@@ -10,6 +10,7 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-08-29 |  |  |  | [1.0.0](https://github.com/gregttx/StashPlugins/commit/1bfccf2) |  |  |  |  |  | GTTxCore 1.0.0: verified against Stash 0.31.0 |
 | 2026-08-29 |  |  |  | [0.0.8](https://github.com/gregttx/StashPlugins/commit/9b2161b) |  |  |  |  |  | GTTxCore 0.0.8: right-click Paste in a Tags or Performers box |
 | 2026-08-29 |  |  |  | [0.0.7](https://github.com/gregttx/StashPlugins/commit/3a7e6b6) |  |  |  |  |  | GTTxCore 0.0.7: the Dev Mods dialog takes the sibling's narrow width |
 | 2026-08-28 |  |  |  | [0.0.6](https://github.com/gregttx/StashPlugins/commit/e08e523) | [4.0.2](https://github.com/gregttx/StashPlugins/commit/e08e523) | [5.2.1](https://github.com/gregttx/StashPlugins/commit/e08e523) | [4.1.2](https://github.com/gregttx/StashPlugins/commit/e08e523) |  | [2.0.1](https://github.com/gregttx/StashPlugins/commit/e08e523) | pickControl: one rule for which Stash select a staged change goes into |

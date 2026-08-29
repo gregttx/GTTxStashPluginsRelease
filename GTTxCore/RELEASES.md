@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| [1.0.0](https://github.com/gregttx/StashPlugins/commit/1bfccf2) | 2026-08-29 | GTTxCore 1.0.0: verified against Stash 0.31.0 |
 | [0.0.8](https://github.com/gregttx/StashPlugins/commit/9b2161b) | 2026-08-29 | GTTxCore 0.0.8: right-click Paste in a Tags or Performers box |
 | [0.0.7](https://github.com/gregttx/StashPlugins/commit/3a7e6b6) | 2026-08-29 | GTTxCore 0.0.7: the Dev Mods dialog takes the sibling's narrow width |
 | [0.0.6](https://github.com/gregttx/StashPlugins/commit/e08e523) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |

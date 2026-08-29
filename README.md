@@ -18,7 +18,7 @@ Requires **Stash 0.31.0 or newer**.
 
 | Plugin | What it does |
 |---|---|
-| [ᝯㄝₓ Core](GTTxCore/README.md) | **Required by all of the others.** The shared half: the hover cards, the tooltips, the Reload UI button, the button-placement rules. Plus the two features that belong to no single plugin — emphasising the Scene Tagger's duration mismatch, and the developer switches. |
+| [ᝯㄝₓ Core](GTTxCore/README.md) | **Required by all of the others.** The shared half: the hover cards, the tooltips, the Reload UI button, the button-placement rules. Plus the three features that belong to no single plugin — emphasising the Scene Tagger's duration mismatch, a right-click **Paste** in the Tags and Performers boxes, and the developer switches. |
 | [ᝯㄝₓ Custom Fields Bulk Editor](CustomFieldsBulkEditor/README.md) | Set, rename or clear a custom field across a whole selection — the seven entity types that carry them. Stash's API supports this; its UI does not expose it. |
 | [ᝯㄝₓ Entity Name Maintainer](EntityNameMaintainer/README.md) | Rename a performer, studio, tag or scene, and it finds every *other* place in the library that mentioned the old name and offers to bring them along. |
 | [ᝯㄝₓ Find & Replace Entities by Text Content](FindEntitiesByTextContent/README.md) | One box: which entities mention this text? Searches every text field of every type, then optionally replaces it. |
