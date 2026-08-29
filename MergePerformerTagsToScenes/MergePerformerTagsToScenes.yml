@@ -1,0 +1,53 @@
+name: ᝯㄝₓ Merge Performer Tags To Scenes
+description: "Copies each performer's tags onto their scenes.\n\nThree ways to run it: buttons on the performer and scene pages, automatically whenever a scene or performer is saved, or as one library-wide task in Settings - Tasks - Plugin Tasks. The buttons and the automatic modes are off until you enable them below.\n\nNothing is written behind your back: the scene button puts tags in the edit form for you to save, and every other way of running it - both buttons and the task - lists every change in a dialog first. Nothing lands until you press Proceed, and Undo takes the merge back while the dialog stays open.\n\nFilters can skip organized scenes, scenes carrying a tag you name, tags set to Ignore auto tag, and tags carrying a custom field you name.\n\nBACK UP YOUR DATABASE BEFORE THE FIRST RUN - it rewrites tag assignments across the whole library and Stash has no undo. \n\nRequires Stash 0.31.0 or newer."
+url: "https://github.com/gregttx/StashPlugins/blob/main/MergePerformerTagsToScenes/README.md"
+version: 4.0.2
+ui:
+  # Loaded before this script, and installed with it. `plugins.tsx` topologically
+  # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished
+  # running before this file begins - which is what lets the shared blocks be bound
+  # at load rather than looked up on every call.
+  requires:
+    - GTTxCore
+  javascript:
+    - MergePerformerTagsToScenes.js
+tasks:
+  - name: Merge Performer Tags into All Their Scenes...
+    description: Copy every performer's tags onto every scene they appear in, across the whole library. Opens a dialog that lists every change first; nothing is written until you press Proceed. The merge only ever adds tags, and an Undo button takes back what it added - but only while the dialog stays open, so back up your database before the first run. The exclusion filters below all apply.
+settings:
+  a1ShowManualMergeButtons:
+    displayName: Show Manual Buttons
+    description: "Show \"Add Tags to all Scenes...\" on the performer detail view (not while editing) and \"Add all Tags from all Performers\" on the scene Edit tab.\n\nButtons only appear when related content exists - the performer button also needs the performer to have at least one tag.\n\nA caption ending in \"...\" opens a dialog listing every change first; nothing is written until you press Proceed."
+    type: BOOLEAN
+  a2SaveTagsImmediately:
+    displayName: Save Immediately
+    description: "Make \"Add all Tags from all Performers\" review in a dialog instead of staging in the form.\n\nLeave this off to stage the tags in the scene's tag box, so you can check them and press Save yourself. Turned on - or on a Stash that cannot stage - the button opens a dialog listing every change first, and nothing is written until you press Proceed. Only affects the scene button; the performer button always reviews in the dialog, and auto-merge always saves."
+    type: BOOLEAN
+  a3AutoMergeOnSceneUpdate:
+    displayName: Auto Merge when the Scene is Saved
+    description: When a scene is saved, automatically merge all of its performers' tags into that scene.
+    type: BOOLEAN
+  a4AutoMergeOnPerformerUpdate:
+    displayName: Auto Merge when the Performer is Saved
+    description: "When a performer is saved, automatically merge their tags into all of their scenes.\n\nCovers every scene featuring the performer; filters and selections in the scene list are ignored."
+    type: BOOLEAN
+  b1ExcludeSceneWithTagName:
+    displayName: Exclude scenes carrying this tag
+    description: "Do not merge performer tags to scenes if the scene has this tag.\n\nMatched by exact name, case-sensitive; a tag one of whose aliases is that exact string counts too, with the name winning where both match. A link to the tag appears beside the value once it resolves - if it does not, nothing here names anything, and every merge stops rather than writing into the scenes this is meant to protect."
+    type: STRING
+  b2ExcludeSceneOrganized:
+    displayName: Exclude scenes marked as Organized
+    description: Do not merge performer tags to scenes if the scene is marked as Organized
+    type: BOOLEAN
+  c1ExcludeTagWithIgnoreAutoTag:
+    displayName: Never merge tags set to Ignore auto tag
+    description: Do not merge a performer tag to scenes if the tag is set to Ignore auto tag
+    type: BOOLEAN
+  c2ExcludeTagWithCustomFieldName:
+    displayName: Never merge tags marked via a Custom Field
+    description: "Do not merge a performer tag to scenes if the tag has this custom field.\n\nOnly the presence of the field matters - its value is ignored, so any value at all excludes the tag. Remove the field from a tag to have it merged again."
+    type: STRING
+  d1LogMergesToConsole:
+    displayName: Log every merge to the Browser Console (Info level)
+    description: "Logs each performer tag merge to the browser's JavaScript console.\n\nThat is F12 - Console, not the Stash server log or the Logs page."
+    type: BOOLEAN

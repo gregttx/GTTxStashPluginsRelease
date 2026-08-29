@@ -1,0 +1,61 @@
+name: ᝯㄝₓ Normalize Parent Tags
+description: "Makes tag hierarchies explicit on your entities, in either direction.\n\nPrune removes any tag that another tag on the same entity already implies. Roll Up adds every ancestor, recursively, of the tags already there. Each entity type is set to Off, Prune or Roll Up on its own, so one library can prune its scenes and roll up its performers.\n\nNormalize Parent Tags runs from Settings - Tasks - Plugin Tasks and asks first: the dialog holds the seven selectors, lists every change it would make, and writes nothing until you press Proceed. Undo reverses the run while the dialog stays open. Auto Mode Settings edits what happens by itself, and Show Tag Hierarchy browses the tree read-only.\n\nA type set to Prune or Roll Up is also normalized silently whenever Stash saves one of them - no dialog, no review, no undo. Everything is Off until you say otherwise.\n\nBACK UP YOUR DATABASE BEFORE THE FIRST RUN - this task rewrites tag assignments across the whole library and Stash has no undo. \n\nRequires Stash 0.31.0 or newer."
+url: "https://github.com/gregttx/StashPlugins/blob/main/NormalizeParentTags/README.md"
+version: 5.2.1
+ui:
+  # Loaded before this script, and installed with it. `plugins.tsx` topologically
+  # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished
+  # running before this file begins - which is what lets the shared blocks be bound
+  # at load rather than looked up on every call.
+  requires:
+    - GTTxCore
+  javascript:
+    - NormalizeParentTags.js
+tasks:
+  - name: Normalize Parent Tags...
+    description: Prune, roll up, or leave alone, per entity type - chosen in the dialog, which starts from the automatic modes below with Images off. Lists every change for review before anything is written, and offers an Undo that takes the run back while the dialog stays open. Back up your database before the first run.
+  - name: Auto Mode Settings...
+    description: Set what happens by itself whenever Stash saves an entity - Off, Prune or Roll Up, for each of the seven types. Writes nothing but the setting itself, which is the one shown in the row below.
+  - name: Show Tag Hierarchy...
+    description: Read-only. Opens a browsable tree of the whole tag hierarchy, marking tags with more than one parent, tags protected by the exclusion filters below, and any cycle. Select a tag to see what Prune and Roll Up would do with it, and jump from a multi-parent tag to each of its parents. Writes nothing.
+settings:
+  a1AutoModes:
+    displayName: Automatic mode per entity type
+    description: "What happens by itself whenever Stash saves an entity, one mode per type.\n\nWARNING: a type set to PRUNE or ROLLUP is updated immediately, with no dialog, no review and no undo, and PRUNE deletes tag assignments. A type that is missing, or set to OFF, is left alone.\n\nPress Auto Mode Settings to change it: the seven selectors are the editor for this setting. It is stored as one line of text, and anything that writes it directly is read forgivingly - any order, any case, the singular of a type, and any separators between the pairs - with whatever was understood written back in canonical form.\n\nThe exclusion filters below still apply. The task dialog starts from these modes - with Images off, since it is usually the largest type and the slowest to scan - and lets you change them for that one run."
+    type: STRING
+  b1ExcludeEntityWithTagName:
+    displayName: Exclude entities carrying this tag
+    description: "Enter one tag name. Any entity carrying that tag is left untouched by both tasks.\n\nMatched by exact name, case-sensitive. The tag must be carried directly - a parent of it does not count. For markers, carrying it as the primary tag also excludes the marker."
+    type: STRING
+  b2ExcludeOrganized:
+    displayName: Exclude entities marked as Organized
+    description: "Skip any entity whose Organized flag is set.\n\nIn Stash 0.31 only scenes, images, galleries and studios have that flag; performers, groups and markers have none, so this setting cannot skip them. If a later Stash adds the flag to more types, they are covered without a plugin update."
+    type: BOOLEAN
+  c1ExcludeTagWithIgnoreAutoTag:
+    displayName: Never add or remove tags set to Ignore auto tag
+    description: "Tags with \"Ignore auto tag\" enabled are neither added by Roll Up nor removed by Prune.\n\nThey still count as present, so they can still imply the removal of their own parents."
+    type: BOOLEAN
+  c2ExcludeAddTagNameContains:
+    displayName: Never add tags whose name contains (space separated substring)
+    description: "Enter one or more substrings separated by spaces. Roll Up will not add a tag whose name contains any of them.\n\nMatched anywhere in the name, case-sensitive, and any Unicode character can be used - handy for namespace markers. A substring cannot itself contain a space unless you set a separator below. Skipping a tag does not stop its own parents from being added."
+    type: STRING
+  c3ExcludeRemoveTagNameContains:
+    displayName: Never remove tags whose name contains (space separated substring)
+    description: "Enter one or more substrings separated by spaces. Prune will not remove a tag whose name contains any of them, even when a descendant tag makes it redundant.\n\nMatched anywhere in the name, case-sensitive, and any Unicode character can be used - handy for namespace markers. A substring cannot itself contain a space unless you set a separator below."
+    type: STRING
+  c4TagNameSeparator:
+    displayName: Separator for the two "name contains" settings
+    description: "Leave this empty to separate those substrings on spaces.\n\nEnter any character - a comma, a pipe, or any Unicode character you do not use in tag names - to separate on that instead, which is how a substring can then contain a space. It is matched literally, so punctuation needs no escaping, and surrounding whitespace is trimmed from each substring."
+    type: STRING
+  c5ExcludeAddTagWithCustomFieldName:
+    displayName: Never add tags marked via a Custom Field
+    description: "Enter a custom field name. Roll Up will not add a tag that has this custom field.\n\nOnly the presence of the field matters - its value is ignored, so any value at all excludes the tag. Remove the field from a tag to have it added again. Skipping a tag does not stop its own parents from being added."
+    type: STRING
+  c6ExcludeRemoveTagWithCustomFieldName:
+    displayName: Never remove tags marked via a Custom Field
+    description: "Enter a custom field name. Prune will not remove a tag that has this custom field, even when a descendant tag makes it redundant.\n\nOnly the presence of the field matters - its value is ignored, so any value at all protects the tag."
+    type: STRING
+  d1ShowSceneButtons:
+    displayName: Show Prune and Roll Up Buttons on a Scene
+    description: "Show Prune and Roll Up buttons on a scene.\n\nOff by default. With it on, a scene's edit row carries a Prune button when the scene holds a tag that a more specific tag on it already implies, and a Roll Up button when it is missing a parent its own tags imply. Each appears only when it would actually change something, and goes away once it would not.\n\nNeither writes on the click: they change the tag box in front of you, and Stash's own Save is what commits it - exactly as if you had picked the tags from the dropdown yourself. Close the form without saving and nothing happened. On a Stash too old to let a plugin reach the tag box, the click opens the review dialog instead, and the caption says so by ending in a full stop trio. Every exclusion filter below still applies, and the automatic modes above are a separate question - a button is offered whether or not this plugin does that direction on its own."
+    type: BOOLEAN
