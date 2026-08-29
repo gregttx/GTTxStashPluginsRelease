@@ -8,23 +8,24 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
-| [2.0.1](https://github.com/gregttx/StashPlugins/commit/e08e523) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
-| [2.0.0](https://github.com/gregttx/StashPlugins/commit/28ce7c2) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
-| [1.3.0](https://github.com/gregttx/StashPlugins/commit/cbb8266) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
-| [1.2.1](https://github.com/gregttx/StashPlugins/commit/a668b69) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
-| [1.2.0](https://github.com/gregttx/StashPlugins/commit/105c196) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
-| [1.1.1](https://github.com/gregttx/StashPlugins/commit/dc3f0b5) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
-| [1.1.0](https://github.com/gregttx/StashPlugins/commit/6712889) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
-| [1.0.0](https://github.com/gregttx/StashPlugins/commit/3e4458b) | 2026-08-22 | TagBundleClipboard 1.0.0: the major digit, on live use |
-| [0.7.3](https://github.com/gregttx/StashPlugins/commit/23eaeb6) | 2026-08-22 | EntityNameMaintainer 0.1.2 / TagBundleClipboard 0.7.3: a scoped dialog head names the entity, not just its id |
-| [0.7.2](https://github.com/gregttx/StashPlugins/commit/9a4f14a) | 2026-08-20 | One grammatical load banner, in all five |
-| [0.7.1](https://github.com/gregttx/StashPlugins/commit/fb346a7) | 2026-08-19 | Release history out of all five plugin sources |
-| [0.7.0](https://github.com/gregttx/StashPlugins/commit/c50338b) | 2026-08-19 | Repo review 2026-08-19: all 27 findings fixed |
-| [0.6.1](https://github.com/gregttx/StashPlugins/commit/04e2a8a) | 2026-08-18 | TagBundleClipboard 0.6.1: one word per mode mark |
-| [0.6.0](https://github.com/gregttx/StashPlugins/commit/d0bece8) | 2026-08-18 | TagBundleClipboard 0.6.0: re-bind the planner when the tab comes back |
-| [0.5.0](https://github.com/gregttx/StashPlugins/commit/8215c44) | 2026-08-18 | NPT 3.2.0 / TBC 0.5.0: one plugin computes the other's operation |
-| [0.4.0](https://github.com/gregttx/StashPlugins/commit/d10b349) | 2026-08-18 | TagBundleClipboard 0.4.0: warn when NPT will rewrite the save |
-| [0.3.0](https://github.com/gregttx/StashPlugins/commit/1480527) | 2026-08-18 | TagBundleClipboard 0.3.0: named titles, amber where it acts, sibling drift |
-| [0.2.0](https://github.com/gregttx/StashPlugins/commit/ff8b899) | 2026-08-18 | TagBundleClipboard 0.2.0: dots back, columns fixed, modes gated on NPT |
-| [0.1.0](https://github.com/gregttx/StashPlugins/commit/034b60a) | 2026-08-18 | TagBundleClipboard 0.1.0: prune/roll-up, tag hovers, columns, Undo |
-| [0.0.1](https://github.com/gregttx/StashPlugins/commit/b529b9e) | 2026-08-17 | TagBundleClipboard 0.0.1: a tag clipboard between any two entities |
+| 2.0.2 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
+| 2.0.1 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
+| 2.0.0 (`28ce7c2`) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
+| 1.3.0 (`cbb8266`) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
+| 1.2.1 (`a668b69`) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
+| 1.2.0 (`105c196`) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
+| 1.1.1 (`dc3f0b5`) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
+| 1.1.0 (`6712889`) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
+| 1.0.0 (`3e4458b`) | 2026-08-22 | TagBundleClipboard 1.0.0: the major digit, on live use |
+| 0.7.3 (`23eaeb6`) | 2026-08-22 | EntityNameMaintainer 0.1.2 / TagBundleClipboard 0.7.3: a scoped dialog head names the entity, not just its id |
+| 0.7.2 (`9a4f14a`) | 2026-08-20 | One grammatical load banner, in all five |
+| 0.7.1 (`fb346a7`) | 2026-08-19 | Release history out of all five plugin sources |
+| 0.7.0 (`c50338b`) | 2026-08-19 | Repo review 2026-08-19: all 27 findings fixed |
+| 0.6.1 (`04e2a8a`) | 2026-08-18 | TagBundleClipboard 0.6.1: one word per mode mark |
+| 0.6.0 (`d0bece8`) | 2026-08-18 | TagBundleClipboard 0.6.0: re-bind the planner when the tab comes back |
+| 0.5.0 (`8215c44`) | 2026-08-18 | NPT 3.2.0 / TBC 0.5.0: one plugin computes the other's operation |
+| 0.4.0 (`d10b349`) | 2026-08-18 | TagBundleClipboard 0.4.0: warn when NPT will rewrite the save |
+| 0.3.0 (`1480527`) | 2026-08-18 | TagBundleClipboard 0.3.0: named titles, amber where it acts, sibling drift |
+| 0.2.0 (`ff8b899`) | 2026-08-18 | TagBundleClipboard 0.2.0: dots back, columns fixed, modes gated on NPT |
+| 0.1.0 (`034b60a`) | 2026-08-18 | TagBundleClipboard 0.1.0: prune/roll-up, tag hovers, columns, Undo |
+| 0.0.1 (`b529b9e`) | 2026-08-17 | TagBundleClipboard 0.0.1: a tag clipboard between any two entities |

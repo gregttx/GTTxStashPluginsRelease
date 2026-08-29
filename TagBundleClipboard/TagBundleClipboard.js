@@ -68,7 +68,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '2.0.1';
+  var PLUGIN_VERSION = '2.0.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -86,7 +86,7 @@
     'script\'s own version - the settings page reads the manifest instead, which can be ' +
     'newer than the script your browser has cached.');
 
-  var README_URL = 'https://github.com/gregttx/StashPlugins/blob/main/TagBundleClipboard/README.md';
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/TagBundleClipboard/README.md';
   var README_LINK_ID = 'tbc-readme-link';
   var DESC_TOGGLE_ID = 'tbc-desc-toggle';
   var STYLE_ID       = 'tbc-style';

@@ -8,72 +8,73 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
-| [3.0.0](https://github.com/gregttx/StashPlugins/commit/28ce7c2) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
-| [2.19.0](https://github.com/gregttx/StashPlugins/commit/cbb8266) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
-| [2.18.1](https://github.com/gregttx/StashPlugins/commit/89ce82b) | 2026-08-27 | Country names come from Stash's own table, not the browser's |
-| [2.18.0](https://github.com/gregttx/StashPlugins/commit/a668b69) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
-| [2.17.0](https://github.com/gregttx/StashPlugins/commit/d4a6e40) | 2026-08-27 | Entity cards on every listed name, and three smaller asks |
-| [2.16.0](https://github.com/gregttx/StashPlugins/commit/105c196) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
-| [2.15.0](https://github.com/gregttx/StashPlugins/commit/03c7cf8) | 2026-08-27 | CFBE 2.15.0: the entities carrying nothing are in the list, and the scope select is gone |
-| [2.14.2](https://github.com/gregttx/StashPlugins/commit/662770e) | 2026-08-26 | The custom-field tooltip is fixed to the viewport, not to an inline span |
-| [2.14.1](https://github.com/gregttx/StashPlugins/commit/f116777) | 2026-08-26 | The custom-field tooltip is a box of ours, out of the cursor's way |
-| [2.14.0](https://github.com/gregttx/StashPlugins/commit/bb1c801) | 2026-08-26 | A hover-lazy tooltip on every setting that names a custom field |
-| [2.13.0](https://github.com/gregttx/StashPlugins/commit/3cc17ea) | 2026-08-26 | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
-| [2.12.3](https://github.com/gregttx/StashPlugins/commit/f99e2f9) | 2026-08-26 | FRETC 2.0.1, and a wider gap before every tag link |
-| [2.12.2](https://github.com/gregttx/StashPlugins/commit/f84a2cb) | 2026-08-26 | CFBE 2.12.2: a rescan restates the listing instead of adding a second one |
-| [2.12.1](https://github.com/gregttx/StashPlugins/commit/85ada93) | 2026-08-26 | A tag named in a setting is a link to it, in four plugins |
-| [2.11.1](https://github.com/gregttx/StashPlugins/commit/dc3f0b5) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
-| [2.11.0](https://github.com/gregttx/StashPlugins/commit/6712889) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
-| [2.10.0](https://github.com/gregttx/StashPlugins/commit/cccd6be) | 2026-08-22 | CustomFieldsBulkEditor 2.10.0 / EntityNameMaintainer 0.1.0: descriptions are read and written through coop().api |
-| [2.9.0](https://github.com/gregttx/StashPlugins/commit/0b9205b) | 2026-08-22 | CustomFieldsBulkEditor 2.9.0: the description tooltip appears where Stash shows the field name |
-| [2.8.4](https://github.com/gregttx/StashPlugins/commit/bb28ff4) | 2026-08-22 | CustomFieldsBulkEditor 2.8.4: the detail tick stops throwing on every page |
-| [2.8.3](https://github.com/gregttx/StashPlugins/commit/c8d90e7) | 2026-08-22 | CustomFieldsBulkEditor 2.8.3: Undo of an applied rename takes the list back, not only the library |
-| [2.8.2](https://github.com/gregttx/StashPlugins/commit/2484566) | 2026-08-22 | CustomFieldsBulkEditor 2.8.2: Apply is quiet until there is something a user would call a change |
-| [2.8.1](https://github.com/gregttx/StashPlugins/commit/3d8adb6) | 2026-08-22 | CustomFieldsBulkEditor 2.8.1: Apply goes back to disabled once a rename has been written |
-| [2.8.0](https://github.com/gregttx/StashPlugins/commit/06f51e6) | 2026-08-22 | PropagateTagsAndPerformers 3.13.1 / CustomFieldsBulkEditor 2.8.0 / FindEntitiesByTextContent 0.0.9: an empty box is empty again, Undo Rename, and the search box keeps its own history |
-| [2.7.0](https://github.com/gregttx/StashPlugins/commit/16a1bcf) | 2026-08-22 | CustomFieldsBulkEditor 2.7.0 / PropagateTagsAndPerformers 3.13.0: the descriptions reach the entity page, and the exclusion field has a default that documents itself |
-| [2.6.0](https://github.com/gregttx/StashPlugins/commit/e3597ce) | 2026-08-22 | CustomFieldsBulkEditor 2.6.0 / NormalizeParentTags 4.7.0: three more boxes remember, and the descriptions pane reads Name then Description |
-| [2.5.1](https://github.com/gregttx/StashPlugins/commit/f39a7a2) | 2026-08-21 | EntityNameMaintainer 0.0.9 / CustomFieldsBulkEditor 2.5.1: five seconds to answer Close, and the red marks one mode |
-| [2.5.0](https://github.com/gregttx/StashPlugins/commit/ee5372e) | 2026-08-21 | CustomFieldsBulkEditor 2.5.0: the filter boxes remember, and a lost Rename is marked rather than switched |
-| [2.4.0](https://github.com/gregttx/StashPlugins/commit/c612d93) | 2026-08-21 | CustomFieldsBulkEditor 2.4.0: the field's name in the descriptions dialog is a box, and changing it renames the field |
-| [2.3.0](https://github.com/gregttx/StashPlugins/commit/5e37588) | 2026-08-21 | EntityNameMaintainer 0.0.7 / FindEntitiesByTextContent 0.0.8 / CustomFieldsBulkEditor 2.3.0 / PropagateTagsAndPerformers 3.12.0: a control says what pressing it costs |
-| [2.2.2](https://github.com/gregttx/StashPlugins/commit/9a4f14a) | 2026-08-20 | One grammatical load banner, in all five |
-| [2.2.1](https://github.com/gregttx/StashPlugins/commit/fb346a7) | 2026-08-19 | Release history out of all five plugin sources |
-| [2.2.0](https://github.com/gregttx/StashPlugins/commit/c50338b) | 2026-08-19 | Repo review 2026-08-19: all 27 findings fixed |
-| [2.1.0](https://github.com/gregttx/StashPlugins/commit/21c9c2a) | 2026-08-17 | All four: a busy cursor under the last log line |
-| [2.0.3](https://github.com/gregttx/StashPlugins/commit/8c6ab97) | 2026-08-16 | CFBE 2.0.3: Prune clears the rows, and greys itself out |
-| [2.0.1](https://github.com/gregttx/StashPlugins/commit/8c8cd24) | 2026-08-16 | CFBE 2.0.1: the marker field takes the prefix |
-| [2.0.0](https://github.com/gregttx/StashPlugins/commit/ae1f4a8) | 2026-08-16 | All four: the ᝯㄝₓ prefix reaches the scripts |
-| [1.3.1](https://github.com/gregttx/StashPlugins/commit/fb5105f) | 2026-08-16 | CFBE 1.3.1, PTP2RE 1.4.2: the last of the version references |
-| [1.3.0](https://github.com/gregttx/StashPlugins/commit/eb0e690) | 2026-08-16 | The stale-script warning in the dialogs, and a README trim |
-| [1.2.0](https://github.com/gregttx/StashPlugins/commit/361d826) | 2026-08-16 | All four: a stale script says so on the settings page |
-| [1.1.1](https://github.com/gregttx/StashPlugins/commit/01d2575) | 2026-08-16 | CFBE 1.1.1: the store-tag row counts its carrier |
-| [1.1.0](https://github.com/gregttx/StashPlugins/commit/12866ec) | 2026-08-16 | CFBE 1.1.0, NPT 2.4.0, MPTTS 2.2.1, PTP2RE 1.2.1 |
-| [1.0.0](https://github.com/gregttx/StashPlugins/commit/3d59ab5) | 2026-08-16 | CFBE 1.0.0: the hide field is nobody's loose end |
-| [0.12.1](https://github.com/gregttx/StashPlugins/commit/49a5f5d) | 2026-08-16 | CFBE 0.12.1: a name pill's tooltip says it is the name |
-| [0.12.0](https://github.com/gregttx/StashPlugins/commit/4473b63) | 2026-08-16 | CFBE 0.12.0: omits, a filter for the entity, and what Overwrite leaves alone |
-| [0.11.0](https://github.com/gregttx/StashPlugins/commit/5e68072) | 2026-08-16 | CFBE 0.11.0: the descriptions dialog divides its own room |
-| [0.10.0](https://github.com/gregttx/StashPlugins/commit/c86c1c7) | 2026-08-16 | CFBE 0.10.0: Rename, a scope that follows the filters, and dialogs that hold still |
-| [0.9.0](https://github.com/gregttx/StashPlugins/commit/dd01574) | 2026-08-16 | CFBE 0.9.0: filter the listing by whether a value is true |
-| [0.8.1](https://github.com/gregttx/StashPlugins/commit/8983894) | 2026-08-16 | CFBE 0.8.1: the descriptions dialog keeps typing, and the settings arrive filled in |
-| [0.8.0](https://github.com/gregttx/StashPlugins/commit/112528d) | 2026-08-15 | CFBE 0.8.0: every custom field can say what it is for |
-| [0.7.3](https://github.com/gregttx/StashPlugins/commit/1d1c414) | 2026-08-14 | CFBE 0.7.3: the dropdowns get Stash's stacked marker |
-| [0.7.2](https://github.com/gregttx/StashPlugins/commit/a601928) | 2026-08-14 | CFBE 0.7.2: the log follows itself again |
-| [0.7.1](https://github.com/gregttx/StashPlugins/commit/4999d8b) | 2026-08-14 | The log stays until you close the dialog, and the footers agree |
-| [0.7.0](https://github.com/gregttx/StashPlugins/commit/823b766) | 2026-08-14 | Wider still, and CFBE gets a setting |
-| [0.6.0](https://github.com/gregttx/StashPlugins/commit/2b41b16) | 2026-08-13 | Wider dialogs, and CFBE stops skipping quietly |
-| [0.5.0](https://github.com/gregttx/StashPlugins/commit/bf1f7b8) | 2026-08-13 | CFBE 0.5.0: one log, and it keeps what it said |
-| [0.4.5](https://github.com/gregttx/StashPlugins/commit/91b664b) | 2026-08-13 | Two words the plugins no longer say: "Stash id", and "(s)" |
-| [0.4.4](https://github.com/gregttx/StashPlugins/commit/25b7597) | 2026-08-13 | CFBE 0.4.4: the legend's ␀ is drawn by the list's own rule |
-| [0.4.3](https://github.com/gregttx/StashPlugins/commit/d182176) | 2026-08-13 | Four dialog heads, one sentence |
-| [0.4.0](https://github.com/gregttx/StashPlugins/commit/538cbbc) | 2026-08-13 | CFBE 0.4.0: five things a whole library made the dialog want |
-| [0.3.2](https://github.com/gregttx/StashPlugins/commit/8ba02e7) | 2026-08-13 | CFBE 0.3.2: the settings decoration was landing on the Tasks panel |
-| [0.3.1](https://github.com/gregttx/StashPlugins/commit/2567a45) | 2026-08-13 | CFBE 0.3.1: the whole-library read is paged, so the counter moves |
-| [0.3.0](https://github.com/gregttx/StashPlugins/commit/5407b5a) | 2026-08-13 | CFBE 0.3.0: a task that opens the same dialog on the whole library |
-| [0.2.5](https://github.com/gregttx/StashPlugins/commit/c46b4a4) | 2026-08-13 | CFBE 0.2.5: an unescaped quote in the yml stopped the plugin loading |
-| [0.2.4](https://github.com/gregttx/StashPlugins/commit/68b1d17) | 2026-08-13 | CFBE 0.2.4: "is empty" is a mode beside the box, not a word in it |
-| [0.2.3](https://github.com/gregttx/StashPlugins/commit/324a7b3) | 2026-08-13 | CFBE 0.2.3: the listing is pills, and ␀ took three rounds |
-| [0.1.2](https://github.com/gregttx/StashPlugins/commit/eca51be) | 2026-08-13 | CFBE 0.1.2: a tag's parent link was eating its own selection |
-| [0.1.1](https://github.com/gregttx/StashPlugins/commit/44c902e) | 2026-08-12 | NPT 2.2.0 drops the graph exports; CFBE 0.1.1 finds the lists whose URL lies |
-| [0.1.0](https://github.com/gregttx/StashPlugins/commit/4c11384) | 2026-08-12 | Escape closes every dialog, and CFBE 0.1.0 gets the settings-page description |
-| [0.0.1](https://github.com/gregttx/StashPlugins/commit/20bc7c3) | 2026-08-12 | CustomFieldsBulkEditor 0.0.1: bulk custom fields, off the list view's "..." menu |
+| 3.0.1 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
+| 3.0.0 (`28ce7c2`) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
+| 2.19.0 (`cbb8266`) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
+| 2.18.1 (`89ce82b`) | 2026-08-27 | Country names come from Stash's own table, not the browser's |
+| 2.18.0 (`a668b69`) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
+| 2.17.0 (`d4a6e40`) | 2026-08-27 | Entity cards on every listed name, and three smaller asks |
+| 2.16.0 (`105c196`) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
+| 2.15.0 (`03c7cf8`) | 2026-08-27 | CFBE 2.15.0: the entities carrying nothing are in the list, and the scope select is gone |
+| 2.14.2 (`662770e`) | 2026-08-26 | The custom-field tooltip is fixed to the viewport, not to an inline span |
+| 2.14.1 (`f116777`) | 2026-08-26 | The custom-field tooltip is a box of ours, out of the cursor's way |
+| 2.14.0 (`bb1c801`) | 2026-08-26 | A hover-lazy tooltip on every setting that names a custom field |
+| 2.13.0 (`3cc17ea`) | 2026-08-26 | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
+| 2.12.3 (`f99e2f9`) | 2026-08-26 | FRETC 2.0.1, and a wider gap before every tag link |
+| 2.12.2 (`f84a2cb`) | 2026-08-26 | CFBE 2.12.2: a rescan restates the listing instead of adding a second one |
+| 2.12.1 (`85ada93`) | 2026-08-26 | A tag named in a setting is a link to it, in four plugins |
+| 2.11.1 (`dc3f0b5`) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
+| 2.11.0 (`6712889`) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
+| 2.10.0 (`cccd6be`) | 2026-08-22 | CustomFieldsBulkEditor 2.10.0 / EntityNameMaintainer 0.1.0: descriptions are read and written through coop().api |
+| 2.9.0 (`0b9205b`) | 2026-08-22 | CustomFieldsBulkEditor 2.9.0: the description tooltip appears where Stash shows the field name |
+| 2.8.4 (`bb28ff4`) | 2026-08-22 | CustomFieldsBulkEditor 2.8.4: the detail tick stops throwing on every page |
+| 2.8.3 (`c8d90e7`) | 2026-08-22 | CustomFieldsBulkEditor 2.8.3: Undo of an applied rename takes the list back, not only the library |
+| 2.8.2 (`2484566`) | 2026-08-22 | CustomFieldsBulkEditor 2.8.2: Apply is quiet until there is something a user would call a change |
+| 2.8.1 (`3d8adb6`) | 2026-08-22 | CustomFieldsBulkEditor 2.8.1: Apply goes back to disabled once a rename has been written |
+| 2.8.0 (`06f51e6`) | 2026-08-22 | PropagateTagsAndPerformers 3.13.1 / CustomFieldsBulkEditor 2.8.0 / FindEntitiesByTextContent 0.0.9: an empty box is empty again, Undo Rename, and the search box keeps its own history |
+| 2.7.0 (`16a1bcf`) | 2026-08-22 | CustomFieldsBulkEditor 2.7.0 / PropagateTagsAndPerformers 3.13.0: the descriptions reach the entity page, and the exclusion field has a default that documents itself |
+| 2.6.0 (`e3597ce`) | 2026-08-22 | CustomFieldsBulkEditor 2.6.0 / NormalizeParentTags 4.7.0: three more boxes remember, and the descriptions pane reads Name then Description |
+| 2.5.1 (`f39a7a2`) | 2026-08-21 | EntityNameMaintainer 0.0.9 / CustomFieldsBulkEditor 2.5.1: five seconds to answer Close, and the red marks one mode |
+| 2.5.0 (`ee5372e`) | 2026-08-21 | CustomFieldsBulkEditor 2.5.0: the filter boxes remember, and a lost Rename is marked rather than switched |
+| 2.4.0 (`c612d93`) | 2026-08-21 | CustomFieldsBulkEditor 2.4.0: the field's name in the descriptions dialog is a box, and changing it renames the field |
+| 2.3.0 (`5e37588`) | 2026-08-21 | EntityNameMaintainer 0.0.7 / FindEntitiesByTextContent 0.0.8 / CustomFieldsBulkEditor 2.3.0 / PropagateTagsAndPerformers 3.12.0: a control says what pressing it costs |
+| 2.2.2 (`9a4f14a`) | 2026-08-20 | One grammatical load banner, in all five |
+| 2.2.1 (`fb346a7`) | 2026-08-19 | Release history out of all five plugin sources |
+| 2.2.0 (`c50338b`) | 2026-08-19 | Repo review 2026-08-19: all 27 findings fixed |
+| 2.1.0 (`21c9c2a`) | 2026-08-17 | All four: a busy cursor under the last log line |
+| 2.0.3 (`8c6ab97`) | 2026-08-16 | CFBE 2.0.3: Prune clears the rows, and greys itself out |
+| 2.0.1 (`8c8cd24`) | 2026-08-16 | CFBE 2.0.1: the marker field takes the prefix |
+| 2.0.0 (`ae1f4a8`) | 2026-08-16 | All four: the ᝯㄝₓ prefix reaches the scripts |
+| 1.3.1 (`fb5105f`) | 2026-08-16 | CFBE 1.3.1, PTP2RE 1.4.2: the last of the version references |
+| 1.3.0 (`eb0e690`) | 2026-08-16 | The stale-script warning in the dialogs, and a README trim |
+| 1.2.0 (`361d826`) | 2026-08-16 | All four: a stale script says so on the settings page |
+| 1.1.1 (`01d2575`) | 2026-08-16 | CFBE 1.1.1: the store-tag row counts its carrier |
+| 1.1.0 (`12866ec`) | 2026-08-16 | CFBE 1.1.0, NPT 2.4.0, MPTTS 2.2.1, PTP2RE 1.2.1 |
+| 1.0.0 (`3d59ab5`) | 2026-08-16 | CFBE 1.0.0: the hide field is nobody's loose end |
+| 0.12.1 (`49a5f5d`) | 2026-08-16 | CFBE 0.12.1: a name pill's tooltip says it is the name |
+| 0.12.0 (`4473b63`) | 2026-08-16 | CFBE 0.12.0: omits, a filter for the entity, and what Overwrite leaves alone |
+| 0.11.0 (`5e68072`) | 2026-08-16 | CFBE 0.11.0: the descriptions dialog divides its own room |
+| 0.10.0 (`c86c1c7`) | 2026-08-16 | CFBE 0.10.0: Rename, a scope that follows the filters, and dialogs that hold still |
+| 0.9.0 (`dd01574`) | 2026-08-16 | CFBE 0.9.0: filter the listing by whether a value is true |
+| 0.8.1 (`8983894`) | 2026-08-16 | CFBE 0.8.1: the descriptions dialog keeps typing, and the settings arrive filled in |
+| 0.8.0 (`112528d`) | 2026-08-15 | CFBE 0.8.0: every custom field can say what it is for |
+| 0.7.3 (`1d1c414`) | 2026-08-14 | CFBE 0.7.3: the dropdowns get Stash's stacked marker |
+| 0.7.2 (`a601928`) | 2026-08-14 | CFBE 0.7.2: the log follows itself again |
+| 0.7.1 (`4999d8b`) | 2026-08-14 | The log stays until you close the dialog, and the footers agree |
+| 0.7.0 (`823b766`) | 2026-08-14 | Wider still, and CFBE gets a setting |
+| 0.6.0 (`2b41b16`) | 2026-08-13 | Wider dialogs, and CFBE stops skipping quietly |
+| 0.5.0 (`bf1f7b8`) | 2026-08-13 | CFBE 0.5.0: one log, and it keeps what it said |
+| 0.4.5 (`91b664b`) | 2026-08-13 | Two words the plugins no longer say: "Stash id", and "(s)" |
+| 0.4.4 (`25b7597`) | 2026-08-13 | CFBE 0.4.4: the legend's ␀ is drawn by the list's own rule |
+| 0.4.3 (`d182176`) | 2026-08-13 | Four dialog heads, one sentence |
+| 0.4.0 (`538cbbc`) | 2026-08-13 | CFBE 0.4.0: five things a whole library made the dialog want |
+| 0.3.2 (`8ba02e7`) | 2026-08-13 | CFBE 0.3.2: the settings decoration was landing on the Tasks panel |
+| 0.3.1 (`2567a45`) | 2026-08-13 | CFBE 0.3.1: the whole-library read is paged, so the counter moves |
+| 0.3.0 (`5407b5a`) | 2026-08-13 | CFBE 0.3.0: a task that opens the same dialog on the whole library |
+| 0.2.5 (`c46b4a4`) | 2026-08-13 | CFBE 0.2.5: an unescaped quote in the yml stopped the plugin loading |
+| 0.2.4 (`68b1d17`) | 2026-08-13 | CFBE 0.2.4: "is empty" is a mode beside the box, not a word in it |
+| 0.2.3 (`324a7b3`) | 2026-08-13 | CFBE 0.2.3: the listing is pills, and ␀ took three rounds |
+| 0.1.2 (`eca51be`) | 2026-08-13 | CFBE 0.1.2: a tag's parent link was eating its own selection |
+| 0.1.1 (`44c902e`) | 2026-08-12 | NPT 2.2.0 drops the graph exports; CFBE 0.1.1 finds the lists whose URL lies |
+| 0.1.0 (`4c11384`) | 2026-08-12 | Escape closes every dialog, and CFBE 0.1.0 gets the settings-page description |
+| 0.0.1 (`20bc7c3`) | 2026-08-12 | CustomFieldsBulkEditor 0.0.1: bulk custom fields, off the list view's "..." menu |

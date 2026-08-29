@@ -62,7 +62,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.0.0';
+  var PLUGIN_VERSION = '3.0.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -77,7 +77,7 @@
     'running script\'s own version - the settings page reads the manifest instead, which can be ' +
     'newer than the script your browser has cached.');
 
-  var README_URL = 'https://github.com/gregttx/StashPlugins/blob/main/CustomFieldsBulkEditor/README.md';
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/CustomFieldsBulkEditor/README.md';
   var STYLE_ID   = 'cfbe-style';
   var README_LINK_ID = 'cfbe-readme-link';
   var DESC_TOGGLE_ID = 'cfbe-desc-toggle';

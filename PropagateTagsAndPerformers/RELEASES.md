@@ -8,102 +8,103 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
-| [4.1.2](https://github.com/gregttx/StashPlugins/commit/e08e523) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
-| [4.1.1](https://github.com/gregttx/StashPlugins/commit/f21c4e3) | 2026-08-28 | NPT: Prune and Roll Up on a scene, when they would do something |
-| [4.1.0](https://github.com/gregttx/StashPlugins/commit/20e11ac) | 2026-08-28 | A dropped `+` had taken six rules off Core's stylesheet; and System view |
-| [4.0.0](https://github.com/gregttx/StashPlugins/commit/28ce7c2) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
-| [3.24.0](https://github.com/gregttx/StashPlugins/commit/cbb8266) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
-| [3.23.1](https://github.com/gregttx/StashPlugins/commit/89ce82b) | 2026-08-27 | Country names come from Stash's own table, not the browser's |
-| [3.23.0](https://github.com/gregttx/StashPlugins/commit/a668b69) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
-| [3.22.0](https://github.com/gregttx/StashPlugins/commit/d4a6e40) | 2026-08-27 | Entity cards on every listed name, and three smaller asks |
-| [3.21.0](https://github.com/gregttx/StashPlugins/commit/105c196) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
-| [3.20.2](https://github.com/gregttx/StashPlugins/commit/662770e) | 2026-08-26 | The custom-field tooltip is fixed to the viewport, not to an inline span |
-| [3.20.1](https://github.com/gregttx/StashPlugins/commit/f116777) | 2026-08-26 | The custom-field tooltip is a box of ours, out of the cursor's way |
-| [3.20.0](https://github.com/gregttx/StashPlugins/commit/bb1c801) | 2026-08-26 | A hover-lazy tooltip on every setting that names a custom field |
-| [3.19.0](https://github.com/gregttx/StashPlugins/commit/3cc17ea) | 2026-08-26 | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
-| [3.18.1](https://github.com/gregttx/StashPlugins/commit/f99e2f9) | 2026-08-26 | FRETC 2.0.1, and a wider gap before every tag link |
-| [3.18.0](https://github.com/gregttx/StashPlugins/commit/85ada93) | 2026-08-26 | A tag named in a setting is a link to it, in four plugins |
-| [3.17.0](https://github.com/gregttx/StashPlugins/commit/c37c8fa) | 2026-08-25 | PTP2RE 3.17.0: skip tags NormalizeParentTags would prune straight back off |
-| [3.16.0](https://github.com/gregttx/StashPlugins/commit/9bce32d) | 2026-08-25 | PTP2RE 3.16.0: the entity an addition came from is a link too |
-| [3.15.1](https://github.com/gregttx/StashPlugins/commit/33e96dd) | 2026-08-25 | PTP2RE 3.15.1: a marker's tags reach its scene when the marker is created, not only when it is edited |
-| [3.15.0](https://github.com/gregttx/StashPlugins/commit/78fe775) | 2026-08-25 | NPT 4.8.4 / PTP2RE 3.15.0: Stop can end a scan, and a plan that has stopped describing the run says so |
-| [3.14.3](https://github.com/gregttx/StashPlugins/commit/1725c41) | 2026-08-22 | NPT 4.8.3 / PTP2RE 3.14.3: a control that changes what a run is doing is locked while it scans, not only while it writes |
-| [3.14.2](https://github.com/gregttx/StashPlugins/commit/033b1eb) | 2026-08-22 | NPT 4.8.2 / PTP2RE 3.14.2: Escape cannot abandon a settings save in flight |
-| [3.14.1](https://github.com/gregttx/StashPlugins/commit/dc3f0b5) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
-| [3.14.0](https://github.com/gregttx/StashPlugins/commit/6712889) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
-| [3.13.2](https://github.com/gregttx/StashPlugins/commit/34981ce) | 2026-08-22 | NPT 4.7.1 / PTP2RE 3.13.2: the settings dialogs' Save waits for a change |
-| [3.13.1](https://github.com/gregttx/StashPlugins/commit/06f51e6) | 2026-08-22 | PropagateTagsAndPerformers 3.13.1 / CustomFieldsBulkEditor 2.8.0 / FindEntitiesByTextContent 0.0.9: an empty box is empty again, Undo Rename, and the search box keeps its own history |
-| [3.13.0](https://github.com/gregttx/StashPlugins/commit/16a1bcf) | 2026-08-22 | CustomFieldsBulkEditor 2.7.0 / PropagateTagsAndPerformers 3.13.0: the descriptions reach the entity page, and the exclusion field has a default that documents itself |
-| [3.12.0](https://github.com/gregttx/StashPlugins/commit/5e37588) | 2026-08-21 | EntityNameMaintainer 0.0.7 / FindEntitiesByTextContent 0.0.8 / CustomFieldsBulkEditor 2.3.0 / PropagateTagsAndPerformers 3.12.0: a control says what pressing it costs |
-| [3.11.2](https://github.com/gregttx/StashPlugins/commit/9a4f14a) | 2026-08-20 | One grammatical load banner, in all five |
-| [3.11.1](https://github.com/gregttx/StashPlugins/commit/fb346a7) | 2026-08-19 | Release history out of all five plugin sources |
-| [3.11.0](https://github.com/gregttx/StashPlugins/commit/c50338b) | 2026-08-19 | Repo review 2026-08-19: all 27 findings fixed |
-| [3.10.0](https://github.com/gregttx/StashPlugins/commit/b523556) | 2026-08-19 | PTP2RE 3.10.0: the paths dialog draws the paths, and you can rearrange them |
-| [3.6.2](https://github.com/gregttx/StashPlugins/commit/05be8bd) | 2026-08-19 | PTP2RE 3.6.2: the progress counters say what their number is |
-| [3.6.1](https://github.com/gregttx/StashPlugins/commit/12fce4a) | 2026-08-19 | PTP2RE 3.6.1: Performers -> Groups above Performers -> Scenes |
-| [3.6.0](https://github.com/gregttx/StashPlugins/commit/2085f8d) | 2026-08-19 | PTP2RE 3.6.0: the layout revised, and a null in a column is a blank row |
-| [3.5.0](https://github.com/gregttx/StashPlugins/commit/6bb9093) | 2026-08-19 | PTP2RE 3.5.0: the layout is the user's, and a path already happening says so |
-| [3.4.0](https://github.com/gregttx/StashPlugins/commit/5160f26) | 2026-08-19 | PTP2RE 3.4.0: the bulk buttons move into the footer, and everything says what it does |
-| [3.3.0](https://github.com/gregttx/StashPlugins/commit/595075a) | 2026-08-19 | PTP2RE 3.3.0: the two moded paths get their own column, and three bulk buttons |
-| [3.2.0](https://github.com/gregttx/StashPlugins/commit/0943e39) | 2026-08-19 | PTP2RE 3.2.0: each path's control is a button carrying its own state |
-| [3.1.2](https://github.com/gregttx/StashPlugins/commit/bcf7d0e) | 2026-08-19 | NPT 4.6.2 / PTP2RE 3.1.2: configurePlugin replaces, so send the whole map |
-| [3.1.1](https://github.com/gregttx/StashPlugins/commit/992c0b7) | 2026-08-19 | PTP2RE 3.1.1: the settings row stops deleting a value it could not read |
-| [3.1.0](https://github.com/gregttx/StashPlugins/commit/e6c5c43) | 2026-08-19 | PTP2RE 3.1.0: adopt MPTTS's four exclusion filters where we have none |
-| [3.0.2](https://github.com/gregttx/StashPlugins/commit/01e394c) | 2026-08-19 | NPT 4.6.1 / PTP2RE 3.0.2: a self-append fixed, and the row listing in columns |
-| [3.0.1](https://github.com/gregttx/StashPlugins/commit/96daa34) | 2026-08-19 | PTP2RE 3.0.1: the path dialog gets two columns and loses a false heading |
-| [3.0.0](https://github.com/gregttx/StashPlugins/commit/706b0c5) | 2026-08-19 | PTP2RE 3.0.0: fifteen path switches become one string and a dialog |
-| [2.4.0](https://github.com/gregttx/StashPlugins/commit/e06ff06) | 2026-08-18 | NPT 4.3.0 / MPTTS 3.4.0 / PTP2RE 2.4.0: amber reaches inside the dialogs |
-| [2.3.1](https://github.com/gregttx/StashPlugins/commit/8a004da) | 2026-08-18 | NPT 4.0.1 / MPTTS 3.3.1 / PTP2RE 2.3.1: the stale banner survives a setting rename |
-| [2.3.0](https://github.com/gregttx/StashPlugins/commit/cdacce0) | 2026-08-18 | NPT 4.0.0: one mode per entity type, and one task that does both |
-| [2.2.0](https://github.com/gregttx/StashPlugins/commit/034b60a) | 2026-08-18 | TagBundleClipboard 0.1.0: prune/roll-up, tag hovers, columns, Undo |
-| [2.1.0](https://github.com/gregttx/StashPlugins/commit/21c9c2a) | 2026-08-17 | All four: a busy cursor under the last log line |
-| [2.0.0](https://github.com/gregttx/StashPlugins/commit/ae1f4a8) | 2026-08-16 | All four: the ᝯㄝₓ prefix reaches the scripts |
-| [1.4.2](https://github.com/gregttx/StashPlugins/commit/fb5105f) | 2026-08-16 | CFBE 1.3.1, PTP2RE 1.4.2: the last of the version references |
-| [1.4.1](https://github.com/gregttx/StashPlugins/commit/b265818) | 2026-08-16 | READMEs describe the plugin, not its history |
-| [1.4.0](https://github.com/gregttx/StashPlugins/commit/eb0e690) | 2026-08-16 | The stale-script warning in the dialogs, and a README trim |
-| [1.3.0](https://github.com/gregttx/StashPlugins/commit/361d826) | 2026-08-16 | All four: a stale script says so on the settings page |
-| [1.2.2](https://github.com/gregttx/StashPlugins/commit/20403e2) | 2026-08-16 | MPTTS 2.2.2, PTP2RE 1.2.2: two leftovers from the README pass |
-| [1.2.1](https://github.com/gregttx/StashPlugins/commit/12866ec) | 2026-08-16 | CFBE 1.1.0, NPT 2.4.0, MPTTS 2.2.1, PTP2RE 1.2.1 |
-| [1.2.0](https://github.com/gregttx/StashPlugins/commit/4999d8b) | 2026-08-14 | The log stays until you close the dialog, and the footers agree |
-| [1.1.4](https://github.com/gregttx/StashPlugins/commit/823b766) | 2026-08-14 | Wider still, and CFBE gets a setting |
-| [1.1.3](https://github.com/gregttx/StashPlugins/commit/2b41b16) | 2026-08-13 | Wider dialogs, and CFBE stops skipping quietly |
-| [1.1.2](https://github.com/gregttx/StashPlugins/commit/91b664b) | 2026-08-13 | Two words the plugins no longer say: "Stash id", and "(s)" |
-| [1.1.1](https://github.com/gregttx/StashPlugins/commit/d182176) | 2026-08-13 | Four dialog heads, one sentence |
-| [1.1.0](https://github.com/gregttx/StashPlugins/commit/4c11384) | 2026-08-12 | Escape closes every dialog, and CFBE 0.1.0 gets the settings-page description |
-| [1.0.1](https://github.com/gregttx/StashPlugins/commit/20bc7c3) | 2026-08-12 | CustomFieldsBulkEditor 0.0.1: bulk custom fields, off the list view's "..." menu |
-| [1.0.0](https://github.com/gregttx/StashPlugins/commit/47d06a6) | 2026-08-11 | GTTx: NPT 2.0.0, MPT2S 2.0.0, PTP2RE 1.0.0 — one prefix, and a name in every dialog head |
-| [0.17.0](https://github.com/gregttx/StashPlugins/commit/2aebce9) | 2026-08-11 | Amber for "a plugin wrote this": NPT 1.8.0, MPT2S 1.17.0, PTP2RE 0.17.0 |
-| [0.16.0](https://github.com/gregttx/StashPlugins/commit/2b1332c) | 2026-08-11 | PropagateTagsAndPerformers 0.16.0, MergePerformerTagsToScenes 1.16.3: parity was a claim nobody had checked |
-| [0.15.0](https://github.com/gregttx/StashPlugins/commit/22aa4bb) | 2026-08-11 | PropagateTagsAndPerformers 0.15.0: source buttons on their targets' tab, and say where the tags come from |
-| [0.14.0](https://github.com/gregttx/StashPlugins/commit/6c5ed24) | 2026-08-11 | PropagateTagsAndPerformers 0.14.0: a second anchor, for the pages with no action row |
-| [0.13.3](https://github.com/gregttx/StashPlugins/commit/c76a624) | 2026-08-11 | PropagateTagsAndPerformers 0.13.3: four pages have no source-button anchor, not one |
-| [0.13.2](https://github.com/gregttx/StashPlugins/commit/eff36ee) | 2026-08-11 | PropagateTagsAndPerformers 0.13.2, MergePerformerTagsToScenes 1.16.2: a diagnostic that only speaks on a cache miss is silent when it is wanted |
-| [0.13.1](https://github.com/gregttx/StashPlugins/commit/b0f2d47) | 2026-08-11 | PropagateTagsAndPerformers 0.13.1, MergePerformerTagsToScenes 1.16.1: a switch to ask a button why it is hidden |
-| [0.13.0](https://github.com/gregttx/StashPlugins/commit/c95d1a4) | 2026-08-11 | PropagateTagsAndPerformers 0.13.0, MergePerformerTagsToScenes 1.16.0: hide a button that would add nothing |
-| [0.12.14](https://github.com/gregttx/StashPlugins/commit/27806fa) | 2026-08-11 | PropagateTagsAndPerformers 0.12.14: measure before you fix, not after |
-| [0.12.10](https://github.com/gregttx/StashPlugins/commit/a2097ec) | 2026-08-10 | PropagateTagsAndPerformers 0.12.10, NormalizeParentTags 1.7.8: say where the buttons are |
-| [0.12.9](https://github.com/gregttx/StashPlugins/commit/dee5079) | 2026-08-10 | PropagateTagsAndPerformers 0.12.9, MergePerformerTagsToScenes 1.15.9, NormalizeParentTags 1.7.7: say it once |
-| [0.12.8](https://github.com/gregttx/StashPlugins/commit/1ff1eb3) | 2026-08-10 | PropagateTagsAndPerformers 0.12.8, MergePerformerTagsToScenes 1.15.8: walk past what you cannot read |
-| [0.12.7](https://github.com/gregttx/StashPlugins/commit/37293e3) | 2026-08-10 | PropagateTagsAndPerformers 0.12.7, MergePerformerTagsToScenes 1.15.7: a margin is true whenever you ask |
-| [0.12.6](https://github.com/gregttx/StashPlugins/commit/780a7d7) | 2026-08-10 | PropagateTagsAndPerformers 0.12.6, MergePerformerTagsToScenes 1.15.6: measure the gap, don't derive it |
-| [0.12.5](https://github.com/gregttx/StashPlugins/commit/36b142d) | 2026-08-10 | PropagateTagsAndPerformers 0.12.5, MergePerformerTagsToScenes 1.15.5: fill the gap the neighbour leaves |
-| [0.12.4](https://github.com/gregttx/StashPlugins/commit/e7fd0d8) | 2026-08-10 | PropagateTagsAndPerformers 0.12.4, MergePerformerTagsToScenes 1.15.4: let the measured margins win the cascade |
-| [0.12.3](https://github.com/gregttx/StashPlugins/commit/535cd0b) | 2026-08-10 | PropagateTagsAndPerformers 0.12.3, MergePerformerTagsToScenes 1.15.3: measure the row's spacing instead of choosing it |
-| [0.12.2](https://github.com/gregttx/StashPlugins/commit/370d5fc) | 2026-08-10 | PropagateTagsAndPerformers 0.12.2, MergePerformerTagsToScenes 1.15.2: source button blink loop, and mx-2 on the scene button |
-| [0.12.1](https://github.com/gregttx/StashPlugins/commit/e99ee5b) | 2026-08-10 | PropagateTagsAndPerformers 0.12.1, MergePerformerTagsToScenes 1.15.1: find Delete by text, not only by class |
-| [0.12.0](https://github.com/gregttx/StashPlugins/commit/bdf2ab2) | 2026-08-10 | PropagateTagsAndPerformers 0.12.0, MergePerformerTagsToScenes 1.15.0: important-action anchor |
-| [0.11.0](https://github.com/gregttx/StashPlugins/commit/a026fd3) | 2026-08-08 | PropagateTagsAndPerformers 0.11.0, MergePerformerTagsToScenes 1.14.0: anchor manual buttons on Delete, not Save |
-| [0.10.0](https://github.com/gregttx/StashPlugins/commit/d2a9dfe) | 2026-08-08 | PropagateTagsAndPerformers 0.9.0-0.10.0, MergePerformerTagsToScenes 1.13.0: button fixes and deterministic cross-plugin ordering |
-| [0.8.3](https://github.com/gregttx/StashPlugins/commit/399082d) | 2026-08-07 | PropagateTagsAndPerformers 0.8.3: fix button height, stop duplicating MPTTS's button |
-| [0.8.2](https://github.com/gregttx/StashPlugins/commit/6f183c5) | 2026-08-07 | PropagateTagsAndPerformers 0.8.2: fix manual buttons on the Group page |
-| [0.8.1](https://github.com/gregttx/StashPlugins/commit/af185f4) | 2026-08-07 | PropagateTagsAndPerformers 0.8.1: fix manual buttons never appearing |
-| [0.8.0](https://github.com/gregttx/StashPlugins/commit/5eccbfb) | 2026-08-07 | PropagateTagsAndPerformers 0.8.0: manual buttons and staging (step 8) |
-| [0.7.0](https://github.com/gregttx/StashPlugins/commit/65a3cfc) | 2026-08-07 | Cross-plugin cooperation: the declares registry (step 7) |
-| [0.6.0](https://github.com/gregttx/StashPlugins/commit/fa58bf2) | 2026-08-07 | PropagateTagsAndPerformers 0.6.0: auto mode, source side |
-| [0.5.0](https://github.com/gregttx/StashPlugins/commit/80d7eba) | 2026-08-06 | PropagateTagsAndPerformers 0.5.0: auto mode, target side |
-| [0.4.0](https://github.com/gregttx/StashPlugins/commit/ebc270a) | 2026-08-06 | PropagateTagsAndPerformers 0.4.0: a gallery's images |
-| [0.3.1](https://github.com/gregttx/StashPlugins/commit/cf4bacc) | 2026-08-06 | PropagateTagsAndPerformers 0.3.1: name the source entity in the log |
-| [0.3.0](https://github.com/gregttx/StashPlugins/commit/3324483) | 2026-08-06 | PropagateTagsAndPerformers 0.3.0: apply and Undo |
-| [0.2.0](https://github.com/gregttx/StashPlugins/commit/a47e793) | 2026-08-06 | PropagateTagsAndPerformers 0.2.0: the planner |
-| [0.1.0](https://github.com/gregttx/StashPlugins/commit/3d44086) | 2026-08-06 | PropagateTagsAndPerformers 0.1.0: the shared base |
-| [0.0.1](https://github.com/gregttx/StashPlugins/commit/64662f0) | 2026-08-06 | PropagateTagsAndPerformers 0.0.1: scaffold |
+| 4.1.3 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
+| 4.1.2 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
+| 4.1.1 (`f21c4e3`) | 2026-08-28 | NPT: Prune and Roll Up on a scene, when they would do something |
+| 4.1.0 (`20e11ac`) | 2026-08-28 | A dropped `+` had taken six rules off Core's stylesheet; and System view |
+| 4.0.0 (`28ce7c2`) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
+| 3.24.0 (`cbb8266`) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
+| 3.23.1 (`89ce82b`) | 2026-08-27 | Country names come from Stash's own table, not the browser's |
+| 3.23.0 (`a668b69`) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
+| 3.22.0 (`d4a6e40`) | 2026-08-27 | Entity cards on every listed name, and three smaller asks |
+| 3.21.0 (`105c196`) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
+| 3.20.2 (`662770e`) | 2026-08-26 | The custom-field tooltip is fixed to the viewport, not to an inline span |
+| 3.20.1 (`f116777`) | 2026-08-26 | The custom-field tooltip is a box of ours, out of the cursor's way |
+| 3.20.0 (`bb1c801`) | 2026-08-26 | A hover-lazy tooltip on every setting that names a custom field |
+| 3.19.0 (`3cc17ea`) | 2026-08-26 | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
+| 3.18.1 (`f99e2f9`) | 2026-08-26 | FRETC 2.0.1, and a wider gap before every tag link |
+| 3.18.0 (`85ada93`) | 2026-08-26 | A tag named in a setting is a link to it, in four plugins |
+| 3.17.0 (`c37c8fa`) | 2026-08-25 | PTP2RE 3.17.0: skip tags NormalizeParentTags would prune straight back off |
+| 3.16.0 (`9bce32d`) | 2026-08-25 | PTP2RE 3.16.0: the entity an addition came from is a link too |
+| 3.15.1 (`33e96dd`) | 2026-08-25 | PTP2RE 3.15.1: a marker's tags reach its scene when the marker is created, not only when it is edited |
+| 3.15.0 (`78fe775`) | 2026-08-25 | NPT 4.8.4 / PTP2RE 3.15.0: Stop can end a scan, and a plan that has stopped describing the run says so |
+| 3.14.3 (`1725c41`) | 2026-08-22 | NPT 4.8.3 / PTP2RE 3.14.3: a control that changes what a run is doing is locked while it scans, not only while it writes |
+| 3.14.2 (`033b1eb`) | 2026-08-22 | NPT 4.8.2 / PTP2RE 3.14.2: Escape cannot abandon a settings save in flight |
+| 3.14.1 (`dc3f0b5`) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
+| 3.14.0 (`6712889`) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
+| 3.13.2 (`34981ce`) | 2026-08-22 | NPT 4.7.1 / PTP2RE 3.13.2: the settings dialogs' Save waits for a change |
+| 3.13.1 (`06f51e6`) | 2026-08-22 | PropagateTagsAndPerformers 3.13.1 / CustomFieldsBulkEditor 2.8.0 / FindEntitiesByTextContent 0.0.9: an empty box is empty again, Undo Rename, and the search box keeps its own history |
+| 3.13.0 (`16a1bcf`) | 2026-08-22 | CustomFieldsBulkEditor 2.7.0 / PropagateTagsAndPerformers 3.13.0: the descriptions reach the entity page, and the exclusion field has a default that documents itself |
+| 3.12.0 (`5e37588`) | 2026-08-21 | EntityNameMaintainer 0.0.7 / FindEntitiesByTextContent 0.0.8 / CustomFieldsBulkEditor 2.3.0 / PropagateTagsAndPerformers 3.12.0: a control says what pressing it costs |
+| 3.11.2 (`9a4f14a`) | 2026-08-20 | One grammatical load banner, in all five |
+| 3.11.1 (`fb346a7`) | 2026-08-19 | Release history out of all five plugin sources |
+| 3.11.0 (`c50338b`) | 2026-08-19 | Repo review 2026-08-19: all 27 findings fixed |
+| 3.10.0 (`b523556`) | 2026-08-19 | PTP2RE 3.10.0: the paths dialog draws the paths, and you can rearrange them |
+| 3.6.2 (`05be8bd`) | 2026-08-19 | PTP2RE 3.6.2: the progress counters say what their number is |
+| 3.6.1 (`12fce4a`) | 2026-08-19 | PTP2RE 3.6.1: Performers -> Groups above Performers -> Scenes |
+| 3.6.0 (`2085f8d`) | 2026-08-19 | PTP2RE 3.6.0: the layout revised, and a null in a column is a blank row |
+| 3.5.0 (`6bb9093`) | 2026-08-19 | PTP2RE 3.5.0: the layout is the user's, and a path already happening says so |
+| 3.4.0 (`5160f26`) | 2026-08-19 | PTP2RE 3.4.0: the bulk buttons move into the footer, and everything says what it does |
+| 3.3.0 (`595075a`) | 2026-08-19 | PTP2RE 3.3.0: the two moded paths get their own column, and three bulk buttons |
+| 3.2.0 (`0943e39`) | 2026-08-19 | PTP2RE 3.2.0: each path's control is a button carrying its own state |
+| 3.1.2 (`bcf7d0e`) | 2026-08-19 | NPT 4.6.2 / PTP2RE 3.1.2: configurePlugin replaces, so send the whole map |
+| 3.1.1 (`992c0b7`) | 2026-08-19 | PTP2RE 3.1.1: the settings row stops deleting a value it could not read |
+| 3.1.0 (`e6c5c43`) | 2026-08-19 | PTP2RE 3.1.0: adopt MPTTS's four exclusion filters where we have none |
+| 3.0.2 (`01e394c`) | 2026-08-19 | NPT 4.6.1 / PTP2RE 3.0.2: a self-append fixed, and the row listing in columns |
+| 3.0.1 (`96daa34`) | 2026-08-19 | PTP2RE 3.0.1: the path dialog gets two columns and loses a false heading |
+| 3.0.0 (`706b0c5`) | 2026-08-19 | PTP2RE 3.0.0: fifteen path switches become one string and a dialog |
+| 2.4.0 (`e06ff06`) | 2026-08-18 | NPT 4.3.0 / MPTTS 3.4.0 / PTP2RE 2.4.0: amber reaches inside the dialogs |
+| 2.3.1 (`8a004da`) | 2026-08-18 | NPT 4.0.1 / MPTTS 3.3.1 / PTP2RE 2.3.1: the stale banner survives a setting rename |
+| 2.3.0 (`cdacce0`) | 2026-08-18 | NPT 4.0.0: one mode per entity type, and one task that does both |
+| 2.2.0 (`034b60a`) | 2026-08-18 | TagBundleClipboard 0.1.0: prune/roll-up, tag hovers, columns, Undo |
+| 2.1.0 (`21c9c2a`) | 2026-08-17 | All four: a busy cursor under the last log line |
+| 2.0.0 (`ae1f4a8`) | 2026-08-16 | All four: the ᝯㄝₓ prefix reaches the scripts |
+| 1.4.2 (`fb5105f`) | 2026-08-16 | CFBE 1.3.1, PTP2RE 1.4.2: the last of the version references |
+| 1.4.1 (`b265818`) | 2026-08-16 | READMEs describe the plugin, not its history |
+| 1.4.0 (`eb0e690`) | 2026-08-16 | The stale-script warning in the dialogs, and a README trim |
+| 1.3.0 (`361d826`) | 2026-08-16 | All four: a stale script says so on the settings page |
+| 1.2.2 (`20403e2`) | 2026-08-16 | MPTTS 2.2.2, PTP2RE 1.2.2: two leftovers from the README pass |
+| 1.2.1 (`12866ec`) | 2026-08-16 | CFBE 1.1.0, NPT 2.4.0, MPTTS 2.2.1, PTP2RE 1.2.1 |
+| 1.2.0 (`4999d8b`) | 2026-08-14 | The log stays until you close the dialog, and the footers agree |
+| 1.1.4 (`823b766`) | 2026-08-14 | Wider still, and CFBE gets a setting |
+| 1.1.3 (`2b41b16`) | 2026-08-13 | Wider dialogs, and CFBE stops skipping quietly |
+| 1.1.2 (`91b664b`) | 2026-08-13 | Two words the plugins no longer say: "Stash id", and "(s)" |
+| 1.1.1 (`d182176`) | 2026-08-13 | Four dialog heads, one sentence |
+| 1.1.0 (`4c11384`) | 2026-08-12 | Escape closes every dialog, and CFBE 0.1.0 gets the settings-page description |
+| 1.0.1 (`20bc7c3`) | 2026-08-12 | CustomFieldsBulkEditor 0.0.1: bulk custom fields, off the list view's "..." menu |
+| 1.0.0 (`47d06a6`) | 2026-08-11 | GTTx: NPT 2.0.0, MPT2S 2.0.0, PTP2RE 1.0.0 — one prefix, and a name in every dialog head |
+| 0.17.0 (`2aebce9`) | 2026-08-11 | Amber for "a plugin wrote this": NPT 1.8.0, MPT2S 1.17.0, PTP2RE 0.17.0 |
+| 0.16.0 (`2b1332c`) | 2026-08-11 | PropagateTagsAndPerformers 0.16.0, MergePerformerTagsToScenes 1.16.3: parity was a claim nobody had checked |
+| 0.15.0 (`22aa4bb`) | 2026-08-11 | PropagateTagsAndPerformers 0.15.0: source buttons on their targets' tab, and say where the tags come from |
+| 0.14.0 (`6c5ed24`) | 2026-08-11 | PropagateTagsAndPerformers 0.14.0: a second anchor, for the pages with no action row |
+| 0.13.3 (`c76a624`) | 2026-08-11 | PropagateTagsAndPerformers 0.13.3: four pages have no source-button anchor, not one |
+| 0.13.2 (`eff36ee`) | 2026-08-11 | PropagateTagsAndPerformers 0.13.2, MergePerformerTagsToScenes 1.16.2: a diagnostic that only speaks on a cache miss is silent when it is wanted |
+| 0.13.1 (`b0f2d47`) | 2026-08-11 | PropagateTagsAndPerformers 0.13.1, MergePerformerTagsToScenes 1.16.1: a switch to ask a button why it is hidden |
+| 0.13.0 (`c95d1a4`) | 2026-08-11 | PropagateTagsAndPerformers 0.13.0, MergePerformerTagsToScenes 1.16.0: hide a button that would add nothing |
+| 0.12.14 (`27806fa`) | 2026-08-11 | PropagateTagsAndPerformers 0.12.14: measure before you fix, not after |
+| 0.12.10 (`a2097ec`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.10, NormalizeParentTags 1.7.8: say where the buttons are |
+| 0.12.9 (`dee5079`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.9, MergePerformerTagsToScenes 1.15.9, NormalizeParentTags 1.7.7: say it once |
+| 0.12.8 (`1ff1eb3`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.8, MergePerformerTagsToScenes 1.15.8: walk past what you cannot read |
+| 0.12.7 (`37293e3`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.7, MergePerformerTagsToScenes 1.15.7: a margin is true whenever you ask |
+| 0.12.6 (`780a7d7`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.6, MergePerformerTagsToScenes 1.15.6: measure the gap, don't derive it |
+| 0.12.5 (`36b142d`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.5, MergePerformerTagsToScenes 1.15.5: fill the gap the neighbour leaves |
+| 0.12.4 (`e7fd0d8`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.4, MergePerformerTagsToScenes 1.15.4: let the measured margins win the cascade |
+| 0.12.3 (`535cd0b`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.3, MergePerformerTagsToScenes 1.15.3: measure the row's spacing instead of choosing it |
+| 0.12.2 (`370d5fc`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.2, MergePerformerTagsToScenes 1.15.2: source button blink loop, and mx-2 on the scene button |
+| 0.12.1 (`e99ee5b`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.1, MergePerformerTagsToScenes 1.15.1: find Delete by text, not only by class |
+| 0.12.0 (`bdf2ab2`) | 2026-08-10 | PropagateTagsAndPerformers 0.12.0, MergePerformerTagsToScenes 1.15.0: important-action anchor |
+| 0.11.0 (`a026fd3`) | 2026-08-08 | PropagateTagsAndPerformers 0.11.0, MergePerformerTagsToScenes 1.14.0: anchor manual buttons on Delete, not Save |
+| 0.10.0 (`d2a9dfe`) | 2026-08-08 | PropagateTagsAndPerformers 0.9.0-0.10.0, MergePerformerTagsToScenes 1.13.0: button fixes and deterministic cross-plugin ordering |
+| 0.8.3 (`399082d`) | 2026-08-07 | PropagateTagsAndPerformers 0.8.3: fix button height, stop duplicating MPTTS's button |
+| 0.8.2 (`6f183c5`) | 2026-08-07 | PropagateTagsAndPerformers 0.8.2: fix manual buttons on the Group page |
+| 0.8.1 (`af185f4`) | 2026-08-07 | PropagateTagsAndPerformers 0.8.1: fix manual buttons never appearing |
+| 0.8.0 (`5eccbfb`) | 2026-08-07 | PropagateTagsAndPerformers 0.8.0: manual buttons and staging (step 8) |
+| 0.7.0 (`65a3cfc`) | 2026-08-07 | Cross-plugin cooperation: the declares registry (step 7) |
+| 0.6.0 (`fa58bf2`) | 2026-08-07 | PropagateTagsAndPerformers 0.6.0: auto mode, source side |
+| 0.5.0 (`80d7eba`) | 2026-08-06 | PropagateTagsAndPerformers 0.5.0: auto mode, target side |
+| 0.4.0 (`ebc270a`) | 2026-08-06 | PropagateTagsAndPerformers 0.4.0: a gallery's images |
+| 0.3.1 (`cf4bacc`) | 2026-08-06 | PropagateTagsAndPerformers 0.3.1: name the source entity in the log |
+| 0.3.0 (`3324483`) | 2026-08-06 | PropagateTagsAndPerformers 0.3.0: apply and Undo |
+| 0.2.0 (`a47e793`) | 2026-08-06 | PropagateTagsAndPerformers 0.2.0: the planner |
+| 0.1.0 (`3d44086`) | 2026-08-06 | PropagateTagsAndPerformers 0.1.0: the shared base |
+| 0.0.1 (`64662f0`) | 2026-08-06 | PropagateTagsAndPerformers 0.0.1: scaffold |

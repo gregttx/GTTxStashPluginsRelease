@@ -63,7 +63,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.2.1';
+  var PLUGIN_VERSION = '5.2.2';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -4077,7 +4077,7 @@
   //
   // Clicking it does not fold the group: SettingGroup's onDivClick walks up from the
   // event target and returns early for `a` and `button`.
-  var README_URL = 'https://github.com/gregttx/StashPlugins/blob/main/NormalizeParentTags/README.md';
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/NormalizeParentTags/README.md';
   var README_LINK_ID = 'npt-readme-link';
 
   // The first descendant carrying a class, in document order. This was a hand-rolled

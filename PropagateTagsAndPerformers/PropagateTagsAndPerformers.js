@@ -80,7 +80,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '4.1.2';
+  var PLUGIN_VERSION = '4.1.3';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -98,7 +98,7 @@
     'running script\'s own version - the settings page reads the manifest instead, which can be ' +
     'newer than the script your browser has cached.');
 
-  var README_URL = 'https://github.com/gregttx/StashPlugins/blob/main/PropagateTagsAndPerformers/README.md';
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/PropagateTagsAndPerformers/README.md';
   var README_LINK_ID = 'ptp2re-readme-link';
   var DESC_TOGGLE_ID = 'ptp2re-desc-toggle';
   var STYLE_ID       = 'ptp2re-style';

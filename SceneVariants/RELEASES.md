@@ -8,31 +8,32 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
-| [0.15.0](https://github.com/gregttx/StashPlugins/commit/28ce7c2) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
-| [0.14.0](https://github.com/gregttx/StashPlugins/commit/cbb8266) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
-| [0.13.1](https://github.com/gregttx/StashPlugins/commit/89ce82b) | 2026-08-27 | Country names come from Stash's own table, not the browser's |
-| [0.13.0](https://github.com/gregttx/StashPlugins/commit/a668b69) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
-| [0.12.0](https://github.com/gregttx/StashPlugins/commit/105c196) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
-| [0.11.0](https://github.com/gregttx/StashPlugins/commit/637e350) | 2026-08-26 | SVR 0.11.0: the default is written into the setting |
-| [0.10.2](https://github.com/gregttx/StashPlugins/commit/662770e) | 2026-08-26 | The custom-field tooltip is fixed to the viewport, not to an inline span |
-| [0.10.1](https://github.com/gregttx/StashPlugins/commit/f116777) | 2026-08-26 | The custom-field tooltip is a box of ours, out of the cursor's way |
-| [0.10.0](https://github.com/gregttx/StashPlugins/commit/bb1c801) | 2026-08-26 | A hover-lazy tooltip on every setting that names a custom field |
-| [0.9.0](https://github.com/gregttx/StashPlugins/commit/3cc17ea) | 2026-08-26 | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
-| [0.8.1](https://github.com/gregttx/StashPlugins/commit/f99e2f9) | 2026-08-26 | FRETC 2.0.1, and a wider gap before every tag link |
-| [0.8.0](https://github.com/gregttx/StashPlugins/commit/85ada93) | 2026-08-26 | A tag named in a setting is a link to it, in four plugins |
-| [0.7.1](https://github.com/gregttx/StashPlugins/commit/bde283f) | 2026-08-22 | SceneVariants 0.7.1: Close ends a scan, Stop is for the write it cannot end |
-| [0.7.0](https://github.com/gregttx/StashPlugins/commit/8b684f1) | 2026-08-22 | SceneVariants 0.7.0: the migration dialog can be stopped, scan included |
-| [0.6.1](https://github.com/gregttx/StashPlugins/commit/dc3f0b5) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
-| [0.6.0](https://github.com/gregttx/StashPlugins/commit/6712889) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
-| [0.5.0](https://github.com/gregttx/StashPlugins/commit/011ff95) | 2026-08-22 | SceneVariants 0.5.0: a partial-length scene's stash-id moves into a custom field, and the tab matches on both |
-| [0.4.0](https://github.com/gregttx/StashPlugins/commit/147f0d7) | 2026-08-21 | SceneVariants 0.4.0: a row's hover text says how that variant differs |
-| [0.3.0](https://github.com/gregttx/StashPlugins/commit/330502e) | 2026-08-21 | SceneVariants 0.3.0: aliases and descendants classify a variant, and the cover comes back |
-| [0.2.3](https://github.com/gregttx/StashPlugins/commit/c061a84) | 2026-08-20 | SceneVariants 0.2.3: the Variants tab is amber |
-| [0.2.2](https://github.com/gregttx/StashPlugins/commit/d2d3cd2) | 2026-08-20 | SceneVariants 0.2.2: the tab goes before Edit, the value leads its own line |
-| [0.2.1](https://github.com/gregttx/StashPlugins/commit/34e613c) | 2026-08-20 | SceneVariants 0.2.1: partial-length is amber, and sized with the metadata |
-| [0.2.0](https://github.com/gregttx/StashPlugins/commit/c0dd2a6) | 2026-08-20 | SceneVariants 0.2.0: covers and previews, and one word for one idea |
-| [0.1.2](https://github.com/gregttx/StashPlugins/commit/b4cec90) | 2026-08-20 | SceneVariants 0.1.2: prove the patch shape against the real React |
-| [0.1.1](https://github.com/gregttx/StashPlugins/commit/f997b2d) | 2026-08-20 | SceneVariants 0.1.1: the after-patch reads its result off the end |
-| [0.1.0](https://github.com/gregttx/StashPlugins/commit/6f8240f) | 2026-08-20 | SceneVariants 0.1.0: a real Siblings tab on the scene page |
-| [0.0.2](https://github.com/gregttx/StashPlugins/commit/1349356) | 2026-08-20 | SceneVariants 0.0.2: the sibling query asks with EQUALS |
-| [0.0.1](https://github.com/gregttx/StashPlugins/commit/5a37e41) | 2026-08-20 | SceneVariants 0.0.1: L0 of the scene-variants plan, as a Siblings panel |
+| 0.15.1 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
+| 0.15.0 (`28ce7c2`) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
+| 0.14.0 (`cbb8266`) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |
+| 0.13.1 (`89ce82b`) | 2026-08-27 | Country names come from Stash's own table, not the browser's |
+| 0.13.0 (`a668b69`) | 2026-08-27 | The tooltip box outlives its dialog, and eight smaller asks |
+| 0.12.0 (`105c196`) | 2026-08-27 | Tag tooltips carry the tag's picture, in all six plugins that draw one |
+| 0.11.0 (`637e350`) | 2026-08-26 | SVR 0.11.0: the default is written into the setting |
+| 0.10.2 (`662770e`) | 2026-08-26 | The custom-field tooltip is fixed to the viewport, not to an inline span |
+| 0.10.1 (`f116777`) | 2026-08-26 | The custom-field tooltip is a box of ours, out of the cursor's way |
+| 0.10.0 (`bb1c801`) | 2026-08-26 | A hover-lazy tooltip on every setting that names a custom field |
+| 0.9.0 (`3cc17ea`) | 2026-08-26 | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
+| 0.8.1 (`f99e2f9`) | 2026-08-26 | FRETC 2.0.1, and a wider gap before every tag link |
+| 0.8.0 (`85ada93`) | 2026-08-26 | A tag named in a setting is a link to it, in four plugins |
+| 0.7.1 (`bde283f`) | 2026-08-22 | SceneVariants 0.7.1: Close ends a scan, Stop is for the write it cannot end |
+| 0.7.0 (`8b684f1`) | 2026-08-22 | SceneVariants 0.7.0: the migration dialog can be stopped, scan included |
+| 0.6.1 (`dc3f0b5`) | 2026-08-22 | Anchor the Reload UI button on markup every released Stash has, not only develop's |
+| 0.6.0 (`6712889`) | 2026-08-22 | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
+| 0.5.0 (`011ff95`) | 2026-08-22 | SceneVariants 0.5.0: a partial-length scene's stash-id moves into a custom field, and the tab matches on both |
+| 0.4.0 (`147f0d7`) | 2026-08-21 | SceneVariants 0.4.0: a row's hover text says how that variant differs |
+| 0.3.0 (`330502e`) | 2026-08-21 | SceneVariants 0.3.0: aliases and descendants classify a variant, and the cover comes back |
+| 0.2.3 (`c061a84`) | 2026-08-20 | SceneVariants 0.2.3: the Variants tab is amber |
+| 0.2.2 (`d2d3cd2`) | 2026-08-20 | SceneVariants 0.2.2: the tab goes before Edit, the value leads its own line |
+| 0.2.1 (`34e613c`) | 2026-08-20 | SceneVariants 0.2.1: partial-length is amber, and sized with the metadata |
+| 0.2.0 (`c0dd2a6`) | 2026-08-20 | SceneVariants 0.2.0: covers and previews, and one word for one idea |
+| 0.1.2 (`b4cec90`) | 2026-08-20 | SceneVariants 0.1.2: prove the patch shape against the real React |
+| 0.1.1 (`f997b2d`) | 2026-08-20 | SceneVariants 0.1.1: the after-patch reads its result off the end |
+| 0.1.0 (`6f8240f`) | 2026-08-20 | SceneVariants 0.1.0: a real Siblings tab on the scene page |
+| 0.0.2 (`1349356`) | 2026-08-20 | SceneVariants 0.0.2: the sibling query asks with EQUALS |
+| 0.0.1 (`5a37e41`) | 2026-08-20 | SceneVariants 0.0.1: L0 of the scene-variants plan, as a Siblings panel |

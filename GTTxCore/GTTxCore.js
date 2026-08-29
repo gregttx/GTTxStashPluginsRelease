@@ -21,8 +21,8 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '1.0.0';
-  var README_URL = 'https://github.com/gregttx/StashPlugins/blob/main/GTTxCore/README.md';
+  var PLUGIN_VERSION = '1.0.1';
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
   var STALE_ID = 'gttxcore-stale-notice';

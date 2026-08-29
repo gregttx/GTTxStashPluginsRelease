@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.0.0';
+  var PLUGIN_VERSION = '3.0.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -87,7 +87,7 @@
     'script\'s own version - the settings page reads the manifest instead, which can be ' +
     'newer than the script your browser has cached.');
 
-  var README_URL = 'https://github.com/gregttx/StashPlugins/blob/main/FindEntitiesByTextContent/README.md';
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/FindEntitiesByTextContent/README.md';
   var STYLE_ID       = 'fretc-style';
   var README_LINK_ID = 'fretc-readme-link';
   var DESC_TOGGLE_ID = 'fretc-desc-toggle';

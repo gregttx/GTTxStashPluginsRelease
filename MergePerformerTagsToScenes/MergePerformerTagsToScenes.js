@@ -74,7 +74,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.0.2';
+  var PLUGIN_VERSION      = '4.0.3';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -3265,7 +3265,7 @@
   //
   // The sibling has the same feature, anchored the same way, for the same reason
   // there are two of everything here: the plugins share no module.
-  var README_URL = 'https://github.com/gregttx/StashPlugins/blob/main/MergePerformerTagsToScenes/README.md';
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/MergePerformerTagsToScenes/README.md';
   var README_LINK_ID = 'cpt2s-readme-link';
 
   // The first descendant carrying a class, in document order. This was a hand-rolled
