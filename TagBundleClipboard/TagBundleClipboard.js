@@ -37,6 +37,7 @@
   }
   var pickControl = C.pickControl,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
+    linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
@@ -68,7 +69,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '2.0.2';
+  var PLUGIN_VERSION = '2.1.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -621,7 +622,12 @@
     '.tbc-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.tbc-foot button{margin-right:.5rem;}' +
-    '.tbc-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.tbc-hidden{display:none !important;}' +
     // ── The picker's own two panes ──────────────────────────────────────────
     //
     // A fixed `height` rather than the shared `max-height` alone: ticking a checkbox
@@ -1990,7 +1996,7 @@
     var link = el('a', 'tbc-readme', 'TagBundleClipboard/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noreferrer';
     link.title = 'Open this plugin’s documentation';
     link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';

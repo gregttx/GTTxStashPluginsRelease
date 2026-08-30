@@ -99,7 +99,8 @@ There is also a **library-wide task**, in **Settings → Tasks → Plugin Tasks*
 
   **Every scene, performer and tag the log names is a link to it** — the recap's tags
   included, with the `x18` beside each one left outside the link, since that count is this
-  run's arithmetic rather than part of the tag's name. They open in a new tab, and
+  run's arithmetic rather than part of the tag's name. They open in a new tab — or in this one, if
+  ᝯㄝₓ Core's **Open Links in the Same Tab** is on — and
   hovering one opens a card: the entity's picture and the fields it is recognised by — a scene's
   studio, performers and tags, a performer's gender, country and scene count. That one is read
   when you point at it, so a plan nobody hovers costs nothing. **Copy log** hands over the plain

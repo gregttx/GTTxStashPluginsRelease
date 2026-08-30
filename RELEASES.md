@@ -10,6 +10,11 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-08-29 |  |  |  | 1.1.4 (`94163aa`) |  |  |  |  |  | It should become a no-op |
+| 2026-08-29 |  |  |  | 1.1.3 (`ed3db08`) |  |  |  |  |  | Say what the no-op is, rather than naming a width |
+| 2026-08-29 |  |  |  | 1.1.2 (`33cbd02`) |  |  |  |  |  | When, not if |
+| 2026-08-29 | 3.1.1 (`f1fb23f`) |  | 3.1.1 (`f1fb23f`) | 1.1.1 (`f1fb23f`) |  |  |  |  |  | Measure two drag limits, gate one row, name one issue |
+| 2026-08-29 | 3.1.0 (`f065c69`) | 2.1.0 (`f065c69`) | 3.1.0 (`f065c69`) | 1.1.0 (`f065c69`) | 4.1.0 (`f065c69`) | 5.3.0 (`f065c69`) | 4.2.0 (`f065c69`) | 0.16.0 (`f065c69`) | 2.1.0 (`f065c69`) | One setting decides where every link opens, and three fixes beside it |
 | 2026-08-29 | 3.0.1 (`694d485`) | 2.0.1 (`694d485`) | 3.0.1 (`694d485`) | 1.0.1 (`694d485`) | 4.0.3 (`694d485`) | 5.2.2 (`694d485`) | 4.1.3 (`694d485`) | 0.15.1 (`694d485`) | 2.0.2 (`694d485`) | All nine plugins: the README link points at the public mirror |
 | 2026-08-29 |  |  |  | 1.0.0 (`1bfccf2`) |  |  |  |  |  | GTTxCore 1.0.0: verified against Stash 0.31.0 |
 | 2026-08-29 |  |  |  | 0.0.8 (`9b2161b`) |  |  |  |  |  | GTTxCore 0.0.8: right-click Paste in a Tags or Performers box |

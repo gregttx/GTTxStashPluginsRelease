@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.3.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 5.2.2 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 5.2.1 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
 | 5.2.0 (`e88a6d7`) | 2026-08-28 | NPT: the scene buttons stage into the tag box instead of opening a dialog |

@@ -35,6 +35,7 @@
   }
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
+    linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
@@ -80,7 +81,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '4.1.3';
+  var PLUGIN_VERSION = '4.2.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1616,7 +1617,12 @@
     '.ptp2re-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.ptp2re-foot button{margin-right:.5rem;}' +
-    '.ptp2re-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.ptp2re-hidden{display:none !important;}' +
     // Our own source-button row, under the tab strip on the pages that render no
     // detail action row (Scene, Gallery, and Image if it is the same). This is the one
     // container in the plugin Stash puts nothing into, so there is no neighbour to
@@ -2663,7 +2669,7 @@
           if (seg.href) {
             span = el('a', 'ptp2re-elink', seg.text);
             span.href = seg.href;
-            span.target = '_blank';
+            span.target = linkTarget();
             span.rel = 'noopener noreferrer';
           } else {
             span = el('span', seg.ent ? 'ptp2re-hover' : null, seg.text);
@@ -5794,7 +5800,7 @@
     var link = el('a', 'ptp2re-readme', 'PropagateTagsAndPerformers/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noreferrer';
     link.title = 'Open this plugin\'s documentation';
     link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
@@ -6033,7 +6039,7 @@
       if (!node) {
         node = el('a', 'ptp2re-tagicon', EXCL_MARK);
         node.id = EXCL_LINK_ID;
-        node.target = '_blank';
+        node.target = linkTarget();
         node.rel = 'noopener noreferrer';
       }
       node.href = entityHref('tag', tag.id);

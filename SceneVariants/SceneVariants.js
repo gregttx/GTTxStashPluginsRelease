@@ -41,7 +41,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, plural = C.plural,
+  var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
@@ -71,7 +71,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's markup or about a filter field name.
-  var PLUGIN_VERSION = '0.15.1';
+  var PLUGIN_VERSION = '0.16.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1074,7 +1074,7 @@
     line.appendChild(el('span', null, head));
     var link = el('a', 'svr-elink', name);
     link.href = '/scenes/' + job.id;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noopener noreferrer';
     entityTip(link, 'scenes', job.id);
     line.appendChild(link);
@@ -1454,7 +1454,12 @@
     '.svr-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.svr-foot button{margin-right:.5rem;}' +
-    '.svr-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.svr-hidden{display:none !important;}' +
     // ── This dialog's own ───────────────────────────────────────────────────
     //
     // A planned scene is not a message, so it does not wear one of the three message
@@ -1892,6 +1897,11 @@
     if (meta) facts.push(React.createElement('span', { key: 'meta', className: 'svr-meta' }, meta));
     var line = [React.createElement('a', {
       key: 'title', className: 'svr-variant-title', href: '/scenes/' + row.scene.id,
+      // A new tab by default, like every other link these plugins draw - the scene
+      // being read is the one the pane belongs to, and following a variant out of it
+      // is what loses the comparison. ᝯㄝₓ Core's own setting is what moves both of
+      // these to the same tab.
+      target: linkTarget(),
     }, row.scene.title || ('Scene ' + row.scene.id))];
     if (facts.length) {
       line.push(React.createElement('div', { key: 'facts', className: 'svr-facts' }, facts));
@@ -1903,7 +1913,8 @@
       // the title inside is already a link, and an anchor inside an anchor is invalid
       // markup that browsers resolve by closing the outer one early.
       kids.unshift(React.createElement('a',
-        { key: 'thumblink', className: 'svr-thumb-link', href: '/scenes/' + row.scene.id }, thumb));
+        { key: 'thumblink', className: 'svr-thumb-link', href: '/scenes/' + row.scene.id,
+          target: linkTarget() }, thumb));
     }
     // On the row rather than on any one thing in it, so anywhere in the row answers it -
     // and the value span keeps its own title, which is a narrower answer about that span.
@@ -2284,7 +2295,7 @@
     var link = el('a', 'svr-readme', 'SceneVariants/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noreferrer';
     link.title = 'Open this plugin’s documentation';
     link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
@@ -2341,7 +2352,7 @@
       if (!node) {
         node = el('a', 'svr-tagicon', TAG_LINK_MARK);
         node.id = tagLinkId(key);
-        node.target = '_blank';
+        node.target = linkTarget();
         node.rel = 'noopener noreferrer';
       }
       node.href = '/tags/' + tag.id;

@@ -65,7 +65,7 @@ Sandy (7)          Performer · Details                                   Likes 
 Outdoors (3)       Tag · Aliases, Custom field name                      beachy
 ```
 
-Click one to open it in a new tab. A second row of filters appears above the list as the
+Click one to open it in a new tab, or in this one if ᝯㄝₓ Core is set that way. A second row of filters appears above the list as the
 search finds attributes to offer — Title, Details, Aliases, Custom field name, and so on,
 one for every attribute something has actually matched in. Turning one off hides the
 entities that only matched there, and drops that attribute's chip from the ones that also
@@ -142,7 +142,8 @@ storage. A private window, or a browser set to block site data, simply remembers
 **Back up your database before the first replace.** This rewrites text across your library.
 
 Tick **Replace** and a second line appears: what to put in place of the text you searched
-for. The **Replace** button then rewrites every entity on the list — so **the list you are
+for. The tick is only available once the box above says what to look for - a replacement
+replaces what a search found, so there is nothing for it to offer before that. The **Replace** button then rewrites every entity on the list — so **the list you are
 looking at is the plan**. There is no second review dialog, because the list already names
 every entity, which attributes matched and how many times each; putting a plan in front of a
 plan would say nothing new.

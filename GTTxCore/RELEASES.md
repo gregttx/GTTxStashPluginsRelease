@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.1.4 (`94163aa`) | 2026-08-29 | It should become a no-op |
+| 1.1.3 (`ed3db08`) | 2026-08-29 | Say what the no-op is, rather than naming a width |
+| 1.1.2 (`33cbd02`) | 2026-08-29 | When, not if |
+| 1.1.1 (`f1fb23f`) | 2026-08-29 | Measure two drag limits, gate one row, name one issue |
+| 1.1.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 1.0.1 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 1.0.0 (`1bfccf2`) | 2026-08-29 | GTTxCore 1.0.0: verified against Stash 0.31.0 |
 | 0.0.8 (`9b2161b`) | 2026-08-29 | GTTxCore 0.0.8: right-click Paste in a Tags or Performers box |

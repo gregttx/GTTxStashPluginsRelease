@@ -144,7 +144,8 @@ count, and it is never part of the name: the id deliberately sits *outside* the 
 actually called `My Scene (2)` cannot be misread. It is what tells two tags with the same name
 apart.
 
-**Every name on a change line is a link**, opening in a new tab: the entity, the tag being written,
+**Every name on a change line is a link**, opening in a new tab unless ᝯㄝₓ Core is set to use this
+one: the entity, the tag being written,
 and the **due to** tag that explains why. **Hovering any of them opens a card** — a picture and what
 the thing carries, which is the other half of deciding whether a removal is right. A Scene Marker
 is the one exception and stays plain text with no card, because Stash gives a marker neither a
@@ -306,8 +307,9 @@ actually gets written.
 
 Select any tag to see its parents, ancestors, children and descendants, plus a plain-language
 answer for what Prune and Roll Up would do with it. **Its name at the top of that panel is a link
-to the tag's own page in Stash, and it opens in a new tab** — the viewer holds a scan of the whole
-hierarchy, and leaving the page in this tab would throw it away. Every tag named in those lists is clickable and
+to the tag's own page in Stash, and by default it opens in a new tab** — the viewer holds a scan of
+the whole hierarchy, and leaving the page in this tab would throw it away, which is worth knowing
+before switching ᝯㄝₓ Core to open links here. Every tag named in those lists is clickable and
 takes you to it — which is the direct way to reach one particular parent of a multi-parent tag,
 where the **◆** badge walks them one at a time. **Load counts** adds how many scenes, images,
 galleries and performers carry each tag — a separate query over the whole tag list, so it is only

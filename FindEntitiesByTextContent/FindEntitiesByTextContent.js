@@ -41,7 +41,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, plural = C.plural,
+  var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.0.1';
+  var PLUGIN_VERSION = '3.1.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -380,7 +380,12 @@
     '.fretc-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.fretc-foot button{margin-right:.5rem;}' +
-    '.fretc-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.fretc-hidden{display:none !important;}' +
     '.fretc-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
     '.fretc-label{color:#a7b6c2;font-size:.85rem;white-space:nowrap;}' +
@@ -991,7 +996,7 @@
     head.appendChild(el('div', 'fretc-legend',
       'One line per entity that matched, reading: the entity with its id in brackets, ' +
       'then which attributes matched and how many times each, then the text around the ' +
-      'first match. Click an entity to open it in a new tab. Turn on the types you want ' +
+      'first match. Click an entity to open it. Turn on the types you want ' +
       'searched - they all start off. A long search pauses itself when the list is full; ' +
       'Continue clears what is on screen and carries on, and Copy log keeps every result ' +
       'either way.'));
@@ -1084,8 +1089,9 @@
     });
     repl.appendChild(this.replaceBox);
     repl.appendChild(el('span', null, 'Replace'));
-    repl.title = 'Offer to replace the text you searched for, everywhere this search ' +
-      'found it. Off, this dialog reads and writes nothing at all.';
+    // The title says which of the two states it is in, so it is written in `syncReplace`
+    // beside everything else that answers for this control.
+    this.replaceLabel = repl;
     opts.appendChild(repl);
 
     // Beside Replace rather than beside the box, because it belongs with the other two
@@ -1433,9 +1439,22 @@
   // dialog looking for what they have missed.
   Run.prototype.syncReplace = function (busy) {
     var self = this;
-    var on = !!this.replacing;
     var writing = !!this.writing;
+    var text = trim(this.textInput.value);
+    // **Nothing to replace until there is something to replace.** The button already said
+    // so and stayed on screen saying it, under a row offering a replacement for a search
+    // nobody had asked for. With the box above empty the whole row is a control for a
+    // write that cannot even be described, so it is unavailable rather than
+    // disabled-with-a-reason - and the tick is kept, so typing the search back brings the
+    // row straight back with it.
+    var on = !!this.replacing && !!text;
     this.show(this.replaceBar, on);
+    // **Amber in the one state that earns it.** The backup sentence is the first line of
+    // every head in this repo that can write, and it is amber in all of them; the other
+    // wording is a fact about a dialog that writes nothing, which is the grey note slot.
+    // One element with the class swapped rather than two, so the sentence stays in the
+    // place the siblings put it whichever of the two it is showing.
+    this.noteFixedEl.className = on ? 'fretc-warn' : 'fretc-note';
     this.noteFixedEl.textContent = on
       ? 'Backing up your database before proceeding is recommended. Replace rewrites the ' +
         'text in your library; Undo only reverses what this dialog wrote, while it stays ' +
@@ -1453,10 +1472,14 @@
       : '';
     this.replaceInput.disabled = busy || writing;
     this.show(this.replaceClearBtn, on && !!trim(this.replaceInput.value) && !busy && !writing);
-    this.replaceBox.disabled = busy || writing;
+    this.replaceBox.disabled = busy || writing || !text;
+    this.replaceLabel.title = text
+      ? 'Offer to replace the text you searched for, everywhere this search found it. ' +
+        'Off, this dialog reads and writes nothing at all.'
+      : 'Nothing to replace yet: a replacement replaces what a search found, so the box ' +
+        'above has to say what to look for first.';
     this.undoBtn.disabled = writing;
     if (!on) return;
-    var text = trim(this.textInput.value);
     var to = this.replaceInput.value;
     // Counted rather than merely tested, because the count is what the button promises
     // and it is the attribute filters' answer, not the raw result list: a filter is a
@@ -1465,10 +1488,11 @@
     var why = writing ? 'A replacement is running.'
       : this.state === 'running' ? 'Not while the search is running - pause it, or let it finish.'
         : this.stale ? 'This page is running an older script than Stash has installed. Reload first.'
-          : !text ? 'There is nothing to replace until something has been searched for.'
-            : !scope.length ? 'Nothing on this list to replace: search first, or turn an attribute back on.'
-              : to === text ? 'The replacement is the text being searched for, so it would change nothing.'
-                : '';
+          : !scope.length
+            ? 'Nothing on this list to replace: search first, or turn an attribute back on.'
+            : to === text
+              ? 'The replacement is the text being searched for, so it would change nothing.'
+              : '';
     this.replaceBtn.disabled = !!why;
     this.replaceBtn.title = why || ('Replace "' + text + '" with ' +
       (to ? '"' + to + '"' : 'nothing') + ' in ' + plural(scope.length, 'entity', 'entities') +
@@ -2099,7 +2123,7 @@
     var row = el('div', 'fretc-result');
     var link = el('a', 'fretc-ent', (hit.name || '(untitled)') + ' (' + hit.id + ')');
     link.href = ENTITIES[hit.typeKey].route + hit.id;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noopener noreferrer';
     // Hovering the name says which entity this is, which is most of what a search result
     // is read for - the matched text says why it is here and nothing else does.
@@ -2362,7 +2386,7 @@
     var link = el('a', 'fretc-readme', 'FindEntitiesByTextContent/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noopener noreferrer';
     link.title = 'Open this plugin\'s documentation';
     var slot = readmeLinkSlot(parts.sub);

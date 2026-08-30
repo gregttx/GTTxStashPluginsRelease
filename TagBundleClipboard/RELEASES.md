@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.1.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 2.0.2 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 2.0.1 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
 | 2.0.0 (`28ce7c2`) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |

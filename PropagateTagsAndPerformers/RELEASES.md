@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.2.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 4.1.3 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 4.1.2 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
 | 4.1.1 (`f21c4e3`) | 2026-08-28 | NPT: Prune and Roll Up on a scene, when they would do something |

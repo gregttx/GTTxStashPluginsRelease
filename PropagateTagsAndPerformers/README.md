@@ -56,7 +56,8 @@ Where several entities carried the same thing, one is named and the rest are cou
 one is where to start looking. Numbers in brackets are ids.
 
 **Every name on the line is a link** — the entity the change lands on, the tag or performer being
-added, and the entity it came *from* — so any of them opens in a new tab, and any of them can be
+added, and the entity it came *from* — so any of them opens in a new tab (ᝯㄝₓ Core's own setting
+switches that to this one), and any of them can be
 selected. A Marker is the exception and stays plain text: Stash gives it no page of its own. **The
 name also hovers to a card**: a picture and the handful of fields the thing is recognised by —
 a tag's aliases, parents, children and description; a performer's gender, birthdate, country and

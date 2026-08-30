@@ -45,7 +45,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, plural = C.plural,
+  var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.0.1';
+  var PLUGIN_VERSION = '2.1.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -476,7 +476,12 @@
     '.enm-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.enm-foot button{margin-right:.5rem;}' +
-    '.enm-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.enm-hidden{display:none !important;}' +
     '.enm-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
     '.enm-label{color:#a7b6c2;font-size:.85rem;white-space:nowrap;}' +
@@ -972,7 +977,7 @@
     legend.appendChild(el('span', null,
       'One line per occurrence: the entity it is in, with its id in brackets, then the ' +
       'attribute - numbered where that attribute holds more than one - then the text ' +
-      'around it. Click the entity to open it in a new tab. Untick a line to leave it ' +
+      'around it. Click the entity to open it. Untick a line to leave it ' +
       'alone. A filter turned off hides its lines and leaves them alone too, without ' +
       'changing any tick you have already made.'));
     head.appendChild(legend);
@@ -1582,7 +1587,7 @@
     if (route) {
       var link = el('a', 'enm-ent', (h.entName || '(untitled)') + ' (' + h.entId + ')');
       link.href = route + h.entId;
-      link.target = '_blank';
+      link.target = linkTarget();
       link.rel = 'noopener noreferrer';
       // Hovering the name says which entity this is - a rename is read a row at a time,
       // and a title is not enough to recognise a scene by. The span branch below gets
@@ -2533,7 +2538,7 @@
     var link = el('a', 'enm-readme', 'EntityNameMaintainer/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noopener noreferrer';
     link.title = 'Open this plugin\'s documentation';
     var slot = readmeLinkSlot(parts.sub);

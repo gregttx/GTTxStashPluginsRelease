@@ -35,8 +35,9 @@ Details   Queue   Markers   Filter   File Info   History   Variants   Edit
 The tab sits just before **Edit**, which stays last, and is amber — the one tab in that strip Stash
 did not put there.
 
-Each cover and title is a link, and a cover plays the scene's preview loop while the pointer is over
-it — the same preview the scene cards use. The tab itself writes nothing: it is two read queries and
+Each cover and title is a link, opening in a new tab so the scene you are comparing against stays
+where it is, and a cover plays the scene's preview loop while the pointer is over it — the same
+preview the scene cards use. The tab itself writes nothing: it is two read queries and
 a list of links. The one thing here that writes is the migration task below, and it shows you every
 scene it would touch first.
 
@@ -96,7 +97,8 @@ find a whole variant set with one query instead of two.
 
 Nothing is written until you press **Proceed**: the dialog lists every scene it would touch, what
 the field will hold and whether the stash-ids come off, and the counters say how far the scan has
-got. **Each scene in that list is a link to it**, opening in a new tab, and hovering one opens a
+got. **Each scene in that list is a link to it**, opening in a new tab like every other link these
+plugins draw, and hovering one opens a
 card — its cover, its studio, its performers and its tags — since a title and an id are exactly
 what does not say which scene it is. **Undo** puts every one of them back — the field to what it said before, or removed where the
 scene had none, and the stash-ids back on — for as long as the dialog stays open.

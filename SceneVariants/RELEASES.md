@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 0.16.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 0.15.1 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 0.15.0 (`28ce7c2`) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
 | 0.14.0 (`cbb8266`) | 2026-08-27 | Review fixes: ENM searches list fields again, and fifteen more |

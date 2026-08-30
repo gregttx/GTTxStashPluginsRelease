@@ -32,7 +32,7 @@
   }
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, insertBeforeImportantAction = C.insertBeforeImportantAction,
     applyButtonSpacing = C.applyButtonSpacing, domBus = C.domBus,
-    coopObject = C.coopObject, coop = C.coop, plural = C.plural,
+    coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
@@ -63,7 +63,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.2.2';
+  var PLUGIN_VERSION = '5.3.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1445,7 +1445,12 @@
     '.npt-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.npt-foot button{margin-right:.5rem;}' +
-    '.npt-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.npt-hidden{display:none !important;}' +
     '.npt-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
     '.npt-find-wrap{flex:1 1 0;display:flex;align-items:center;gap:.4rem;}' +
@@ -2224,7 +2229,7 @@
           if (seg.href) {
             span = el('a', 'npt-elink', seg.text);
             span.href = seg.href;
-            span.target = '_blank';
+            span.target = linkTarget();
             span.rel = 'noopener noreferrer';
           } else {
             span = el('span', null, seg.text);
@@ -3411,16 +3416,17 @@
       self.inspectEl.appendChild(body);
     }
 
-    // The title is a link to the tag's own page, and it opens in a new tab: this
-    // viewer is a modal over whatever page you were on, holding a scan of the whole
+    // The title is a link to the tag's own page, and by default it opens in a new tab:
+    // this viewer is a modal over whatever page you were on, holding a scan of the whole
     // hierarchy, and a navigation in this tab would throw that away to show one tag.
+    // ᝯㄝₓ Core's own setting is what decides otherwise, for every link in this repo.
     // An `<a>` rather than a click handler, so middle-click and ctrl-click do what
     // they do everywhere else.
     var title = el('a', 'npt-i-title', tagLabel(g, id));
     title.href = '/tags/' + id;
-    title.target = '_blank';
+    title.target = linkTarget();
     title.rel = 'noreferrer';
-    title.title = 'Open this tag in a new tab';
+    title.title = 'Open this tag' + (linkTarget() ? ' in a new tab' : '');
     this.inspectEl.appendChild(title);
 
     var anc = [], k, ancMap = g.ancestorsOf(id);
@@ -4358,7 +4364,7 @@
     var link = el('a', 'npt-readme', 'NormalizeParentTags/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noreferrer';
     link.title = 'Open this plugin\'s documentation for the version it was published at';
     link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';

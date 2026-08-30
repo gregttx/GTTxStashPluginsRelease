@@ -37,7 +37,8 @@
     return;
   }
   var coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
-    copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard,
+    tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
     entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
@@ -62,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.0.1';
+  var PLUGIN_VERSION = '3.1.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -617,7 +618,12 @@
     '.cfbe-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.cfbe-foot button{margin-right:.5rem;}' +
-    '.cfbe-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.cfbe-hidden{display:none !important;}' +
     // The filter row, shared with NormalizeParentTags' find bar: same position in the
     // dialog (a strip under the head), same job, so the same rule.
     '.cfbe-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
@@ -748,8 +754,24 @@
     '.cfbe-rename{padding:.05rem .4rem;line-height:1.2;flex:0 0 auto;}' +
     '.cfbe-text{width:100%;box-sizing:border-box;min-height:5rem;background:#1f2b33;' +
     'color:#f5f8fa;border:1px solid #394b59;border-radius:3px;padding:.35rem .5rem;' +
-    'font-family:inherit;font-size:.85rem;resize:vertical;}' +
-    '.cfbe-users{flex:1 1 auto;overflow:auto;min-height:5rem;background:#1f2b33;' +
+    'font-family:inherit;font-size:.85rem;resize:vertical;color-scheme:dark;}' +
+    // **The grip the user drags, drawn rather than left to the browser.** Chrome paints
+    // the default one in the widget colours of a light page - a white square on this
+    // dark box - and a `::-webkit-resizer` with a background of its own replaces that
+    // image outright, so the triangle has to be drawn here or there is nothing to take
+    // hold of. `color-scheme:dark` above is the other half, for the scrollbar beside it
+    // and for Firefox, which has no such pseudo-element.
+    '.cfbe-text::-webkit-resizer{background:linear-gradient(315deg,#7d8f9c 0 45%,' +
+    'transparent 45%);}' +
+    // **`flex-basis:0`, not `auto`, and that is what makes the box above resizable.** A
+    // basis of `auto` is the content's own height, and this list holds every entity
+    // carrying the field - thousands of lines on a real library. The column then runs a
+    // shrink of thousands of pixels, weighted by basis: this box takes it until its own
+    // `min-height` stops it, and every pixel after that comes off the textarea, which
+    // therefore sat at its minimum however far it was dragged. With a basis of 0 there
+    // is no deficit to distribute: the textarea keeps the height it was given and this
+    // box grows into whatever is left.
+    '.cfbe-users{flex:1 1 0;overflow:auto;min-height:5rem;background:#1f2b33;' +
     'border:1px solid #394b59;border-radius:3px;padding:.35rem .5rem;font-family:monospace;' +
     'font-size:.8rem;line-height:1.9;}' +
     // The same modifier trick `.cfbe-listwrap` is: the shared `.cfbe-log` claims the
@@ -896,13 +918,27 @@
     var bar = el('div', 'cfbe-divider');
     bar.title = 'Drag to give the log below more or less room.';
     var y0 = 0, h0 = 0;
+    function set(px) {
+      px = Math.max(40, Math.round(px));
+      above.style.flex = '0 0 ' + px + 'px';
+      return px;
+    }
+    // **Both limits are measured, not named.** A ceiling of `room - 200` knew neither the
+    // height of the dialog's own chrome nor the floor of the log below it, and was wrong
+    // in both directions: dragged down it pushed the footer off the bottom edge of a
+    // fixed-height modal, dragged up it squeezed the panes past their own content. One
+    // reading each says by how much - the modal overflows when this pane is too tall
+    // (everything below it has already shrunk to its `min-height`), and the pane itself
+    // overflows when it is too short. Whatever the chrome around them changes to, the
+    // measurement is still right.
     function move(ev) {
-      var room = above.parentNode ? above.parentNode.clientHeight : 0;
-      // The floor keeps the panes usable; the ceiling keeps the log and the footer on
-      // screen, since neither can shrink past its own `min-height`.
-      var max = Math.max(120, room - 200);
-      var want = Math.max(80, Math.min(h0 + (ev.clientY - y0), max));
-      above.style.flex = '0 0 ' + want + 'px';
+      var parent = above.parentNode;
+      if (!parent) return;
+      var want = set(h0 + (ev.clientY - y0));
+      var over = parent.scrollHeight - parent.clientHeight;
+      if (over > 0) want = set(want - over);
+      var under = above.scrollHeight - above.clientHeight;
+      if (under > 0) set(want + under);
     }
     function up() {
       document.removeEventListener('mousemove', move);
@@ -1475,7 +1511,7 @@
       ' marks nothing there - an entity carrying no custom fields at all, no field on that ' +
       'side of a change, or a field set to an empty value; it is a mark on the screen only, ' +
       'and copies as nothing. A value that is not text says so after it - num, bool or null - ' +
-      'since a null and an empty value look alike. Click an entity to open it in a new tab; ' +
+      'since a null and an empty value look alike. Click an entity to open it; ' +
       'click a field name or value to copy it. Counts are written with prefix "x".'));
     head.appendChild(legend);
     this.noteEl = el('div', 'cfbe-note', '');
@@ -2286,9 +2322,9 @@
   function entityPill(spec, id, display) {
     var a = el('a', 'cfbe-pill cfbe-pill-ent', '"' + display + '" (' + id + ')');
     a.href = '/' + spec.key + '/' + id;
-    a.target = '_blank';
+    a.target = linkTarget();
     a.rel = 'noopener noreferrer';
-    a.title = 'Open this ' + spec.label.toLowerCase() + ' in a new tab';
+    a.title = 'Open this ' + spec.label.toLowerCase() + (linkTarget() ? ' in a new tab' : '');
     // One pill builds every entity name in both dialogs - the listing, the change lines
     // and the descriptions dialog's carriers pane - so the card goes on here and nowhere
     // else. It replaces the title above while it is open and hands it back after.
@@ -4571,7 +4607,7 @@
       if (!node) {
         node = el('a', 'cfbe-tagicon', STORE_LINK_MARK);
         node.id = STORE_LINK_ID;
-        node.target = '_blank';
+        node.target = linkTarget();
         node.rel = 'noopener noreferrer';
       }
       node.href = '/tags/' + tag.id;
@@ -4631,7 +4667,7 @@
     var link = el('a', 'cfbe-readme', 'CustomFieldsBulkEditor/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noopener noreferrer';
     link.title = 'Open this plugin\'s documentation';
     var slot = readmeLinkSlot(parts.sub);

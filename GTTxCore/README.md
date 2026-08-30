@@ -25,7 +25,7 @@ settings page down with it.) There is one copy now.
 
 ## What you actually see
 
-Three things, and all of them are off until you turn them on.
+Four things, and all of them are off until you turn them on.
 
 ### The Scene Tagger's duration mismatch
 
@@ -64,7 +64,21 @@ No clipboard permission is asked for and no menu of ours is drawn — this is on
 tags already in the box keep their own space and their remove buttons, because the input only
 takes the empty tail of the row.
 
-It is off by default because it restyles a page this plugin does not own.
+It is off by default because it restyles a page this plugin does not own. When a Stash release
+fixes #7139 it should become a no-op, so it changes nothing you can see: harmless to leave on,
+and fine to turn off.
+
+### Where every link opens
+
+The ᝯㄝₓ dialogs, listings and hover cards name entities as links — a scene, a tag, a performer,
+the plugin's own README. Every one of them opens a **new tab**, which is what keeps the dialog you
+are reading open behind it.
+
+Turn on **Open Links in the Same Tab** and they all open in the tab you are already in, the way
+Stash's own links do. It reaches every ᝯㄝₓ plugin at once — this is the one place the answer is
+kept — and takes effect on the next link drawn rather than on the next page load.
+
+It is off by default, which is a new tab.
 
 ### Dev Mods
 
@@ -109,5 +123,5 @@ If you install by copying folders by hand rather than through a source index, co
 
 ## Nothing here touches your library
 
-No task, no mutation, no write of any kind — the only thing this plugin stores is its own two
+No task, no mutation, no write of any kind — the only thing this plugin stores is its own
 settings. Every other ᝯㄝₓ plugin still asks before it writes, exactly as it did.

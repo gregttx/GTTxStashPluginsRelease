@@ -70,7 +70,7 @@ Each of those coloured boxes is a **pill**, and clicking one does something:
 
 | Pill | Click |
 | --- | --- |
-| `"Beach Day" (412)` | Opens that entity's page in a **new tab**. Hovering it opens a card: the entity's picture and the handful of fields it is recognised by — its studio, performers, tags, date and rating, or for a tag its aliases, parents, children and description. It is read on the first hover, never while the list is drawn. |
+| `"Beach Day" (412)` | Opens that entity's page in a **new tab** — or in this one, if ᝯㄝₓ Core's **Open Links in the Same Tab** is on. Hovering it opens a card: the entity's picture and the handful of fields it is recognised by — its studio, performers, tags, date and rating, or for a tag its aliases, parents, children and description. It is read on the first hover, never while the list is drawn. |
 | `shoot`, `2019-07` | **Copies** that text to the clipboard. The pill flashes green. |
 | `Added`, `Replaced`, `Deleted` *(after Apply)* | Nothing. It is a label. |
 
@@ -334,7 +334,8 @@ Some details worth knowing:
   with it. A tag the dialog *created* is left in place; delete it by hand if you do not want it.
 - **Rescan** re-reads the library and the store, keeping whatever you have typed.
 - **The room is yours to divide.** Drag the divider above the log to trade room between the panes
-  and the log, and the description box's own bottom-right corner to resize just that box. Picking a
+  and the log - it stops where the buttons would leave the bottom of the dialog, and where the
+  panes would be squeezed past what is in them - and the description box's own bottom-right corner to resize just that box. Picking a
   field sizes the box to the description it loads — up to four fifths of the pane — so a long one
   needs no scrolling.
 - **A rename takes the description with it.** Renaming a custom field in the bulk dialog moves its

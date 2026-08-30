@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '1.0.1';
+  var PLUGIN_VERSION = '1.1.4';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -424,7 +424,7 @@
       lines.push('Description: ' +
         (desc.length > TIP_DESC_CHARS ? desc.slice(0, TIP_DESC_CHARS) + '…' : desc));
     }
-    lines.push('Click to open it in a new tab.');
+    lines.push(linkTarget() ? 'Click to open it in a new tab.' : 'Click to open it.');
     return lines.join('\n');
   }
   // ── The card an entity's name opens ───────────────────────────────────────
@@ -564,7 +564,7 @@
       if (rows[i][1] == null || rows[i][1] === '') continue;
       lines.push(rows[i][0] + ': ' + tipText(rows[i][1]));
     }
-    lines.push('Click to open it in a new tab.');
+    lines.push(linkTarget() ? 'Click to open it in a new tab.' : 'Click to open it.');
     return lines.join('\n');
   }
 
@@ -1327,6 +1327,7 @@
   var DEFAULTS = {
     a1TaggerDuration: false,
     a2SelectPaste: false,
+    a3SameTab: false,
     b1DevMods: '',
   };
   var _settings = null;
@@ -1334,6 +1335,26 @@
   var _settingsInFlight = null;
 
   function settings() { return _settings || DEFAULTS; }
+
+  // **Where every link these plugins draw opens, answered in one place.** Nine plugins
+  // set `target` on an anchor and all of them ask this rather than naming `_blank`, so
+  // the switch is one setting rather than nine.
+  //
+  // The read is fired from here rather than from `start()`, because §8 holds for this
+  // too: a page drawing none of our links must ask nothing, and most tabs draw none.
+  // It is fired only while nothing has been read yet - the settings page's own tick is
+  // what refreshes it, which is the page the switch is thrown on - so a library-sized
+  // log costs one query rather than one per ten seconds of drawing.
+  //
+  // The answer is synchronous, so the first link built on a page is drawn from the
+  // default while that read is in flight: `_blank`, which is what every one of these
+  // anchors said before this setting existed.
+  function linkTarget() {
+    if (!_settings && !_settingsInFlight) {
+      try { loadSettings(false); } catch (e) { /* a settings read is never fatal */ }
+    }
+    return settings().a3SameTab ? '' : '_blank';
+  }
 
   function loadSettings(force) {
     var now = Date.now();
@@ -1737,7 +1758,7 @@
     var link = el('a', 'gttxcore-readme', 'NormalizeParentTags/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
-    link.target = '_blank';
+    link.target = linkTarget();
     link.rel = 'noreferrer';
     link.title = 'Open this plugin\'s documentation for the version it was published at';
     link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
@@ -1957,7 +1978,12 @@
     '.gttxcore-line{white-space:pre-wrap;word-break:break-word;}' +
     '.gttxcore-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;' +
     'gap:.5rem;flex-wrap:wrap;align-items:center;}' +
-    '.gttxcore-hidden{display:none;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.gttxcore-hidden{display:none !important;}' +
     '.gttxcore-spin{color:#a7b6c2;}' +
     '.gttxcore-own-group .gttxcore-sub-heading{white-space:pre-wrap;}' +
     '.gttxcore-own-group .gttxcore-sub-heading .gttxcore-p{margin:0 0 .35em;}' +
@@ -2115,6 +2141,7 @@
     byClass: byClass, gqlRequest: gqlRequest, settingElement: settingElement,
     settingRow: settingRow, coopObject: coopObject, coop: coop,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
+    linkTarget: linkTarget,
     tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace,
     tipOpen: tipOpen, tipClose: tipClose, tagTip: tagTip,
     tipText: tipText, tagTipNames: tagTipNames, tagLinkTitle: tagLinkTitle,

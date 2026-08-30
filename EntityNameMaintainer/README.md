@@ -70,7 +70,7 @@ saying what is being looked for, then the occurrences, then whatever the run had
 afterwards.
 
 - **Tick** — every line starts ticked. Untick one to leave that occurrence alone.
-- **Click the entity** — opens it in a new tab. **Hover it** for a card: the entity's picture
+- **Click the entity** — opens it in a new tab, or in this one if ᝯㄝₓ Core is set that way. **Hover it** for a card: the entity's picture
   and the fields it is recognised by, or for a tag its aliases, parents, children and
   description. It is read on the first hover, so a listing nobody hovers costs nothing.
 - **Filters** — one row of toggles for the entity types found and one for the attribute
