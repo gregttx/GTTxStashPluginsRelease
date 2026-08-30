@@ -71,7 +71,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's markup or about a filter field name.
-  var PLUGIN_VERSION = '0.16.0';
+  var PLUGIN_VERSION = '0.18.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -143,6 +143,7 @@
     a1FullLengthTag: '',
     a2PartialLengthTag: '',
     a3VariantStashIdField: '',
+    a4VariantFlagTag: '',
     b1LogToConsole: false,
   };
 
@@ -162,6 +163,24 @@
 
   function fieldName(s) {
     return trim((s || settings()).a3VariantStashIdField) || FIELD_DEFAULT;
+  }
+
+  // The tag the flag task keeps in step with the library: on every scene that shares a
+  // variant stash-id line with at least one other scene, and off everything else. A tag
+  // rather than a second custom field because the whole point is Stash's own tag filter -
+  // one click on the tag's page lists every scene offering a choice of variants. Prefixed
+  // like the field above and for the same reason: a tag name is flat and unowned. The tag
+  // is machine-kept and not a source of truth - it says what the last run of the task
+  // found, nothing fresher.
+  var FLAG_DEFAULT = 'ᱜ╦╦🞮⸎✱MultiVariants❌∙';
+  // The name this shipped under for one release, only ever written by the seed - treated
+  // as unanswered so the rename reaches a box nobody chose deliberately, the same trade
+  // CustomFieldsBulkEditor's legacy hide-field name makes.
+  var LEGACY_FLAG_DEFAULT = 'ᱜ╦╦🞮_Multiple_Variants';
+
+  function flagTagName(s) {
+    var v = trim((s || settings()).a4VariantFlagTag);
+    return !v || v === LEGACY_FLAG_DEFAULT ? FLAG_DEFAULT : v;
   }
 
   // `stashdb.org:9f3c1e2a-...`: the provider, then the id. The endpoint is a GraphQL URL
@@ -195,6 +214,19 @@
   function splitValues(raw) {
     if (raw == null) return [];
     return String(raw).split('\n').map(trim).filter(function (v) { return !!v; });
+  }
+
+  // The field lookup, as one regex: any of these values as a whole line of the stored
+  // string. EQUALS compared the whole value, so two migrated partials whose id sets
+  // overlap without being equal never found each other - a value holding two lines is
+  // not equal to either of them. One regex rather than one value per line because the
+  // criterion ANDs its values under every modifier (read off custom_fields.go): the OR
+  // has to be inside a single pattern, and the line anchors are what keep one id from
+  // matching inside a longer one.
+  function fieldRegex(values) {
+    return '(^|\n)(' + values.map(function (v) {
+      return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }).join('|') + ')(\n|$)';
   }
 
   function customField(scene, field) {
@@ -337,21 +369,40 @@
   // Nothing here watches yet, and the next thing that does would have to know.
   var _seededField = false;
 
+  // Both defaulted string settings, in one write: a key that is *absent* gets its
+  // default written in; a key that is present - even holding '' - has been answered.
+  var SEED_DEFAULTS = {
+    a3VariantStashIdField: FIELD_DEFAULT,
+    a4VariantFlagTag: FLAG_DEFAULT,
+  };
+
   function seedFieldDefault(raw, s) {
-    if (_seededField || hasOwn(raw, 'a3VariantStashIdField')) return;
+    if (_seededField) return;
+    var missing = [], k;
+    for (k in SEED_DEFAULTS) {
+      if (!hasOwn(SEED_DEFAULTS, k)) continue;
+      // The legacy default was only ever written by the seed, so it is an unanswered
+      // box wearing an old spelling, not an answer.
+      if (!hasOwn(raw, k) ||
+        (k === 'a4VariantFlagTag' && raw[k] === LEGACY_FLAG_DEFAULT)) missing.push(k);
+    }
+    if (!missing.length) return;
     _seededField = true;
-    s.a3VariantStashIdField = FIELD_DEFAULT;
     var input = {};
-    for (var k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-    input.a3VariantStashIdField = FIELD_DEFAULT;
+    for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+    missing.forEach(function (key) {
+      s[key] = SEED_DEFAULTS[key];
+      input[key] = SEED_DEFAULTS[key];
+    });
     gqlRequest('mutation SVRSeedSettings($id: ID!, $input: Map!) ' +
       '{ configurePlugin(plugin_id: $id, input: $input) }',
     { id: PLUGIN_ID, input: input }).then(null, function () {
-      // Left in force for this page either way: the value is what `fieldName` already
-      // uses. Only the box stays empty, and the next load tries again.
+      // Left in force for this page either way: the values are what `fieldName` and
+      // `flagTagName` already use. Only the boxes stay empty, and the next load tries
+      // again.
       _seededField = false;
-      svr('[svr] the default custom field name could not be written into the settings; ' +
-        'it is in force all the same.');
+      svr('[svr] the default names could not be written into the settings; ' +
+        'they are in force all the same.');
     });
   }
 
@@ -536,16 +587,16 @@
 
   // The other half of the same question, for the scenes whose stash-id has been moved
   // into the custom field - and for the full-length ones carrying both, where either
-  // query finds them. `custom_fields` takes a list of criteria and each one a list of
-  // values; EQUALS over that list is an OR, the same semantics `stash_ids_endpoint` has
-  // above, so one criterion covers a scene with several ids.
+  // query finds them. The one value is `fieldRegex`'s pattern: MATCHES_REGEX per line
+  // rather than EQUALS on the whole value, because a scene with entries at two
+  // providers stores two lines, and sharing any one of them is sharing the work.
   //
   // Its own failure is caught where it is asked rather than here: a Stash that spells
   // this criterion differently must lose the half of the answer it cannot give, not the
   // half it can.
   var BY_FIELD_QUERY =
     'query SVRFieldMatch($field: String!, $values: [Any!]) { findScenes(' +
-    'scene_filter: { custom_fields: [{ field: $field, value: $values, modifier: EQUALS }] }, ' +
+    'scene_filter: { custom_fields: [{ field: $field, value: $values, modifier: MATCHES_REGEX }] }, ' +
     'filter: { per_page: -1 }) { scenes { ' + SCENE_FIELDS + ' } } }';
 
   // What this scene's own custom field holds. `props.scene` is Stash's
@@ -619,7 +670,7 @@
         }
         return Promise.all([
           ids.length ? gqlRequest(VARIANTS_QUERY, { ids: ids }) : Promise.resolve(null),
-          values.length ? gqlRequest(BY_FIELD_QUERY, { field: field, values: values })
+          values.length ? gqlRequest(BY_FIELD_QUERY, { field: field, values: [fieldRegex(values)] })
             .then(null, function (err) {
               // Half an answer beats none: the stash-id half is still valid, and a
               // criterion this server spells differently is worth one line rather than
@@ -768,24 +819,32 @@
     };
   }
 
-  // The hover text itself. "Same tags and attributes as this scene." rather than an empty
-  // tooltip: a row with nothing to report is an answer - the two are duplicates of each
-  // other in everything this plugin can see - and a tooltip that failed to open would read
-  // as one that had never been built.
-  function deltaText(self, other) {
-    if (!self || String(self.id) === String(other.id)) return '';
-    var d = tagDelta(self, other), lines = [];
+  // The hover content itself, as sections rather than one string: each has a header the
+  // box renders bold and amber, because three runs of comma-separated names in one grey
+  // paragraph were the reported readability problem. "Same tags and attributes as this
+  // scene." rather than an empty box: a row with nothing to report is an answer - the two
+  // are duplicates of each other in everything this plugin can see - and a box that
+  // failed to open would read as one that had never been built.
+  // Sections for the hover box, counts for the row's badges - one computation, so the
+  // badge and the box it opens can never disagree about a number. Null where there is
+  // nothing to compare against, which is a different fact from "no differences".
+  function deltaOf(self, other) {
+    if (!self || String(self.id) === String(other.id)) return null;
+    var d = tagDelta(self, other), out = [];
     if (d.extra.length) {
-      lines.push('Extra ' + plural(d.extra.length, 'tag') + ': ' + d.extra.join(', '));
+      out.push({ head: 'Extra ' + plural(d.extra.length, 'tag') + ':', body: d.extra.join(', ') });
     }
     if (d.missing.length) {
-      lines.push('Missing ' + plural(d.missing.length, 'tag') + ': ' + d.missing.join(', '));
+      out.push({ head: 'Missing ' + plural(d.missing.length, 'tag') + ':',
+        body: d.missing.join(', ') });
     }
     var differ = ATTRS.filter(function (a) {
       return attrValue(self, a) !== attrValue(other, a);
     }).map(function (a) { return a.label; });
-    if (differ.length) lines.push('Attributes that differ: ' + differ.join(', '));
-    return lines.length ? lines.join('\n') : 'Same tags and attributes as this scene.';
+    if (differ.length) out.push({ head: 'Differing attributes:', body: differ.join(', ') });
+    if (!out.length) out.push({ head: '', body: 'Same tags and attributes as this scene.' });
+    return { sections: out, extra: d.extra.length, missing: d.missing.length,
+      attrs: differ.length };
   }
 
   function bestFile(scene) {
@@ -820,7 +879,7 @@
 
   function ordered(variants, self, m) {
     return variants.map(function (scene) {
-      return { scene: scene, cls: classify(scene, m), delta: deltaText(self, scene) };
+      return { scene: scene, cls: classify(scene, m), delta: deltaOf(self, scene) };
     }).sort(function (a, b) {
       var ra = ROLE_RANK[a.cls.role], rb = ROLE_RANK[b.cls.role];
       if (ra !== rb) return ra - rb;
@@ -840,6 +899,7 @@
   // one criterion, where a library half-migrated needs the union of two. Their stash-id
   // is untouched, because on the full-length scene it is true.
   var TASK_NAME = 'Migrate Variant Stash-IDs...';
+  var FLAG_TASK_NAME = 'Flag Variants...';
 
   // The scan reads only what a plan needs - the tags to classify by, the stash-ids to
   // move, and the field as it stands so an entry already in place is not written again.
@@ -924,13 +984,18 @@
   // the scan is a read, and what it found is on screen before anything moves.
   var _active = null;
 
-  function startRun() {
+  function startRun(task) {
     if (_active) { _active.focus(); return; }
-    _active = new Run();
+    _active = new Run(task);
     _active.begin();
   }
 
-  function Run() {
+  // One dialog, two tasks. The chrome, the log, the counters, the write batching and the
+  // undo bookkeeping are the same machinery; what differs per task - the title, the
+  // legend, the scan, the input builders, the verbs - lives on a task object rather than
+  // in a second three-hundred-line copy of this one.
+  function Run(task) {
+    this.task = task;
     this.logText = [];      // every line as plain text, for Copy log and for the count
     this.jobs = [];         // what the scan found to do
     this.changes = [];      // what Proceed wrote, newest last, for Undo
@@ -953,7 +1018,7 @@
 
     var head = el('div', 'svr-head');
     // A plain block, so a title too long for one line wraps rather than being clipped.
-    head.appendChild(el('div', 'svr-title', PLUGIN_SHORT_NAME + ' - Migrate Variant Stash-IDs'));
+    head.appendChild(el('div', 'svr-title', PLUGIN_SHORT_NAME + ' - ' + this.task.title));
     this.staleEl = el('div', 'svr-stale svr-hidden', '');
     head.appendChild(this.staleEl);
     head.appendChild(el('div', 'svr-warn',
@@ -962,11 +1027,7 @@
       'meantime.'));
     this.noteEl = el('div', 'svr-note svr-hidden', '');
     head.appendChild(this.noteEl);
-    head.appendChild(el('div', 'svr-legend',
-      'One line per scene: whether it is full-length or partial-length, the scene with its id ' +
-      'in brackets, and the value its custom field will hold. A partial-length scene also has ' +
-      'its stash-ids removed, which is what the migration is for; a full-length one keeps ' +
-      'them.'));
+    head.appendChild(el('div', 'svr-legend', this.task.legend));
     this.modal.appendChild(head);
 
     this.progressEl = el('div', 'svr-progress', 'Starting…');
@@ -1037,13 +1098,12 @@
     this.goBtn.textContent = undo ? 'Undo' : 'Proceed';
     if (undo) {
       this.goBtn.disabled = this.state !== 'listing';
-      this.goBtn.title = 'Put back the custom field and the stash-ids of every scene this ' +
-        'dialog wrote. Only what it wrote, and only while it stays open.';
+      this.goBtn.title = this.task.undoTip;
       return;
     }
     var why = this.state !== 'listing' ? 'Still working.'
       : this.stale ? 'Reload the page first: this tab is running an older script.'
-        : !this.jobs.length ? 'Nothing found to migrate.'
+        : !this.jobs.length ? this.task.nothing
           : '';
     this.goBtn.disabled = !!why;
     this.goBtn.title = why || ('Write ' + plural(this.jobs.length, 'scene') + '.');
@@ -1065,20 +1125,24 @@
   // cannot be recognised. `logText` keeps the plain line, so Copy log is unchanged - a
   // link and a card are not text.
   Run.prototype.jobLine = function (job) {
-    var head = (job.role === 'fl' ? ROLES.fl.label : ROLES.pl.label) + '  ';
+    var p = this.task.jobParts(job);
+    // `tailParts` is the rendered tail where one piece wants a colour of its own;
+    // `tail` stays the whole thing as text, so `logText` and Copy log never depend on
+    // how the line was drawn.
+    var tailParts = p.tailParts || [{ text: p.tail }];
     var name = job.title + ' [' + job.id + ']';
-    var tail = '  ' + job.field + ' = ' + job.value.split('\n').join(' + ') +
-      (job.clear ? '  (stash-ids removed)' : '');
-    var text = head + name + tail;
-    var line = el('div', 'svr-line svr-job svr-role-' + job.role);
-    line.appendChild(el('span', null, head));
+    var text = p.head + name + p.tail;
+    var line = el('div', 'svr-line svr-job ' + p.cls);
+    line.appendChild(el('span', null, p.head));
     var link = el('a', 'svr-elink', name);
     link.href = '/scenes/' + job.id;
     link.target = linkTarget();
     link.rel = 'noopener noreferrer';
     entityTip(link, 'scenes', job.id);
     line.appendChild(link);
-    line.appendChild(el('span', null, tail));
+    tailParts.forEach(function (part) {
+      line.appendChild(el('span', part.cls || null, part.text));
+    });
     this.logEl.appendChild(line);
     this.logText.push(text);
     this.capLog();
@@ -1119,8 +1183,8 @@
 
   Run.prototype.progressText = function () {
     var parts = ['Scanned ' + this.scanned + (this.total ? ' of ' + this.total : '') +
-      ' tagged ' + (this.scanned === 1 && !this.total ? 'scene' : 'scenes')];
-    parts.push(plural(this.jobs.length, 'scene') + ' to migrate');
+      ' ' + this.task.scanNoun + (this.scanned === 1 && !this.total ? '' : 's')];
+    parts.push(plural(this.jobs.length, 'scene') + ' ' + this.task.planNoun);
     if (this.written) parts.push(plural(this.written, 'scene') + ' written');
     if (this.failed) parts.push(plural(this.failed, 'failure'));
     if (this.logText.length > LOG_RENDER_CAP) {
@@ -1209,6 +1273,9 @@
 
   // ── The scan ──────────────────────────────────────────────────────────────
 
+  // The shared half of every scan: the stale check, the foreign-lease note, and the
+  // transition back to a listing whatever the task's own `begin` did. A task's `begin`
+  // resolves to an optional progress override for the runs that never scanned anything.
   Run.prototype.begin = function () {
     var self = this;
     this.setState('scanning');
@@ -1223,38 +1290,43 @@
       this.note('Another plugin is running a bulk edit here (' + lease.label + '), so a ' +
         'scene may be read a moment behind what it holds.');
     }
-    Promise.all([settingsReady(), tagTree()]).then(function (both) {
+    Promise.resolve().then(function () { return self.task.begin(self); })
+      .then(function (finalProgress) {
+        self.setState('listing');
+        self.progress(finalProgress || self.progressText());
+      }, function (err) {
+        self.setState('listing');
+        self.msg('ERROR', 'The scan failed: ' + (err && err.message ? err.message : String(err)));
+        self.progress(self.progressText());
+      });
+  };
+
+  function migrateBegin(run) {
+    return Promise.all([settingsReady(), tagTree()]).then(function (both) {
       var s = both[0];
       var m = matchers(both[1], s);
       var field = fieldName(s);
-      self.field = field;
+      run.field = field;
       var conflict = conflictNote(m);
-      if (conflict) self.msg('WARN', conflict);
+      if (conflict) run.msg('WARN', conflict);
       var tags = tagIdsFor(m);
       if (!tags.length) {
-        self.setState('listing');
-        self.progress('Nothing to scan.');
-        self.msg('WARN', 'Neither the full-length nor the partial-length tag setting names ' +
+        run.msg('WARN', 'Neither the full-length nor the partial-length tag setting names ' +
           'a tag in your library, so there is nothing to classify. Name them in this ' +
           'plugin’s settings first.');
-        return null;
+        return 'Nothing to scan.';
       }
-      self.msg('INFO', 'Looking through every scene tagged full-length or partial-length ' +
+      run.msg('INFO', 'Looking through every scene tagged full-length or partial-length ' +
         'for a stash-id to move into "' + field + '".');
-      return self.scanPage(1, m, field, tags).then(function () {
-        self.setState('listing');
-        self.progress(self.progressText());
-        if (!self.jobs.length) {
-          self.msg('INFO', 'Nothing to migrate: every tagged scene either carries no ' +
+      return run.scanPage(1, m, field, tags).then(function () {
+        if (!run.jobs.length) {
+          run.msg('INFO', 'Nothing to migrate: every tagged scene either carries no ' +
             'stash-id or has been through this already.');
         }
+        return null;
       });
-    }).then(null, function (err) {
-      self.setState('listing');
-      self.msg('ERROR', 'The scan failed: ' + (err && err.message ? err.message : String(err)));
-      self.progress(self.progressText());
     });
-  };
+  }
 
   // Paged rather than `per_page: -1`, which is what the rest of this plugin uses: a
   // library-wide scan is the one query here whose answer grows with the library, and the
@@ -1285,35 +1357,47 @@
 
   Run.prototype.go = function () {
     if (this.changes.length) { this.undo(); return; }
-    var self = this;
+    var self = this, task = this.task;
     this.setState('writing');
     this.stopped = false;
     this.msg('INFO', 'Writing ' + plural(this.jobs.length, 'scene') + '.');
-    var lease = acquireLease('Variant stash-id migration');
-    this.writeAll(this.jobs, writeInput, 'migrated', lease).then(function () {
-      lease.release();
-      self.setState('listing');
-      self.progress(self.progressText());
-      self.msg('INFO', 'Done: ' + plural(self.written, 'scene') + ' migrated' +
-        (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
-        (self.stopped ? ' (stopped early; what was written stays written, and Undo takes ' +
-          'back exactly that)' : '') + '.');
-    });
+    var lease = acquireLease(task.leaseLabel);
+    // `prepare` is the write-phase step a task may need before its first scene - the
+    // flag task creates its tag here when the library has none, because a tag must not
+    // be created by a scan, and a failure has to leave a listing nobody has acted on.
+    Promise.resolve().then(function () { return task.prepare ? task.prepare(self) : null; })
+      .then(function () {
+        return self.writeAll(self.jobs, task.writeInput, task.verb, lease);
+      })
+      .then(function () {
+        lease.release();
+        self.setState('listing');
+        self.progress(self.progressText());
+        self.msg('INFO', 'Done: ' + plural(self.written, 'scene') + ' ' + task.verb +
+          (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
+          (self.stopped ? ' (stopped early; what was written stays written, and Undo takes ' +
+            'back exactly that)' : '') + '.');
+      }, function (err) {
+        lease.release();
+        self.setState('listing');
+        self.msg('ERROR', 'Nothing was written: ' +
+          (err && err.message ? err.message : String(err)));
+      });
   };
 
   Run.prototype.undo = function () {
-    var self = this;
+    var self = this, task = this.task;
     var jobs = this.changes.slice().reverse();
     this.setState('undoing');
     this.stopped = false;
     this.msg('INFO', 'Putting back what ' + plural(jobs.length, 'scene') + ' held before.');
-    var lease = acquireLease('Variant stash-id migration (undo)');
+    var lease = acquireLease(task.leaseLabel + ' (undo)');
     this.written = 0;
     this.failed = 0;
     // `changes` is emptied a scene at a time by the write itself rather than upfront, so
     // a stopped or failed reversal still knows what it did not reach. Empty at the end
     // means back to a listing nobody has used, and Proceed offers the same jobs again.
-    this.writeAll(jobs, undoInput, 'put back', lease).then(function () {
+    this.writeAll(jobs, task.undoInput, 'put back', lease).then(function () {
       lease.release();
       self.setState('listing');
       self.progress(self.progressText());
@@ -1335,9 +1419,10 @@
       lease.renew();
       var slice = jobs.slice(i, i + WRITE_CHUNK);
       return Promise.all(slice.map(function (job) {
-        return gqlRequest(SCENE_UPDATE, { input: build(job) }).then(function () {
+        var req = build(job, self);
+        return gqlRequest(req.query, req.variables).then(function () {
           self.written++;
-          if (verb === 'migrated') self.changes.push(job);
+          if (verb === self.task.verb) self.changes.push(job);
           else {
             var ix = self.changes.indexOf(job);
             if (ix >= 0) self.changes.splice(ix, 1);
@@ -1384,6 +1469,282 @@
       });
   }
 
+  // ── The two tasks ─────────────────────────────────────────────────────────
+
+  var MIGRATE_TASK = {
+    title: 'Migrate Variant Stash-IDs',
+    legend: 'One line per scene: whether it is full-length or partial-length, the scene ' +
+      'with its id in brackets, and the value its custom field will hold. A ' +
+      'partial-length scene also has its stash-ids removed, which is what the migration ' +
+      'is for; a full-length one keeps them.',
+    nothing: 'Nothing found to migrate.',
+    scanNoun: 'tagged scene',
+    planNoun: 'to migrate',
+    leaseLabel: 'Variant stash-id migration',
+    undoTip: 'Put back the custom field and the stash-ids of every scene this ' +
+      'dialog wrote. Only what it wrote, and only while it stays open.',
+    verb: 'migrated',
+    begin: migrateBegin,
+    jobParts: function (job) {
+      return {
+        head: (job.role === 'fl' ? ROLES.fl.label : ROLES.pl.label) + '  ',
+        cls: 'svr-role-' + job.role,
+        tail: '  ' + job.field + ' = ' + job.value.split('\n').join(' + ') +
+          (job.clear ? '  (stash-ids removed)' : ''),
+      };
+    },
+    writeInput: function (job) {
+      return { query: SCENE_UPDATE, variables: { input: writeInput(job) } };
+    },
+    undoInput: function (job) {
+      return { query: SCENE_UPDATE, variables: { input: undoInput(job) } };
+    },
+  };
+
+  // ── The flag task ─────────────────────────────────────────────────────────
+  //
+  // Keeps one tag - configurable, `FLAG_DEFAULT` by default - in step with the library:
+  // on every scene that shares a variant stash-id line with at least one other scene,
+  // and off every scene it marks that no longer does. The tag is what makes "show me
+  // the scenes offering a choice of variants" one click on Stash's own tag filter; it
+  // is not a source of truth, only what the last run of this task found.
+  //
+  // The matching is the tab's own, deliberately: a scene's lines are its stash-ids as
+  // `variantValue` spells them plus whatever its field holds, and two scenes sharing
+  // any one line are variants of one work - the same line-level rule the tab's
+  // MATCHES_REGEX lookup applies.
+  //
+  // Three paged passes rather than one query, because there is no OR across criteria:
+  // scenes carrying a stash-id, scenes carrying the field, and - so a scene that has
+  // lost both is still unflagged - scenes carrying the flag tag itself.
+  var FLAG_SCENE_SEL =
+    '{ count scenes { id title tags { id } custom_fields ' +
+    'stash_ids { endpoint stash_id } } }';
+
+  var FLAG_BY_STASHID_QUERY =
+    'query SVRFlagScanIds($f: FindFilterType) { findScenes(' +
+    'scene_filter: { stash_ids_endpoint: { modifier: NOT_NULL } }, filter: $f) ' +
+    FLAG_SCENE_SEL + ' }';
+  var FLAG_BY_FIELD_QUERY =
+    'query SVRFlagScanField($f: FindFilterType, $field: String!) { findScenes(' +
+    'scene_filter: { custom_fields: [{ field: $field, value: [], modifier: NOT_NULL }] }, ' +
+    'filter: $f) ' + FLAG_SCENE_SEL + ' }';
+  var FLAG_BY_TAG_QUERY =
+    'query SVRFlagScanTag($f: FindFilterType, $tags: [ID!]) { findScenes(' +
+    'scene_filter: { tags: { value: $tags, modifier: INCLUDES, depth: 0 } }, filter: $f) ' +
+    FLAG_SCENE_SEL + ' }';
+
+  function sceneKeys(scene, field) {
+    var out = variantValues(scene.stash_ids), seen = {}, i;
+    for (i = 0; i < out.length; i++) seen[out[i]] = true;
+    splitValues(customField(scene, field)).forEach(function (v) {
+      if (!hasOwn(seen, v)) { seen[v] = true; out.push(v); }
+    });
+    return out;
+  }
+
+  // One pass of the scan: pages through one query, collecting scenes not already seen
+  // by an earlier pass. `total` is left alone - the three counts overlap, so there is
+  // no honest denominator and the progress line counts scenes rather than promising one.
+  function flagScanPass(run, query, vars, seen, scenes) {
+    function page(p) {
+      var v = { f: { page: p, per_page: READ_PAGE, sort: 'id', direction: 'ASC' } }, k;
+      for (k in vars) if (hasOwn(vars, k)) v[k] = vars[k];
+      return gqlRequest(query, v).then(function (data) {
+        var got = ((((data || {}).findScenes) || {}).scenes) || [];
+        got.forEach(function (sc) {
+          if (hasOwn(seen, String(sc.id))) return;
+          seen[String(sc.id)] = true;
+          scenes.push(sc);
+          run.scanned++;
+        });
+        run.progress(run.progressText());
+        if (run.stopped || got.length < READ_PAGE) return null;
+        return page(p + 1);
+      });
+    }
+    return page(1);
+  }
+
+  function flagBegin(run) {
+    return Promise.all([settingsReady(), tagTree()]).then(function (both) {
+      var s = both[0];
+      var field = fieldName(s), name = flagTagName(s);
+      // Exact name or alias, never descendants: the flag is one machine-kept tag, and a
+      // scene wearing a child of it is not wearing it.
+      var hits = tagsMatchingName(both[1], name);
+      run.flagTagId = hits.length ? String(hits[0].id) : null;
+      run.flagTagName = name;
+      if (hits.length > 1) {
+        run.msg('WARN', plural(hits.length, 'tag') + ' answer to "' + name + '"; using "' +
+          hits[0].name + '" [' + hits[0].id + '].');
+      }
+      if (!run.flagTagId) {
+        run.msg('INFO', 'No tag named "' + name + '" exists yet; Proceed will create it.');
+      }
+      run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
+        '" line with another scene, to put "' + name + '" on exactly those.');
+      var seen = {}, scenes = [];
+      return flagScanPass(run, FLAG_BY_STASHID_QUERY, {}, seen, scenes)
+        .then(function () {
+          return run.stopped ? null
+            : flagScanPass(run, FLAG_BY_FIELD_QUERY, { field: field }, seen, scenes);
+        })
+        .then(function () {
+          return (run.stopped || !run.flagTagId) ? null
+            : flagScanPass(run, FLAG_BY_TAG_QUERY, { tags: [run.flagTagId] }, seen, scenes);
+        })
+        .then(function () {
+          if (run.stopped) return null;
+          // Which scenes share a line: ids per line, then each scene's partners are the
+          // union over its lines minus itself. The count goes in the log - the tag
+          // cannot carry it, and the listing is where a number is worth a glance.
+          var byKey = {};
+          scenes.forEach(function (sc) {
+            sceneKeys(sc, field).forEach(function (k) {
+              (byKey[k] = byKey[k] || []).push(String(sc.id));
+            });
+          });
+          // How many sets, not only how many scenes: connected components over shared
+          // lines, counted where they hold two or more. Union-find, because two scenes
+          // can be one set through a chain of overlapping lines without sharing one.
+          var parent = {};
+          function findRoot(x) {
+            while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+            return x;
+          }
+          scenes.forEach(function (sc) { parent[String(sc.id)] = String(sc.id); });
+          var k2;
+          for (k2 in byKey) {
+            if (!hasOwn(byKey, k2)) continue;
+            for (var i2 = 1; i2 < byKey[k2].length; i2++) {
+              parent[findRoot(byKey[k2][i2])] = findRoot(byKey[k2][0]);
+            }
+          }
+          var sizes = {}, setCount = 0;
+          scenes.forEach(function (sc) {
+            var r = findRoot(String(sc.id));
+            sizes[r] = (sizes[r] || 0) + 1;
+            if (sizes[r] === 2) setCount++;
+          });
+          scenes.forEach(function (sc) {
+            var id = String(sc.id), partners = {}, n = 0;
+            sceneKeys(sc, field).forEach(function (k) {
+              byKey[k].forEach(function (other) {
+                if (other !== id && !hasOwn(partners, other)) { partners[other] = true; n++; }
+              });
+            });
+            var flagged = run.flagTagId && (sc.tags || []).some(function (t) {
+              return String(t.id) === run.flagTagId;
+            });
+            if (!!flagged === (n > 0)) return;
+            var job = { id: id, title: sc.title || ('Scene ' + sc.id), flag: n > 0, others: n };
+            run.jobs.push(job);
+            run.jobLine(job);
+          });
+          // After the listing, not before it: this is the summary, and the log scrolls
+          // to its newest line - a count printed first is off the top of a long plan
+          // the moment the plan lands, and past the render cap it is not even in the
+          // DOM any more. Last is the one position a summary is guaranteed to be read
+          // in.
+          run.msg('INFO', plural(setCount, 'multi-variant set') + ' detected in the library.');
+          if (!run.jobs.length) {
+            run.msg('INFO', 'Nothing to change: the flag tag already marks exactly the ' +
+              'scenes that have another variant.');
+          }
+          return null;
+        });
+    });
+  }
+
+  // What the created tag carries, beyond its name. The whole input shape is the one
+  // CustomFieldsBulkEditor's store tag already creates live - description, aliases,
+  // ignore_auto_tag and a plain custom-fields map are all TagCreateInput fields there.
+  //
+  // The two marks are other plugins' vocabularies, written the way each reads them:
+  // CFBE's hide-from-add-lists mark is value-read (`isMarked`, where 0 is present but
+  // off - the key is there for the user to flip on without retyping the name), and the
+  // do-not-propagate mark is presence-read in MPTTS (the value is never inspected), so
+  // 1 simply says what it means. No parents: the tag is an orphan by design - a
+  // machine-kept flag filed under anything would put the hierarchy plugins in play.
+  var FLAG_TAG_ALIAS = 'GTTx Multiple Variants';
+  var FLAG_TAG_DESCRIPTION = '[Personal∙Tag] ᝯㄝₓ Scene Variants - This scene was ' +
+    'associated with at least another variant during the last Flag Variants task run. ' +
+    'Re-Run Flag Variants task to update entire library.';
+
+  function flagTagCreateInput(name) {
+    var marks = {};
+    marks['ᱜ╦╦🞮_exclude_from_add_list'] = 0;
+    marks['ᱜ╦╦🞮_Do_Not_Propagate_Tag'] = 1;
+    return { name: name, description: FLAG_TAG_DESCRIPTION, aliases: [FLAG_TAG_ALIAS],
+      ignore_auto_tag: true, custom_fields: marks };
+  }
+
+  // The tag is created on Proceed, never by the scan - a scan is a read - and a failure
+  // here rejects the whole write, leaving a listing nobody has acted on.
+  function flagPrepare(run) {
+    if (run.flagTagId) return null;
+    return gqlRequest('mutation SVRCreateTag($input: TagCreateInput!) ' +
+      '{ tagCreate(input: $input) { id } }', { input: flagTagCreateInput(run.flagTagName) })
+      .then(function (data) {
+        var t = (data || {}).tagCreate;
+        if (!t || !t.id) throw new Error('the tag "' + run.flagTagName + '" could not be created');
+        run.flagTagId = String(t.id);
+        run.msg('INFO', 'Created the tag "' + run.flagTagName + '" [' + t.id + '] - an ' +
+          'orphan, ignored by auto-tagging, marked never-propagate, with the alias "' +
+          FLAG_TAG_ALIAS + '". Undo takes it off the scenes and leaves the tag itself ' +
+          'in place.');
+      });
+  }
+
+  var BULK_TAG_MUTATION =
+    'mutation SVRFlagWrite($input: BulkSceneUpdateInput!) { bulkSceneUpdate(input: $input) { id } }';
+
+  // ADD / REMOVE rather than a full tag_ids replace, so a tag somebody put on the scene
+  // between the scan and the press is not clobbered - the mutation names only the flag.
+  // The inverse is the opposite mode, and both are idempotent on the server, which is
+  // what lets a stopped undo be pressed again.
+  function flagInput(job, run, add) {
+    return { query: BULK_TAG_MUTATION, variables: { input: {
+      ids: [job.id], tag_ids: { ids: [run.flagTagId], mode: add ? 'ADD' : 'REMOVE' },
+    } } };
+  }
+
+  var FLAG_TASK = {
+    title: 'Flag Variants',
+    legend: 'One line per scene: FLAG where the tag goes on, because at least one other ' +
+      'scene shares one of its variant stash-id lines, and UNFLAG where it comes off, ' +
+      'because none does any more. Only the flag tag moves; nothing else on the scene ' +
+      'is touched.',
+    nothing: 'Nothing to flag or unflag.',
+    scanNoun: 'scene',
+    planNoun: 'to flag or unflag',
+    leaseLabel: 'Variant flagging',
+    undoTip: 'Put the flag tag back the way it was on every scene this dialog wrote. ' +
+      'Only what it wrote, and only while it stays open.',
+    verb: 'updated',
+    begin: flagBegin,
+    prepare: flagPrepare,
+    jobParts: function (job) {
+      if (!job.flag) {
+        return { head: '[UNFLAG]  ', cls: 'svr-op-unflag',
+          tail: '  no other scene shares its ids' };
+      }
+      // The count in its own colour - blue for exactly one partner, amber for a real
+      // choice - so a listing of hundreds scans by number. `tail` carries the same
+      // words as text for the log.
+      var word = '  shares its ids with ';
+      var rest = ' other ' + (job.others === 1 ? 'scene' : 'scenes');
+      return { head: '[FLAG]    ', cls: 'svr-op-flag',
+        tail: word + job.others + rest,
+        tailParts: [{ text: word },
+          { text: String(job.others), cls: job.others > 1 ? 'svr-num-many' : 'svr-num-one' },
+          { text: rest }] };
+    },
+    writeInput: function (job, run) { return flagInput(job, run, job.flag); },
+    undoInput: function (job, run) { return flagInput(job, run, !job.flag); },
+  };
+
   // ── The task button ───────────────────────────────────────────────────────
   //
   // Declared in the yml so Stash renders a button for it in Settings → Tasks, and handled
@@ -1396,7 +1757,7 @@
   // name - another plugin may declare a task called the same thing.
   function ownTaskName(btn) {
     var label = trim(btn.textContent);
-    if (label !== TASK_NAME) return null;
+    if (label !== TASK_NAME && label !== FLAG_TASK_NAME) return null;
     var node = btn;
     var fallback = null;
     for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
@@ -1466,6 +1827,16 @@
     // colours; it wears the row colour the tab already gives that value, which is what
     // makes a listing of two hundred lines scannable by role.
     '.svr-job{margin-left:.5rem;}' +
+    // The flag task's two line kinds, in the greens and ambers the migration lines
+    // already borrow from the tab's roles: green where the tag goes on, amber where it
+    // comes off.
+    '.svr-op-flag{color:#84d68a;}' +
+    '.svr-op-unflag{color:#ffb648;}' +
+    // The partner count inside a [FLAG] line: blue where there is exactly one other
+    // scene, amber where there is a real choice. The blue is the log's own link blue,
+    // so nothing new is introduced.
+    '.svr-num-one{color:#7cc4ff;font-weight:600;}' +
+    '.svr-num-many{color:#ffb648;font-weight:600;}' +
     // ── The tab itself ──────────────────────────────────────────────────────
     //
     // Amber, so the one tab in the strip that Stash did not put there says so. This is the
@@ -1501,9 +1872,24 @@
     // The settings contradiction, in the same red the row-level one wears - it is the same
     // fact reported one level up, before it can be mistaken for a fault in the scenes.
     '.svr-conflict{color:#ff7373;margin-bottom:.5rem;}' +
+    // `position:relative` anchors the hover delta box; the pane scrolls with the page
+    // rather than inside an overflow container, so absolute positioning has nothing to
+    // clip against here.
     '.svr-variant{display:flex;align-items:center;gap:.75rem;padding:.35rem .5rem;' +
-    'border-radius:3px;}' +
+    'border-radius:3px;position:relative;}' +
     '.svr-variant:hover{background:#3c4f5d;}' +
+    // The delta box the row opens on hover, in place of a native title, which cannot be
+    // styled. z-index 1700, the shared tipbox's own lesson: level with the backdrops is a
+    // stacking race decided by document order. The colours are the dialogs' - #202b33
+    // panel, #ffb648 headers, the amber every warning here already wears.
+    '.svr-delta{display:none;position:absolute;left:.5rem;top:100%;z-index:1700;' +
+    'background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    'padding:.5rem .75rem;max-width:min(56rem,90vw);font-size:.85rem;line-height:1.4;' +
+    'pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5);}' +
+    '.svr-variant:hover .svr-delta{display:block;}' +
+    '.svr-delta-hdr{color:#ffb648;font-weight:600;}' +
+    // The asked-for half-line of air between sections, and only between them.
+    '.svr-delta-sec+.svr-delta-sec{margin-top:.5em;}' +
     // A fixed 16:9 box, so a row is the same height whatever the cover's aspect is and the
     // list does not step in and out as it scrolls. `object-fit:cover` is what fills it
     // without distorting; a portrait scene is cropped rather than letterboxed, which is
@@ -1524,6 +1910,12 @@
     // reads as one of them being an afterthought.
     '.svr-role,.svr-meta{font-size:.85rem;white-space:nowrap;}' +
     '.svr-meta{color:#a7b6c2;}' +
+    // The delta badges: an icon and a count per kind, absent at zero. The metadata grey,
+    // because the icon is the distinguisher and three colours here would out-shout the
+    // role column. The group is one inline-flex item in the wrapping facts row, so the
+    // badges break onto the next line together rather than between each other.
+    '.svr-dbadges{display:inline-flex;gap:.5rem;white-space:nowrap;}' +
+    '.svr-dbadge{font-size:.85rem;color:#a7b6c2;}' +
     // Green for the full-length one, because it is the answer the tab exists to give;
     // amber for a partial; red for the scene wearing both tags, which is a contradiction.
     // An untagged scene has no label at all, which is the only quiet state left.
@@ -1895,6 +2287,27 @@
     }
     var meta = metaOf(row.scene);
     if (meta) facts.push(React.createElement('span', { key: 'meta', className: 'svr-meta' }, meta));
+    // The delta at a glance, before the hover: a badge per kind, only where the count
+    // is not zero. The numbers come from the same computation the hover box renders,
+    // so the two cannot disagree. One wrapper for the group, because the facts line
+    // wraps between its children - three loose badges could break onto two lines
+    // mid-group, and they read as one annotation, so they move as one.
+    if (row.delta) {
+      var badges = [];
+      [['extra', '🏷️+', 'extra tag'], ['missing', '🏷️−', 'missing tag'],
+        ['attrs', '📋⚙', 'differing attribute']].forEach(function (b) {
+        var n = row.delta[b[0]];
+        if (!n) return;
+        badges.push(React.createElement('span', {
+          key: 'badge-' + b[0], className: 'svr-dbadge svr-dbadge-' + b[0],
+          title: plural(n, b[2]),
+        }, b[1] + n));
+      });
+      if (badges.length) {
+        facts.push(React.createElement('span',
+          { key: 'badges', className: 'svr-dbadges' }, badges));
+      }
+    }
     var line = [React.createElement('a', {
       key: 'title', className: 'svr-variant-title', href: '/scenes/' + row.scene.id,
       // A new tab by default, like every other link these plugins draw - the scene
@@ -1918,8 +2331,26 @@
     }
     // On the row rather than on any one thing in it, so anywhere in the row answers it -
     // and the value span keeps its own title, which is a narrower answer about that span.
+    // A styled box shown by the row's own :hover rather than a native `title`, because a
+    // `title` cannot make the section headers bold and amber or space the sections, and
+    // that formatting is the whole point - three runs of names in one grey paragraph was
+    // the readability complaint. `pointer-events:none` in its rule, for the reason every
+    // box here has it: one that took the pointer would close and reopen under it.
+    if (row.delta) {
+      kids.push(React.createElement('div', { key: 'delta', className: 'svr-delta' },
+        row.delta.sections.map(function (sec, i) {
+          var bits = [];
+          if (sec.head) {
+            bits.push(React.createElement('span',
+              { key: 'h', className: 'svr-delta-hdr' }, sec.head));
+            bits.push(' ');
+          }
+          bits.push(sec.body);
+          return React.createElement('div', { key: 's' + i, className: 'svr-delta-sec' }, bits);
+        })));
+    }
     return React.createElement('div',
-      { key: row.scene.id, className: 'svr-variant', title: row.delta || null }, kids);
+      { key: row.scene.id, className: 'svr-variant' }, kids);
   }
 
   // `found` is null until the query lands, which is the loading state; after that it is
@@ -2038,7 +2469,8 @@
 
   function hasOwnTaskButton(node) {
     if (!node) return false;
-    if (node.tagName === 'BUTTON' && trim(node.textContent) === TASK_NAME) return true;
+    if (node.tagName === 'BUTTON' &&
+      (trim(node.textContent) === TASK_NAME || trim(node.textContent) === FLAG_TASK_NAME)) return true;
     var kids = node.childNodes || [];
     for (var i = 0; i < kids.length; i++) {
       if (hasOwnTaskButton(kids[i])) return true;
@@ -2309,7 +2741,7 @@
 
 
   var TAG_LINK_MARK = '🔗';      // link symbol
-  var TAG_LINK_KEYS = ['a1FullLengthTag', 'a2PartialLengthTag'];
+  var TAG_LINK_KEYS = ['a1FullLengthTag', 'a2PartialLengthTag', 'a4VariantFlagTag'];
 
   function tagLinkId(key) { return 'svr-taglink-' + key; }
 
@@ -2338,13 +2770,20 @@
     if (node && node.parentNode) node.parentNode.removeChild(node);
   }
 
+  // The flag tag's box, like the field's, means its default when empty - so its link
+  // resolves the name in force rather than the raw setting, and never drops for an
+  // empty box the way the two length tags' links do.
+  function tagLinkName(key) {
+    return key === 'a4VariantFlagTag' ? flagTagName() : trim(settings()[key]);
+  }
+
   function tagLinkTick(key) {
     if (!settingRow(key)) return;
-    var name = trim(settings()[key]);
+    var name = tagLinkName(key);
     if (!name) { dropTagLink(key); return; }
     tagTree().then(function (tags) {
       var row = settingRow(key);
-      if (!row || trim(settings()[key]) !== name) return;   // the box moved on
+      if (!row || tagLinkName(key) !== name) return;   // the box moved on
       var hits = tagsMatchingName(tags, name);
       if (!hits.length) { dropTagLink(key); return; }
       var tag = hits[0];
@@ -2397,10 +2836,11 @@
     document.addEventListener('click', function (event) {
       var target = event.target;
       var btn = target && target.closest ? target.closest('button') : null;
-      if (!btn || !ownTaskName(btn)) return;
+      var name = btn ? ownTaskName(btn) : null;
+      if (!name) return;
       if (event.preventDefault) event.preventDefault();
       if (event.stopPropagation) event.stopPropagation();
-      startRun();
+      startRun(name === FLAG_TASK_NAME ? FLAG_TASK : MIGRATE_TASK);
     }, true);
   }
 

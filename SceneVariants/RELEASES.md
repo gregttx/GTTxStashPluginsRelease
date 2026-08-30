@@ -8,6 +8,10 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 0.18.1 (`53610e8`) | 2026-08-30 | SceneVariants 0.18.1: the set count is a summary, and the badges wrap as one |
+| 0.18.0 (`d181c55`) | 2026-08-30 | SceneVariants 0.18.0: furnished flag tag, set counter, delta badges |
+| 0.17.0 (`52b3c74`) | 2026-08-30 | SceneVariants 0.17.0: Flag Variants task, and the hover delta becomes a styled box |
+| 0.16.1 (`8148865`) | 2026-08-30 | SceneVariants 0.16.1: field lookup matches individual lines, not the whole value |
 | 0.16.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 0.15.1 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 0.15.0 (`28ce7c2`) | 2026-08-28 | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |

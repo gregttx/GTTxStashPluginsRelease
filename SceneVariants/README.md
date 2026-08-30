@@ -52,13 +52,14 @@ say on most scenes today.
 
 ## What it needs from you
 
-Two settings, both optional, both under **Settings → Plugins → ᝯㄝₓ Scene Variants**:
+A handful of settings, all optional, all under **Settings → Plugins → ᝯㄝₓ Scene Variants**:
 
 | Setting | What it does |
 |---|---|
 | Full-length Tag | The name of the tag you put on a scene that is the whole work |
 | Partial-length Tag | The name of the tag you put on a cut of one |
 | Variant Stash-ID Custom Field | The custom field the migration task writes into. The default `ᱜ╦╦🞮_Variant_Stash_ID` is written into the box the first time the plugin loads, so the page shows the name it is actually using; clearing it goes back to that same default, and a box you have cleared stays cleared. A **ⓘ** beside the value hovers to the field's description, how many scenes carry it and the first ten — read on hover The tooltip opens above the mark rather than under the pointer, where the cursor would sit on top of its first line. |
+| Variant Flag Tag | The tag the **Flag Variants** task keeps on every scene that has at least one other variant. The default `ᱜ╦╦🞮⸎✱MultiVariants❌∙` is seeded the same way; the task's Proceed creates the tag if it does not exist yet — see below for what the created tag carries. |
 
 Names are typed rather than picked, and compared without regard to case or surrounding spaces. A
 name finds the tag by any of its **aliases** as well as by its name, and a scene tagged with any
@@ -116,23 +117,55 @@ Running it twice is safe: a scene whose field already says the right thing, and 
 stash-id left to move, is not written again.
 
 The **Variants** tab then matches on both — a scene is found by its stash-id, by this field, or by
-either — so a half-migrated library keeps working throughout.
+either, and a field holding several ids matches on any one of them — so a half-migrated library
+keeps working throughout.
 
-## What the hover text tells you
+## Flagging the scenes that have variants
 
-Hover anywhere on a row and it says how that variant differs from the scene you are looking at:
+**Settings → Tasks → ᝯㄝₓ Scene Variants → Flag Variants...** puts the variant flag tag on every
+scene that shares a stash-id line — real or migrated — with at least one other scene, and takes it
+off every scene it marks that no longer does. Filter by that tag, or click it, and you have every
+scene offering a choice of variants.
+
+The matching is the tab's own: a scene's lines are its stash-ids plus whatever its variant field
+holds, and sharing any one line is sharing the work. The plan lists every scene the task would
+touch and closes with how many **multi-variant sets** the scan found — **[FLAG]** with how many other
+scenes share its ids (the count in blue for exactly one, amber for a real choice), **[UNFLAG]**
+where none does any more — and nothing is written until **Proceed**. **Undo** puts the tag back the
+way it was on every scene written, for as long as the dialog stays open.
+
+If no tag answers to the configured name yet, Proceed creates it first, fully furnished: an
+**orphan** (no parents, so hierarchy plugins never touch it), **ignored by auto-tagging**, aliased
+`GTTx Multiple Variants`, described so the tag's own page says what it means, carrying the
+never-propagate mark (`ᱜ╦╦🞮_Do_Not_Propagate_Tag: 1`) the merge plugins read, and the
+hide-from-add-lists mark present but off (`ᱜ╦╦🞮_exclude_from_add_list: 0`) so you can flip it on
+without retyping the name. A tag Proceed created stays after an Undo, empty.
+
+The tag is **not a source of truth**: it says what the last run found, nothing fresher. Scenes
+scraped, migrated or merged since then are out of step until the task runs again — running it twice
+in a row changes nothing, so run it whenever you want the flags current.
+
+## What the hover box tells you
+
+Each row wears the delta at a glance first: up to three badges after the resolution and running
+time — `🏷️+3` for tags the variant has that this scene does not, `🏷️−1` for the ones it is
+missing, `📋⚙4` for attributes that disagree. A badge whose count is zero is not shown, and
+hovering one says what it counts.
+
+Hover anywhere on the row and a box says the same thing in full, one amber-headed section per
+kind:
 
 ```
 Extra 3 tags: Blonde, Outdoor, Solo
 Missing 1 tag: Anal
-Attributes that differ: Title, Date, Performers
+Differing attributes: Title, Date, Performers
 ```
 
 **Extra** are the tags the variant carries and this scene does not; **missing** are the ones this
-scene carries and it does not. The last line names the attributes that disagree — title, date,
+scene carries and it does not. The last section names the attributes that disagree — title, date,
 studio, performers, groups, rating, studio code, director, details, URLs, organised — and **only
 their names**. Which fields differ is what sends you to the two pages; what each of them says is a
-question for those pages, and a tooltip quoting both sides would be a diff view rather than a hint.
+question for those pages, and a box quoting both sides would be a diff view rather than a hint.
 
 A list attribute in a different order is not a difference: the same three performers on both scenes
 agree, however each page happens to have them sorted. A variant that differs in nothing says so.
@@ -155,8 +188,8 @@ on a title convention (`<title> - Clip 2`) and on shared performers is the obvio
 not built — expect a list on the scenes that carry the id convention and nowhere else.
 
 **The tab never writes.** No tag is added, no title is corrected, no stash-id is propagated.
-Everything it notices that looks wrong is shown and left alone. The migration task is the only thing
-here that writes, it is started by hand, and it shows its whole plan first.
+Everything it notices that looks wrong is shown and left alone. The two tasks are the only things
+here that write, both are started by hand, and both show their whole plan first.
 
 **Scene pages only.** There is nothing on a performer, studio or group.
 

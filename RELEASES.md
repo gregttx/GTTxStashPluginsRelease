@@ -10,6 +10,10 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-08-30 |  |  |  |  |  |  |  | 0.18.1 (`53610e8`) |  | SceneVariants 0.18.1: the set count is a summary, and the badges wrap as one |
+| 2026-08-30 |  |  |  |  |  |  |  | 0.18.0 (`d181c55`) |  | SceneVariants 0.18.0: furnished flag tag, set counter, delta badges |
+| 2026-08-30 |  |  |  |  |  |  |  | 0.17.0 (`52b3c74`) |  | SceneVariants 0.17.0: Flag Variants task, and the hover delta becomes a styled box |
+| 2026-08-30 |  |  |  |  |  |  |  | 0.16.1 (`8148865`) |  | SceneVariants 0.16.1: field lookup matches individual lines, not the whole value |
 | 2026-08-29 |  |  |  | 1.1.4 (`94163aa`) |  |  |  |  |  | It should become a no-op |
 | 2026-08-29 |  |  |  | 1.1.3 (`ed3db08`) |  |  |  |  |  | Say what the no-op is, rather than naming a width |
 | 2026-08-29 |  |  |  | 1.1.2 (`33cbd02`) |  |  |  |  |  | When, not if |
