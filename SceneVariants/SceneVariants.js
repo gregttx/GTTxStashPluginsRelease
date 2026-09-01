@@ -14,9 +14,11 @@
 // prose and as two synonyms in a UI. The plugin is called Scene Variants and the id is the
 // contract, so `variant` is the word that survives everywhere - tab, copy, log, CSS.
 //
-// **Nothing in this file writes to the library.** It reads two queries - the variants and
-// the tag tree they are classified against - and draws a list of links. There is no mutation to undo, no lease to take and nothing to stand a
-// reactive plugin down for.
+// **The tab itself never writes.** It reads two queries - the variants and the tag tree
+// they are classified against - and draws a list of links. What writes is a dialog with
+// the whole plan listed first, reached three ways: the two tasks in Settings - Tasks
+// (the stash-id migration and the flag), and the tab's own Synchronize Variants button.
+// Every write takes a lease and is undoable while its dialog stays open.
 //
 // The design notes, and the reasoning behind the parts that look arbitrary, are in
 // CLAUDE.md next to this file.
@@ -43,6 +45,7 @@
   }
   var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
     entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
@@ -71,7 +74,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's markup or about a filter field name.
-  var PLUGIN_VERSION = '0.18.1';
+  var PLUGIN_VERSION = '1.2.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -145,7 +148,33 @@
     a3VariantStashIdField: '',
     a4VariantFlagTag: '',
     b1LogToConsole: false,
+    c1PropagateOnSave: false,
+    c2PropagateTitleOnSave: false,
+    c3SkipRedundantTags: false,
+    c4CheckCoverMismatch: false,
+    // The set-review weights. Dialog-only - they are edited in the review dialog's own
+    // strip, and a `.yml` row would be a second editor for one value. Absent means
+    // "not remembered", which is why they are read as numbers-or-null rather than
+    // through the boolean/string coercion above.
+    d1WeightAttribute: null,
+    d2WeightTag: null,
+    d3WeightPerformer: null,
+    d4WeightGroup: null,
+    d5WeightCover: null,
+    d6WeightTitle: null,
   };
+
+  // What an unremembered dialog starts with: an attribute difference is worth five of
+  // a missing tag, which is the ratio the feature was asked for.
+  // Title is priced on its own and cheaply: variants are *named* apart on purpose, so
+  // a title difference is the one that says least about whether a set has drifted -
+  // but it is not nothing, and pricing it at zero would be this plugin deciding that
+  // rather than the user. One point, where an attribute is five.
+  var WEIGHT_DEFAULTS = { title: 1, cover: 5, attr: 5, tag: 1, performer: 1, group: 1 };
+  var WEIGHT_KEYS = { attr: 'd1WeightAttribute', tag: 'd2WeightTag',
+    performer: 'd3WeightPerformer', group: 'd4WeightGroup', cover: 'd5WeightCover',
+    title: 'd6WeightTitle' };
+  var WEIGHT_MAX = 100;
 
   // ── The variant stash-id custom field ─────────────────────────────────────
   //
@@ -211,6 +240,26 @@
     return out;
   }
 
+  // A variant stash-id for a set no stash-box knows about: `pseudo` where a real line
+  // carries the provider's host, so a reader of Stash's custom-field panel can tell at
+  // a glance that nothing upstream was consulted. Written identically into every scene
+  // of the set the user grouped by hand, it is a line like any other from there on -
+  // the tab's lookup, the flag task's matching and the field regex all read it with no
+  // special case.
+  function pseudoStashId() {
+    var hex = '', bytes = null, i, b;
+    var c = window.crypto || window.msCrypto;
+    if (c && c.getRandomValues && typeof Uint8Array !== 'undefined') {
+      bytes = new Uint8Array(16);
+      c.getRandomValues(bytes);
+    }
+    for (i = 0; i < 16; i++) {
+      b = bytes ? bytes[i] : Math.floor(Math.random() * 256);
+      hex += (b < 16 ? '0' : '') + b.toString(16);
+    }
+    return 'pseudo:' + hex;
+  }
+
   function splitValues(raw) {
     if (raw == null) return [];
     return String(raw).split('\n').map(trim).filter(function (v) { return !!v; });
@@ -241,13 +290,9 @@
   }
 
 
-  // **Four of the shared mechanisms are correctly left alone, and each absence is a rule
-  // rather than an omission:**
+  // **Three of the shared mechanisms are correctly left alone, and each absence is a
+  // rule rather than an omission:**
   //
-  //   no `respecters`    - the flag says "I react to saves and will stand down". This
-  //                        plugin reacts to nothing: its one write is a task somebody
-  //                        pressed, which is the case §7 of the repo-root rules says is
-  //                        never suppressed.
   //   no `declares`      - the registry is for two plugins performing the *identical*
   //                        relationship copy, keyed by a path id. Nothing here copies a
   //                        relationship, so any path id would be a lie.
@@ -261,10 +306,13 @@
   //                        page is decoration, which the one-second timer covers - the
   //                        same position `NormalizeParentTags` is in.
   //
-  // The fifth it does take: the migration task rewrites many scenes on purpose, which is
-  // exactly what a **lease** announces. It reads `debugButtons` too - the tab is a control
-  // drawn into Stash's chrome and "why is it not there" is the same question that flag
-  // answers for every sibling.
+  // The two it does take: the tasks and the propagate dialog rewrite many scenes on
+  // purpose, which is exactly what a **lease** announces; and `respecters`, since the
+  // save watch made the plugin reactive - it answers a scene save with a dialog, and a
+  // library-wide bulk edit must not raise one per scene, so the watch samples the
+  // lease *before* the save goes through and stands down while one is held. It reads
+  // `debugButtons` too - the tab is a control drawn into Stash's chrome and "why is it
+  // not there" is the same question that flag answers for every sibling.
 
   // A bulk run announces itself for the duration of its writes, so a reactive plugin in
   // the same tab stands down rather than reacting to every entity we touch. Advisory,
@@ -317,10 +365,14 @@
   // ── GraphQL ───────────────────────────────────────────────────────────────
 
   function gqlRequest(query, variables) {
+    // `__svr` marks the request as this plugin's own, so the save watch lets it
+    // straight through - on a live page the bare `fetch` here *is* the wrapper.
+    // `fetch` ignores a property it does not know.
     return fetch('/graphql', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ query: query, variables: variables }),
+      __svr: true,
     })
       .then(function (resp) { return resp.json(); })
       .then(function (json) {
@@ -335,7 +387,12 @@
       var s = {};
       for (var k in DEFAULTS) {
         if (!hasOwn(DEFAULTS, k)) continue;
-        s[k] = typeof DEFAULTS[k] === 'boolean' ? !!raw[k] : (raw[k] == null ? '' : String(raw[k]));
+        s[k] = DEFAULTS[k] === null
+          // A weight is a number or nothing at all; an absent one is what says the
+          // user has not asked for these to be remembered.
+          ? (raw[k] == null || raw[k] === '' ? null : Number(raw[k]))
+          : typeof DEFAULTS[k] === 'boolean' ? !!raw[k]
+            : (raw[k] == null ? '' : String(raw[k]));
       }
       seedFieldDefault(raw, s);
       return s;
@@ -369,11 +426,16 @@
   // Nothing here watches yet, and the next thing that does would have to know.
   var _seededField = false;
 
-  // Both defaulted string settings, in one write: a key that is *absent* gets its
-  // default written in; a key that is present - even holding '' - has been answered.
+  // The defaulted settings, in one write: a key that is *absent* gets its default
+  // written in; a key that is present - even holding '' or false - has been answered.
+  // The propagate offer is on by default, and Stash has no default for a plugin
+  // setting, so the seed is what makes a fresh install's switch show the state the
+  // plugin is actually in.
   var SEED_DEFAULTS = {
     a3VariantStashIdField: FIELD_DEFAULT,
     a4VariantFlagTag: FLAG_DEFAULT,
+    c1PropagateOnSave: true,
+    c3SkipRedundantTags: true,
   };
 
   function seedFieldDefault(raw, s) {
@@ -578,7 +640,7 @@
     'id title tags { id name } ' +
     'paths { screenshot preview } files { duration width height } ' +
     'code details director date rating100 organized urls ' +
-    'studio { id name } performers { id name } groups { group { id name } }';
+    'studio { id name } performers { id name } groups { group { id name } scene_index }';
 
   var VARIANTS_QUERY =
     'query SVRVariants($ids: [String!]) { findScenes(' +
@@ -698,6 +760,10 @@
             ' from ' + matchedOn(ids, own));
           return {
             rows: ordered(others, self, m),
+            // The viewed scene as the query returned it - the delta's other side, and
+            // what the synchronize task pushes from: the same fields, selected the same
+            // way, for both readers.
+            self: self,
             conflict: conflictNote(m),
             why: others.length
               ? 'Matched on ' + matchedOn(ids, own) + '.'
@@ -832,16 +898,19 @@
     if (!self || String(self.id) === String(other.id)) return null;
     var d = tagDelta(self, other), out = [];
     if (d.extra.length) {
-      out.push({ head: 'Extra ' + plural(d.extra.length, 'tag') + ':', body: d.extra.join(', ') });
+      out.push({ head: 'Extra ' + plural(d.extra.length, 'tag') + ':',
+        body: d.extra.join(', '), kind: 'extra' });
     }
     if (d.missing.length) {
       out.push({ head: 'Missing ' + plural(d.missing.length, 'tag') + ':',
-        body: d.missing.join(', ') });
+        body: d.missing.join(', '), kind: 'missing' });
     }
     var differ = ATTRS.filter(function (a) {
       return attrValue(self, a) !== attrValue(other, a);
     }).map(function (a) { return a.label; });
-    if (differ.length) out.push({ head: 'Differing attributes:', body: differ.join(', ') });
+    if (differ.length) {
+      out.push({ head: 'Differing attributes:', body: differ.join(', '), kind: 'attrs' });
+    }
     if (!out.length) out.push({ head: '', body: 'Same tags and attributes as this scene.' });
     return { sections: out, extra: d.extra.length, missing: d.missing.length,
       attrs: differ.length };
@@ -984,9 +1053,14 @@
   // the scan is a read, and what it found is on screen before anything moves.
   var _active = null;
 
-  function startRun(task) {
-    if (_active) { _active.focus(); return; }
-    _active = new Run(task);
+  // `scope` is what the synchronize button adds: the scene whose values are pushed.
+  // On the run rather than in the call that started it, so anything re-entering
+  // `begin()` stays scoped - the same reasoning the siblings' scoped dialogs record.
+  function startRun(task, scope, extra) {
+    // An automatic run never steals an open dialog; a pressed button focuses it.
+    if (_active) { if (!extra || !extra.auto) _active.focus(); return; }
+    _active = new Run(task, extra);
+    _active.scope = scope || null;
     _active.begin();
   }
 
@@ -994,13 +1068,24 @@
   // undo bookkeeping are the same machinery; what differs per task - the title, the
   // legend, the scan, the input builders, the verbs - lives on a task object rather than
   // in a second three-hundred-line copy of this one.
-  function Run(task) {
+  function Run(task, extra) {
     this.task = task;
+    // `auto` (opened by a save rather than a press) and `only` (the attribute set the
+    // save changed) ride on the run itself, the way `scope` does, because Rescan
+    // re-enters `begin()` and a rescan of a scoped run has to stay scoped.
+    if (extra) { for (var xk in extra) if (hasOwn(extra, xk)) this[xk] = extra[xk]; }
     this.logText = [];      // every line as plain text, for Copy log and for the count
     this.jobs = [];         // what the scan found to do
+    this.candidates = [];   // { job, box }: flagged scenes with no evidence, user-decided
     this.changes = [];      // what Proceed wrote, newest last, for Undo
     this.scanned = 0;
     this.total = 0;
+    this.sets = [];          // the review task's variant sets, scored
+    this.srcRadios = [];     // every source radio on screen, for exclusivity
+    this.weightInputs = {};
+    this.source = null;      // the scene a set will be synchronized from
+    this.sourceSet = null;
+    this.plannedFrom = null; // the id of the source whose set is already listed below
     this.written = 0;
     this.failed = 0;
     this.state = 'scanning';
@@ -1013,6 +1098,10 @@
     var self = this;
 
     this.backdrop = el('div', 'svr-backdrop');
+    // An automatic run stays invisible until its plan holds something to offer: a
+    // dialog that flashed open and shut on every unremarkable save would be worse
+    // than no feature.
+    if (this.auto) this.backdrop.className += ' svr-hidden';
     this.modal = el('div', 'svr-modal');
     this.backdrop.appendChild(this.modal);
 
@@ -1033,31 +1122,75 @@
     this.progressEl = el('div', 'svr-progress', 'Starting…');
     this.modal.appendChild(this.progressEl);
 
+    // One "All <attribute>" box per attribute the listing holds, filled by a task
+    // that lists per-attribute lines (`buildAllBar`); hidden for the tasks that do
+    // not.
+    this.allBar = el('div', 'svr-allbar svr-hidden');
+    this.modal.appendChild(this.allBar);
+
+    // The review task's own two blocks: the weights strip, and the set listing above
+    // the log rather than in it, because it is re-rendered and a log is append-only.
+    this.weightBar = el('div', 'svr-allbar svr-hidden');
+    this.modal.appendChild(this.weightBar);
+    // Hidden until a task fills it, like the weights strip beside it. It carries a
+    // height of its own so it can be dragged, which is exactly what made an empty one
+    // visible: every dialog but the review task's had 22vh of nothing above its log.
+    this.setsEl = el('div', 'svr-sets svr-hidden');
+    this.modal.appendChild(this.setsEl);
+
     this.logEl = el('div', 'svr-log');
     this.modal.appendChild(this.logEl);
 
     var foot = el('div', 'svr-foot');
-    // One button for both halves of the write, the shape `EntityNameMaintainer` settled
-    // on: Proceed until something has been written and Undo afterwards. The two never
-    // overlap, because after a write the listing describes a library this dialog has
-    // already changed.
+    // Two buttons, as every sibling's footer has: one that writes and one that takes
+    // it back. They were one button on the reasoning that the two never overlap -
+    // after a write, the listing describes a library this dialog has already changed.
+    // **Rescan is what makes that false**: it reads the library again and produces a
+    // fresh plan while what the last pass wrote is still undoable, and a single button
+    // can only offer one of them. Live, that was a Proceed nobody could find.
     this.goBtn = button('Proceed', 'svr-go');
     this.goBtn.className = this.goBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.goBtn.disabled = true;
+    this.undoBtn = button('Undo', 'svr-undo svr-hidden');
+    this.undoBtn.className = this.undoBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     // Offered while a write runs and never during the scan, which is the split the
     // siblings make too. A scan is a read: Close abandons it outright, so a second
     // control that ends it slowly - after the page in flight, which is hundreds of
     // scenes - would be the worse of the two exits and the one nearer the pointer.
     this.stopBtn = button('Stop', 'svr-stop svr-hidden');
+    // The two candidate actions, hidden until a scan lists a [GROUP?] line. Both write,
+    // so both are amber; no "..." because the listing they act on is already on screen.
+    this.groupBtn = button('Create Variant Group', 'svr-group svr-hidden');
+    this.groupBtn.className = this.groupBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.untagBtn = button('Remove Tag', 'svr-untag svr-hidden');
+    this.untagBtn.className = this.untagBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    // Amber and dotted: it lists a plan rather than writing one, and the listing is
+    // what Proceed then acts on.
+    this.syncSetBtn = button('Synchronize Set...', 'svr-syncset svr-hidden');
+    this.syncSetBtn.className =
+      this.syncSetBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.closeBtn = button('Close', 'svr-close');
     this.copyBtn = button('Copy log', 'svr-copy');
+    // Grey: it reads the library again and writes nothing. Hidden while anything is
+    // in flight, like Stop's mirror image - a second scan started over a running one
+    // would have two passes writing into one listing.
+    this.rescanBtn = button('Rescan', 'svr-rescan svr-hidden');
+    this.rescanBtn.title = 'Scan the library again and replace the plan with whatever ' +
+      'is left to do. The log is kept, and so is what Undo can still reverse.';
     this.copyBtn.title = 'Copy the counters, the messages and every line of the listing as ' +
       'plain text.';
     this.goBtn.addEventListener('click', function () { self.go(); });
+    this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.stopBtn.addEventListener('click', function () { self.stop(); });
+    this.groupBtn.addEventListener('click', function () { self.actCandidates(true); });
+    this.untagBtn.addEventListener('click', function () { self.actCandidates(false); });
+    this.syncSetBtn.addEventListener('click', function () { self.planSet(); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
-    [this.goBtn, this.stopBtn, this.closeBtn, this.copyBtn].forEach(function (b) { foot.appendChild(b); });
+    this.rescanBtn.addEventListener('click', function () { self.rescan(); });
+    [this.goBtn, this.stopBtn, this.syncSetBtn, this.groupBtn, this.untagBtn,
+      this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
+      .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
     wireEscape(this);
@@ -1082,6 +1215,7 @@
     var busy = state !== 'listing';
     var writing = state === 'writing' || state === 'undoing';
     this.show(this.stopBtn, writing);
+    this.show(this.rescanBtn, !busy);
     // Closing mid-scan is safe and instant: nothing has been written, so there is
     // nothing to leave half-done, and the paging stops on the next answer. Closing
     // mid-write is the one thing this dialog must not let happen - what it wrote is
@@ -1093,20 +1227,628 @@
 
   // Proceed until a write has landed, Undo afterwards, and the reason it is disabled said
   // out loud rather than left to be guessed at.
+  // The jobs Proceed will write: every job whose line carries no checkbox, and the
+  // ticked live ones where it does. A disabled box is either mid-write or settled by an
+  // earlier write, and neither is a selection.
+  // The items of an additive line the user has left ticked - every item, where the
+  // line has no picker.
+  function pickedItems(job) {
+    return (job.items || []).filter(function (it) { return !it.box || it.box.checked; });
+  }
+
+  Run.prototype.tickedJobs = function () {
+    var out = [];
+    this.jobs.forEach(function (j) {
+      if (j.box && (!j.box.checked || j.box.disabled)) return;
+      // An additive line with every individual item unticked adds nothing, so it is
+      // not a change however its master box stands.
+      if (j.items && !pickedItems(j).length) return;
+      out.push(j);
+    });
+    return out;
+  };
+
   Run.prototype.syncFooter = function () {
-    var undo = this.changes.length > 0;
-    this.goBtn.textContent = undo ? 'Undo' : 'Proceed';
-    if (undo) {
-      this.goBtn.disabled = this.state !== 'listing';
-      this.goBtn.title = this.task.undoTip;
-      return;
-    }
-    var why = this.state !== 'listing' ? 'Still working.'
+    this.syncCandidates();
+    this.syncSets();
+    var busy = this.state !== 'listing', self = this;
+    // Jobs with a checkbox lock while anything is in flight - the selection is read at
+    // press time, so a live box mid-write would steer nothing - and stay settled once
+    // written, until an Undo takes them back out of `changes`.
+    this.jobs.forEach(function (j) {
+      var lock = busy || self.changes.indexOf(j) !== -1;
+      if (j.box) j.box.disabled = lock;
+      // The individual item boxes steer the write exactly like the line's own box, so
+      // they lock with it. The expander stays live: opening a list changes only what
+      // the screen shows.
+      if (j.items) j.items.forEach(function (it) { if (it.box) it.box.disabled = lock; });
+    });
+    // Undo stands beside Proceed rather than replacing it: a rescan leaves a fresh
+    // plan and a written pass in the same dialog, and both need a button.
+    this.show(this.undoBtn, this.changes.length > 0);
+    this.undoBtn.disabled = busy;
+    this.undoBtn.title = this.task.undoTip;
+    // "Proceed all" against "Proceed selected" is read off the boxes themselves rather
+    // than `tickedJobs`, which excludes locked boxes and would flap mid-write.
+    var unticked = 0;
+    this.jobs.forEach(function (j) { if (j.box && !j.box.checked) unticked++; });
+    this.goBtn.textContent = !this.task.pickCaption ? 'Proceed'
+      : unticked ? 'Proceed selected' : 'Proceed all';
+    var ticked = this.tickedJobs().length;
+    var why = busy ? 'Still working.'
       : this.stale ? 'Reload the page first: this tab is running an older script.'
         : !this.jobs.length ? this.task.nothing
-          : '';
+          : !ticked ? 'Nothing is ticked.'
+            : '';
     this.goBtn.disabled = !!why;
-    this.goBtn.title = why || ('Write ' + plural(this.jobs.length, 'scene') + '.');
+    this.goBtn.title = why || ('Write ' + plural(ticked, this.task.planUnit || 'scene') + '.');
+    this.refreshAllBar();
+  };
+
+  // The weights strip: what a difference of each kind is worth, 0 to 100, and whether
+  // to keep the numbers for next time. Above the listing rather than in the settings
+  // page because they are read *while* looking at the scores they produce - a number
+  // whose effect you cannot see is a number nobody tunes.
+  Run.prototype.buildWeightBar = function () {
+    var self = this;
+    this.weightBar.className = 'svr-allbar';
+    this.weightBar.textContent = '';
+    this.weightBar.appendChild(el('span', 'svr-all-label', 'A difference is worth:'));
+    [['title', 'title'], ['cover', 'cover'], ['attr', 'other attribute'],
+      ['tag', 'tag'], ['performer', 'performer'], ['group', 'group']]
+      .forEach(function (w) {
+        var wrap = el('label', 'svr-weight');
+        wrap.appendChild(el('span', null, w[1]));
+        var input = el('input', 'svr-weight-box');
+        input.type = 'number';
+        input.min = '0';
+        input.max = String(WEIGHT_MAX);
+        input.value = String(self.weights[w[0]]);
+        input.title = 'What one ' + w[1] + ' difference adds to a set\u2019s score, ' +
+          '0 to ' + WEIGHT_MAX + '.';
+        input.addEventListener('change', function () {
+          self.weights[w[0]] = clampWeight(input.value);
+          input.value = String(self.weights[w[0]]);
+          self.renderSets(false);
+          if (self.remember) self.saveWeights();
+          self.msg('INFO', 'Re-sorted: an attribute difference is worth ' +
+            self.weights.attr + ', a tag ' + self.weights.tag + ', a performer ' +
+            self.weights.performer + ', a group ' + self.weights.group + '.');
+        });
+        self.weightInputs[w[0]] = input;
+        wrap.appendChild(input);
+        self.weightBar.appendChild(wrap);
+      });
+    // Set apart from the numbers rather than reading as one more of them: it prices
+    // nothing, it decides whether the six survive the dialog.
+    var mem = el('label', 'svr-weight svr-remember');
+    var box = el('input', 'svr-remember-box');
+    box.type = 'checkbox';
+    box.checked = !!this.remember;
+    box.title = 'Keep these numbers in this plugin\u2019s settings, so the next review ' +
+      'opens with them. Unticked, they are forgotten when this dialog closes.';
+    box.addEventListener('click', function () {
+      self.remember = !!box.checked;
+      self.saveWeights();
+    });
+    this.rememberBox = box;
+    mem.appendChild(box);
+    mem.appendChild(el('span', null, 'Remember'));
+    this.weightBar.appendChild(mem);
+  };
+
+  // Written whole, per the rule `configurePlugin` forces: it replaces the plugin's
+  // stored map rather than merging into it, so a mutation naming four keys would
+  // delete every other setting this plugin has. Read per write rather than off the
+  // cache, since another tab may have changed something in the meantime.
+  Run.prototype.saveWeights = function () {
+    var self = this;
+    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      var input = {}, k;
+      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+      for (k in WEIGHT_KEYS) {
+        if (!hasOwn(WEIGHT_KEYS, k)) continue;
+        // Forgetting is the key going away, not a zero: an absent weight is what
+        // says "not remembered", and zero is a perfectly good weight to have chosen.
+        if (self.remember) input[WEIGHT_KEYS[k]] = self.weights[k];
+        else delete input[WEIGHT_KEYS[k]];
+        if (_settings) _settings[WEIGHT_KEYS[k]] = self.remember ? self.weights[k] : null;
+      }
+      return gqlRequest('mutation SVRSaveWeights($id: ID!, $input: Map!) ' +
+        '{ configurePlugin(plugin_id: $id, input: $input) }',
+      { id: PLUGIN_ID, input: input });
+    }).then(null, function (err) {
+      self.msg('WARN', 'The weights could not be saved: ' +
+        (err && err.message ? err.message : String(err)) + '. They still apply here.');
+    });
+  };
+
+  // One line per set, worst first, each opening on its arrow to a radio per member.
+  // Picking a member picks the set and the source in one control, because they are one
+  // decision: the scene whose values are right.
+  //
+  // Rebuilt in place whenever a weight moves - it is a listing, not a log line, and a
+  // re-sorted copy appended below the old one would be two answers to one question.
+  // The log keeps a line saying the weights moved, so Copy log still explains the
+  // order on screen.
+  Run.prototype.renderSets = function (first) {
+    var self = this;
+    var w = this.weights;
+    this.show(this.setsEl, true);
+    this.sets.forEach(function (set) { set.score = scoreOf(set.delta, w); });
+    var order = this.sets.slice().sort(function (a, b) {
+      return b.score - a.score || String(a.key).localeCompare(String(b.key));
+    });
+    this.setsEl.textContent = '';
+    order.forEach(function (set) {
+      var head = el('div', 'svr-line svr-set');
+      var toggle = el('span', 'svr-expand', '▸');
+      toggle.title = 'Open to pick the scene whose values are right.';
+      var sub = el('div', 'svr-sub svr-hidden');
+      toggle.addEventListener('click', function () {
+        var open = hasClass(sub, 'svr-hidden');
+        self.show(sub, open);
+        toggle.textContent = open ? '▾' : '▸';
+      });
+      head.appendChild(toggle);
+      set.scoreEl = el('span', 'svr-score ' + scoreClass(set.score, w),
+        ' ' + set.score + ' ');
+      head.appendChild(set.scoreEl);
+      var headText = el('span', null, plural(set.scenes.length, 'scene') + ': ' +
+        (set.scenes[0].title || ('Scene ' + set.scenes[0].id)) +
+        (set.scenes.length > 1 ? ' + ' + (set.scenes.length - 1) + ' more' : '') +
+        '  (' + deltaText(set.delta) + ')');
+      // The names are in the table's own column headers, so the hover answers "how is
+      // this set split" rather than repeating the line it hangs off.
+      diffTip(headText, [{ node: setTable(set, self.skip, self.coverBy) }]);
+      set.headEl = headText;
+      head.appendChild(headText);
+      self.setsEl.appendChild(head);
+      set.scenes.forEach(function (sc) {
+        var row = el('div', 'svr-item');
+        var radio = el('input', 'svr-src-box');
+        radio.type = 'radio';
+        radio.checked = !!self.source && String(self.source.id) === String(sc.id);
+        radio.title = 'Push this scene\u2019s values to the rest of its set.';
+        radio.addEventListener('click', function () {
+          // The exclusivity is ours rather than the browser's: these radios are
+          // rebuilt on every re-sort, and a `name` group spanning a rebuilt subtree
+          // is one the browser has no reason to keep consistent.
+          self.clearSourceRadios();
+          radio.checked = true;
+          self.source = sc;
+          self.sourceSet = set;
+          self.syncFooter();
+        });
+        self.srcRadios.push(radio);
+        row.appendChild(radio);
+        var link = el('a', 'svr-elink', (sc.title || ('Scene ' + sc.id)) + ' [' + sc.id + ']');
+        link.href = '/scenes/' + sc.id;
+        link.target = linkTarget();
+        link.rel = 'noopener noreferrer';
+        entityTip(link, 'scenes', sc.id);
+        row.appendChild(link);
+        row.appendChild(el('span', 'svr-meta', '  ' + (metaOf(sc) || '')));
+        sub.appendChild(row);
+      });
+      self.setsEl.appendChild(sub);
+      if (first) {
+        self.logText.push('[SET]     ' + set.score + '  ' +
+          set.scenes.map(function (sc) {
+            return (sc.title || ('Scene ' + sc.id)) + ' [' + sc.id + ']';
+          }).join(', ') + '  (' + deltaText(set.delta) + ')');
+      }
+    });
+    if (first) this.capLog();
+  };
+
+  // Pressing Synchronize Set: the same `planSyncScene` both other doors use, over the
+  // members of one set against the picked source. Add-only, like the tab's button and
+  // for the same reason - nothing here knows what the source deliberately dropped, so
+  // a value only the target holds is its own.
+  //
+  // A set already written is *committed* rather than carried: Undo reaches the set in
+  // front of you, and moving on says so. Keeping every set's writes undoable would
+  // mean a dialog whose Proceed can never be pressed again after the first set, which
+  // is exactly the one-set-at-a-time review this task exists to avoid.
+  Run.prototype.planSet = function () {
+    if (this.state !== 'listing' || !this.source ||
+      String(this.source.id) === this.plannedFrom) return;
+    var self = this;
+    // The jobs of a set already listed are done with - their boxes stay on screen as
+    // the record of what was decided, and a fresh listing follows below.
+    this.jobs.forEach(function (j) { if (j.box) j.box.disabled = true; });
+    this.jobs = [];
+    this.msg('INFO', '--- Synchronizing from ' +
+      (this.source.title || ('Scene ' + this.source.id)) + ' [' + this.source.id + '] ---');
+    var others = this.sourceSet.scenes.filter(function (sc) {
+      return String(sc.id) !== String(self.source.id);
+    });
+    this.plannedFrom = String(this.source.id);
+    this.pruned = 0;
+    // The covers are the one part of a plan that has to be read before it can be
+    // built, so the listing is a state of its own while they land - Synchronize Set
+    // is a scan like any other, and the footer already knows what to do with one.
+    this.setState('scanning');
+    this.progress('Reading the set as it stands now…');
+    var set = this.sourceSet;
+    // Read before planning, every time: the listing was built before whatever this
+    // dialog has already written, and the second source out of one set is exactly the
+    // press that would otherwise offer changes that have already been made.
+    var ready = refreshScenes(set.scenes).then(function (fresh) {
+      var moved = false;
+      set.scenes.forEach(function (sc, i) {
+        var got = fresh[String(sc.id)];
+        if (!got) return;
+        set.scenes[i] = got;
+        moved = true;
+        // The covers cached by the scan are as old as the scene objects were.
+        if (self.coverBy) delete self.coverBy[String(sc.id)];
+      });
+      if (moved) {
+        self.source = fresh[String(self.source.id)] || self.source;
+        others = set.scenes.filter(function (sc) {
+          return String(sc.id) !== String(self.source.id);
+        });
+      }
+      // The covers again, for the set alone: cheap where the comparison is on, and
+      // `null` where it is off, exactly as it was for the scan.
+      return gatherCovers(self, self.settings, self.source, others);
+    });
+    ready.then(function (covers) {
+      self.covers = covers;
+      // What the fresh read says the set is worth now, put back on the line it is
+      // already drawn on. **Not a re-render**: the score changes after a write and the
+      // sort would carry the set away from the pointer that is working on it.
+      if (covers) {
+        self.coverBy = self.coverBy || {};
+        self.coverBy[String(self.source.id)] = covers.src;
+        others.forEach(function (sc) {
+          self.coverBy[String(sc.id)] = covers.had[String(sc.id)];
+        });
+      }
+      self.rescoreSet(set);
+      others.forEach(function (sc) { planSyncScene(self, self.source, sc, self.skip); });
+      if (!self.jobs.length) {
+        self.msg('INFO', 'Nothing to synchronize: this set already agrees on every ' +
+          'attribute this dialog pushes.');
+      }
+      reportPruneFilter(self, self.settings || {});
+      self.buildAllBar();
+      self.setState('listing');
+      self.progress(self.progressText());
+    }, function (err) {
+      self.setState('listing');
+      self.msg('ERROR', 'The covers could not be read: ' +
+        (err && err.message ? err.message : String(err)));
+    });
+  };
+
+  // One set's score and counts, recomputed and written back onto the line it is
+  // already drawn on. Deliberately not a re-render: a write makes a set agree more,
+  // so its score drops, and re-sorting would move the set out from under the pointer
+  // of whoever is working on it. The order is the order the listing was drawn in, and
+  // it changes when the user asks for that - a weight, or a rescan.
+  Run.prototype.rescoreSet = function (set) {
+    if (!set || !set.scoreEl) return;
+    set.delta = setDelta(set.scenes, this.skip, this.coverBy);
+    set.score = scoreOf(set.delta, this.weights);
+    set.scoreEl.textContent = ' ' + set.score + ' ';
+    set.scoreEl.className = 'svr-score ' + scoreClass(set.score, this.weights);
+    if (set.headEl) {
+      set.headEl.textContent = plural(set.scenes.length, 'scene') + ': ' +
+        (set.scenes[0].title || ('Scene ' + set.scenes[0].id)) +
+        (set.scenes.length > 1 ? ' + ' + (set.scenes.length - 1) + ' more' : '') +
+        '  (' + deltaText(set.delta) + ')';
+      // The table is built from the scenes as they were when the line was drawn, and
+      // this is the one place they change under it - a set re-read after a write.
+      diffTip(set.headEl, [{ node: setTable(set, this.skip, this.coverBy) }]);
+    }
+  };
+
+  Run.prototype.clearSourceRadios = function () {
+    this.srcRadios.forEach(function (r) { r.checked = false; });
+  };
+
+  // The "All <attribute>" boxes above the listing: one per distinct `job.group`,
+  // ticking or unticking every line of that attribute across all the variants at
+  // once. Built after a plan lands; a task whose jobs carry no groups never shows
+  // the bar.
+  Run.prototype.buildAllBar = function () {
+    var self = this, groups = [], seen = {};
+    this.jobs.forEach(function (j) {
+      if (!j.box || !j.group || hasOwn(seen, j.group)) return;
+      seen[j.group] = true;
+      groups.push(j.group);
+    });
+    if (!groups.length) return;
+    this.allBoxes = [];
+    groups.forEach(function (g) {
+      var lab = el('label', 'svr-all');
+      var b = el('input', 'svr-all-box');
+      b.type = 'checkbox';
+      b._group = g;
+      b.addEventListener('click', function () {
+        self.jobs.forEach(function (j) {
+          if (j.group === g && j.box && !j.box.disabled) j.box.checked = b.checked;
+        });
+        self.syncFooter();
+      });
+      lab.appendChild(b);
+      lab.appendChild(el('span', null, 'All ' + g));
+      self.allBar.appendChild(lab);
+      self.allBoxes.push(b);
+    });
+    this.show(this.allBar, true);
+    this.refreshAllBar();
+  };
+
+  // Each All box restates its group - checked while every live line of it is - so a
+  // line ticked by hand is reflected upward, and the boxes lock with everything else
+  // while a write is in flight.
+  Run.prototype.refreshAllBar = function () {
+    if (!this.allBoxes) return;
+    var self = this, busy = this.state !== 'listing';
+    this.allBoxes.forEach(function (b) {
+      var live = [];
+      self.jobs.forEach(function (j) {
+        if (j.group === b._group && j.box && !j.box.disabled) live.push(j);
+      });
+      b.disabled = busy || !live.length;
+      b.checked = !!live.length && live.every(function (j) { return j.box.checked; });
+    });
+  };
+
+  // The candidate buttons and their checkboxes, kept in step with the run the same way
+  // syncFooter keeps Proceed: disabled while anything is in flight - the selection is
+  // read at the moment a button is pressed, so a box left live mid-write would be a
+  // control that looks like it steers the run and does not - and a candidate already
+  // written stays disabled until an Undo takes it back out of `changes`.
+  // The review task's own controls. A source radio and a weight steer what the next
+  // press plans, so both are unavailable while anything is in flight - the rule that
+  // a control steering a run is locked while the run is running, with a scan counting.
+  Run.prototype.syncSets = function () {
+    if (!this.sets.length) return;
+    var busy = this.state !== 'listing', self = this;
+    this.srcRadios.forEach(function (r) { r.disabled = busy; });
+    var k;
+    for (k in this.weightInputs) {
+      if (hasOwn(this.weightInputs, k)) this.weightInputs[k].disabled = busy;
+    }
+    if (this.rememberBox) this.rememberBox.disabled = busy;
+    this.show(this.syncSetBtn, true);
+    // Pressing it a second time on the set already listed is the one thing it must
+    // not do: a fresh plan *commits* whatever the last one wrote, so the press that
+    // looks like a no-op is the one that takes Undo away. Nothing about the listing
+    // says the button has already been used on this source, so the button says it.
+    var why = busy ? 'Let the pass finish, or stop it, before changing what it covers.'
+      : this.stale ? 'Reload the page first: this tab is running an older script.'
+        : !this.source ? 'Open a set and pick the scene whose values are right.'
+          : String(this.source.id) === this.plannedFrom
+            ? 'This set is already listed below.'
+            : '';
+    this.syncSetBtn.disabled = !!why;
+    this.syncSetBtn.title = why || ('List what would be pushed from "' +
+      (this.source.title || ('Scene ' + this.source.id)) + '" to the ' +
+      plural(this.sourceSet.scenes.length - 1, 'other scene') + ' in its set.');
+  };
+
+  Run.prototype.syncCandidates = function () {
+    if (!this.candidates.length) return;
+    var busy = this.state !== 'listing', selected = 0, self = this;
+    this.candidates.forEach(function (c) {
+      var done = self.changes.indexOf(c.job) !== -1;
+      c.box.disabled = busy || done;
+      if (!done && c.box.checked) selected++;
+    });
+    this.show(this.groupBtn, true);
+    this.show(this.untagBtn, true);
+    var why = busy ? 'Still working.'
+      : this.stale ? 'Reload the page first: this tab is running an older script.' : '';
+    this.groupBtn.disabled = !!why || selected < 2;
+    this.groupBtn.title = why || (selected < 2
+      ? 'Tick at least two candidate scenes: one scene cannot be a variant set.'
+      : 'Write one shared pseudo stash-id into "' + this.field + '" of the ' +
+        plural(selected, 'ticked scene') + ', making them one variant set. They keep ' +
+        'the flag tag, which is now true of them.');
+    this.untagBtn.disabled = !!why || selected < 1;
+    this.untagBtn.title = why || (selected < 1
+      ? 'Tick at least one candidate scene.'
+      : 'Take the flag tag off the ' + plural(selected, 'ticked scene') +
+        ': their flag is left over rather than deliberate.');
+  };
+
+  // A [GROUP?] line: a flagged scene with no stash-id and no field value. The task
+  // cannot tell a flag that outlived its evidence from one the user just put on by hand
+  // to say "group these", so the line carries a checkbox and the decision is the
+  // user's - Create Variant Group for a deliberate set, Remove Tag for a leftover.
+  Run.prototype.candLine = function (job) {
+    var self = this;
+    var name = job.title + ' [' + job.id + ']';
+    var tail = '  carries the flag with no stash-id and no variant stash-id value';
+    var line = el('div', 'svr-line svr-job svr-op-cand');
+    var box = el('input', 'svr-cand-box');
+    box.type = 'checkbox';
+    box.checked = true;
+    // The browser toggles `checked` before click handlers run, so reading it from here
+    // sees the new state.
+    box.addEventListener('click', function () { self.syncFooter(); });
+    line.appendChild(box);
+    line.appendChild(el('span', null, '[GROUP?]  '));
+    var link = el('a', 'svr-elink', name);
+    link.href = '/scenes/' + job.id;
+    link.target = linkTarget();
+    link.rel = 'noopener noreferrer';
+    entityTip(link, 'scenes', job.id);
+    line.appendChild(link);
+    line.appendChild(el('span', null, tail));
+    this.logEl.appendChild(line);
+    this.logText.push('[GROUP?]  ' + name + tail);
+    this.capLog();
+    if (this.spinEl) this.logEl.appendChild(this.spinEl);
+    this.scrollLog();
+    this.candidates.push({ job: job, box: box });
+  };
+
+  // A *job* line with a checkbox - unlike a candidate, it is written by Proceed, and
+  // only while its box is ticked. The box hangs off the job itself, so the footer's
+  // count, the write's selection and the settled state all read one thing.
+  Run.prototype.tickLine = function (job, cls, head, tail, ticked, full) {
+    var self = this;
+    var name = job.title + ' [' + job.id + ']';
+    var line = el('div', 'svr-line svr-job ' + cls);
+    var box = el('input', 'svr-cand-box');
+    box.type = 'checkbox';
+    box.checked = ticked !== false;
+    box.addEventListener('click', function () { self.syncFooter(); });
+    job.box = box;
+    line.appendChild(box);
+    line.appendChild(el('span', null, head));
+    var link = el('a', 'svr-elink', name);
+    link.href = '/scenes/' + job.id;
+    link.target = linkTarget();
+    link.rel = 'noopener noreferrer';
+    entityTip(link, 'scenes', job.id);
+    line.appendChild(link);
+    var sub = null;
+    if (job.items) sub = this.itemPicker(job, line);
+    else {
+      // A tail is either a plain string or `[[text, className], ...]` - the parts a
+      // line wants coloured, in the one vocabulary the head's legend explains: what a
+      // variant loses is red, what it gains green, a value replaced blue, and every
+      // label, name and count around them the modal's own white.
+      var parts = typeof tail === 'string' ? [[tail, null]] : tail;
+      var tailEl = el('span', null);
+      var text = '';
+      parts.forEach(function (part) {
+        tailEl.appendChild(el('span', part[1] || null, part[0]));
+        text += part[0];
+      });
+      tail = text;
+      // On the tail rather than on the line: the name beside it is a link with a hover
+      // card of its own, and a `title` on their common parent would be what the
+      // browser showed while the pointer was over the link's own text.
+      //
+      // Only where the two strings differ. A value that fits and holds no newline is
+      // shown whole already, and a tooltip repeating it is one more box opening over
+      // a log for no reason.
+      if (full && typeof full !== 'string') diffTip(tailEl, full);
+      else if (full && full !== text) tailEl.title = full;
+      line.appendChild(tailEl);
+    }
+    this.logEl.appendChild(line);
+    // A sibling of the line rather than a child, so the line's own text stays exactly
+    // what the listing says and the sub-list travels under it.
+    if (sub) this.logEl.appendChild(sub);
+    this.logText.push(head + name + tail);
+    this.capLog();
+    if (this.spinEl) this.logEl.appendChild(this.spinEl);
+    this.scrollLog();
+    this.jobs.push(job);
+  };
+
+  // The click-open sub-list on an additive line: one checkbox per tag or performer,
+  // so a press can push some of what a variant is missing without pushing all of it.
+  // The summary re-says what is picked as boxes move; the line's master box still
+  // gates the whole line, and a line with nothing picked is not a change at all.
+  Run.prototype.itemPicker = function (job, line) {
+    var self = this;
+    var toggle = el('span', 'svr-expand', ' ▸');
+    toggle.title = 'Open to pick individual ' + job.noun + 's.';
+    var tailEl = el('span', null, '');
+    var sub = el('div', 'svr-sub svr-hidden');
+
+    function tailText() {
+      var picked = pickedItems(job);
+      var count = picked.length === job.items.length
+        ? plural(job.items.length, job.noun)
+        : picked.length + ' of ' + plural(job.items.length, job.noun);
+      return '  ' + (job.verb || 'Add') + ' ' + count + (picked.length ? ': ' +
+        picked.map(function (it) { return it.name; }).sort().join(', ') : '');
+    }
+
+    // The names in it carry the line's own colour: an item picker only ever appears on
+    // an add line or a remove line, so which one is the job's verb.
+    function tailPaint() {
+      var t = tailText(), at = t.indexOf(': ');
+      tailEl.textContent = '';
+      if (at === -1) { tailEl.appendChild(el('span', null, t)); return; }
+      tailEl.appendChild(el('span', null, t.slice(0, at + 2)));
+      tailEl.appendChild(el('span',
+        job.verb === 'Remove' ? 'svr-del' : 'svr-add', t.slice(at + 2)));
+    }
+
+    toggle.addEventListener('click', function () {
+      var open = hasClass(sub, 'svr-hidden');
+      self.show(sub, open);
+      toggle.textContent = open ? ' ▾' : ' ▸';
+    });
+
+    job.items.forEach(function (it) {
+      var row = el('div', 'svr-item');
+      var b = el('input', 'svr-item-box');
+      b.type = 'checkbox';
+      b.checked = true;
+      b.addEventListener('click', function () {
+        tailPaint();
+        self.syncFooter();
+      });
+      it.box = b;
+      row.appendChild(b);
+      // A link with the shared hover card, like every name these dialogs draw: which
+      // tag or performer this is, is exactly what a pick is decided from.
+      var a = el('a', 'svr-elink', it.name);
+      a.href = '/' + job.tipType + '/' + it.id;
+      a.target = linkTarget();
+      a.rel = 'noopener noreferrer';
+      entityTip(a, job.tipType, it.id);
+      row.appendChild(a);
+      sub.appendChild(row);
+    });
+
+    tailPaint();
+    line.appendChild(toggle);
+    line.appendChild(tailEl);
+    return sub;
+  };
+
+  // What the two candidate buttons do: the ticked, not-yet-written candidates through
+  // the same batching, lease and undo bookkeeping as Proceed. A group press mints one
+  // pseudo stash-id and writes it into every selected scene, which is what makes them a
+  // set; a fresh id per press, so two presses are two sets.
+  // ponytail: after a partial failure a retry press mints a new id, so the retried
+  // scenes form a set of their own rather than joining the ones that succeeded - Undo
+  // and one clean press is the way back.
+  Run.prototype.actCandidates = function (group) {
+    if (this.state !== 'listing') return;
+    var self = this, task = this.task, jobs = [];
+    this.candidates.forEach(function (c) {
+      if (c.box.checked && !c.box.disabled) jobs.push(c.job);
+    });
+    if (group ? jobs.length < 2 : !jobs.length) return;
+    var value = group ? pseudoStashId() : null;
+    jobs.forEach(function (job) {
+      job.kind = group ? 'group' : 'untag';
+      job.field = self.field;
+      if (group) job.value = value;
+    });
+    this.setState('writing');
+    this.stopped = false;
+    this.msg('INFO', group
+      ? 'Writing "' + this.field + ' = ' + value + '" into ' +
+        plural(jobs.length, 'scene') + ' - one new variant set.'
+      : 'Taking the flag tag off ' + plural(jobs.length, 'scene') + '.');
+    var lease = acquireLease(task.leaseLabel);
+    this.writeAll(jobs, task.writeInput, task.verb, lease).then(function () {
+      lease.release();
+      self.setState('listing');
+      self.progress(self.progressText());
+      self.msg('INFO', 'Done: ' + plural(self.written, 'scene') + ' ' + task.verb +
+        (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
+        (self.stopped ? ' (stopped early; what was written stays written, and Undo takes ' +
+          'back exactly that)' : '') + '.');
+    });
   };
 
   Run.prototype.msg = function (kind, message) {
@@ -1184,8 +1926,14 @@
   Run.prototype.progressText = function () {
     var parts = ['Scanned ' + this.scanned + (this.total ? ' of ' + this.total : '') +
       ' ' + this.task.scanNoun + (this.scanned === 1 && !this.total ? '' : 's')];
-    parts.push(plural(this.jobs.length, 'scene') + ' ' + this.task.planNoun);
-    if (this.written) parts.push(plural(this.written, 'scene') + ' written');
+    // Right after the scanned count, where the review task's own denominator belongs:
+    // sets are what that scan is for, and scenes are only how it found them.
+    if (this.setCount) parts.push(plural(this.setCount, 'variant set') + ' found');
+    parts.push(plural(this.jobs.length, this.task.planUnit || 'scene') + ' ' + this.task.planNoun);
+    if (this.candidates.length) {
+      parts.push(plural(this.candidates.length, 'candidate') + ' to group or untag');
+    }
+    if (this.written) parts.push(plural(this.written, this.task.planUnit || 'scene') + ' written');
     if (this.failed) parts.push(plural(this.failed, 'failure'));
     if (this.logText.length > LOG_RENDER_CAP) {
       parts.push('showing the last ' + LOG_RENDER_CAP + ' of ' + this.logText.length + ' lines');
@@ -1225,11 +1973,53 @@
     });
   };
 
+  Run.prototype.reveal = function () {
+    this.backdrop.className = 'svr-backdrop';
+  };
+
   Run.prototype.stop = function () {
     if (this.state !== 'writing' && this.state !== 'undoing') return;
     if (this.stopped) return;
     this.stopped = true;
     this.msg('WARN', 'Stopping after the request in flight…');
+  };
+
+  // A rescan starts a *pass*, not a session: the log is the record of what this dialog
+  // has already done, and `changes` is what Undo can still reverse - converging on an
+  // empty plan must not cost either. Everything a pass builds goes: the jobs, the
+  // candidates, the sets and the source picked among them, and the counters.
+  //
+  // The old plan's lines stay on screen, because the log does; their boxes are locked
+  // so that a listing nobody can act on cannot be ticked, which is the same thing
+  // `planSet` does when it moves to a new set.
+  Run.prototype.rescan = function () {
+    if (this.state !== 'listing') return;
+    this.jobs.forEach(function (j) {
+      if (j.box) j.box.disabled = true;
+      if (j.items) j.items.forEach(function (it) { if (it.box) it.box.disabled = true; });
+    });
+    this.jobs = [];
+    this.candidates.forEach(function (c) { c.box.disabled = true; });
+    this.candidates = [];
+    this.sets = [];
+    this.setCount = 0;
+    this.srcRadios = [];
+    this.source = null;
+    this.sourceSet = null;
+    this.plannedFrom = null;
+    this.setsEl.textContent = '';
+    this.show(this.setsEl, false);
+    this.show(this.weightBar, false);
+    this.show(this.allBar, false);
+    this.show(this.syncSetBtn, false);
+    this.show(this.groupBtn, false);
+    this.show(this.untagBtn, false);
+    this.scanned = 0;
+    this.total = 0;
+    this.written = 0;
+    this.failed = 0;
+    this.msg('INFO', '--- Rescan ---');
+    this.begin();
   };
 
   Run.prototype.close = function () {
@@ -1238,10 +2028,18 @@
     this.stopped = true;
     unwireEscape(this);
     this.spin(false);
+    diffTipClose();
     if (this.backdrop && this.backdrop.parentNode) {
       this.backdrop.parentNode.removeChild(this.backdrop);
     }
     _active = null;
+    // A run that wrote - or put back - changed the very scenes the pane behind this
+    // dialog is listing, and that list was read before the dialog opened. Closing is
+    // when the user comes back to it, so closing is when it re-reads. An undo counts:
+    // a stopped one leaves part of the writes standing, and a completed one is one
+    // wasted read rather than a stale list. No pane mounted (the settings-page tasks)
+    // is a no-op.
+    if (this.dirty && _paneRefresh) _paneRefresh();
   };
 
   // Escape acts through whichever of the footer's exits is showing and enabled, never by
@@ -1356,24 +2154,26 @@
   // ── Writing, and taking it back ───────────────────────────────────────────
 
   Run.prototype.go = function () {
-    if (this.changes.length) { this.undo(); return; }
     var self = this, task = this.task;
+    // Read before the state change: mid-write every box is disabled, and a selection
+    // has to be what the user saw at the moment of the press.
+    var jobs = this.tickedJobs();
     this.setState('writing');
     this.stopped = false;
-    this.msg('INFO', 'Writing ' + plural(this.jobs.length, 'scene') + '.');
+    this.msg('INFO', 'Writing ' + plural(jobs.length, task.planUnit || 'scene') + '.');
     var lease = acquireLease(task.leaseLabel);
     // `prepare` is the write-phase step a task may need before its first scene - the
     // flag task creates its tag here when the library has none, because a tag must not
     // be created by a scan, and a failure has to leave a listing nobody has acted on.
     Promise.resolve().then(function () { return task.prepare ? task.prepare(self) : null; })
       .then(function () {
-        return self.writeAll(self.jobs, task.writeInput, task.verb, lease);
+        return self.writeAll(jobs, task.writeInput, task.verb, lease);
       })
       .then(function () {
         lease.release();
         self.setState('listing');
         self.progress(self.progressText());
-        self.msg('INFO', 'Done: ' + plural(self.written, 'scene') + ' ' + task.verb +
+        self.msg('INFO', 'Done: ' + plural(self.written, task.planUnit || 'scene') + ' ' + task.verb +
           (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
           (self.stopped ? ' (stopped early; what was written stays written, and Undo takes ' +
             'back exactly that)' : '') + '.');
@@ -1390,7 +2190,8 @@
     var jobs = this.changes.slice().reverse();
     this.setState('undoing');
     this.stopped = false;
-    this.msg('INFO', 'Putting back what ' + plural(jobs.length, 'scene') + ' held before.');
+    this.msg('INFO', 'Putting back what ' + plural(jobs.length, this.task.planUnit || 'scene') +
+      ' held before.');
     var lease = acquireLease(task.leaseLabel + ' (undo)');
     this.written = 0;
     this.failed = 0;
@@ -1401,7 +2202,7 @@
       lease.release();
       self.setState('listing');
       self.progress(self.progressText());
-      self.msg('INFO', 'Undone: ' + plural(self.written, 'scene') + ' put back' +
+      self.msg('INFO', 'Undone: ' + plural(self.written, task.planUnit || 'scene') + ' put back' +
         (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
         (self.stopped ? ' (stopped early; what was put back stays put back)' : '') + '.');
       self.written = 0;
@@ -1422,6 +2223,7 @@
         var req = build(job, self);
         return gqlRequest(req.query, req.variables).then(function () {
           self.written++;
+          self.dirty = true;
           if (verb === self.task.verb) self.changes.push(job);
           else {
             var ix = self.changes.indexOf(job);
@@ -1558,6 +2360,10 @@
           scenes.push(sc);
           run.scanned++;
         });
+        // A task that can say more about what it has read so far says it here, before
+        // the counters are drawn - the review task counts the sets in what has landed,
+        // which is the number its whole listing is about.
+        if (run.afterPage) run.afterPage(scenes);
         run.progress(run.progressText());
         if (run.stopped || got.length < READ_PAGE) return null;
         return page(p + 1);
@@ -1570,6 +2376,7 @@
     return Promise.all([settingsReady(), tagTree()]).then(function (both) {
       var s = both[0];
       var field = fieldName(s), name = flagTagName(s);
+      run.field = field;
       // Exact name or alias, never descendants: the flag is one machine-kept tag, and a
       // scene wearing a child of it is not wearing it.
       var hits = tagsMatchingName(both[1], name);
@@ -1629,7 +2436,8 @@
           });
           scenes.forEach(function (sc) {
             var id = String(sc.id), partners = {}, n = 0;
-            sceneKeys(sc, field).forEach(function (k) {
+            var keys = sceneKeys(sc, field);
+            keys.forEach(function (k) {
               byKey[k].forEach(function (other) {
                 if (other !== id && !hasOwn(partners, other)) { partners[other] = true; n++; }
               });
@@ -1637,6 +2445,14 @@
             var flagged = run.flagTagId && (sc.tags || []).some(function (t) {
               return String(t.id) === run.flagTagId;
             });
+            // A flagged scene with no evidence at all is not unflagged by machine: the
+            // flag is either left over or the user's own "group these" mark, and the
+            // two are indistinguishable from here. Listed as a [GROUP?] candidate and
+            // decided by the buttons instead.
+            if (flagged && !keys.length) {
+              run.candLine({ id: id, title: sc.title || ('Scene ' + sc.id) });
+              return;
+            }
             if (!!flagged === (n > 0)) return;
             var job = { id: id, title: sc.title || ('Scene ' + sc.id), flag: n > 0, others: n };
             run.jobs.push(job);
@@ -1648,7 +2464,14 @@
           // DOM any more. Last is the one position a summary is guaranteed to be read
           // in.
           run.msg('INFO', plural(setCount, 'multi-variant set') + ' detected in the library.');
-          if (!run.jobs.length) {
+          if (run.candidates.length) {
+            run.msg('INFO', plural(run.candidates.length, 'scene carries', 'scenes carry') +
+              ' the flag with no stash-id and no "' + field + '" value - tagged by hand ' +
+              'to make a set, or left over from evidence since removed. Tick the ones ' +
+              'that belong together and press Create Variant Group, or Remove Tag for ' +
+              'the leftovers.');
+          }
+          if (!run.jobs.length && !run.candidates.length) {
             run.msg('INFO', 'Nothing to change: the flag tag already marks exactly the ' +
               'scenes that have another variant.');
           }
@@ -1715,7 +2538,11 @@
     legend: 'One line per scene: FLAG where the tag goes on, because at least one other ' +
       'scene shares one of its variant stash-id lines, and UNFLAG where it comes off, ' +
       'because none does any more. Only the flag tag moves; nothing else on the scene ' +
-      'is touched.',
+      'is touched. A scene carrying the flag with no stash-id and no field value is a ' +
+      'GROUP? line with a checkbox instead - either you tagged it yourself to say ' +
+      '"these are variants", or its flag outlived the evidence. Tick the ones that ' +
+      'belong together and Create Variant Group writes one shared pseudo stash-id ' +
+      'into their field; Remove Tag takes the flag off the ticked leftovers.',
     nothing: 'Nothing to flag or unflag.',
     scanNoun: 'scene',
     planNoun: 'to flag or unflag',
@@ -1741,8 +2568,1461 @@
           { text: String(job.others), cls: job.others > 1 ? 'svr-num-many' : 'svr-num-one' },
           { text: rest }] };
     },
-    writeInput: function (job, run) { return flagInput(job, run, job.flag); },
-    undoInput: function (job, run) { return flagInput(job, run, !job.flag); },
+    // Three job shapes through one pair of builders: the scan's FLAG/UNFLAG, and the
+    // two things a candidate button can do to a scene. A group write is a sceneUpdate
+    // on the custom field - the candidates carry no value by definition, so the exact
+    // inverse is removing the field, not restoring one.
+    writeInput: function (job, run) {
+      if (job.kind === 'group') {
+        var input = { id: job.id, custom_fields: { partial: {} } };
+        input.custom_fields.partial[job.field] = job.value;
+        return { query: SCENE_UPDATE, variables: { input: input } };
+      }
+      if (job.kind === 'untag') return flagInput(job, run, false);
+      return flagInput(job, run, job.flag);
+    },
+    undoInput: function (job, run) {
+      if (job.kind === 'group') {
+        return { query: SCENE_UPDATE, variables: { input:
+          { id: job.id, custom_fields: { remove: [job.field] } } } };
+      }
+      if (job.kind === 'untag') return flagInput(job, run, true);
+      return flagInput(job, run, !job.flag);
+    },
+  };
+
+  // ── The synchronize task ──────────────────────────────────────────────────
+  //
+  // Opened from the Variants pane, never from Settings - Tasks: it pushes *this*
+  // scene's values to its variants, and only the scene page knows which scene that is.
+  // The direction is the whole design - the scene the user is standing on is the
+  // source, so there is no "which of the selected wins" question to invent an answer
+  // to.
+  //
+  // One job per attribute per variant, each a checkbox line, ticked by default except
+  // titles. Scalars are replaces, listed old -> new; tags and performers are ADDs and
+  // never removes, so whatever makes a variant deliberately different survives a
+  // Proceed with everything ticked. The dimension tags (full-length, partial-length
+  // and everything under them) and the flag tag are never pushed at all: they are what
+  // makes a variant a variant, and the flag is the flag task's to keep.
+  //
+  // Groups ride at the source's own `scene_index`: variants are the same work, so a
+  // variant added to a group belongs at the same position in it. Membership is what is
+  // compared - a shared group whose index differs is not listed. The write is the
+  // whole `groups` list through `sceneUpdate`, like URLs (`SceneUpdateInput.groups`
+  // has no ADD mode), so a save that removed a group folds into the same line as the
+  // adds rather than a second write clobbering the first.
+  var SYNC_TASK_NAME = 'Synchronize Variants...';
+
+  // The writable half of the delta's attribute list: how each field is compared for
+  // the listing (same shape as `ATTRS`) and which `SceneUpdateInput` field carries it.
+  var SYNC_ATTRS = [
+    { key: 'title', label: 'Title', input: 'title' },
+    { key: 'date', label: 'Date', input: 'date' },
+    { key: 'studio', label: 'Studio', input: 'studio_id',
+      raw: function (sc) { return sc.studio ? String(sc.studio.id) : null; },
+      show: function (sc) { return sc.studio ? sc.studio.name : ''; } },
+    { key: 'rating100', label: 'Rating', input: 'rating100' },
+    { key: 'code', label: 'Studio code', input: 'code' },
+    { key: 'director', label: 'Director', input: 'director' },
+    { key: 'details', label: 'Details', input: 'details' },
+    { key: 'organized', label: 'Organized', input: 'organized' },
+  ];
+
+  // A value as a listing shows it: one line, quoted, cut at sixty characters - the
+  // details block is a paragraph and the log line is a glance. The job keeps the whole
+  // value; only the display is cut.
+  function syncValShow(v) {
+    var t = oneLine(v == null ? '' : String(v));
+    if (t.length > 60) t = t.slice(0, 57) + '...';
+    return t === '' ? '(empty)' : '"' + t + '"';
+  }
+
+  // ── Seeing what changed inside a paragraph ────────────────────────────────
+  //
+  // `Details: "Porcelain-skinned, blonde princess flirting..." -> "Porcelain-skinned,
+  // blonde princess flirting..."` is two cuts of the same opening sentence and says
+  // nothing at all: the change is somewhere past the sixtieth character, which is
+  // exactly where both strings stop being shown. So a long value is not shown twice
+  // and cut - it is shown **once, as a diff**: the words only the old value has in
+  // red, the words only the new one has in green, and the text they share in white.
+  //
+  // Word-level rather than character-level, because a paragraph diffed by character
+  // produces shards of words that are harder to read than the sentence was.
+  var DIFF_TOKEN_CAP = 400;   // beyond this the middle is one replacement, not a diff
+  var DIFF_EDGE = 30;         // characters of unchanged text kept at either end
+  var DIFF_GAP = 60;          // an unchanged run longer than this is elided in the middle
+
+  // A token is a word **and the space after it**, never a space of its own. Split the
+  // other way and the spaces match each other everywhere, so `second half` against
+  // `closing act` comes back as `second closing half act` - the words interleaved
+  // around the blanks between them, which is nonsense to read. Carrying the space
+  // means a word can only match a word, and the text still rebuilds exactly.
+  function diffTokens(t) {
+    return String(t == null ? '' : t).match(/\S+\s*/g) || [];
+  }
+
+  // Two tokens are the same word when they differ only in the space they carry. The
+  // last word of a value has none and the same word mid-sentence has one, so without
+  // this a sentence with something appended to it matches nothing at the join.
+  function diffKey(t) { return String(t).replace(/\s+$/, ''); }
+
+  // The longest common subsequence of two short token lists, as a list of
+  // `[op, text]` with op -1 removed, 0 kept, 1 added. Only ever called on what is left
+  // after the shared head and tail are taken off, which for an edited paragraph is a
+  // handful of words.
+  function diffMiddle(a, b) {
+    var n = a.length, m = b.length, i, j;
+    if (!n && !m) return [];
+    if (!n) return [[1, b.join('')]];
+    if (!m) return [[-1, a.join('')]];
+    if (n > DIFF_TOKEN_CAP || m > DIFF_TOKEN_CAP) {
+      return [[-1, a.join('')], [1, b.join('')]];
+    }
+    var len = [];
+    for (i = 0; i <= n; i++) {
+      len[i] = [];
+      for (j = 0; j <= m; j++) {
+        len[i][j] = (!i || !j) ? 0
+          : diffKey(a[i - 1]) === diffKey(b[j - 1]) ? len[i - 1][j - 1] + 1
+            : Math.max(len[i - 1][j], len[i][j - 1]);
+      }
+    }
+    var out = [];
+    function push(op, text) {
+      if (!text) return;
+      if (out.length && out[out.length - 1][0] === op) out[out.length - 1][1] += text;
+      else out.push([op, text]);
+    }
+    i = n; j = m;
+    var rev = [];
+    while (i > 0 || j > 0) {
+      if (i > 0 && j > 0 && diffKey(a[i - 1]) === diffKey(b[j - 1])) {
+        rev.push([0, b[j - 1]]); i--; j--;
+      }
+      else if (j > 0 && (i === 0 || len[i][j - 1] >= len[i - 1][j])) { rev.push([1, b[j - 1]]); j--; }
+      else { rev.push([-1, a[i - 1]]); i--; }
+    }
+    for (i = rev.length - 1; i >= 0; i--) push(rev[i][0], rev[i][1]);
+    return out;
+  }
+
+  // Unchanged text is context, not content: enough of it to place a change and no
+  // more. The ends are cut towards the change and the middle from both sides, with a
+  // one-character ellipsis standing in for what is left out - the tooltip still has
+  // the whole of both values.
+  function diffContext(text, first, last) {
+    if (first && last) return text;                       // the values share everything shown
+    if (first) {
+      return text.length > DIFF_EDGE ? '\u2026' + text.slice(text.length - DIFF_EDGE) : text;
+    }
+    if (last) return text.length > DIFF_EDGE ? text.slice(0, DIFF_EDGE) + '\u2026' : text;
+    if (text.length <= DIFF_GAP) return text;
+    return text.slice(0, DIFF_EDGE) + ' \u2026 ' + text.slice(text.length - DIFF_EDGE);
+  }
+
+  // The diff itself: `[[op, text], ...]`, or null where one would say less than the
+  // plain old -> new - a value short enough to show whole, one side empty, or two
+  // values with no word in common to anchor on.
+  function valueDiffOps(oldV, newV) {
+    var a = oneLine(oldV == null ? '' : String(oldV));
+    var b = oneLine(newV == null ? '' : String(newV));
+    if (!a || !b) return null;
+    var A = diffTokens(a), B = diffTokens(b);
+    var p = 0;
+    while (p < A.length && p < B.length && diffKey(A[p]) === diffKey(B[p])) p++;
+    var q = 0;
+    while (q < A.length - p && q < B.length - p &&
+      diffKey(A[A.length - 1 - q]) === diffKey(B[B.length - 1 - q])) q++;
+    var ops = [];
+    // From `B` throughout: the new value is the one that would be written, so where
+    // the two differ only in spacing it is its spacing that belongs on screen.
+    if (p) ops.push([0, B.slice(0, p).join('')]);
+    diffMiddle(A.slice(p, A.length - q), B.slice(p, B.length - q))
+      .forEach(function (o) { ops.push(o); });
+    if (q) ops.push([0, B.slice(B.length - q).join('')]);
+    // Nothing in common to anchor on - two unrelated paragraphs - so the diff would be
+    // one red block and one green one, which is what old -> new already says.
+    if (!ops.some(function (o) { return o[0] === 0 && trim(o[1]); })) return null;
+    if (!ops.some(function (o) { return o[0] !== 0; })) return null;
+    return ops;
+  }
+
+  // The line's view of a diff: coloured, with the unchanged runs elided to context.
+  function valueDiffParts(ops) {
+    var parts = [];
+    ops.forEach(function (o, i) {
+      var text = o[0] === 0
+        ? diffContext(o[1], i === 0, i === ops.length - 1)
+        : o[1];
+      if (!text) return;
+      // An equal run is rendered from the new value, whose last word carries no
+      // trailing space - so where something follows it, the space that was there in
+      // the old value has to come back or `Adira` runs straight into `- Promo`.
+      if (o[0] === 0 && i < ops.length - 1 && !/\s$/.test(text)) text += ' ';
+      // A removal running straight into the insertion that replaced it reads as one
+      // made-up word - `sunlitcandlelit` - so the two are separated by an arrow.
+      // White, and spaced, because it is punctuation of ours rather than either
+      // value's text; a removal or an insertion on its own gets none.
+      if (o[0] === -1 && ops[i + 1] && ops[i + 1][0] === 1) {
+        parts.push([text.replace(/\s+$/, ''), 'svr-del']);
+        parts.push([' \u2192 ', 'svr-mod']);
+        return;
+      }
+      parts.push([text, o[0] === 0 ? 'svr-mod' : o[0] < 0 ? 'svr-del' : 'svr-add']);
+    });
+    return parts;
+  }
+
+  // The tooltip's view of the same diff: **the whole text, with the changes coloured
+  // in it** - nothing elided, and no second copy of the paragraph to compare by eye.
+  //
+  // Unchanged text is white here and light blue in the line, which is not an
+  // inconsistency: the line is one row among many and the blue says "this row's value
+  // is what changed", while the box holds nothing but the value, where the same blue
+  // would only be dimming the text you opened it to read.
+  function valueDiffFullParts(ops) {
+    var out = [];
+    ops.forEach(function (o) {
+      if (!o[1]) return;
+      out.push([o[1], o[0] === 0 ? null : o[0] < 0 ? 'svr-del' : 'svr-add']);
+    });
+    return out;
+  }
+
+  // ── The box a diff opens ──────────────────────────────────────────────────
+  //
+  // A native `title` cannot colour anything, which is why the full diff shipped in it
+  // as `[-went-]` and `{+arrived+}` - a notation standing in for the colours the line
+  // already had. This is the thing itself: one box for the page, `position:fixed` so a
+  // scrolling log cannot clip it, above the backdrop so it is not painted over, and
+  // `pointer-events:none` for the reason every box here has it - one that took the
+  // pointer would close under it and reopen for ever.
+  var DIFF_TIP_ID = 'svr-difftip';
+
+  function diffTipBox() {
+    var box = document.getElementById(DIFF_TIP_ID);
+    if (!box) {
+      box = el('div', 'svr-difftip');
+      box.id = DIFF_TIP_ID;
+      (document.body || document.documentElement).appendChild(box);
+    }
+    return box;
+  }
+
+  function diffTipOpen(node, parts) {
+    var box = diffTipBox();
+    box.textContent = '';
+    parts.forEach(function (part) {
+      // A picture rather than a run of text: `{ img: <data url>, label: ... }`. The
+      // cover line's tooltip is the only thing that uses it, and it is the one place
+      // here where the change *is* an image - two of them side by side is the whole
+      // question ("is that the right cover?") answered at a glance, where any amount
+      // of text about them is not.
+      if (part && part.node) { box.appendChild(part.node); return; }
+      if (part && part.img) {
+        var fig = el('div', 'svr-coverfig' + (part.cls ? ' ' + part.cls : ''));
+        var im = el('img');
+        im.src = part.img;
+        im.alt = '';
+        fig.appendChild(im);
+        fig.appendChild(el('div', 'svr-covercap', part.label || ''));
+        box.appendChild(fig);
+        return;
+      }
+      box.appendChild(el('span', part[1] || null, part[0]));
+    });
+    // Last child of the body every time: a dialog opened after the box would otherwise
+    // paint over it wherever the two carry the same z-index, which is the bug the
+    // shared tooltip in Core had and fixed the same way.
+    var host = document.body || document.documentElement;
+    if (host && host.lastChild !== box) host.appendChild(box);
+    // A box holding built content (the set table) shrinks to it; the fixed 60rem is
+    // for the text diffs, whose paragraphs need somewhere to wrap.
+    var fit = parts.length && parts.every(function (p) { return p && p.node; });
+    box.className = 'svr-difftip svr-difftip-open' + (fit ? ' svr-difftip-fit' : '');
+    if (!node.getBoundingClientRect || !box.getBoundingClientRect) return;
+    var a = node.getBoundingClientRect(), b = box.getBoundingClientRect();
+    var vw = window.innerWidth || 1024, vh = window.innerHeight || 768;
+    var top = a.bottom + 6;
+    if (top + b.height > vh - 8) top = Math.max(8, a.top - b.height - 6);
+    box.style.top = top + 'px';
+    box.style.left = Math.min(Math.max(8, a.left), Math.max(8, vw - b.width - 8)) + 'px';
+  }
+
+  function diffTipClose() {
+    var box = document.getElementById(DIFF_TIP_ID);
+    if (box) box.className = 'svr-difftip';
+  }
+
+  function diffTip(node, parts) {
+    if (!node || !node.addEventListener) return;
+    node.addEventListener('mouseenter', function () { diffTipOpen(node, parts); });
+    node.addEventListener('mouseleave', diffTipClose);
+    node.addEventListener('focus', function () { diffTipOpen(node, parts); });
+    node.addEventListener('blur', diffTipClose);
+  }
+
+  // The same value with nothing taken out of it - the tooltip's half. A details block
+  // is cut at sixty characters *and* flattened onto one line, so a value can be
+  // abbreviated well under the cut; comparing the two strings is what decides whether
+  // there is anything a tooltip could add.
+  function syncValFull(v) {
+    var t = v == null ? '' : String(v);
+    return t === '' ? '(empty)' : '"' + t + '"';
+  }
+
+  // ── The cover ─────────────────────────────────────────────────────────────
+  //
+  // The one attribute here that is not a value the scene record carries. `paths`
+  // gives a URL per scene - `/scene/<id>/screenshot`, different for every scene
+  // whatever the pictures are - and `SceneUpdateInput.cover_image` takes base64 image
+  // data. So both halves of "does this differ" and "write it across" mean reading the
+  // bytes, and the read is what makes the comparison honest as well as the write
+  // possible: the same fetch answers both, and the target's own bytes are what Undo
+  // needs. Nothing is fetched twice.
+  //
+  // **Only where a person picked the source.** A save never changes a cover, so the
+  // save dialog never lists one and never fetches; and the review task scores whole
+  // libraries, where a fetch per scene would be thousands of images for a number.
+  // Covers are compared inside a set a user has chosen, and nowhere else.
+  function coverUrl(scene) {
+    return (scene && scene.paths && scene.paths.screenshot) || null;
+  }
+
+  // Bytes to base64, in chunks: `String.fromCharCode.apply` over a whole image is an
+  // argument list long enough to overflow the call stack.
+  function base64Of(buf) {
+    var bytes = new Uint8Array(buf), step = 0x8000, parts = [], i;
+    for (i = 0; i < bytes.length; i += step) {
+      parts.push(String.fromCharCode.apply(null, bytes.subarray(i, i + step)));
+    }
+    return btoa(parts.join(''));
+  }
+
+  // A scene's cover as the data URL `cover_image` wants, or null. `__svr` marks it as
+  // ours so the save watch lets it straight past.
+  function readCover(scene) {
+    var url = coverUrl(scene);
+    if (!url) return Promise.resolve(null);
+    return fetch(url, { __svr: true }).then(function (r) {
+      if (!r || !r.ok) return null;
+      var type = (r.headers && r.headers.get && r.headers.get('content-type')) || 'image/jpeg';
+      return r.arrayBuffer().then(function (buf) {
+        var b64 = base64Of(buf);
+        return b64 ? 'data:' + type + ';base64,' + b64 : null;
+      });
+    }).then(null, function () { return null; });   // a cover we cannot read is one we do not offer
+  }
+
+  // Every cover in every set, so the listing can score a mismatch rather than only
+  // report one after a set has been picked. Sequential on purpose: this is the one
+  // read here that is an image per scene, and firing hundreds at once is how a page
+  // stops responding. The progress line counts them, and Close stops it.
+  //
+  // What it buys is the whole point of the review dialog for covers: a variant that
+  // was rescanned into losing the cover a stash-box gave it is *findable*, at the top
+  // of the listing, rather than something you have to open every set to notice.
+  function readSetCovers(run, s, sets) {
+    run.coverBy = null;
+    if (!s.c4CheckCoverMismatch) return Promise.resolve(null);
+    var scenes = [];
+    sets.forEach(function (set) {
+      set.scenes.forEach(function (sc) { scenes.push(sc); });
+    });
+    if (!scenes.length) return Promise.resolve(null);
+    var by = {}, done = 0;
+    run.coverRead = 0;
+    run.coverFailed = 0;
+    run.msg('INFO', 'Reading the cover of ' + plural(scenes.length, 'scene in a set') +
+      ', to say which sets disagree about one.');
+    function next(i) {
+      if (i >= scenes.length || run.stopped) return Promise.resolve(null);
+      return readCover(scenes[i]).then(function (data) {
+        by[String(scenes[i].id)] = data;
+        if (data) run.coverRead++; else run.coverFailed++;
+        done++;
+        if (done % 10 === 0 || done === scenes.length) {
+          run.progress(run.progressText() + ' Covers ' + done + ' of ' + scenes.length + '…');
+        }
+        return next(i + 1);
+      });
+    }
+    return next(0).then(function () {
+      run.coverBy = by;
+      return null;
+    });
+  }
+
+  // What the cover comparison did, said once after the listing. **A setting that is
+  // off and a feature that is broken look identical from the outside**, which is how
+  // "still not seeing a cover mismatch flagged" stayed unanswerable across two
+  // releases: the dialog said nothing about covers in either case. The tag filter has
+  // had this line since it shipped; this is the same rule, applied where it was
+  // missed.
+  //
+  // The failure count is the half that earns its keep. `readCover` answers null for
+  // anything it cannot read and carries on - which is right, since a picture is not
+  // worth failing a scan for - so a Stash whose `paths.screenshot` points at another
+  // origin, or behind a proxy that refuses the fetch, would otherwise compare nothing
+  // and report nothing, for ever.
+  function reportCoverCheck(run, s) {
+    if (!s.c4CheckCoverMismatch) {
+      run.msg('INFO', 'Cover images are not compared: switch on "Compare Cover Images" ' +
+        'in this plugin\u2019s settings to have a set scored for a cover its members ' +
+        'disagree about.');
+      return;
+    }
+    var sets = 0;
+    run.sets.forEach(function (set) { if (set.delta.cover) sets++; });
+    if (run.coverFailed) {
+      run.msg(run.coverRead ? 'WARN' : 'ERROR',
+        plural(run.coverFailed, 'cover') + ' could not be read' +
+        (run.coverRead ? '' : ' - none of them could') + ', so ' +
+        (run.coverRead ? 'those scenes are' : 'no set is') + ' not compared. This is ' +
+        'what a Stash serving its images from another origin, or from behind a proxy ' +
+        'that refuses the request, looks like from here.');
+    }
+    run.msg('INFO', run.coverRead
+      ? plural(run.coverRead, 'cover') + ' read; ' + (sets
+        ? plural(sets, 'set disagrees', 'sets disagree') + ' about one.'
+        : 'every set agrees on its cover.')
+      : 'No cover was read, so no set could be compared.');
+  }
+
+  // The source's cover and every target's, read once before the plan is built - the
+  // planner is synchronous, and this is the one thing in it that is not.
+  function gatherCovers(run, s, source, targets) {
+    // Opt-in, because it is the one comparison here that costs a download per scene.
+    if (!s || !s.c4CheckCoverMismatch) return Promise.resolve(null);
+    // An automatic run reads covers only when the save it is answering actually set
+    // one. Every other save would otherwise pay for an image per variant to find out
+    // that nothing about the cover moved.
+    if (run.auto && !(run.only && run.only.cover)) return Promise.resolve(null);
+    return readCover(source).then(function (src) {
+      if (!src) return null;
+      var out = { src: src, had: {} };
+      var chain = Promise.resolve();
+      targets.forEach(function (t) {
+        chain = chain.then(function () {
+          return readCover(t).then(function (b) { out.had[String(t.id)] = b; });
+        });
+      });
+      return chain.then(function () { return out; });
+    });
+  }
+
+  // A scene's `groups` as `SceneUpdateInput.groups` spells them - the index kept,
+  // because it is the half the whole feature is about.
+  function groupInput(list) {
+    return (list || []).map(function (g) {
+      return { group_id: String(g.group.id),
+        scene_index: g.scene_index == null ? null : g.scene_index };
+    });
+  }
+
+  // One variant against the source: a [SYNC] line per difference. `skip` is the set of
+  // tag ids never pushed.
+  function planSyncScene(run, source, target, skip) {
+    var title = target.title || ('Scene ' + target.id);
+
+    var only = run.only || null;
+    SYNC_ATTRS.forEach(function (a) {
+      // `only` is the set of attributes the triggering save changed; without one
+      // (the manual button) every attribute is compared. Titles are dropped from an
+      // automatic run unless the setting opts them in - a title is the one value a
+      // variant most deliberately owns.
+      if (only && !only[a.key]) return;
+      if (a.key === 'title' && run.titleOff) return;
+      var sv = a.show ? a.show(source) : source[a.key];
+      var tv = a.show ? a.show(target) : target[a.key];
+      if (String(sv == null ? '' : sv) === String(tv == null ? '' : tv)) return;
+      var ops = valueDiffOps(tv, sv);
+      // Unticked, every one of them: an add only ever adds, while a replace
+      // overwrites the variant's own value, so a replace is opted into rather than
+      // out of. The All boxes are what keep that from costing a click per line.
+      run.tickLine({
+        id: String(target.id), title: title, kind: 'set', input: a.input,
+        group: a.label,
+        value: a.raw ? a.raw(source) : (source[a.key] == null ? null : source[a.key]),
+        had: a.raw ? a.raw(target) : (target[a.key] == null ? null : target[a.key]),
+      }, 'svr-op-set', '[SYNC]    ',
+      // The save dialog preselects its replaces: they are the edit the user just made
+      // by hand, which is stronger evidence of intent than a long-standing diff the
+      // manual button lists. Titles are the exception either way - the one value a
+      // variant most deliberately owns.
+      // A long value is shown once as a diff rather than twice and cut: two cuts of
+      // one opening sentence are identical and say nothing about the edit. The
+      // tooltip is the same diff unelided, so hovering says what changed rather than
+      // handing back two paragraphs to compare.
+      [['  ' + a.label + ': ', null]].concat(ops ? valueDiffParts(ops)
+        : [[syncValShow(tv), 'svr-del'], [' \u2192 ', 'svr-mod'],
+          [syncValShow(sv), 'svr-add']]),
+      run.auto ? a.key !== 'title' : false,
+      ops ? [['  ' + a.label + ': ', null]].concat(valueDiffFullParts(ops))
+        // The same arrow the line uses, so a value short enough to be shown whole
+        // matches its own tooltip exactly and no box opens to repeat it.
+        : '  ' + a.label + ': ' + syncValFull(tv) + ' \u2192 ' + syncValFull(sv));
+    });
+
+    // The additive lists: what the source carries and the target lacks, by id. The
+    // target's own extras are never listed and never touched - they are the variant's
+    // deliberate uniqueness.
+    [['tags', 'tag_ids', 'tag'], ['performers', 'performer_ids', 'performer']]
+      .forEach(function (list) {
+        if (only && !only[list[0]]) return;
+        var have = {};
+        (target[list[0]] || []).forEach(function (x) { have[String(x.id)] = true; });
+        var missing = (source[list[0]] || []).filter(function (x) {
+          return !have[String(x.id)] && !skip[String(x.id)];
+        });
+        // A tag the hierarchy already implies through another the target carries is
+        // not copied - the sibling decides which those are. Only the additions are
+        // filtered: what the target already holds is its own, and this dialog does
+        // not prune.
+        if (list[0] === 'tags' && run.pruner && missing.length) {
+          var drop = redundantOf(run.pruner, target,
+            missing.map(function (x) { return String(x.id); }));
+          var kept = missing.filter(function (x) { return !drop[String(x.id)]; });
+          run.pruned = (run.pruned || 0) + (missing.length - kept.length);
+          missing = kept;
+        }
+        if (!missing.length) return;
+        // `items` is what makes the line a picker: one checkbox per tag or performer,
+        // behind the line's expander. `tipType` is the URL half of the item links.
+        var items = missing.map(function (x) {
+          return { id: String(x.id), name: x.name || ('id ' + x.id) };
+        });
+        run.tickLine({
+          id: String(target.id), title: title, kind: list[1],
+          items: items, noun: list[2], tipType: list[0],
+          group: list[0] === 'tags' ? 'Tags' : 'Performers',
+        }, 'svr-op-add', '[SYNC]    ',
+        [['  Add ' + plural(items.length, list[2]) + ': ', null],
+          [items.map(function (x) { return x.name; }).sort().join(', '), 'svr-add']],
+        true);
+      });
+
+    // URLs are a list of bare strings with no ADD mode on the input, so the additive
+    // write is the union sent whole - and the undo is the old list, not a removal.
+    // What this save *removed*, offered as removals on the variants that still carry
+    // it. Only the save-triggered run has `run.removed`: the manual button cannot tell
+    // a value the source dropped from a value the variant deliberately owns, which is
+    // why its lists stay add-only. The dimension and flag tags are protected here the
+    // same way they are from the adds.
+    var rem = run.removed || {};
+    [['tags', 'tag_ids_remove', 'tag'], ['performers', 'performer_ids_remove', 'performer']]
+      .forEach(function (list) {
+        if (only && !only[list[0]]) return;
+        var gone = rem[list[0]] || [];
+        if (!gone.length) return;
+        var carried = (target[list[0]] || []).filter(function (x) {
+          return gone.indexOf(String(x.id)) !== -1 && !skip[String(x.id)];
+        });
+        if (!carried.length) return;
+        var items = carried.map(function (x) {
+          return { id: String(x.id), name: x.name || ('id ' + x.id) };
+        });
+        run.tickLine({
+          id: String(target.id), title: title, kind: list[1],
+          items: items, noun: list[2], tipType: list[0], verb: 'Remove',
+          group: list[0] === 'tags' ? 'Tags' : 'Performers',
+        }, 'svr-op-set', '[SYNC]    ',
+        [['  Remove ' + plural(items.length, list[2]) + ': ', null],
+          [items.map(function (x) { return x.name; }).sort().join(', '), 'svr-del']],
+        true);
+      });
+
+    // Compared by the bytes, so a set already sharing a cover lists nothing. A target
+    // whose own cover could not be read is not offered: writing one without having
+    // captured what it replaced would leave an Undo that cannot put it back.
+    var cov = run.covers;
+    if (cov && hasOwn(cov.had, String(target.id)) && cov.had[String(target.id)] &&
+        cov.had[String(target.id)] !== cov.src) {
+      run.tickLine({
+        id: String(target.id), title: title, kind: 'cover_image', group: 'Cover',
+        value: cov.src, had: cov.had[String(target.id)],
+      }, 'svr-op-set', '[SYNC]    ',
+      [['  Cover: ', null], ['replace with this scene\u2019s', 'svr-mod']], !!run.auto,
+      // Both covers, side by side, in the colours the rest of the vocabulary uses:
+      // the one that goes and the one that arrives.
+      [{ img: cov.had[String(target.id)], label: 'this variant now', cls: 'svr-cover-old' },
+        { img: cov.src, label: 'would become', cls: 'svr-cover-new' }]);
+    }
+
+    if (!only || only.groups) {
+      var tg = target.groups || [];
+      var tgIds = {};
+      tg.forEach(function (g) { tgIds[String(g.group.id)] = true; });
+      var goneGroups = (rem.groups || []).filter(function (id) { return tgIds[id]; });
+      var missingGroups = (source.groups || []).filter(function (g) {
+        return !tgIds[String(g.group.id)];
+      });
+      if (goneGroups.length || missingGroups.length) {
+        var keptG = tg.filter(function (g) {
+          return goneGroups.indexOf(String(g.group.id)) === -1;
+        });
+        var goneNames = tg.filter(function (g) {
+          return goneGroups.indexOf(String(g.group.id)) !== -1;
+        }).map(function (g) { return g.group.name || ('id ' + g.group.id); }).sort();
+        var addNames = missingGroups.map(function (g) {
+          return g.group.name || ('id ' + g.group.id);
+        }).sort();
+        run.tickLine({
+          id: String(target.id), title: title, kind: 'groups', group: 'Groups',
+          value: groupInput(keptG).concat(groupInput(missingGroups)),
+          had: groupInput(tg),
+        }, goneGroups.length ? 'svr-op-set' : 'svr-op-add', '[SYNC]    ',
+        goneGroups.length
+          ? [['  Update groups: remove ', null], [goneNames.join(', '), 'svr-del']]
+            .concat(addNames.length
+              ? [['; add ', null], [addNames.join(', '), 'svr-add']] : [])
+          : [['  Add ' + plural(addNames.length, 'group') + ': ', null],
+            [addNames.join(', '), 'svr-add']],
+        true);
+      }
+    }
+
+    if (only && !only.urls) return;
+    var tu = target.urls || [];
+    var missingUrls = (source.urls || []).filter(function (u) { return tu.indexOf(u) === -1; });
+    var goneUrls = (rem.urls || []).filter(function (u) { return tu.indexOf(u) !== -1; });
+    if (goneUrls.length) {
+      // One line, not an add line and a remove line: both would write the whole `urls`
+      // list and the second would clobber the first. The combined value is the
+      // variant's list with the removed URLs out and the missing ones in, and the one
+      // box starts unticked because part of what it does is take a value away.
+      run.tickLine({
+        id: String(target.id), title: title, kind: 'urls', group: 'URLs',
+        value: tu.filter(function (u) { return goneUrls.indexOf(u) === -1; })
+          .concat(missingUrls),
+        had: tu.slice(),
+      }, 'svr-op-set', '[SYNC]    ',
+      [['  Update URLs: remove ', null], [goneUrls.join(', '), 'svr-del']]
+        .concat(missingUrls.length
+          ? [['; add ', null], [missingUrls.join(', '), 'svr-add']] : []), true);
+    } else if (missingUrls.length) {
+      run.tickLine({
+        id: String(target.id), title: title, kind: 'urls', group: 'URLs',
+        value: tu.concat(missingUrls), had: tu.slice(),
+      }, 'svr-op-add', '[SYNC]    ',
+      [['  Add ' + plural(missingUrls.length, 'URL') + ': ', null],
+        [missingUrls.join(', '), 'svr-add']], true);
+    }
+  }
+
+  function syncBegin(run) {
+    var scene = run.scope || {};
+    return Promise.all([settingsReady(), tagTree()]).then(function (both) {
+      var s = both[0], m = matchers(both[1], s);
+      if (run.auto && !s.c2PropagateTitleOnSave) run.titleOff = true;
+      run.settings = s;
+      // The tag ids never pushed: both dimension sets, descendants included, and
+      // whatever answers to the flag tag's name.
+      var skip = {}, id;
+      for (id in m.fl) if (hasOwn(m.fl, id)) skip[id] = true;
+      for (id in m.pl) if (hasOwn(m.pl, id)) skip[id] = true;
+      tagsMatchingName(both[1], flagTagName(s)).forEach(function (t) {
+        skip[String(t.id)] = true;
+      });
+      // Re-queried rather than taken off the pane: the pane's answer is as old as the
+      // tab, and this is the read a write is planned from. The sibling is asked in the
+      // same breath - one `prepare`, answered from its own caches.
+      return Promise.all([findVariants(scene), nptPruner(s)]).then(function (two) {
+        var found = two[0];
+        run.pruner = two[1];
+        run.scanned = found.rows.length;
+        if (!found.rows.length) {
+          if (run.auto) { run.close(); return null; }
+          run.msg('WARN', found.why || 'This scene has no variants to synchronize with.');
+          return 'Nothing to synchronize.';
+        }
+        if (!found.self) {
+          if (run.auto) { run.close(); return null; }
+          run.msg('WARN', 'The server did not return the viewed scene among its own ' +
+            'variants, so there is nothing to push from.');
+          return 'Nothing to synchronize.';
+        }
+        return gatherCovers(run, s, found.self, found.rows.map(function (r) { return r.scene; }))
+          .then(function (covers) {
+            run.covers = covers;
+            found.rows.forEach(function (row) {
+              planSyncScene(run, found.self, row.scene, skip);
+            });
+            return finishSyncPlan(run, s);
+          });
+      });
+    });
+  }
+
+  // The tail of a sync listing, shared by the run that reaches it through `syncBegin`
+  // and the one the review dialog's Synchronize Set builds.
+  function finishSyncPlan(run, s) {
+    var unticked = 0;
+    run.jobs.forEach(function (j) { if (j.box && !j.box.checked) unticked++; });
+    if (unticked && run.auto) {
+      // The save dialog preselects everything it lists except titles, so its unticked
+      // lines are title lines and nothing else.
+      run.msg('INFO', plural(unticked, 'title line starts', 'title lines start') +
+        ' unticked: a title is the one value a variant most deliberately owns.');
+    } else if (unticked) {
+      run.msg('INFO', plural(unticked, 'replace line starts', 'replace lines start') +
+        ' unticked: an add only ever adds, while a replace overwrites the ' +
+        'variant\u2019s own value. Tick them one by one, or a whole attribute at ' +
+        'once with the All boxes above the listing.');
+    }
+    // The state the title policy left things in, said in the listing: a change the
+    // save made that this dialog is deliberately not offering.
+    if (run.titleOff && run.only && run.only.title) {
+      run.msg('INFO', 'The title changed too, but title lines are not offered here: ' +
+        'the "Offer Title Changes Too" setting is off.');
+    }
+    if (!run.jobs.length) {
+      if (run.auto) { run.close(); return null; }
+      run.msg('INFO', 'Nothing to synchronize: the variants already agree on every ' +
+        'attribute this dialog pushes.');
+    }
+    reportPruneFilter(run, s);
+    run.buildAllBar();
+    if (run.auto) run.reveal();
+    return null;
+  }
+
+
+  var SYNC_TASK = {
+    title: 'Synchronize Variants',
+    legend: 'One line per attribute per variant, pushing this scene’s values ' +
+      'outward: old -> new where a value would be replaced, and the tags, performers, ' +
+      'groups or URLs that would be added - added only, never removed, so whatever ' +
+      'makes a variant deliberately different stays. A group is joined at this ' +
+      'scene’s own position in it, since a variant is the same work. The full-length, partial-length and flag ' +
+      'tags are never pushed: they are what makes a variant a variant. Adds start ' +
+      'ticked and replaces start unticked - overwriting is opted into, not out of. ' +
+      'Green is what a variant gains, red what it loses, blue a value replaced. ' +
+      'Proceed writes only the ticked lines; the All boxes above the listing tick a ' +
+      'whole attribute at once, and a tag or performer line opens on its arrow to ' +
+      'pick individual ones.',
+    nothing: 'The variants already agree on every attribute this dialog pushes.',
+    scanNoun: 'variant',
+    planNoun: 'listed',
+    planUnit: 'change',
+    leaseLabel: 'Variant synchronization',
+    undoTip: 'Put back what every written line replaced or added. Only what this ' +
+      'dialog wrote, and only while it stays open.',
+    verb: 'synchronized',
+    pickCaption: true,
+    begin: syncBegin,
+    writeInput: function (job) {
+      if (job.kind === 'tag_ids_remove' || job.kind === 'performer_ids_remove') {
+        job.written = pickedItems(job).map(function (it) { return it.id; });
+        var rin = { ids: [job.id] };
+        rin[job.kind.replace('_remove', '')] = { ids: job.written, mode: 'REMOVE' };
+        return { query: BULK_TAG_MUTATION, variables: { input: rin } };
+      }
+      if (job.kind === 'tag_ids' || job.kind === 'performer_ids') {
+        // The picked items, read at write time - the boxes lock the moment the state
+        // leaves `listing`, so this is the selection the user saw at the press. What
+        // was actually written is kept on the job, because the undo must remove
+        // exactly that, whatever the boxes say by then.
+        job.written = pickedItems(job).map(function (it) { return it.id; });
+        var input = { ids: [job.id] };
+        input[job.kind] = { ids: job.written, mode: 'ADD' };
+        return { query: BULK_TAG_MUTATION, variables: { input: input } };
+      }
+      var one = { id: job.id };
+      one[job.kind === 'urls' || job.kind === 'groups' || job.kind === 'cover_image'
+        ? job.kind : job.input] = job.value;
+      return { query: SCENE_UPDATE, variables: { input: one } };
+    },
+    undoInput: function (job) {
+      if (job.kind === 'tag_ids_remove' || job.kind === 'performer_ids_remove') {
+        var rin = { ids: [job.id] };
+        rin[job.kind.replace('_remove', '')] = { ids: job.written || [], mode: 'ADD' };
+        return { query: BULK_TAG_MUTATION, variables: { input: rin } };
+      }
+      if (job.kind === 'tag_ids' || job.kind === 'performer_ids') {
+        var input = { ids: [job.id] };
+        input[job.kind] = { ids: job.written || [], mode: 'REMOVE' };
+        return { query: BULK_TAG_MUTATION, variables: { input: input } };
+      }
+      var one = { id: job.id };
+      one[job.kind === 'urls' || job.kind === 'groups' || job.kind === 'cover_image'
+        ? job.kind : job.input] = job.had;
+      return { query: SCENE_UPDATE, variables: { input: one } };
+    },
+  };
+
+  // The save-triggered shape of the same task: identical planner, writers and undo,
+  // scoped by `run.only` to the attributes the save changed. A separate object only
+  // because its head has a different story to tell.
+  var PROPAGATE_TASK = (function () {
+    var t = {}, k;
+    for (k in SYNC_TASK) if (hasOwn(SYNC_TASK, k)) t[k] = SYNC_TASK[k];
+    t.title = 'Propagate Changes to Variants';
+    t.legend = 'This scene was just saved with changes, and these are its variants: ' +
+      'one checkbox line per changed attribute per variant, old -> new where a value ' +
+      'would be replaced, adds for the tags, performers, groups or URLs this save ' +
+      'added - a group joined at this scene’s own position in it - and ' +
+      'removes for the ones it took off, on variants still carrying them - a ' +
+      'variant\u2019s own extras are never touched. The full-length, partial-length ' +
+      'and flag tags are never pushed or removed. Green is what a variant gains, red ' +
+      'what it loses, blue a value replaced. Every line starts ticked - it is ' +
+      'the edit you just made - except titles, which start unticked: a title is the ' +
+      'one value a variant most deliberately owns. ' +
+      'Proceed writes only the ticked lines; Cancel leaves the variants as they are. ' +
+      'The offer can be switched off in this plugin\u2019s settings.';
+    t.leaseLabel = 'Variant propagation';
+    return t;
+  }());
+
+  // ── Propagating a save to the variants ────────────────────────────────────
+  //
+  // Stash's scene edit form submits its whole input on Save, so which attributes
+  // *changed* is the input against the scene as it stood - and after the write there
+  // is no "stood" left to ask for. The save is therefore held for one by-id read
+  // (nothing else: settings answer from their cache), then forwarded untouched.
+  //
+  // Two of the repo's fetch-wrapper rules are load-bearing here:
+  //   - the response body is never read - `resp.ok` is all this looks at, and the
+  //     dialog's own scan re-reads every value from the server, so a save that came
+  //     back 200-with-errors still gets a truthful listing;
+  //   - the lease is sampled *before* the write goes through, so a sibling reacting
+  //     to this same save cannot make the watch stand down for a reaction rather
+  //     than for a bulk run.
+
+  var SAVE_SNAPSHOT_QUERY = 'query SVRSaveSnapshot($id: ID!) { findScene(id: $id) { ' +
+    'id title date code director details rating100 organized urls ' +
+    'studio { id } tags { id } performers { id } groups { group { id } scene_index } ' +
+    'stash_ids { endpoint stash_id } } }';
+
+  // The single-scene save mutation's input, or null for anything else - our own
+  // requests (`__svr`), bulk updates, and everything that is not a scene save.
+  function sceneSaveOf(init) {
+    if (!init || init.__svr || typeof init.body !== 'string') return null;
+    var body;
+    try { body = JSON.parse(init.body); } catch (e) { return null; }
+    var q = body && body.query;
+    if (!q || typeof q !== 'string') return null;
+    if (!/\bsceneUpdate\s*\(/.test(q) || q.indexOf('bulkSceneUpdate') !== -1) return null;
+    var input = body.variables && body.variables.input;
+    if (!input || input.id == null) return null;
+    return input;
+  }
+
+  // The save's group list, whichever field the form spelled it in - `groups` is the
+  // current name, `movies` the compatibility one - normalised to group_id entries.
+  function saveGroups(input) {
+    if (hasOwn(input, 'groups')) return input.groups || [];
+    if (hasOwn(input, 'movies')) {
+      return (input.movies || []).map(function (m) {
+        return { group_id: m.movie_id, scene_index: m.scene_index };
+      });
+    }
+    return null;
+  }
+
+  function idSet(arr) {
+    return (arr || []).map(function (x) {
+      return String(x && typeof x === 'object' ? x.id : x);
+    }).sort().join(',');
+  }
+
+  // Which of the writable attributes this save changed: input against the snapshot,
+  // keyed the way `planSyncScene` reads `run.only`. Null when nothing it pushes moved.
+  function changedAttrs(before, input) {
+    var out = {}, any = false;
+    function norm(v) { return v == null ? '' : String(v); }
+    SYNC_ATTRS.forEach(function (a) {
+      if (!hasOwn(input, a.input)) return;
+      var was = a.raw ? a.raw(before) : before[a.key];
+      if (norm(input[a.input]) !== norm(was)) { out[a.key] = true; any = true; }
+    });
+    [['tags', 'tag_ids'], ['performers', 'performer_ids'], ['urls', 'urls']]
+      .forEach(function (l) {
+        if (hasOwn(input, l[1]) && idSet(input[l[1]]) !== idSet(before[l[0]])) {
+          out[l[0]] = true; any = true;
+        }
+      });
+    // A cover the save carried. Stash sends `cover_image` only when the form has one
+    // to set, and there is nothing on the snapshot to compare it against - the
+    // snapshot holds fields, not image bytes. So this says "a cover was set", and the
+    // dialog's own byte comparison is what decides whether any variant differs from
+    // it. A save that re-sent an unchanged cover therefore lists nothing and closes
+    // unseen, which is the same answer as not having noticed.
+    if (hasOwn(input, 'cover_image') && input.cover_image) { out.cover = true; any = true; }
+    // Membership, not index: a reorder inside a group is not variant metadata.
+    var gIn = saveGroups(input);
+    if (gIn) {
+      var was = (before.groups || []).map(function (g) { return String(g.group.id); })
+        .sort().join(',');
+      var now = gIn.map(function (g) { return String(g.group_id); }).sort().join(',');
+      if (was !== now) { out.groups = true; any = true; }
+    }
+    return any ? out : null;
+  }
+
+  // What the save took off the scene, per list - the half of an edit the manual
+  // dialog can never see, and what lets a replaced URL or a dropped tag be offered
+  // for removal from the variants too.
+  function removedIn(before, input) {
+    var out = {};
+    [['tags', 'tag_ids'], ['performers', 'performer_ids'], ['urls', 'urls']]
+      .forEach(function (l) {
+        if (!hasOwn(input, l[1])) return;
+        var kept = {};
+        (input[l[1]] || []).forEach(function (x) {
+          kept[String(x && typeof x === 'object' ? x.id : x)] = true;
+        });
+        out[l[0]] = (before[l[0]] || []).map(function (x) {
+          return String(x && typeof x === 'object' ? x.id : x);
+        }).filter(function (id) { return !kept[id]; });
+      });
+    var gIn = saveGroups(input);
+    if (gIn) {
+      var kept = {};
+      gIn.forEach(function (g) { kept[String(g.group_id)] = true; });
+      out.groups = (before.groups || []).map(function (g) { return String(g.group.id); })
+        .filter(function (id) { return !kept[id]; });
+    }
+    return out;
+  }
+
+  function offerPropagate(input, before) {
+    var changed = changedAttrs(before, input);
+    if (!changed || _active) return;
+    // Enough scene for `findVariants`: the id, and the stash-ids as the save left
+    // them. The dialog's scan reads everything else fresh.
+    var scene = { id: String(input.id),
+      stash_ids: hasOwn(input, 'stash_ids') ? (input.stash_ids || []) : (before.stash_ids || []) };
+    startRun(PROPAGATE_TASK, scene, { auto: true, only: changed,
+      removed: removedIn(before, input) });
+  }
+
+  function watchSave(orig, self, args, input) {
+    return settingsReady().then(function (s) {
+      if (!s.c1PropagateOnSave) return null;
+      return gqlRequest(SAVE_SNAPSHOT_QUERY, { id: String(input.id) }).then(function (d) {
+        return (d || {}).findScene || null;
+      }, function () { return null; });   // a lost snapshot must not lose the save
+    }).then(function (before) {
+      var resp = orig.apply(self, args);
+      if (before) {
+        // A side listener, never a link in the save's own chain: nothing this plugin
+        // does can delay or fail the response Stash is waiting for.
+        resp.then(function (r) {
+          if (r && r.ok) offerPropagate(input, before);
+        }, function () {});
+      }
+      return resp;
+    }, function () { return orig.apply(self, args); });
+  }
+
+  function installSaveWatch() {
+    if (typeof window.fetch !== 'function') return;
+    var orig = window.fetch;
+    window.fetch = function (url) {
+      try {
+        if (!/\/graphql([?#]|$)/.test(String(url))) return orig.apply(this, arguments);
+        var input = sceneSaveOf(arguments[1]);
+        if (!input) return orig.apply(this, arguments);
+        if (foreignLease()) return orig.apply(this, arguments);
+        return watchSave(orig, this, arguments, input);
+      } catch (e) {
+        return orig.apply(this, arguments);
+      }
+    };
+  }
+
+  // ── Not pushing a tag the hierarchy makes redundant ───────────────────────
+  //
+  // A scene tagged both `Blonde` and its parent `Hair Colour` carries one tag that
+  // says nothing the other does not, and pushing that redundancy onto every variant
+  // spreads it. `NormalizeParentTags` is the plugin that decides what "redundant"
+  // means - it owns the hierarchy walk *and* the exclusion filters a user configures
+  // over there - so this asks it rather than copying the rules, which is the drift its
+  // API exists to end.
+  //
+  // **It asks a different question from `PropagateTagsAndPerformers`, deliberately.**
+  // That plugin gates on `autoMode === 'prune'`, because its question is "will the
+  // sibling take this tag off again in a moment" - a type nobody prunes automatically
+  // is a type where adding it is harmless. This plugin's question is "is this tag
+  // redundant *as data* before I copy it to three more scenes", and the answer does
+  // not depend on whether anyone tidies up afterwards. `plan` answers without the
+  // mode, so nothing is being worked around: the two callers ask what each needs.
+  var NPT_ID = 'NormalizeParentTags';
+  // Named as the user will see it: the whole point of the line is to send them to that
+  // plugin's own settings group, which they then have to find.
+  var NPT_NAME = 'ᝯㄝₓ Normalize Parent Tags';
+  var NPT_API_MIN = '3.2.0';   // the release that publishes `prepare`, for the log line
+
+  function nptApi() {
+    var api = coop().api && coop().api[NPT_ID];
+    return api && typeof api.prepare === 'function' ? api : null;
+  }
+
+  // A bound pruner, or null. Resolved once per run and read synchronously from the
+  // planner, which is the whole reason the sibling's `plan` is not a promise.
+  function nptPruner(s) {
+    if (!s.c3SkipRedundantTags) return Promise.resolve(null);
+    var api = nptApi();
+    if (!api) return Promise.resolve(null);
+    return api.prepare({ entityType: 'scenes' }).then(function (w) {
+      // Feature-detected rather than version-gated: the number is for a log line.
+      return w && typeof w.plan === 'function' ? w : null;
+    }, function () { return null; });   // a sibling that cannot answer is not asked
+  }
+
+  // Which of `ids` the sibling would prune off this target. Asked against the tags the
+  // target would actually be carrying - its own plus the ones under consideration -
+  // because a tag is redundant for being implied by *any* of them, most often by one
+  // that was already there.
+  function redundantOf(pruner, target, ids) {
+    var all = {}, k, out = {};
+    idsOfList(target, 'tags').forEach(function (id) { all[id] = true; });
+    ids.forEach(function (id) { all[String(id)] = true; });
+    var list = [];
+    for (k in all) if (hasOwn(all, k)) list.push(k);
+    var res = null;
+    // A sibling that throws is one that is not asked again here; this decides what to
+    // skip and never what to write, so failing open is right.
+    try { res = pruner.plan({ mode: 'prune', tagIds: list }); } catch (e) { return out; }
+    if (!res || !res.remove) return out;
+    res.remove.forEach(function (id) { out[String(id)] = true; });
+    return out;
+  }
+
+  // What a run says about the filter once, after its listing: what it dropped, or why
+  // it dropped nothing. A setting that is on and silently doing nothing is the failure
+  // this line exists to prevent.
+  function reportPruneFilter(run, s) {
+    if (!s.c3SkipRedundantTags) return;
+    if (run.pruner) {
+      if (run.pruned) {
+        run.msg('INFO', plural(run.pruned, 'tag was', 'tags were') + ' not listed: ' +
+          'the tag hierarchy already implies ' +
+          (run.pruned === 1 ? 'it' : 'them') + ' through another tag the scene carries.');
+      }
+      return;
+    }
+    run.msg('INFO', 'Redundant tags are not being filtered: ' +
+      (nptApi() ? 'the copy of ' + NPT_NAME + ' running here is older than ' +
+        NPT_API_MIN + '.'
+        : NPT_NAME + ' is not installed, or is disabled, so nothing here can say ' +
+          'which tags the hierarchy makes redundant.'));
+  }
+
+  // ── Reviewing every variant set in the library ────────────────────────────
+  //
+  // The two per-scene doors into synchronization - the tab's button and the save
+  // dialog - both start from a scene the user is already looking at. This one starts
+  // from the library: every multi-variant set, scored by how far apart its members
+  // have drifted, worst first, so the sets worth a minute are the ones at the top.
+  //
+  // It is a *listing*, not a plan: nothing is written until a set and a source are
+  // picked and Synchronize Set is pressed, at which point the same `planSyncScene`
+  // that both other doors use lists the changes below, with the same boxes, the same
+  // All bar, the same Proceed and the same Undo.
+
+  var REVIEW_TASK_NAME = 'Review Variant Sets...';
+
+  var REVIEW_SCENE_SEL = '{ count scenes { ' + SCENE_FIELDS +
+    ' custom_fields stash_ids { endpoint stash_id } } }';
+  var REVIEW_BY_STASHID_QUERY =
+    'query SVRReviewScanIds($f: FindFilterType) { findScenes(' +
+    'scene_filter: { stash_ids_endpoint: { modifier: NOT_NULL } }, filter: $f) ' +
+    REVIEW_SCENE_SEL + ' }';
+  var REVIEW_BY_FIELD_QUERY =
+    'query SVRReviewScanField($f: FindFilterType, $field: String!) { findScenes(' +
+    'scene_filter: { custom_fields: [{ field: $field, value: [], modifier: NOT_NULL }] }, ' +
+    'filter: $f) ' + REVIEW_SCENE_SEL + ' }';
+
+  // The weights in force: what the dialog's strip holds, seeded from the settings when
+  // they have been remembered and from the defaults when they have not.
+  function weightsFrom(s) {
+    var w = {}, k;
+    for (k in WEIGHT_DEFAULTS) {
+      if (!hasOwn(WEIGHT_DEFAULTS, k)) continue;
+      var v = s ? s[WEIGHT_KEYS[k]] : null;
+      w[k] = v == null || isNaN(v) ? WEIGHT_DEFAULTS[k] : clampWeight(v);
+    }
+    return w;
+  }
+
+  function clampWeight(v) {
+    var n = Math.round(Number(v));
+    if (isNaN(n) || n < 0) return 0;
+    return n > WEIGHT_MAX ? WEIGHT_MAX : n;
+  }
+
+  function anyRemembered(s) {
+    var k;
+    for (k in WEIGHT_KEYS) {
+      if (hasOwn(WEIGHT_KEYS, k) && s && s[WEIGHT_KEYS[k]] != null) return true;
+    }
+    return false;
+  }
+
+  // ── What a set disagrees about, laid out per variant ──────────────────────
+  //
+  // The set line's tooltip was the member names, which is the one thing the line
+  // already says. This is the question actually being asked of a listing sorted by
+  // drift: *how* is this set split? A column per variant and a row per dimension they
+  // do not all agree on, with a tick where a variant has company on that value and a
+  // cross where something else disagrees.
+  //
+  // Both marks in one cell is the interesting case and the reason for marks rather
+  // than a value: with three variants holding A, A, B, the two A's each have company
+  // *and* a disagreement, so a 2-1 split reads at a glance and a 1-1-1 split - crosses
+  // all the way across - reads as "these need looking at side by side" without the
+  // table pretending to say more than it can.
+  var SET_TABLE_COLS = 4;    // beyond this the marks stop being scannable
+
+  // One comparable string per member for a dimension, or null where the dimension has
+  // nothing to say about this set.
+  function setRowValues(set, dim, skip, coverBy) {
+    return set.scenes.map(function (sc) {
+      if (dim.list) {
+        return idsOfList(sc, dim.list).filter(function (id) {
+          return !(dim.list === 'tags' && skip[id]);
+        }).sort().join(',');
+      }
+      if (dim.cover) return coverBy ? (coverBy[String(sc.id)] || null) : null;
+      var v = dim.attr.show ? dim.attr.show(sc) : sc[dim.attr.key];
+      return v == null ? '' : String(v);
+    });
+  }
+
+  function setTableRows(set, skip, coverBy) {
+    var dims = SYNC_ATTRS.map(function (a) { return { label: a.label, attr: a }; })
+      .concat([{ label: 'Tags', list: 'tags' }, { label: 'Performers', list: 'performers' },
+        { label: 'Groups', list: 'groups' }, { label: 'Cover', cover: true }]);
+    var out = [];
+    dims.forEach(function (dim) {
+      var vals = setRowValues(set, dim, skip, coverBy);
+      // A dimension nobody can answer for - a cover nobody read - says nothing rather
+      // than reporting agreement it has not checked.
+      if (vals.some(function (v) { return v === null; })) return;
+      var cells = vals.map(function (v, i) {
+        var ok = false, bad = false;
+        vals.forEach(function (other, j) {
+          if (i === j) return;
+          if (other === v) ok = true; else bad = true;
+        });
+        return { ok: ok, bad: bad };
+      });
+      if (!cells.some(function (c) { return c.bad; })) return;
+      out.push({ label: dim.label, cells: cells });
+    });
+    return out;
+  }
+
+  // The table itself. Built once per render of a set line and handed to the shared box,
+  // which is what lets it be a table at all - a native `title` is text.
+  function setTable(set, skip, coverBy) {
+    var rows = setTableRows(set, skip, coverBy);
+    var wrap = el('div', 'svr-settable');
+    if (!rows.length) {
+      wrap.appendChild(el('div', null,
+        'These variants agree on everything this dialog compares.'));
+      return wrap;
+    }
+    var shown = Math.min(set.scenes.length, SET_TABLE_COLS);
+    var table = el('table');
+    var head = el('tr');
+    head.appendChild(el('th', null, ''));
+    for (var c = 0; c < shown; c++) {
+      var sc = set.scenes[c];
+      var name = oneLine(sc.title || ('Scene ' + sc.id));
+      if (name.length > 18) name = name.slice(0, 17) + '\u2026';
+      var th = el('th', null, name + ' [' + sc.id + ']');
+      // A second line under the name: the duration and resolution are how a reader
+      // tells the variants apart when the names do not - the same facts, formatted by
+      // the same helper, as the pane's own rows.
+      var meta = metaOf(sc);
+      if (meta) th.appendChild(el('div', 'svr-settable-meta', meta));
+      head.appendChild(th);
+    }
+    table.appendChild(head);
+    rows.forEach(function (row) {
+      var tr = el('tr');
+      tr.appendChild(el('th', 'svr-settable-label', row.label));
+      for (var i = 0; i < shown; i++) {
+        var cell = el('td');
+        if (row.cells[i].ok) cell.appendChild(el('span', 'svr-mark-ok', '\u2714'));
+        if (row.cells[i].bad) cell.appendChild(el('span', 'svr-mark-bad', '\u2718'));
+        tr.appendChild(cell);
+      }
+      table.appendChild(tr);
+    });
+    wrap.appendChild(table);
+    if (set.scenes.length > shown) {
+      wrap.appendChild(el('div', 'svr-settable-note',
+        plural(set.scenes.length - shown, 'more variant is', 'more variants are') +
+        ' in this set and not shown: past ' + SET_TABLE_COLS +
+        ' columns the marks stop being scannable.'));
+    }
+    return wrap;
+  }
+
+  // How far apart a set has drifted, in the four counts the weights price.
+  //
+  // For each scalar attribute: the members that disagree with the set's most common
+  // value. For each list: the union of what the set carries between them, and every
+  // membership a scene is missing from it. Both reduce to the obvious thing for a pair
+  // - one differing attribute, one tag on one side only - and stay meaningful above
+  // two, which pairwise counting does not.
+  //
+  // The dimension and flag tags are left out: a full-length scene and its partial cut
+  // differ by them *by definition*, and counting that would give every set in the
+  // library the same baseline score and rank nothing.
+  function setDelta(scenes, skip, coverBy) {
+    var out = { title: 0, attr: 0, tag: 0, performer: 0, group: 0, cover: 0 };
+    var n = scenes.length;
+    // The same shape as an attribute: the members that disagree with the set's most
+    // common cover. Only where the covers have actually been read - the comparison is
+    // opt-in, and an unread cover is not a matching one.
+    if (coverBy) {
+      var seen = {}, best = 0, known = 0;
+      scenes.forEach(function (sc) {
+        var c = coverBy[String(sc.id)];
+        if (!c) return;
+        known++;
+        seen[c] = (seen[c] || 0) + 1;
+        if (seen[c] > best) best = seen[c];
+      });
+      if (known > 1) out.cover = known - best;
+    }
+    SYNC_ATTRS.forEach(function (a) {
+      // Titles are counted into a bucket of their own rather than in with the rest.
+      // They were counted nowhere at all, because variants are *named* apart on
+      // purpose and pricing that with the other attributes put the same baseline
+      // under every set in the library. A weight of its own is the better answer to
+      // the same problem: the difference stays visible, and what it is worth is the
+      // user's to say rather than this plugin's.
+      var bucket = a.key === 'title' ? 'title' : 'attr';
+      var counts = {}, best = 0;
+      scenes.forEach(function (sc) {
+        var v = a.show ? a.show(sc) : sc[a.key];
+        v = v == null ? '' : String(v);
+        counts[v] = (counts[v] || 0) + 1;
+        if (counts[v] > best) best = counts[v];
+      });
+      out[bucket] += n - best;
+    });
+    [['tags', 'tag'], ['performers', 'performer'], ['groups', 'group']]
+      .forEach(function (l) {
+        var union = {};
+        scenes.forEach(function (sc) {
+          idsOfList(sc, l[0]).forEach(function (id) {
+            if (l[0] === 'tags' && skip[id]) return;
+            union[id] = true;
+          });
+        });
+        scenes.forEach(function (sc) {
+          var have = {};
+          idsOfList(sc, l[0]).forEach(function (id) { have[id] = true; });
+          for (var id in union) {
+            if (hasOwn(union, id) && !have[id]) out[l[1]]++;
+          }
+        });
+      });
+    return out;
+  }
+
+  // A scene's members of one list, by id. Groups wrap theirs a level in.
+  function idsOfList(scene, key) {
+    return (scene[key] || []).map(function (x) {
+      return String(key === 'groups' ? x.group.id : x.id);
+    });
+  }
+
+  function scoreOf(delta, w) {
+    return (delta.title || 0) * w.title + delta.attr * w.attr + delta.tag * w.tag +
+      delta.performer * w.performer + delta.group * w.group +
+      (delta.cover || 0) * w.cover;
+  }
+
+  // What a score's colour says: nothing to do, a little, a lot, or look at this one.
+  //
+  // The bands are read off the weights rather than fixed, because the weights are the
+  // user's to change and a threshold in absolute points would mean something different
+  // after every edit to the strip. `unit` is the cheapest difference the strip can
+  // price - one point where a weight has been set to zero, since a band of width zero
+  // sorts nothing - and the top band starts at whichever is the larger of three
+  // attribute differences and ten of the cheapest ones.
+  function scoreBands(w) {
+    var unit = Math.max(1,
+      Math.min(w.title, w.cover, w.attr, w.tag, w.performer, w.group));
+    return { mid: 5 * unit, high: Math.max(3 * w.attr, 10 * unit) };
+  }
+
+  function scoreClass(score, w) {
+    if (!score) return 'svr-score-none';
+    var b = scoreBands(w);
+    if (score >= b.high) return 'svr-score-high';
+    if (score >= b.mid) return 'svr-score-mid';
+    return 'svr-score-low';
+  }
+
+  function deltaText(delta) {
+    return (delta.title || 0) + ' title, ' + delta.attr + ' attr, ' +
+      delta.tag + ' tag, ' + delta.performer + ' perf, ' + delta.group + ' group' +
+      (delta.cover ? ', ' + delta.cover + ' cover' : '');
+  }
+
+  // The scenes of one set as they stand *now*, in one request - `findScene(id:)` per
+  // member, aliased, which is a spelling this plugin already sends rather than a new
+  // by-ids filter to be wrong about.
+  //
+  // It exists because a Proceed makes the scan's own copies stale: the listing was
+  // built before the write, and planning a second source out of the same set from
+  // those objects offers changes that have already been made. A rescan would fix it
+  // and is the wrong tool - it re-scores every set in the library and moves the one
+  // being worked on out from under the pointer.
+  function refreshScenes(scenes) {
+    if (!scenes.length) return Promise.resolve({});
+    var decl = [], parts = [], vars = {};
+    scenes.forEach(function (sc, i) {
+      decl.push('$id' + i + ': ID!');
+      parts.push('s' + i + ': findScene(id: $id' + i + ') { ' + SCENE_FIELDS +
+        ' custom_fields }');
+      vars['id' + i] = String(sc.id);
+    });
+    return gqlRequest('query SVRSetRefresh(' + decl.join(', ') + ') { ' +
+      parts.join(' ') + ' }', vars).then(function (d) {
+      var out = {};
+      scenes.forEach(function (sc, i) {
+        var got = (d || {})['s' + i];
+        if (got) out[String(sc.id)] = got;
+      });
+      return out;
+    }, function () { return {}; });   // a read that fails leaves the scan's own copies
+  }
+
+  // Connected components over the lines the scenes share: two scenes can be one set
+  // through a chain of overlapping lines without sharing one, which is what makes this
+  // union-find rather than a group-by.
+  function variantSetsOf(scenes, field) {
+    var byKey = {}, parent = {}, k, i;
+    scenes.forEach(function (sc) {
+      parent[String(sc.id)] = String(sc.id);
+      sceneKeys(sc, field).forEach(function (key) {
+        (byKey[key] = byKey[key] || []).push(String(sc.id));
+      });
+    });
+    function findRoot(x) {
+      while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
+      return x;
+    }
+    for (k in byKey) {
+      if (!hasOwn(byKey, k)) continue;
+      for (i = 1; i < byKey[k].length; i++) {
+        parent[findRoot(byKey[k][i])] = findRoot(byKey[k][0]);
+      }
+    }
+    var groups = {}, out = [];
+    scenes.forEach(function (sc) {
+      var r = findRoot(String(sc.id));
+      (groups[r] = groups[r] || []).push(sc);
+    });
+    for (k in groups) {
+      if (hasOwn(groups, k) && groups[k].length > 1) out.push({ key: k, scenes: groups[k] });
+    }
+    return out;
+  }
+
+  // Every scene carrying evidence, gathered into connected components over the lines
+  // they share - the flag task's union-find, over the same two queries, kept separate
+  // because this one needs every field a plan is built from rather than the four the
+  // flag needs.
+  function reviewBegin(run) {
+    return Promise.all([settingsReady(), tagTree()]).then(function (both) {
+      var s = both[0], m = matchers(both[1], s);
+      var field = fieldName(s);
+      run.settings = s;
+      run.weights = weightsFrom(s);
+      run.remember = anyRemembered(s);
+      run.skip = {};
+      var id;
+      for (id in m.fl) if (hasOwn(m.fl, id)) run.skip[id] = true;
+      for (id in m.pl) if (hasOwn(m.pl, id)) run.skip[id] = true;
+      tagsMatchingName(both[1], flagTagName(s)).forEach(function (t) {
+        run.skip[String(t.id)] = true;
+      });
+      run.buildWeightBar();
+      // Bound before the scan, so the first Synchronize Set can read it synchronously.
+      var pruning = nptPruner(s).then(function (w) { run.pruner = w; });
+      run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
+        '" line with another, to score how far each set has drifted apart.');
+      var seen = {}, scenes = [];
+      // The count the listing is about, updated as pages land rather than only at the
+      // end: a library-wide scan is the one place here that runs for minutes, and
+      // "scenes read" alone says nothing about whether it is finding anything.
+      run.afterPage = function (got) { run.setCount = variantSetsOf(got, field).length; };
+      return pruning
+        .then(function () { return flagScanPass(run, REVIEW_BY_STASHID_QUERY, {}, seen, scenes); })
+        .then(function () {
+          return run.stopped ? null
+            : flagScanPass(run, REVIEW_BY_FIELD_QUERY, { field: field }, seen, scenes);
+        })
+        .then(function () {
+          if (run.stopped) return null;
+          var raw = variantSetsOf(scenes, field);
+          // The covers, once the sets are known - and only for scenes that are *in*
+          // one. A scene sharing evidence with nobody can have no cover mismatch, so
+          // the read is bounded by the variants in the library rather than by the
+          // library, which is the difference between a few hundred images and all of
+          // them.
+          return readSetCovers(run, s, raw).then(function () {
+            run.sets = raw.map(function (set) {
+            // Longest first inside a set, the order the tab lists variants in.
+            var members = set.scenes.slice().sort(function (a, b) {
+              return ((bestFile(b) || {}).duration || 0) - ((bestFile(a) || {}).duration || 0);
+            });
+              return { key: set.key, scenes: members,
+                delta: setDelta(members, run.skip, run.coverBy) };
+            });
+            run.setCount = run.sets.length;
+          if (!raw.length) {
+            run.msg('INFO', 'No scene in the library shares a stash-id or a "' + field +
+              '" line with another, so there are no variant sets to review.');
+            return null;
+          }
+            run.renderSets(true);
+            reportCoverCheck(run, s);
+            run.msg('INFO', plural(run.sets.length, 'variant set') + ' found. Pick the ' +
+              'scene whose values are right - that is both the set and the source - then ' +
+              'press Synchronize Set to list what would be pushed to the others.');
+            return null;
+          });
+        });
+    });
+  }
+
+  var REVIEW_TASK = {
+    title: 'Review Variant Sets',
+    legend: 'Every multi-variant set in your library, worst first: the score beside ' +
+      'each is how far its members have drifted apart, counting the attributes they ' +
+      'disagree on and the tags, performers and groups one carries and another does ' +
+      'not. What each of those is worth is the strip above the listing, and Remember ' +
+      'keeps your numbers for next time. Open a set and pick the scene whose values ' +
+      'are right; Synchronize Set then lists exactly what would be pushed to the ' +
+      'others, one checkbox line each - green for what a variant gains, red for what ' +
+      'it loses, blue for a value replaced - and nothing is written until you press ' +
+      'Proceed. The full-length, partial-length and flag tags are never pushed, and ' +
+      'never counted against a set.',
+    nothing: 'Pick a source scene and press Synchronize Set first.',
+    scanNoun: 'scene',
+    planNoun: 'listed',
+    planUnit: 'change',
+    leaseLabel: 'Variant set synchronization',
+    undoTip: 'Put back what every written line replaced or added. Only what this ' +
+      'dialog wrote, and only while it stays open.',
+    verb: 'synchronized',
+    pickCaption: true,
+    begin: reviewBegin,
+    writeInput: SYNC_TASK.writeInput,
+    undoInput: SYNC_TASK.undoInput,
   };
 
   // ── The task button ───────────────────────────────────────────────────────
@@ -1757,7 +4037,8 @@
   // name - another plugin may declare a task called the same thing.
   function ownTaskName(btn) {
     var label = trim(btn.textContent);
-    if (label !== TASK_NAME && label !== FLAG_TASK_NAME) return null;
+    if (label !== TASK_NAME && label !== FLAG_TASK_NAME &&
+      label !== REVIEW_TASK_NAME) return null;
     var node = btn;
     var fallback = null;
     for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
@@ -1832,6 +4113,121 @@
     // comes off.
     '.svr-op-flag{color:#84d68a;}' +
     '.svr-op-unflag{color:#ffb648;}' +
+    // A [GROUP?] candidate is a question rather than a plan, so it wears the log's own
+    // link blue - neither the green of a write going on nor the amber of one coming off.
+    '.svr-op-cand{color:#7cc4ff;}' +
+    '.svr-cand-box{margin-right:.5rem;vertical-align:middle;}' +
+    // The synchronize listing colours the *change*, not the line. One vocabulary
+    // across every dialog here, explained in each head's legend: what a variant loses
+    // is red, what it gains green, a value replaced blue, and everything around them -
+    // the label, the scene's name, the counts - stays the modal's own white, so a
+    // glance down the listing reads the kinds rather than the sentences.
+    //
+    // The line classes stay for what they are, a name for the kind of line; colouring
+    // the whole of one was what made a listing of adds and removes uniform amber.
+    // The box a diffed value opens: the modal's own panel colour, above the backdrop,
+    // and fixed so a scrolling log cannot clip it. `pre-wrap` because the value it
+    // holds is a paragraph and the whole point is to show all of it.
+    '.svr-difftip{display:none;position:fixed;left:0;top:0;z-index:1700;' +
+    'width:min(60rem,90vw);max-height:70vh;overflow:hidden;padding:.5rem .65rem;' +
+    'background:#202b33;color:#f5f8fa;border:1px solid #425a6b;border-radius:3px;' +
+    'font-size:.8rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
+    'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.svr-difftip.svr-difftip-open{display:block;}' +
+    // Sized to the table it holds rather than to a paragraph's wrap width.
+    '.svr-difftip.svr-difftip-fit{width:max-content;max-width:90vw;}' +
+    // Two covers side by side: the question a cover line asks is "is that the right
+    // picture", and no amount of text answers it.
+    // The set table: a column per variant, a row per dimension they disagree about.
+    // Left-aligned labels, centred marks, and the log's own borders so it reads as
+    // part of the dialog rather than as a web page's table.
+    '.svr-settable table{border-collapse:collapse;}' +
+    '.svr-settable th,.svr-settable td{border:1px solid #394b59;padding:.15rem .5rem;' +
+    'text-align:center;white-space:nowrap;}' +
+    '.svr-settable th{color:#a7b6c2;font-weight:600;}' +
+    '.svr-settable-meta{font-weight:400;font-size:.9em;color:#7d8f9c;}' +
+    '.svr-settable-label{text-align:left !important;color:#f5f8fa !important;}' +
+    // `width:0;min-width:100%` is the caption trick: the note contributes nothing to
+    // the box's shrink-to-fit width and then wraps at the table's, so a long sentence
+    // cannot widen a box sized to its table.
+    '.svr-settable-note{color:#a7b6c2;margin-top:.35rem;white-space:normal;' +
+    'width:0;min-width:100%;}' +
+    '.svr-mark-ok{color:#84d68a;}' +
+    '.svr-mark-bad{color:#ff7b72;margin-left:.15rem;}' +
+    '.svr-coverfig{display:inline-block;vertical-align:top;margin:0 .4rem 0 0;' +
+    'border:2px solid transparent;border-radius:3px;}' +
+    '.svr-coverfig img{display:block;width:24rem;max-width:40vw;aspect-ratio:16/9;' +
+    'object-fit:contain;background:#111a20;}' +
+    '.svr-covercap{font-size:.75rem;text-align:center;padding:.15rem 0;}' +
+    '.svr-cover-old{border-color:#ff7b72;}' +
+    '.svr-cover-old .svr-covercap{color:#ff7b72;}' +
+    '.svr-cover-new{border-color:#84d68a;}' +
+    '.svr-cover-new .svr-covercap{color:#84d68a;}' +
+    '.svr-del{color:#ff7b72;}' +
+    '.svr-add{color:#84d68a;}' +
+    '.svr-mod{color:#7cc4ff;}' +
+    // The pane's one button, spaced off the summary above and the rows below.
+    '.svr-sync-btn{margin:.25rem 0 .75rem;}' +
+    // The All boxes' own strip, between the counters and the log: one label per
+    // attribute, wrapping on a narrow window. The log's INFO grey - it is a control
+    // strip, not a message.
+    '.svr-allbar{padding:.4rem 1rem;border-bottom:1px solid #394b59;display:flex;' +
+    'gap:1rem;flex-wrap:wrap;color:#a7b6c2;font-size:.85rem;}' +
+    '.svr-all{display:inline-flex;align-items:center;gap:.35rem;margin:0;' +
+    'cursor:pointer;}' +
+    '.svr-all-box{margin:0;}' +
+    // An additive line's expander and its sub-list. The arrow is the log's link blue -
+    // it is a control, not content - and the sub rows indent under the line they
+    // belong to. The expander stays live mid-write (it only shows and hides); the
+    // item boxes lock with the line's own.
+    // A size up from the log's .8rem monospace, from live feedback - at the log's own
+    // size the arrow reads as punctuation, and it is the click target. The padding
+    // widens that target a little without moving the text beside it.
+    '.svr-expand{cursor:pointer;color:#7cc4ff;font-size:1.35em;line-height:1;' +
+    'padding:0 .15rem;}' +
+    '.svr-expand:hover{text-decoration:underline;}' +
+    '.svr-sub{margin-left:3.5rem;}' +
+    // The review listing: the set lines scroll on their own above the log, so a
+    // library with hundreds of sets does not push the messages off the dialog.
+    // The same monospace the log uses - the two are read as one column.
+    // **`resize:vertical`, not a divider of our own.** The browser already draws a
+    // grabber on a block with a scroll of its own, and dragging it is the whole
+    // feature - a handle element would need pointer capture, a move listener and
+    // arithmetic against the modal's own height, all to reimplement this line.
+    //
+    // `flex:0 1 auto` rather than `0 0 auto`: the dragged height is kept while there
+    // is room for it, and given up before the log's own minimum pushes the footer off
+    // the bottom of a short window. `color-scheme:dark` and the drawn resizer are
+    // CustomFieldsBulkEditor's lesson - Chrome paints the default grip in the widget
+    // colours of a light page, a white square on this box, and a `::-webkit-resizer`
+    // with a background replaces that image outright, so the triangle has to be drawn
+    // or there is nothing to take hold of.
+    '.svr-sets{flex:0 1 auto;overflow:auto;resize:vertical;height:22vh;min-height:3rem;' +
+    'max-height:46vh;color-scheme:dark;padding:0 1rem;font-family:ui-monospace,' +
+    'SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;line-height:1.5;}' +
+    '.svr-sets::-webkit-resizer{background:linear-gradient(315deg,#7d8f9c 0 45%,' +
+    'transparent 45%);}' +
+    '.svr-set{white-space:pre-wrap;}' +
+    // The score, banded: green where there is nothing to do, then yellow, amber and
+    // red as a set drifts further apart. The weights decide where the bands fall, so
+    // a user who reprices a difference reprices the colours with it.
+    '.svr-score{font-weight:600;}' +
+    '.svr-score-none{color:#84d68a;}' +
+    '.svr-score-low{color:#ffe066;}' +
+    '.svr-score-mid{color:#ffb648;}' +
+    '.svr-score-high{color:#ff7b72;}' +
+    '.svr-src-box{margin-right:.4rem;vertical-align:middle;}' +
+    // The weights: a number box narrow enough that four of them and the label fit one
+    // line, and wide enough for three digits.
+    '.svr-weight{display:inline-flex;align-items:center;gap:.35rem;margin:0;' +
+    'cursor:pointer;}' +
+    '.svr-weight-box{width:4rem;background:#30404d;color:#f5f8fa;border:1px solid ' +
+    '#425a6b;border-radius:3px;padding:0 .25rem;}' +
+    // Two steps of the strip's own gap, so Remember reads as the thing beside the
+    // numbers rather than the last of them.
+    '.svr-remember{margin-left:2rem;}' +
+    '.svr-all-label{color:#7d8f9c;}' +
+    '.svr-item-box{margin-right:.4rem;vertical-align:middle;}' +
     // The partner count inside a [FLAG] line: blue where there is exactly one other
     // scene, amber where there is a real choice. The blue is the log's own link blue,
     // so nothing new is introduced.
@@ -1888,13 +4284,25 @@
     'pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5);}' +
     '.svr-variant:hover .svr-delta{display:block;}' +
     '.svr-delta-hdr{color:#ffb648;font-weight:600;}' +
+    // The hover delta's three sections, in the listing's own colours: what this
+    // variant carries and the viewed scene does not is a gain, what it lacks is a
+    // loss, and an attribute they disagree on is a modification. The headers stay
+    // amber - they label a section rather than name a change.
+    '.svr-delta-extra{color:#84d68a;}' +
+    '.svr-delta-missing{color:#ff7b72;}' +
+    '.svr-delta-attrs{color:#7cc4ff;}' +
     // The asked-for half-line of air between sections, and only between them.
     '.svr-delta-sec+.svr-delta-sec{margin-top:.5em;}' +
     // A fixed 16:9 box, so a row is the same height whatever the cover's aspect is and the
     // list does not step in and out as it scrolls. `object-fit:cover` is what fills it
     // without distorting; a portrait scene is cropped rather than letterboxed, which is
     // what Stash's own cards do with the same content.
-    '.svr-thumb-link{flex:0 0 auto;display:block;line-height:0;}' +
+    '.svr-thumb-link{flex:0 0 auto;display:block;line-height:0;position:relative;}' +
+    '.svr-rating{position:absolute;top:.2rem;left:.2rem;background:#ffb648;' +
+    'color:#1b2429;font-weight:600;font-size:.75rem;line-height:1.4;padding:0 .35rem;' +
+    'border-radius:3px;}' +
+    '.svr-organized{position:absolute;top:.2rem;right:.2rem;font-size:.85rem;' +
+    'line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8));}' +
     '.svr-thumb{width:10rem;aspect-ratio:16/9;object-fit:cover;background:#0d1317;' +
     'border-radius:3px;display:block;}' +
     // A column: the title, then the facts line under it.
@@ -1916,6 +4324,10 @@
     // badges break onto the next line together rather than between each other.
     '.svr-dbadges{display:inline-flex;gap:.5rem;white-space:nowrap;}' +
     '.svr-dbadge{font-size:.85rem;color:#a7b6c2;}' +
+    // The cover badge is the one that arrives a moment after the row, so it is also
+    // the one that has to be noticed once it does - amber rather than the metadata
+    // grey the counts wear.
+    '.svr-dbadge-cover{color:#ffb648;}' +
     // Green for the full-length one, because it is the answer the tab exists to give;
     // amber for a partial; red for the scene wearing both tags, which is a contradiction.
     // An untagged scene has no label at all, which is the only quiet state left.
@@ -2276,7 +4688,7 @@
   // head of the second line rather than after the title, which is what keeps a column of
   // them scannable - titles vary in length, so a value trailing one starts at a different
   // place on every row, and the eye has to hunt for it.
-  function VariantRow(React, row) {
+  function VariantRow(React, row, coverDiffers) {
     var facts = [];
     if (row.cls.label) {
       facts.push(React.createElement('span', {
@@ -2308,6 +4720,16 @@
           { key: 'badges', className: 'svr-dbadges' }, badges));
       }
     }
+    // The cover is not part of `row.delta`: every other count comes off fields the
+    // one query already returned, and this one is two pictures compared by their
+    // bytes, which lands after the list is drawn. Its own badge, in the same row.
+    if (coverDiffers) {
+      facts.push(React.createElement('span',
+        { key: 'coverbadge', className: 'svr-dbadges' },
+        React.createElement('span', { key: 'c', className: 'svr-dbadge svr-dbadge-cover',
+          title: 'This variant\u2019s cover is not the same picture as this scene\u2019s.' },
+        '\ud83d\uddbc\u2260')));
+    }
     var line = [React.createElement('a', {
       key: 'title', className: 'svr-variant-title', href: '/scenes/' + row.scene.id,
       // A new tab by default, like every other link these plugins draw - the scene
@@ -2325,9 +4747,17 @@
       // The cover links too, and it is its own anchor rather than the whole row being one:
       // the title inside is already a link, and an anchor inside an anchor is invalid
       // markup that browsers resolve by closing the outer one early.
+      // The rating banner and the organized mark, over the cover's top corners - the
+      // same pair the hover card wears, from the same fields the query already fetches.
+      var over = [thumb];
+      var rate = tipRatingBadge(row.scene.rating100);
+      if (rate) over.push(React.createElement('span',
+        { key: 'rate', className: 'svr-rating' }, rate));
+      if (row.scene.organized) over.push(React.createElement('span',
+        { key: 'org', className: 'svr-organized', title: 'Organized' }, '\ud83d\udce6'));
       kids.unshift(React.createElement('a',
         { key: 'thumblink', className: 'svr-thumb-link', href: '/scenes/' + row.scene.id,
-          target: linkTarget() }, thumb));
+          target: linkTarget() }, over));
     }
     // On the row rather than on any one thing in it, so anywhere in the row answers it -
     // and the value span keeps its own title, which is a narrower answer about that span.
@@ -2337,15 +4767,24 @@
     // the readability complaint. `pointer-events:none` in its rule, for the reason every
     // box here has it: one that took the pointer would close and reopen under it.
     if (row.delta) {
+      var sections = row.delta.sections;
+      if (coverDiffers) {
+        sections = sections.filter(function (sec) { return sec.head; })
+          .concat([{ head: 'Cover:', body: 'a different picture from this scene\u2019s',
+            kind: 'attrs' }]);
+      }
       kids.push(React.createElement('div', { key: 'delta', className: 'svr-delta' },
-        row.delta.sections.map(function (sec, i) {
+        sections.map(function (sec, i) {
           var bits = [];
           if (sec.head) {
             bits.push(React.createElement('span',
               { key: 'h', className: 'svr-delta-hdr' }, sec.head));
             bits.push(' ');
           }
-          bits.push(sec.body);
+          bits.push(sec.kind
+            ? React.createElement('span',
+              { key: 'b', className: 'svr-delta-' + sec.kind }, sec.body)
+            : sec.body);
           return React.createElement('div', { key: 's' + i, className: 'svr-delta-sec' }, bits);
         })));
     }
@@ -2357,18 +4796,63 @@
   // `{ rows, why }` and `why` is a whole sentence, because every one of the empty answers
   // needs one. The effect is keyed on the scene id so that walking the queue re-runs it,
   // and its cleanup drops the answer to a scene the user has already left.
+  // The closing dialog's way back into the mounted pane's hooks: plain DOM code cannot
+  // reach a `useState`, so the pane leaves a callback here for as long as it is mounted.
+  var _paneRefresh = null;
+
   function VariantsPane(React) {
     return function (props) {
       var scene = (props && props.scene) || {};
       var state = React.useState(null);
       var found = state[0], setFound = state[1];
+      var bump = React.useState(0);
+      var stamp = bump[0], setStamp = bump[1];
+      // `{ <scene id>: true }` for the variants whose cover is a different picture,
+      // or null while nobody has asked or nothing has answered.
+      var cov = React.useState(null);
+      var coverDiff = cov[0], setCoverDiff = cov[1];
+
+      // Re-registered every render so the callback always closes over the current
+      // stamp; unregistered on unmount so a task run from the settings page pokes
+      // nothing.
+      React.useEffect(function () {
+        _paneRefresh = function () { setStamp(stamp + 1); };
+        return function () { _paneRefresh = null; };
+      });
 
       React.useEffect(function () {
         var live = true;
         setFound(null);
+        setCoverDiff(null);
         findVariants(scene).then(function (result) { if (live) setFound(result); });
         return function () { live = false; };
-      }, [scene.id]);
+      }, [scene.id, stamp]);
+
+      // **After the list, never before it.** Comparing covers means reading the
+      // pictures, and a tab that waited for them would show nothing while it did -
+      // for an answer that is a badge on a row the user can already see. The browser
+      // is fetching these same images to draw the thumbnails, so the read is a cache
+      // hit in the ordinary case.
+      React.useEffect(function () {
+        if (!found || !found.self || !found.rows.length) return undefined;
+        var live = true;
+        settingsReady().then(function (s) {
+          if (!live || !s.c4CheckCoverMismatch) return null;
+          return readCover(found.self).then(function (mine) {
+            if (!live || !mine) return null;
+            var out = {}, chain = Promise.resolve();
+            found.rows.forEach(function (row) {
+              chain = chain.then(function () {
+                return readCover(row.scene).then(function (theirs) {
+                  if (theirs && theirs !== mine) out[String(row.scene.id)] = true;
+                });
+              });
+            });
+            return chain.then(function () { if (live) setCoverDiff(out); });
+          });
+        }, function () { return null; });
+        return function () { live = false; };
+      }, [found, stamp]);
 
       if (!found) {
         return React.createElement('div', { className: 'svr-tabpane' },
@@ -2385,7 +4869,23 @@
         found.rows.length
           ? plural(found.rows.length, 'other variant') + ' of this scene. ' + found.why
           : found.why));
-      found.rows.forEach(function (row) { kids.push(VariantRow(React, row)); });
+      // The one control in the pane, and the reading half's only door into a write:
+      // it opens the synchronize dialog, which re-reads and lists everything before
+      // anything moves. Amber because pressing through leads to writes, dots because
+      // the click itself only asks.
+      if (found.rows.length) {
+        kids.push(React.createElement('button', {
+          key: 'sync', type: 'button',
+          className: 'btn btn-sm ' + PLUGIN_BTN_VARIANT + ' svr-sync-btn',
+          title: 'Push this scene’s attribute values to its variants. Everything ' +
+            'that differs is listed first with a checkbox per line; tags, performers ' +
+            'and URLs are only ever added, and nothing is written until you approve.',
+          onClick: function () { startRun(SYNC_TASK, scene); },
+        }, SYNC_TASK_NAME));
+      }
+      found.rows.forEach(function (row) {
+        kids.push(VariantRow(React, row, !!(coverDiff && coverDiff[String(row.scene.id)])));
+      });
       return React.createElement('div', { className: 'svr-tabpane' }, kids);
     };
   }
@@ -2470,7 +4970,8 @@
   function hasOwnTaskButton(node) {
     if (!node) return false;
     if (node.tagName === 'BUTTON' &&
-      (trim(node.textContent) === TASK_NAME || trim(node.textContent) === FLAG_TASK_NAME)) return true;
+      (trim(node.textContent) === TASK_NAME || trim(node.textContent) === FLAG_TASK_NAME ||
+        trim(node.textContent) === REVIEW_TASK_NAME)) return true;
     var kids = node.childNodes || [];
     for (var i = 0; i < kids.length; i++) {
       if (hasOwnTaskButton(kids[i])) return true;
@@ -2840,7 +5341,8 @@
       if (!name) return;
       if (event.preventDefault) event.preventDefault();
       if (event.stopPropagation) event.stopPropagation();
-      startRun(name === FLAG_TASK_NAME ? FLAG_TASK : MIGRATE_TASK);
+      startRun(name === FLAG_TASK_NAME ? FLAG_TASK
+        : name === REVIEW_TASK_NAME ? REVIEW_TASK : MIGRATE_TASK);
     }, true);
   }
 
@@ -2885,6 +5387,11 @@
   }
 
   installTabs();
+  // The respecter flag says "I react to saves and will stand down for a lease" - true
+  // since the save watch, and what lets a sibling's bulk dialog tell "will stand
+  // down" from "too old to know".
+  coop().respecters[PLUGIN_ID] = true;
+  installSaveWatch();
 
   if (window.addEventListener) {
     window.addEventListener('load', function () {

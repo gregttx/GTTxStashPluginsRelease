@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.0 (`658a9d9`) | 2026-08-31 | GTTxCore 1.2.0 + SceneVariants 0.23.0: rating banner and organized mark on hover cards and variant covers |
 | 1.1.4 (`94163aa`) | 2026-08-29 | It should become a no-op |
 | 1.1.3 (`ed3db08`) | 2026-08-29 | Say what the no-op is, rather than naming a width |
 | 1.1.2 (`33cbd02`) | 2026-08-29 | When, not if |

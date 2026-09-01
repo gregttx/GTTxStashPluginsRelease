@@ -8,6 +8,40 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.2.1 (`e4806d9`) | 2026-09-01 | SceneVariants 1.2.1: the set table's headers carry the file facts, and the box fits the table |
+| 1.2.0 (`ac683d5`) | 2026-09-01 | SceneVariants 1.2.0: a set line hovers to a table of marks saying how the set is split |
+| 1.1.0 (`9e49c30`) | 2026-09-01 | SceneVariants 1.1.0: the title is scored on its own weight, and the strip is reordered |
+| 1.0.1 (`09db634`) | 2026-09-01 | SceneVariants 1.0.1: each Synchronize Set re-reads its own set, and restates its score without re-sorting |
+| 1.0.0 (`934cc1d`) | 2026-09-01 | SceneVariants 1.0.0 |
+| 0.43.0 (`1a2630c`) | 2026-09-01 | SceneVariants 0.43.0: the score wears four colour bands derived from the weights, and the ENM save chain is pinned |
+| 0.42.1 (`7b3a025`) | 2026-09-01 | SceneVariants 0.42.1: the set listing is hidden until a task fills it |
+| 0.42.0 (`25b827d`) | 2026-09-01 | SceneVariants 0.42.0: the variants list badges a cover that is a different picture |
+| 0.41.0 (`b245e9b`) | 2026-09-01 | SceneVariants 0.41.0: Proceed and Undo are two buttons, and a cover line hovers to both pictures |
+| 0.40.1 (`2be92e5`) | 2026-09-01 | SceneVariants 0.40.1: the review listing says which of the three cover states a run was in |
+| 0.40.0 (`477611a`) | 2026-09-01 | SceneVariants 0.40.0: blue is a changed value's unchanged text, short values diff too, and the tooltip is a coloured box |
+| 0.39.0 (`dabdeae`) | 2026-09-01 | SceneVariants 0.39.0: the set listing counts cover mismatches, so a rescanned variant is findable |
+| 0.38.0 (`6db851e`) | 2026-09-01 | SceneVariants 0.38.0: the tooltip is the diff too, and the set count runs during the scan |
+| 0.37.0 (`7b7b012`) | 2026-09-01 | SceneVariants 0.37.0: a long value is shown once as a word diff, not twice and cut |
+| 0.36.0 (`f2f55d6`) | 2026-09-01 | SceneVariants 0.36.0: the change is coloured, not the line - red lost, green gained, blue replaced |
+| 0.35.0 (`bbfc82a`) | 2026-09-01 | SceneVariants 0.35.0: the cover comparison is opt-in, and a cover set in the edit form offers to propagate |
+| 0.34.0 (`71e0b80`) | 2026-09-01 | SceneVariants 0.34.0: the cover propagates too, compared and undone by its bytes |
+| 0.33.0 (`d111eae`) | 2026-09-01 | SceneVariants 0.33.0: a tag the hierarchy makes redundant is not pushed to the variants |
+| 0.32.0 (`7b0da0b`) | 2026-09-01 | SceneVariants 0.32.0: what the listing abbreviates carries the whole string on hover |
+| 0.31.1 (`0fdc9ee`) | 2026-08-31 | SceneVariants 0.31.1: Synchronize Set disarms on the set it has already listed |
+| 0.31.0 (`3f50b9d`) | 2026-08-31 | SceneVariants 0.31.0: the set listing is draggable, and the counter line says how many sets |
+| 0.30.0 (`53d354e`) | 2026-08-31 | SceneVariants 0.30.0: Rescan, in every dialog - the log and the undo survive the pass |
+| 0.29.0 (`fb57a28`) | 2026-08-31 | SceneVariants 0.29.0: Review Variant Sets - every set in the library, scored by drift, worst first |
+| 0.28.0 (`fb282f8`) | 2026-08-31 | SceneVariants 0.28.0: groups propagate, joined at the source's own scene_index |
+| 0.27.0 (`1d6a501`) | 2026-08-31 | SceneVariants 0.27.0: the save dialog preselects everything it lists except titles |
+| 0.26.0 (`95c9e38`) | 2026-08-31 | SceneVariants 0.26.0: the save dialog offers the removals the save made - a replaced URL follows whole |
+| 0.25.0 (`3544f92`) | 2026-08-31 | SceneVariants 0.25.0: saving a scene offers to propagate the changed attributes to its variants |
+| 0.24.0 (`87059e6`) | 2026-08-31 | SceneVariants 0.24.0: the variants list re-reads when a run that wrote is closed |
+| 0.23.0 (`658a9d9`) | 2026-08-31 | GTTxCore 1.2.0 + SceneVariants 0.23.0: rating banner and organized mark on hover cards and variant covers |
+| 0.22.0 (`cae09bb`) | 2026-08-31 | SceneVariants 0.22.0: only the adds are preselected, with an All box per attribute |
+| 0.21.1 (`912364f`) | 2026-08-31 | SceneVariants 0.21.1: the picker arrow is a size up from the log |
+| 0.21.0 (`2515e98`) | 2026-08-31 | SceneVariants 0.21.0: pick individual tags and performers inside a synchronize line |
+| 0.20.0 (`6196fb0`) | 2026-08-31 | SceneVariants 0.20.0: a Synchronize Variants dialog pushes this scene's values to its variants |
+| 0.19.0 (`07f1e77`) | 2026-08-31 | SceneVariants 0.19.0: group hand-flagged scenes into a variant set with a pseudo stash-id |
 | 0.18.1 (`53610e8`) | 2026-08-30 | SceneVariants 0.18.1: the set count is a summary, and the badges wrap as one |
 | 0.18.0 (`d181c55`) | 2026-08-30 | SceneVariants 0.18.0: furnished flag tag, set counter, delta badges |
 | 0.17.0 (`52b3c74`) | 2026-08-30 | SceneVariants 0.17.0: Flag Variants task, and the hover delta becomes a styled box |

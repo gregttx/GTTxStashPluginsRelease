@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '1.1.4';
+  var PLUGIN_VERSION = '1.2.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -266,6 +266,13 @@
     return _tagTipImages[id];
   }
 
+  // The number a rating banner shows: the 5-star value `rating100` holds, with one
+  // decimal where the rating has one.
+  function tipRatingBadge(r) {
+    if (r == null) return null;
+    return '\u2605 ' + (Math.round(r / 2) / 10);
+  }
+
   // One box for the page, not one per node: a log renders thousands of lines, and a
   // hidden box on each of them is the page-that-stops-responding the render cap exists to
   // prevent. Shared with any sibling drawing the same box, which is what the unprefixed
@@ -273,7 +280,7 @@
   // reused, since what tells them apart is what is inside them.
   function tipBox() {
     var box = document.getElementById(TIP_BOX_ID);
-    if (box && !box._gttxImg && box.parentNode) { box.parentNode.removeChild(box); box = null; }
+    if (box && (!box._gttxImg || !box._gttxRate) && box.parentNode) { box.parentNode.removeChild(box); box = null; }
     if (!box) {
       box = el('div', 'gttx-tipbox');
       box.id = TIP_BOX_ID;
@@ -281,6 +288,15 @@
       box._gttxText = el('div');
       box.appendChild(box._gttxImg);
       box.appendChild(box._gttxText);
+      // The rating banner and the organized mark, laid over the picture's top corners.
+      // The box itself is `position:fixed`, so it is already the containing block -
+      // no wrapper, which is what keeps the img the box's first child for everything
+      // that reads one back. Shown only over a picture; the text lines carry both
+      // facts for a card without one.
+      box._gttxRate = el('span', 'gttx-tip-rating');
+      box._gttxOrg = el('span', 'gttx-tip-organized', '\ud83d\udce6');
+      box.appendChild(box._gttxRate);
+      box.appendChild(box._gttxOrg);
       (document.body || document.documentElement).appendChild(box);
     }
     return box;
@@ -305,9 +321,13 @@
   // Fills the shared box and puts it beside the node. `img` may be null - a card with no
   // picture is still the answer to "which one is that", and only `tagTip` treats an
   // absent picture as a reason not to open at all.
-  function tipOpen(node, text, img) {
+  function tipOpen(node, text, img, extra) {
     var box = tipBox();
     box._gttxFor = node;
+    var rate = tipRatingBadge((extra || {}).rating100);
+    box._gttxRate.textContent = rate || '';
+    box._gttxRate.style.display = img && rate ? '' : 'none';
+    box._gttxOrg.style.display = img && (extra || {}).organized ? '' : 'none';
     // Last child of the body, every time. The box outlives the dialog it was first
     // opened over, and a backdrop appended after it paints above it wherever the two
     // carry the same z-index - which is how a tooltip could work once per page and
@@ -327,6 +347,8 @@
       box._gttxImg.onload = function () { if (box._gttxFor === node) tipPlace(node); };
       box._gttxImg.onerror = function () {
         box._gttxImg.style.display = 'none';
+        box._gttxRate.style.display = 'none';
+        box._gttxOrg.style.display = 'none';
         if (box._gttxFor === node) tipPlace(node);
       };
       box._gttxImg.src = img;
@@ -674,7 +696,7 @@
       var o = (d || {})[spec.one];
       if (!o) return null;
       var img = spec.img(o);
-      return { text: spec.text(o, id),
+      return { text: spec.text(o, id), rating100: o.rating100, organized: !!o.organized,
         // Stash answers for an entity with no image of its own as well - with a
         // placeholder it marks `default=true`. The same generic icon on every card is
         // noise, so that answer counts as no image.
@@ -697,7 +719,7 @@
         // query fails.
         if (node.title) node._gttxEntTipTitle = node.title;
         node.title = '';
-        tipOpen(node, d.text, d.img);
+        tipOpen(node, d.text, d.img, d);
       });
     };
     var shut = function () {
@@ -1919,6 +1941,13 @@
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
     'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    // Over the picture's top corners, positioned against the fixed box itself - the
+    // .7rem/.85rem insets are the box's own padding plus a step inside the picture.
+    '.gttx-tip-rating{position:absolute;top:.7rem;left:.85rem;background:#ffb648;' +
+    'color:#1b2429;font-weight:600;font-size:.75rem;line-height:1.4;padding:0 .35rem;' +
+    'border-radius:3px;}' +
+    '.gttx-tip-organized{position:absolute;top:.7rem;right:.85rem;font-size:.85rem;' +
+    'line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8));}' +
     // stashapp/stash#7139. react-select v5 gives the input container
     // `grid-template-columns:0 min-content`, so the search input is as wide as what has
     // been typed - two pixels with nothing in it - and a right-click in the box lands on
@@ -2142,7 +2171,7 @@
     settingRow: settingRow, coopObject: coopObject, coop: coop,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
     linkTarget: linkTarget,
-    tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace,
+    tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace, tipRatingBadge: tipRatingBadge,
     tipOpen: tipOpen, tipClose: tipClose, tagTip: tagTip,
     tipText: tipText, tagTipNames: tagTipNames, tagLinkTitle: tagLinkTitle,
     entityTipStars: entityTipStars, entityTipName: entityTipName, entityTipCountry: entityTipCountry,

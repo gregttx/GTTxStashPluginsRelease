@@ -13,7 +13,8 @@ Requires Stash 0.31.0 or newer.
 ## Why it exists
 
 Every ᝯㄝₓ plugin used to carry its own copy of the same few thousand lines: the hover card that
-opens on an entity's name, the tooltip on a tag, the mark beside a setting that names a custom
+opens on an entity's name — its picture wearing the rating as an amber banner and a 📦 mark where
+the entity is organized — the tooltip on a tag, the mark beside a setting that names a custom
 field, the red **Reload UI** button, the rules that decide where a plugin's button lands in one of
 Stash's own rows and in what order when two plugins want the same row, and the small protocol they
 use to keep out of each other's way while one of them is rewriting your library.
