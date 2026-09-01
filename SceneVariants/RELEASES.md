@@ -8,6 +8,10 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.4.1 (`19eded8`) | 2026-09-01 | SceneVariants 1.4.1: the review divider is a full-width drag bar, not a corner grip |
+| 1.4.0 (`943b9da`) | 2026-09-01 | SceneVariants 1.4.0: the field's own display links each stash-box line, and the migrate scan flags pseudo-plus-real drift |
+| 1.3.1 (`8d12dd8`) | 2026-09-01 | SceneVariants 1.3.1: a save re-reads the pane, and the review score explains itself on hover |
+| 1.3.0 (`cade576`) | 2026-09-01 | SceneVariants 1.3.0: each stash-box entry under the summary is a link to the work's page there |
 | 1.2.1 (`e4806d9`) | 2026-09-01 | SceneVariants 1.2.1: the set table's headers carry the file facts, and the box fits the table |
 | 1.2.0 (`ac683d5`) | 2026-09-01 | SceneVariants 1.2.0: a set line hovers to a table of marks saying how the set is split |
 | 1.1.0 (`9e49c30`) | 2026-09-01 | SceneVariants 1.1.0: the title is scored on its own weight, and the strip is reordered |

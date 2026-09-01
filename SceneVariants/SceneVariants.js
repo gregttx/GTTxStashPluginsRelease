@@ -74,7 +74,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's markup or about a filter field name.
-  var PLUGIN_VERSION = '1.2.1';
+  var PLUGIN_VERSION = '1.4.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -263,6 +263,18 @@
   function splitValues(raw) {
     if (raw == null) return [];
     return String(raw).split('\n').map(trim).filter(function (v) { return !!v; });
+  }
+
+  // A field line back into the page it names: `stashdb.org:9f3c…` is this work's entry
+  // at that stash-box, and a stashdb-style box serves it at `/scenes/<id>`. A line whose
+  // head is not a host - `pseudo:`, or a bare id - names nothing upstream and gets no
+  // link.
+  function boxLink(v) {
+    var i = String(v).indexOf(':');
+    if (i < 1) return null;
+    var host = v.slice(0, i), id = v.slice(i + 1);
+    if (!id || host.indexOf('.') === -1) return null;
+    return { value: v, url: 'https://' + host + '/scenes/' + id };
   }
 
   // The field lookup, as one regex: any of these values as a whole line of the stored
@@ -765,6 +777,9 @@
             // way, for both readers.
             self: self,
             conflict: conflictNote(m),
+            // The merged evidence, for the pane's stash-box links: the same lines the
+            // lookup was matched on, so a link can never name an entry the tab did not ask.
+            values: values,
             why: others.length
               ? 'Matched on ' + matchedOn(ids, own) + '.'
               : 'No other scene shares this one’s ' + matchedOn(ids, own) + '.',
@@ -1137,6 +1152,31 @@
     // visible: every dialog but the review task's had 22vh of nothing above its log.
     this.setsEl = el('div', 'svr-sets svr-hidden');
     this.modal.appendChild(this.setsEl);
+    // The full-width drag bar under the listing. The divider was `resize:vertical` -
+    // one declaration, no listeners - and live use found its corner grip tedious to
+    // keep re-finding as the log grows. A bar the pointer can take anywhere along the
+    // row is the fix; the CSS min/max-height still clamp whatever the drag sets, so
+    // the arithmetic the declaration was chosen to avoid is still avoided.
+    this.splitEl = el('div', 'svr-splitbar svr-hidden');
+    this.splitEl.title = 'Drag to resize the set listing';
+    (function (run) {
+      run.splitEl.addEventListener('mousedown', function (e) {
+        var startY = e.clientY || 0;
+        var startH = run.setsEl.getBoundingClientRect
+          ? run.setsEl.getBoundingClientRect().height : 0;
+        function move(ev) {
+          run.setsEl.style.height = Math.max(0, startH + ((ev.clientY || 0) - startY)) + 'px';
+        }
+        function up() {
+          document.removeEventListener('mousemove', move);
+          document.removeEventListener('mouseup', up);
+        }
+        document.addEventListener('mousemove', move);
+        document.addEventListener('mouseup', up);
+        if (e.preventDefault) e.preventDefault();   // a drag must not select the log's text
+      });
+    })(this);
+    this.modal.appendChild(this.splitEl);
 
     this.logEl = el('div', 'svr-log');
     this.modal.appendChild(this.logEl);
@@ -1376,6 +1416,7 @@
     var self = this;
     var w = this.weights;
     this.show(this.setsEl, true);
+    this.show(this.splitEl, true);
     this.sets.forEach(function (set) { set.score = scoreOf(set.delta, w); });
     var order = this.sets.slice().sort(function (a, b) {
       return b.score - a.score || String(a.key).localeCompare(String(b.key));
@@ -1394,6 +1435,12 @@
       head.appendChild(toggle);
       set.scoreEl = el('span', 'svr-score ' + scoreClass(set.score, w),
         ' ' + set.score + ' ');
+      // What the number is: a sorting value, priced by the weights strip - the one
+      // question a bare number beside a title cannot answer. Set once here; a rescore
+      // rewrites the text and the class and leaves the title standing.
+      set.scoreEl.title = 'A sorting value, not a count: every disagreement in the ' +
+        'counts to the right is worth the points its weight above assigns, and this ' +
+        'is their sum - the further apart the set has drifted, the higher it sorts.';
       head.appendChild(set.scoreEl);
       var headText = el('span', null, plural(set.scenes.length, 'scene') + ': ' +
         (set.scenes[0].title || ('Scene ' + set.scenes[0].id)) +
@@ -2009,6 +2056,7 @@
     this.plannedFrom = null;
     this.setsEl.textContent = '';
     this.show(this.setsEl, false);
+    this.show(this.splitEl, false);
     this.show(this.weightBar, false);
     this.show(this.allBar, false);
     this.show(this.syncSetBtn, false);
@@ -2126,6 +2174,24 @@
     });
   }
 
+  // A scene holding a pseudo line *and* a real stash-id is making two different claims
+  // about what names the work - a hand-made grouping and a provider entry - and this
+  // task's rewrite keeps only the second. Flagged, never resolved: which claim wins is
+  // the user's call, and the line says what a Proceed would do so the call is an
+  // informed one. A full scene carrying only its real stash-id is the ordinary case,
+  // not this.
+  function warnPseudoDrift(run, scene, field) {
+    var pseudos = splitValues(customField(scene, field)).filter(function (v) {
+      return v.indexOf('pseudo:') === 0;
+    });
+    if (!pseudos.length || !(scene.stash_ids || []).length) return;
+    run.msg('WARN', 'Potential drift: "' + (scene.title || ('Scene ' + scene.id)) +
+      '" [' + scene.id + '] carries ' + plural(pseudos.length, 'pseudo line') + ' (' +
+      pseudos.join(', ') + ') and a real stash-id at once - an inconsistent state this ' +
+      'task does not resolve. Proceeding rewrites the field from the real stash-id and ' +
+      'drops the pseudo line, which takes the scene out of its hand-made set.');
+  }
+
   // Paged rather than `per_page: -1`, which is what the rest of this plugin uses: a
   // library-wide scan is the one query here whose answer grows with the library, and the
   // counters are only worth having if they move while it runs.
@@ -2139,6 +2205,7 @@
       self.total = answer.count || self.total;
       scenes.forEach(function (scene) {
         self.scanned++;
+        warnPseudoDrift(self, scene, field);
         var job = planScene(scene, m, field);
         if (!job) return;
         self.jobs.push(job);
@@ -3506,13 +3573,16 @@
       }, function () { return null; });   // a lost snapshot must not lose the save
     }).then(function (before) {
       var resp = orig.apply(self, args);
-      if (before) {
-        // A side listener, never a link in the save's own chain: nothing this plugin
-        // does can delay or fail the response Stash is waiting for.
-        resp.then(function (r) {
-          if (r && r.ok) offerPropagate(input, before);
-        }, function () {});
-      }
+      // A side listener, never a link in the save's own chain: nothing this plugin
+      // does can delay or fail the response Stash is waiting for.
+      resp.then(function (r) {
+        if (!r || !r.ok) return;
+        // A mounted pane's rows and deltas describe the scene this save just changed,
+        // so it re-reads - whatever the propagate switch says, since the staleness
+        // does not depend on it. The same door the dialogs' dirty close uses.
+        if (_paneRefresh) _paneRefresh();
+        if (before) offerPropagate(input, before);
+      }, function () {});
       return resp;
     }, function () { return orig.apply(self, args); });
   }
@@ -4190,23 +4260,20 @@
     // The review listing: the set lines scroll on their own above the log, so a
     // library with hundreds of sets does not push the messages off the dialog.
     // The same monospace the log uses - the two are read as one column.
-    // **`resize:vertical`, not a divider of our own.** The browser already draws a
-    // grabber on a block with a scroll of its own, and dragging it is the whole
-    // feature - a handle element would need pointer capture, a move listener and
-    // arithmetic against the modal's own height, all to reimplement this line.
+    // The divider under this block is `.svr-splitbar`, a full-width drag bar of our
+    // own - `resize:vertical`'s corner grip was tedious to keep re-finding as the log
+    // grew, per live use. The min/max-height here still clamp whatever the drag sets.
     //
     // `flex:0 1 auto` rather than `0 0 auto`: the dragged height is kept while there
     // is room for it, and given up before the log's own minimum pushes the footer off
-    // the bottom of a short window. `color-scheme:dark` and the drawn resizer are
-    // CustomFieldsBulkEditor's lesson - Chrome paints the default grip in the widget
-    // colours of a light page, a white square on this box, and a `::-webkit-resizer`
-    // with a background replaces that image outright, so the triangle has to be drawn
-    // or there is nothing to take hold of.
-    '.svr-sets{flex:0 1 auto;overflow:auto;resize:vertical;height:22vh;min-height:3rem;' +
+    // the bottom of a short window. `color-scheme:dark` keeps the box's own scrollbar
+    // in the dialog's colours - CustomFieldsBulkEditor's lesson.
+    '.svr-sets{flex:0 1 auto;overflow:auto;height:22vh;min-height:3rem;' +
     'max-height:46vh;color-scheme:dark;padding:0 1rem;font-family:ui-monospace,' +
     'SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;line-height:1.5;}' +
-    '.svr-sets::-webkit-resizer{background:linear-gradient(315deg,#7d8f9c 0 45%,' +
-    'transparent 45%);}' +
+    '.svr-splitbar{flex:0 0 auto;height:8px;margin:.15rem 1rem .35rem;' +
+    'cursor:ns-resize;background:#2b3a45;border-radius:4px;}' +
+    '.svr-splitbar:hover{background:#425a6b;}' +
     '.svr-set{white-space:pre-wrap;}' +
     // The score, banded: green where there is nothing to do, then yellow, amber and
     // red as a set drifts further apart. The weights decide where the bands fall, so
@@ -4265,6 +4332,10 @@
     // plugins share has to mean the same thing in both, and a *tab* pane is not that.
     '.svr-tabpane{padding:1rem;}' +
     '.svr-summary{color:#7d8f9c;margin-bottom:.5rem;}' +
+    '.svr-boxlinks{color:#7d8f9c;margin:-.25rem 0 .5rem;}' +
+    '.svr-boxlink{margin-right:.75rem;}' +
+    '.svr-cflinks{margin-left:.5rem;}' +
+    '.svr-cflink{margin-right:.5rem;}' +
     // The settings contradiction, in the same red the row-level one wears - it is the same
     // fact reported one level up, before it can be mistaken for a fault in the scenes.
     '.svr-conflict{color:#ff7373;margin-bottom:.5rem;}' +
@@ -4869,6 +4940,22 @@
         found.rows.length
           ? plural(found.rows.length, 'other variant') + ' of this scene. ' + found.why
           : found.why));
+      // The evidence lines back into the pages they name: one link per stash-box
+      // entry, opening `https://<host>/scenes/<id>`. A pseudo line names nothing
+      // upstream, so it gets none - and a scene with only one is a line with no links,
+      // which is nothing at all.
+      var boxes = (found.values || []).map(boxLink).filter(function (l) { return !!l; });
+      if (boxes.length) {
+        kids.push(React.createElement('div', { key: 'boxes', className: 'svr-boxlinks' },
+          [plural(boxes.length, 'stash-box entry', 'stash-box entries') + ': ']
+            .concat(boxes.map(function (l, i) {
+              return React.createElement('a', {
+                key: 'box' + i, href: l.url, target: linkTarget(), rel: 'noopener',
+                className: 'svr-boxlink',
+                title: 'Open ' + l.url + (linkTarget() ? ' in a new tab' : ''),
+              }, l.value);
+            }))));
+      }
       // The one control in the pane, and the reading half's only door into a write:
       // it opens the synchronize dialog, which re-reads and lists everything before
       // anything moves. Amber because pressing through leads to writes, dots because
@@ -5333,6 +5420,41 @@
     cfTipTick(PLUGIN_ID, 'a3VariantStashIdField', fieldName());
   }
 
+  // The field's own display, wherever Stash shows it. `CustomFields.tsx` renders each
+  // field as a DetailItem whose value span is classed `detail-item-value
+  // custom-field-<name, lowercased, spaces and underscores to hyphens>` - Stash's own
+  // class, by construction, the same kind of anchor as the settings ids. Each `host:id`
+  // line gains a link opening the work's page at that stash-box, through the same
+  // `boxLink` the pane draws; a pseudo line names nothing upstream and gets none.
+  //
+  // Appended after Stash's text rather than replacing it: the span is React's, so a
+  // re-render drops the links and the next tick puts them back - the settings-page
+  // rule, applied to a second page that is also decoration rather than a control.
+  function cfValueLinkTick() {
+    if (!document.querySelectorAll) return;
+    var cls = ('custom-field-' + fieldName().toLowerCase().replace(/ /g, '-'))
+      .replace(/_/g, '-');
+    var nodes = document.querySelectorAll('.' + cls);
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!hasClass(node, 'detail-item-value')) continue;
+      if (node.querySelector && node.querySelector('.svr-cflinks')) continue;
+      var links = splitValues(node.textContent).map(boxLink)
+        .filter(function (l) { return !!l; });
+      if (!links.length) continue;
+      var wrap = el('span', 'svr-cflinks');
+      for (var j = 0; j < links.length; j++) {
+        var a = el('a', 'svr-cflink', '↗' + links[j].url.split('/')[2]);
+        a.href = links[j].url;
+        a.target = linkTarget();
+        a.rel = 'noopener';
+        a.title = 'Open ' + links[j].url + (linkTarget() ? ' in a new tab' : '');
+        wrap.appendChild(a);
+      }
+      node.appendChild(wrap);
+    }
+  }
+
   if (document.addEventListener) {
     document.addEventListener('click', function (event) {
       var target = event.target;
@@ -5377,13 +5499,15 @@
   // this runs at script load; the `load` retry only covers Stash setting
   // window.PluginApi later than usual.
   //
-  // The timer is for the settings page alone. There is no MutationObserver and no click
-  // or popstate handler, because there is nothing left to put back into the DOM: React
-  // renders the tab and the pane, and re-renders them itself. That is the same position
+  // The timer is for decoration alone - the settings page, and the custom field's own
+  // display on a detail panel. There is no MutationObserver and no click or popstate
+  // handler, because nothing a click needs is put back into the DOM: React renders the
+  // tab and the pane, and re-renders them itself. That is the same position
   // `NormalizeParentTags` is in, and the reason this plugin subscribes to no `domBus`.
 
   function tick() {
     try { settingsTick(); } catch (e) { console.error('[svr] settings tick:', e); }
+    try { cfValueLinkTick(); } catch (e) { console.error('[svr] cf link tick:', e); }
   }
 
   installTabs();

@@ -10,6 +10,10 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-01 |  |  |  |  |  |  |  | 1.4.1 (`19eded8`) |  | SceneVariants 1.4.1: the review divider is a full-width drag bar, not a corner grip |
+| 2026-09-01 |  |  |  |  |  |  |  | 1.4.0 (`943b9da`) |  | SceneVariants 1.4.0: the field's own display links each stash-box line, and the migrate scan flags pseudo-plus-real drift |
+| 2026-09-01 |  |  |  |  |  |  |  | 1.3.1 (`8d12dd8`) |  | SceneVariants 1.3.1: a save re-reads the pane, and the review score explains itself on hover |
+| 2026-09-01 |  |  |  |  |  |  |  | 1.3.0 (`cade576`) |  | SceneVariants 1.3.0: each stash-box entry under the summary is a link to the work's page there |
 | 2026-09-01 |  |  |  |  |  |  |  | 1.2.1 (`e4806d9`) |  | SceneVariants 1.2.1: the set table's headers carry the file facts, and the box fits the table |
 | 2026-09-01 |  |  |  |  |  |  |  | 1.2.0 (`ac683d5`) |  | SceneVariants 1.2.0: a set line hovers to a table of marks saying how the set is split |
 | 2026-09-01 |  |  |  |  |  |  |  | 1.1.0 (`9e49c30`) |  | SceneVariants 1.1.0: the title is scored on its own weight, and the strip is reordered |

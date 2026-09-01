@@ -43,6 +43,12 @@ hover. With **Compare Cover Images** on, a variant whose cover is a different pi
 scene you are on gets a 🖼≠ badge — the list already shows both covers, and the badge is the half
 that says they disagree. The pictures are read after the rows are drawn, never before, so the tab
 never waits on them; the browser is fetching the same images to draw the thumbnails anyway.
+Under the first line, each stash-box entry the lookup matched on — a real stash-id, or a
+`host:id` line from the variant stash-id field — is a link opening the work's page at that
+stash-box (`https://stashdb.org/scenes/<id>`), one link per entry so a scene named at two
+providers offers both. A `pseudo:` line names nothing upstream, so it gets none. The same links
+appear on the custom field's own display in a detail panel's **Custom Fields** section: a
+`↗stashdb.org` link beside the value, one per `host:id` line it holds.
 The tab itself writes nothing: it is two read queries and
 a list of links. The one thing here that writes is the migration task below, and it shows you every
 scene it would touch first.
@@ -101,6 +107,13 @@ field and takes the stash-id off:
 One line per stash-id, written as `<provider>:<stash-id>`, so a scene that carries two ids keeps
 both. Full-length scenes get the same field **and keep their stash-ids**, which is what lets the tab
 find a whole variant set with one query instead of two.
+
+The scan also flags an inconsistent state it does not resolve: a scene carrying a `pseudo:` line —
+a hand-made variant group — **and** a real stash-id at once is making two different claims about
+what names the work. Each such scene gets a *Potential drift* line saying so, and saying that a
+Proceed would rewrite the field from the real stash-id and drop the pseudo line, taking the scene
+out of its hand-made set. A full-length scene carrying only its real stash-id is the ordinary case
+and is never flagged.
 
 Nothing is written until you press **Proceed**: the dialog lists every scene it would touch, what
 the field will hold and whether the stash-ids come off, and the counters say how far the scan has
@@ -227,7 +240,8 @@ it.
 
 The score is those counts, each priced by the strip above the listing: for every attribute, the
 members that disagree with the set's most common value; for tags, performers and groups, every
-membership a member is missing from what the set carries between them. For a pair that is exactly
+membership a member is missing from what the set carries between them. Hovering the number says
+so — it is a sorting value, not a count of anything. For a pair that is exactly
 "one differing attribute" and "one tag on one side only", and it stays meaningful for larger sets,
 which counting pairs does not.
 
@@ -240,8 +254,8 @@ Each number is editable from 0 to 100, and the listing re-scores and re-sorts as
 forgotten — an absent weight is what "not remembered" means, which is why forgetting removes the
 keys rather than writing zeros.
 
-The listing and the log below it share the dialog, and the divider between them is draggable —
-grab the bottom edge of the listing and pull. The counter line says what the scan has found **as it
+The listing and the log below it share the dialog, and the bar between them is the divider —
+grab it anywhere along its width and pull to resize the listing. The counter line says what the scan has found **as it
 goes**, page by page, not only at the end: `Scanned 812 scenes. 37 variant sets found. 0 changes
 listed.` — a library-wide scan is the one pass here that runs for minutes, and a count of scenes
 read says nothing about whether it is finding anything.
