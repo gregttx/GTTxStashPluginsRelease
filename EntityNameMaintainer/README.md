@@ -1,23 +1,12 @@
 # ᝯㄝₓ Entity Name Maintainer
 
-> ## ⚠ This release needs ᝯㄝₓ Core
->
-> From this version on, this plugin needs **[ᝯㄝₓ Core](../GTTxCore/README.md)** installed and
-> enabled. It holds the code every ᝯㄝₓ plugin used to carry its own copy of — the hover cards, the
-> tooltips, the Reload UI button, the rules that place a button in one of Stash's rows.
->
-> **If you install through a source index**, Stash installs it for you: it is declared as a
-> dependency and loaded first. **If you copy folders by hand, copy `GTTxCore/` too.**
->
-> Without it this plugin stops at load and says so once in the browser console. Your settings and
-> your library are untouched either way — the plugin id, every setting key and everything stored
-> under them are unchanged.
+Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTxCore/README.md), installed and enabled alongside
+it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
+copy must copy the `GTTxCore` folder too.
 
 Rename a performer, a studio, a tag or a scene, and every other place in your library that
 mentioned the old name goes on mentioning it. Stash moves one string; this plugin notices
 and offers to bring the rest along.
-
-Requires Stash 0.31.0 or newer.
 
 ## What it does
 
@@ -50,16 +39,7 @@ failing the whole search.
 Scene markers are not covered: a marker carries a title but has no page of its own to be
 renamed from.
 
-**Custom field descriptions are covered too, where ᝯㄝₓ Custom Fields Bulk Editor is
-installed and enabled.** Those descriptions are prose you wrote about a field, they mention
-names like anything else you write, and they are not in the library at all — that plugin
-keeps them as JSON inside one tag. This plugin does not read or write that JSON: it asks the
-other plugin for the descriptions as text and hands back the ones you agreed to change. They
-appear in the listing under their own filter, named by the field they describe, and Undo
-puts them back the same way. With that plugin absent, older, or disabled, nothing is listed
-and nothing else changes.
-
-## The dialog
+## Usage
 
 One line per occurrence, reading: the entity it is in with its id in brackets, the type and
 attribute — numbered where that attribute holds more than one — and the text around the
@@ -95,8 +75,8 @@ afterwards.
   not by what the server said about the write. The Escape key never reaches this button.
 - **Copy log** — the counters, the whole listing and every message, as plain text.
 - **Close**, or the Escape key. While the listing holds occurrences *nothing has been done
-  with yet*, the first press asks **Are you sure?** and counts down for a few seconds; a
-  second press within five seconds closes. The scan runs off a rename that has already happened, so
+  with yet*, the first press asks **Are you sure? (5)** and counts down from five; a
+  second press within those five seconds closes. The scan runs off a rename that has already happened, so
   a listing thrown away cannot be asked for again — press **Copy log** first if you want to
   keep it. It closes on the first press once there is nothing left to lose: nothing was
   found, or **Proceed** has run. It is **green** in exactly those states, and grey
@@ -115,9 +95,8 @@ The first line says how far it has got; the second says **where**, one entry per
 with that type's own total. Each total arrives with the first page of its type and does not
 move afterwards.
 
-There is no overall "out of N": adding the counts up as each type is reached would make the
-grand total grow as the scan went, and a target that moves is worse than none. Per type the
-number is honest, and it costs nothing — every page already carries its type's count.
+There is no overall "out of N". Per type the number is exact, and it costs nothing — every
+page already carries its type's count.
 
 ## Safety
 
@@ -138,11 +117,6 @@ number is honest, and it costs nothing — every page already carries its type's
   plugin for them, which is the only way to change one without touching the JSON — and the
   line that reports the skip says so, rather than reading as something missed. With that
   plugin absent or disabled it says the descriptions are searchable when it is enabled.
-- **It stands down while a sibling plugin is running a bulk task.** A library-wide rename
-  would otherwise put up one dialog per entity. What decides is the lease being held *when
-  you pressed Save* — a sibling that reacts to that same save, such as ᝯㄝₓ Normalize Parent
-  Tags pruning the tag you just renamed, is not a bulk run and does not suppress the dialog.
-  It takes a lease of its own while it writes, so those plugins stand down in turn.
 - **Undo only reverses what this dialog wrote**, while it stays open, and cannot account for
   changes made elsewhere in the meantime. Backing up your database before proceeding is
   recommended.
@@ -168,18 +142,32 @@ are for.
 - **Log to the Browser Console** — print the dialog's messages under the `[enm]` prefix as
   well.
 
-## Why the scan reads everything
+## Relationship to the other plugins in this repo
 
+**Custom field descriptions are covered too, where ᝯㄝₓ Custom Fields Bulk Editor is
+installed and enabled.** Those descriptions are prose you wrote about a field, they mention
+names like anything else you write, and they are not in the library at all — that plugin
+keeps them as JSON inside one tag. This plugin does not read or write that JSON: it asks the
+other plugin for the descriptions as text and hands back the ones you agreed to change. They
+appear in the listing under their own filter, named by the field they describe, and Undo
+puts them back the same way. With that plugin absent, older, or disabled, nothing is listed
+and nothing else changes.
+
+It stands down while a sibling plugin holds a [bulk-edit
+lease](../GTTxCore/README.md#the-bulk-edit-lease): a library-wide run would otherwise put up one
+dialog per entity. What decides is the lease being held *when you pressed Save* — a sibling that
+reacts to that same save, such as ᝯㄝₓ Normalize Parent Tags pruning the tag you just renamed, is
+not a bulk run and does not suppress the dialog. It takes a lease of its own while it writes, so
+those plugins stand down in turn.
+
+## Notes and limitations
+
+**Why the scan reads everything.**
 There is no server-side filter that can answer "does any text field of any type contain this
 string". Custom fields can only be filtered by naming the key up front, and there is no way
 to ask for whichever keys an entity happens to carry. So the rows come back and the matching
 happens in the browser, one page of one type at a time, with a progress line and a limit that
 can end it early.
-
-## Installing
-
-Copy the `EntityNameMaintainer` folder into your Stash plugins directory
-(`<stash-config-dir>/plugins/`) and press **Reload plugins** in Settings → Plugins.
 
 ## Troubleshooting
 
@@ -211,15 +199,26 @@ switch on first. Read it top to bottom:
 
 Paste that output into a bug report; it names no values from your library, only field names.
 
-For a running commentary instead of a summary, `__GTTx__.StashPluginCoop.debugButtons = true`
-prints the same lines to the console as they happen — the same switch every ᝯㄝₓ plugin uses.
+For a running commentary instead of a summary, the
+[debug switch](../GTTxCore/README.md#the-debug-switch) (`__GTTx__.StashPluginCoop.debugButtons = true`)
+prints the same lines to the console as they happen.
 
-**A red banner says the page is running an older script.** Stash serves plugin JS with
-caching on, so the browser can still be running the file it fetched before the update. Press
-Ctrl+Shift+R (⌘+Shift+R on a Mac).
+**The settings page shows nothing formatted.** If the folder was updated half-way — the `.yml`
+replaced and the `.js` not, or the reverse — the plugin can be looking for a heading that has
+moved. Copy the whole folder.
 
-**A red Reload UI button appears beside Stash's own Reload plugins** while any ᝯㄝₓ plugin's script is out of date, at the top of Settings → Plugins. Pressing it reloads the page, which is the whole fix: **Reload plugins** re-reads the plugin folder on the server and cannot replace a script this page has already run. Any other Stash tab you have open needs the same. **The same red button is in every dialog's own stale banner**, so a warning found while a dialog is open can be acted on where it is read.
+### Checking which version is actually running
 
-**The settings page shows nothing formatted.** The same cause. If the folder was updated
-half-way — the `.yml` replaced and the `.js` not, or the reverse — the plugin can be looking
-for a heading that has moved. Copy the whole folder.
+**A red banner says the page is running an older script**, on the settings group and in the
+dialog, each with a red **Reload UI** button. Press it, or reload the page — see [the
+stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button).
+
+## Installing
+
+Copy the `EntityNameMaintainer` folder into your Stash plugins directory
+(`<stash-config-dir>/plugins/`) and press **Reload plugins** in Settings → Plugins.
+
+## Licence
+
+Same terms as the rest of this repository.
+

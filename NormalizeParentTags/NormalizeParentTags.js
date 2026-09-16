@@ -43,7 +43,7 @@
     cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen, cfTipArm = C.cfTipArm,
     cfTipTick = C.cfTipTick, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    entityTipName = C.entityTipName;
+    entityTipName = C.entityTipName, splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny;
 
   var PLUGIN_ID   = 'NormalizeParentTags';
   var PLUGIN_NAME = 'ᝯㄝₓ Normalize Parent Tags';
@@ -63,7 +63,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.3.0';
+  var PLUGIN_VERSION = '5.3.2';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -760,7 +760,7 @@
   // dropped silently, so a truncated list still says there is more, and the tag page
   // is where to read all of it.
   function tagTooltip(t, id) {
-    var lines = [oneLine((t && t.name) || 'unknown'), 'Stash tag id ' + id];
+    var lines = [oneLine((t && t.name) || 'unknown'), 'tag id ' + id];
 
     var aliases = aliasList(t);
     if (aliases.length) {
@@ -799,33 +799,6 @@
   }
 
   // ── Exclusion filters ─────────────────────────────────────────────────────
-
-  // The name filters take a list of substrings, and a tag is excluded when its
-  // name contains any one of them. Whitespace separates them by default, which
-  // costs the ability to write a substring containing a space; `sep` buys it back
-  // by separating on something the user's tag names never contain instead.
-  //
-  // Split on a *string*, never a RegExp: `.` and `|` are plausible separators and
-  // would otherwise have to be escaped by the user. Each term is trimmed, so a
-  // list written as "a, b" does not carry a leading space into the match, and
-  // empty terms are dropped - a setting of nothing but separators must leave an
-  // empty list, never a term matching every tag in the library.
-  function splitTerms(value, sep) {
-    var raw = String(value == null ? '' : value);
-    var out = [];
-    (sep ? raw.split(sep) : raw.split(/\s+/)).forEach(function (term) {
-      var t = term.trim();
-      if (t) out.push(t);
-    });
-    return out;
-  }
-
-  function nameMatchesAny(name, terms) {
-    for (var i = 0; i < terms.length; i++) {
-      if (name.indexOf(terms[i]) !== -1) return true;
-    }
-    return false;
-  }
 
   function makeFilters(settings, graph) {
     // Trimmed, so stray padding around the separator does not become the

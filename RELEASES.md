@@ -10,6 +10,18 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-16 |  |  |  |  |  |  |  | 1.6.1 (`4430fff`) |  | SceneVariants 1.6.1: the pane re-reads when the scene's stash-ids change under it |
+| 2026-09-16 |  |  |  |  |  |  |  | 1.6.0 (`1ebf30f`) |  | SceneVariants 1.6.0: a save that adds a shared stash-id says which set it joined |
+| 2026-09-16 |  |  |  |  |  |  |  | 1.5.2 (`ac018e9`) |  | SceneVariants 1.5.2: each dropped stash-id is probed as its own set |
+| 2026-09-16 |  |  |  |  |  |  |  | 1.5.1 (`97d65cd`) |  | SceneVariants 1.5.1: the lone survivor is checked exactly |
+| 2026-09-16 |  |  |  |  |  |  |  | 1.5.0 (`879edf7`) |  | SceneVariants 1.5.0: deleting a stash-id asks before the plugin's marks come off with it |
+| 2026-09-14 |  |  |  |  |  |  | 4.4.1 (`ed8e8b9`) |  |  | PropagateTagsAndPerformers 4.4.1: the child-tag exclusion setting reads "child tags" |
+| 2026-09-14 |  |  |  |  |  |  |  | 1.4.4 (`b0ec483`) |  | SceneVariants 1.4.4: the flag tag's default is spelled with ✅ |
+| 2026-09-14 |  |  |  |  |  |  | 4.4.0 (`05d543e`) |  |  | PropagateTagsAndPerformers 4.4.0: a tag and everything under it can be kept out |
+| 2026-09-14 |  |  |  | 1.3.0 (`9e53be6`) |  | 5.3.2 (`9e53be6`) | 4.3.0 (`9e53be6`) |  |  | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |
+| 2026-09-10 |  |  |  |  |  |  | 4.2.1 (`6187590`) |  |  | PropagateTagsAndPerformers 4.2.1: a write evicts the list query too, so a page listing what it wrote refetches |
+| 2026-09-02 |  |  |  |  |  |  |  | 1.4.3 (`856c59c`) |  | SceneVariants 1.4.3: the pane's Synchronize button is unavailable while a dialog is open |
+| 2026-09-02 |  |  |  | 1.2.1 (`4fcd6bb`) | 4.1.1 (`4fcd6bb`) | 5.3.1 (`4fcd6bb`) |  | 1.4.2 (`4fcd6bb`) |  | Review fixes 2026-09-02: the All row is drawn once, and sixty more |
 | 2026-09-01 |  |  |  |  |  |  |  | 1.4.1 (`19eded8`) |  | SceneVariants 1.4.1: the review divider is a full-width drag bar, not a corner grip |
 | 2026-09-01 |  |  |  |  |  |  |  | 1.4.0 (`943b9da`) |  | SceneVariants 1.4.0: the field's own display links each stash-box line, and the migrate scan flags pseudo-plus-real drift |
 | 2026-09-01 |  |  |  |  |  |  |  | 1.3.1 (`8d12dd8`) |  | SceneVariants 1.3.1: a save re-reads the pane, and the review score explains itself on hover |

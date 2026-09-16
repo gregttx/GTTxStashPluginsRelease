@@ -1,17 +1,9 @@
 # ᝯㄝₓ Propagate Tags and Performers to Related Entities
 
-> ## ⚠ This release needs ᝯㄝₓ Core
->
-> From this version on, this plugin needs **[ᝯㄝₓ Core](../GTTxCore/README.md)** installed and
-> enabled. It holds the code every ᝯㄝₓ plugin used to carry its own copy of — the hover cards, the
-> tooltips, the Reload UI button, the rules that place a button in one of Stash's rows.
->
-> **If you install through a source index**, Stash installs it for you: it is declared as a
-> dependency and loaded first. **If you copy folders by hand, copy `GTTxCore/` too.**
->
-> Without it this plugin stops at load and says so once in the browser console. Your settings and
-> your library are untouched either way — the plugin id, every setting key and everything stored
-> under them are unchanged.
+Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTxCore/README.md), installed and enabled alongside
+it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
+copy must copy the `GTTxCore` folder too. Tag custom fields (the custom-field exclusion filter)
+and UI plugin component patching (staging into an edit form) both depend on that Stash.
 
 > ## ⚠ Back up your database before the first library-wide run
 >
@@ -20,7 +12,7 @@
 > tagging scheme the way a bad prune can — but a run you did not mean is thousands of entities
 > carrying assignments you now have to find and remove, and there is no practical way to do that by
 > hand. Stop Stash, copy `stash-go.sqlite` (next to your `config.yml`) somewhere safe, start Stash
-> again — then run the task. Read the review log properly the first time; that is what it is for.
+> again — then run the task. Read the plan properly the first time; that is what it is for.
 >
 > The dialog has an **Undo** button, but it only reaches its own writes and only while it
 > stays open. It is a way out of a run you regret in the moment, not a safety net — the backup is
@@ -29,9 +21,6 @@
 > The two **automatic** settings deserve the same caution for a different reason: they write on
 > every save, with no dialog and nothing to undo them. The manual buttons are the safe way to try
 > this plugin out.
-
-> **Requires Stash 0.31.0 or newer.** Tag custom fields (the custom-field exclusion filter) and UI
-> plugin component patching (staging into an edit form) both depend on it.
 
 ## What it does
 
@@ -44,7 +33,7 @@ It is always a **copy**. Nothing is ever removed from the source, and nothing is
 target either — the only thing in the plugin that removes anything at all is the dialog's Undo,
 taking back what that same dialog just wrote.
 
-Every line of the review log names the entity being changed, what is being added to it, and **which
+Every line of the plan names the entity being changed, what is being added to it, and **which
 entity it came from**:
 
 ```
@@ -179,8 +168,8 @@ There is deliberately **no performer path onto a Group**, in any direction: `Gro
 `performers` field in Stash's schema at all. Groups are tag-only. That is why *Groups ← performers*
 above has to route through the group's scenes.
 
-There is also no path onto a **Performer**. It was considered and rejected: a performer appears in
-thousands of scenes, so the union of those scenes' tags is enormous and near-meaningless.
+There is also no path onto a **Performer**: a performer appears in thousands of scenes, so the
+union of those scenes' tags would be enormous and near-meaningless.
 
 ## ⚠ The two reversible pairs
 
@@ -276,8 +265,9 @@ copies into each of those exactly as the target-side mode would, cooldown and al
 
 Both automatic modes share the rest of their behaviour:
 
-- **They stand down while another plugin is writing in bulk**, and each holds its own short lease
-  while it writes, so a sibling's reactive mode stands down for it in turn.
+- **They stand down while another plugin holds the
+  [bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease)**, and each takes a short lease of
+  its own while it writes, so a sibling's reactive mode stands down in turn.
 - A save Stash *rejected* is not reacted to. A response coming back is not the same as an edit
   being accepted, and copying tags onto an entity because of an edit that never happened would be
   the worst kind of surprise.
@@ -333,7 +323,7 @@ back stays hidden until you press Save. Saving re-checks immediately; you never 
 
 The buttons above pull tags or performers *in* to whatever page you are viewing. Eleven of the
 thirteen paths also offer the reverse: a button on the **source's own page** that pushes its tags
-or performers *out* to everything an enabled path reaches — a performer's own page gets **"Copy
+or performers *out* to everything an enabled path reaches — a performer's own page gets **"Add
 Tags to all Scenes"** and **"Add Tags to all Groups"**, a studio's page the same two, and a
 scene, gallery, image or group's own page (not its Edit tab — its ordinary detail view) gets
 whichever of its own outgoing paths are enabled.
@@ -358,8 +348,8 @@ be on, that is most likely it.
 ### Every button, by page
 
 All 24 of this plugin's buttons, plus the 2 from `MergePerformerTagsToScenes` that share these
-rows. Every one of them additionally needs **Show Manual Buttons** on (MPTTS's own setting is
-**Show Manual Merge Buttons**), and every one is hidden when clicking it would add nothing — see
+rows. Every one of them additionally needs **Show Manual Buttons** on — the setting has that name in
+both plugins — and every one is hidden when clicking it would add nothing — see
 "When a button appears" above.
 
 Within a row the order is fixed: `Save · …this plugin's buttons… · MPTTS's button · Delete`.
@@ -423,7 +413,7 @@ one cost this has.
 This is the one thing worth reading twice, because the obvious reading is wrong.
 
 **It does not copy the tags of the entity you are standing on.** It finds the targets that entity
-reaches, then rebuilds *each of those targets from all of their own sources*. On a scene, "Copy
+reaches, then rebuilds *each of those targets from all of their own sources*. On a scene, "Add
 common Tags to all Groups from their Scenes" updates every group the scene belongs to, and each group
 is computed from **every scene in it** — this one is merely how the groups were found.
 
@@ -444,9 +434,15 @@ no source-side button. `NormalizeParentTags` adds no entity-page button at all.
 All under **Settings → Plugins → ᝯㄝₓ Propagate Tags and Performers to Related Entities**. Each
 description shows one line on the page; hover it, or the setting's name, for the rest.
 
-**Running it** — whether the manual buttons appear, whether they save or stage for review, and the
-two automatic modes (react when the *target* is saved, or when a *source* is saved). The
-source-side mode fans out: saving one performer can rewrite every scene they appear in.
+**Show Manual Buttons** — draws the [manual buttons](#manual-buttons-and-staging) on the pages an
+enabled path reaches.
+
+**Save Immediately** — makes an Edit-tab button review in the dialog instead of staging into the
+form.
+
+**Auto Propagate when the Target is Saved** and **Auto Propagate when the Source is Saved** — the
+two [automatic modes](#the-automatic-modes), with no dialog and no undo. The source-side one fans
+out: saving one performer can rewrite every scene they appear in.
 
 **Paths** — one row, listing the paths that are on in three columns and holding the button that
 opens the **Path Settings** dialog (the propagate dialog's own footer is the other way in). All thirteen are in that dialog, in three columns read top to
@@ -456,12 +452,11 @@ tags:scene>group=COMMON`) and can be typed by hand — it is read forgivingly, i
 case, and rewritten in canonical form. A path nobody names is off. Upgrading from an earlier
 release carries your existing path toggles over untouched.
 
-**Exclusion filters** — skip entities carrying a tag you name, skip entities marked Organized,
-never copy tags set to *Ignore auto tag*, and never copy tags carrying a custom field you name.
-There is a fifth, and it is in the **Path Settings** dialog rather than here; it is described
-below.
+Seven exclusion filters follow. There is an eighth, and it is in the **Path Settings** dialog rather
+than here; it is described below.
 
-The tag you name in the first one is matched by exact name, case-sensitive — and a tag one of
+**Exclude target entities carrying this tag** — any entity carrying the tag you name is skipped.
+The tag is matched by exact name, case-sensitive — and a tag one of
 whose aliases is that exact string counts too, with the name winning where both match. Once it
 resolves, a **🔗** appears on the value's own line, just after the name and left of **Edit**,
 linking to the tag it found. **Hover it for what that tag is** — its name and id, the alias it
@@ -472,20 +467,42 @@ matches nothing, which is worth knowing before you start a run: a name that reso
 does not make the filter do less, it stops the run outright, because copying onto the very
 entities the filter protects is the one thing here that cannot be undone.
 
-That last one is the only box here with a **default**: `ᱜ╦╦🞮_Do_Not_Propagate_Tag`, written in the
+**Exclude target entities marked as Organized** — any entity with Stash's Organized flag set is skipped.
+
+**Never copy tags set to Ignore auto tag** — a tag with "Ignore auto tag" set is never copied.
+
+**Never copy tags marked via a Custom Field** — a tag carrying the custom field you name is never
+copied. It is the only box here with a **default**: `ᱜ╦╦🞮_Do_Not_Propagate_Tag`, written in the
 first time the plugin loads so you can see the name to mark tags with. Put that custom field on a
 tag — any value at all — and nothing here ever copies it anywhere. **Clearing the box switches the
 filter off**, like every other box here, and it stays off: the default is written once and never
 again.
 
-Once it is set, a **ⓘ** appears beside the value: hover it for what the field is — the description `ᝯㄝₓ Custom Fields Bulk Editor` holds for it, how many entities carry it, and the first ten of them by name and type. Nothing is read until you hover, because finding the carriers means seven filtered queries and this page redraws every second. The tooltip opens above the mark rather than under the pointer, where the cursor would sit on top of its first line.
+Once it is set, a **ⓘ** appears beside the value: hover it for what the field is — the description `ᝯㄝₓ Custom Fields Bulk Editor` holds for it, how many entities carry it, and the first ten of them by name and type. Nothing is read until you hover, because finding the carriers means seven filtered queries and this page redraws every second ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)).
 
 If a value is adopted from `MergePerformerTagsToScenes` on that first load, it replaces the default
 — the field is theirs, and you have already answered this question over there. The description filed
 for the default is then an orphan: it shows as `[orphan]` in **Manage Custom Field Descriptions...**
 and **Prune orphans** clears it.
 
-**Skip tags Normalize Parent Tags would prune again** is the fifth filter, and the only one whose
+**Exclude tags whose name contains (space separated substring)** — one or more substrings,
+separated by spaces; a tag whose name contains any of them is never copied. Matched anywhere in
+the name, case-sensitive, and any Unicode character can be used, which is what makes it handy for
+namespace markers. A substring cannot itself contain a space unless the next box sets a separator.
+
+**Separator for the "name contains" setting** — empty, and the substrings above are separated on
+spaces. Any character — a comma, a pipe, anything you do not use in tag names — separates on that
+instead, which is how a substring can then contain a space. It is matched literally, so punctuation
+needs no escaping, and each substring is trimmed.
+
+**Exclude all child tags of this tag (included)** — one tag name; that tag and everything
+under it in the hierarchy, however deep, is never copied. It resolves the way the first box does —
+exact name, case-sensitive, an alias counting too — and gets the same **🔗** on its own line once it
+does, with the same hover card. A name that resolves to nothing stops the run for the same reason: a
+run without the filter would copy the very tags it is there to keep out. The plan's log says which
+tag it resolved to and how many tags the subtree holds.
+
+**Skip tags Normalize Parent Tags would prune again** is the eighth filter, and the only one whose
 rule belongs to another plugin — which is why it is a checkbox under the paths in the **Path
 Settings** dialog and not a row on this page. A settings row is rendered from a static manifest and
 could never say whether that plugin is answering right now; the dialog says so on the line beneath
@@ -503,8 +520,8 @@ honoured — a tag it is set never to remove is one this plugin still copies. It
 type, because that is how Prune is configured over there. And **Roll Up is never skipped**: that
 mode *adds* ancestors, so a tag copied here is one it would have added anyway.
 
-It needs that plugin installed, enabled, and 3.2.0 or newer — the release that lets another plugin
-ask it. With the box ticked and nobody answering, the plan says so in as many words and copies
+It needs ᝯㄝₓ Normalize Parent Tags 3.2.0 or newer, installed and enabled — the release that lets
+another plugin ask it. With the box ticked and nobody answering, the plan says so in as many words and copies
 everything as usual, and the dialog's own checkbox is disabled with the same explanation beside it —
 still showing what you have stored, so a tick does not read as having been lost. One tag can still slip through: where a later path in the same run adds
 something more specific than a tag copied earlier by another path. **Rescan** sees it, and the other
@@ -517,15 +534,16 @@ only what it understands completely is ever tidied into canonical form. Pressing
 dialog replaces the whole setting with what the selectors show, which the dialog says before you do
 it.
 
-If you also run `MergePerformerTagsToScenes`, these are the same four questions it asks, worded for
+If you also run `MergePerformerTagsToScenes`, the first four of these are the same four questions it asks, worded for
 a wider set of entities — so any of them you have **never set here** takes that plugin's answer the
 first time this one loads, and is saved here as yours. It is asked once. From then on this is where
 you change it, and a value you have set is never replaced — including a toggle you have switched
 back off, which is why the rule is about whether you have *touched* the setting rather than what it
 currently says.
 
-**Logging** — write every copy to the browser console (F12 → Console; **not** the Stash server log
-or the Logs page — this is a UI plugin and cannot write there).
+**Log every copy to the Browser Console (Info level)** — one console line per tag or performer
+added (F12 → Console; **not** the Stash server log or the Logs page — this is a UI plugin and
+cannot write there).
 
 Four of those switches are not Stash's blue. **Save Immediately** and the two
 automatic modes are **amber**, the plugin's colour for a setting that makes it write without
@@ -533,16 +551,6 @@ showing you a plan first; the logging switch is **teal**, for one that only talk
 Everything else stays blue. In **Settings → Tasks → Plugin Tasks** the one task, **Propagate
 All...**, is amber for the same reason, and **Path Settings** — wherever it appears — is teal: it
 writes a setting, not your library.
-
-**If your paths or toggles look reset, that is a bug this plugin used to have.** Stash's
-`configurePlugin` replaces a plugin's whole settings block rather than merging into it, so any
-setting this plugin wrote by itself — the one-time migration of the older per-path settings, the
-**Path Settings** dialog's Save, the adoption of `MergePerformerTagsToScenes`' exclusion filters —
-took every other setting with it. Nothing warned you, and the settings page kept showing the old
-values until it was reloaded, so the loss usually surfaced a release later. It is fixed: every
-write now carries the rest of the block with it. What was cleared cannot be recovered — the old
-per-path settings are gone from Stash's config too, so the migration cannot re-run — so open **Path
-Settings** and set your paths again, and check the four toggles at the top while you are there.
 
 ## Relationship to the other plugins in this repo
 
@@ -577,19 +585,10 @@ Settings** and set your paths again, and check the four toggles at the top while
 ### Why is a button missing?
 
 A button hides itself whenever clicking it would add nothing, and most of the reasons
-are invisible from the page — the sources' tags, the target's own tags, the exclusion filters. To
-see the reasoning, open the browser console (F12), run:
-
-```js
-__GTTx__.StashPluginCoop.debugButtons = true
-```
-
-Each button reports whether it is shown or hidden and why, prefixed `[ptp2re gate]`, on the next tick —
-no reload, no navigation, no setting to change. It works on the page you are already looking at,
-which is the point: the answer is restated from what the plugin already knows rather
-than only when it next re-checks. One switch covers every plugin in this repo that draws a control
-into Stash's own UI — two of them share these very rows, and "why is this missing" is rarely a
-question about only one. Set it to `false`, or reload the page, to turn it off again.
+are invisible from the page — the sources' tags, the target's own tags, the exclusion filters. Turn
+on the [debug switch](../GTTxCore/README.md#the-debug-switch)
+(`__GTTx__.StashPluginCoop.debugButtons = true` in the browser console) and each button reports
+whether it is shown or hidden and why, prefixed `[ptp2re gate]`, on the next tick.
 
 **Each button copies its own path and nothing else.** With both the performer and studio
 paths enabled on a scene, "Add all Tags from all Performers" copies the performers' tags and
@@ -626,20 +625,15 @@ instead, say so in their tooltip, and warn once in the browser console.
 page — today the only path the two plugins share), this plugin does not add a second one next to
 it, on the source side as well as the target side. Nothing else changes:
 click MPTTS's button and you get its behaviour; enable more paths here and you still get buttons
-for all of them, this one path aside. This needs `MergePerformerTagsToScenes` 1.12.1 or newer,
-which renamed its two buttons to match; an older copy's buttons will not be recognised and both
-plugins' buttons will show.
+for all of them, this one path aside. It recognises that plugin's buttons by their captions, "Add Tags
+to all Scenes" and "Add all Tags from all Performers"; a copy whose buttons say something else is
+not recognised, and both plugins' buttons show.
 
 ### Checking which version is actually running
 
-**Reload plugins cannot replace the script your browser is already running.** It re-reads the
-plugin folder on the server; the JavaScript in your open page was fetched when the page loaded and
-stays until the page reloads. The version beside the plugin's name in the settings list settles
-nothing either — it comes from the manifest, which goes current the instant you reload plugins even
-when the running script is older.
-
-The plugin says so when that happens, in red, in two places — both naming the version you are
-running, the version installed, and the fix:
+**The plugin says so when it happens.** A stale script is called out in red, in two places, both
+naming the version you are running, the version installed, and carrying the red **Reload UI**
+button — see [the stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button):
 
 - **Settings → Plugins → ᝯㄝₓ Propagate Tags and Performers to Related Entities**, at the top of the
   group and above the description, so it shows even with the group collapsed. It disappears once the
@@ -648,14 +642,11 @@ running, the version installed, and the fix:
   disagree, since the plan would otherwise be computed by the code you replaced, and the warning
   goes into the log so **Copy log** carries it.
 
-**A red Reload UI button appears beside Stash's own Reload plugins** while any ᝯㄝₓ plugin's script is out of date, at the top of Settings → Plugins. Pressing it reloads the page, which is the whole fix: **Reload plugins** re-reads the plugin folder on the server and cannot replace a script this page has already run. Any other Stash tab you have open needs the same. **The same red button is in every dialog's own stale banner**, so a warning found while a dialog is open can be acted on where it is read.
-
-Press **F5** first — Stash serves plugin scripts so that a normal reload picks up a changed file —
-and keep **Ctrl+Shift+R** (**Cmd+Shift+R**) for when it does not. If neither works, check the new
-`.js` really is in your plugins folder: a file that was never copied cannot be refreshed into
-existence. The console prints the version it is actually running at every page load
+The console prints the version it is actually running at every page load
 (`[ptp2re] PropagateTagsAndPerformers.js <version> loaded`), which is the one number a cached script
-cannot fake.
+cannot fake. If that is not the version you just installed, reload the page, and check the new
+`.js` really is in your plugins folder: a file that was never copied cannot be refreshed into
+existence.
 
 None of this catches an edit made without changing the version: both numbers stay equal and there
 is nothing to compare.
@@ -668,6 +659,7 @@ Copy the `PropagateTagsAndPerformers` folder into your Stash plugins directory (
 ```
 plugins/PropagateTagsAndPerformers/PropagateTagsAndPerformers.yml
 plugins/PropagateTagsAndPerformers/PropagateTagsAndPerformers.js
+plugins/PropagateTagsAndPerformers/manifest
 plugins/PropagateTagsAndPerformers/README.md
 ```
 

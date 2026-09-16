@@ -7,10 +7,10 @@ all eight require.
 
 They are written to be installed **together**. They share one namespace, one visual language and a
 handful of cooperation protocols, so two of their buttons in the same row agree on order and
-spacing, a bulk run tells its siblings to stand down while it writes, and one plugin asks another
+spacing, a bulk run takes a lease its siblings stand down for while it writes, and one plugin asks another
 for an answer rather than reimplementing it.
 
-Requires **Stash 0.31.0 or newer**.
+Requires **Stash 0.31.0 or newer** (Scene Variants: 0.28.0).
 
 ---
 
@@ -19,14 +19,17 @@ Requires **Stash 0.31.0 or newer**.
 | Plugin | What it does |
 |---|---|
 | [ᝯㄝₓ Core](GTTxCore/README.md) | **Required by all of the others.** The shared half: the hover cards, the tooltips, the Reload UI button, the button-placement rules. Plus the three features that belong to no single plugin — emphasising the Scene Tagger's duration mismatch, a right-click **Paste** in the Tags and Performers boxes, and the developer switches. |
-| [ᝯㄝₓ Custom Fields Bulk Editor](CustomFieldsBulkEditor/README.md) | Set, rename or clear a custom field across a whole selection — the seven entity types that carry them. Stash's API supports this; its UI does not expose it. |
+| [ᝯㄝₓ Custom Fields Bulk Editor](CustomFieldsBulkEditor/README.md) | View and bulk edit custom fields across a whole selection, or across the whole library — the seven entity types that carry them. Stash's API supports this; its UI does not expose it. |
 | [ᝯㄝₓ Entity Name Maintainer](EntityNameMaintainer/README.md) | Rename a performer, studio, tag or scene, and it finds every *other* place in the library that mentioned the old name and offers to bring them along. |
 | [ᝯㄝₓ Find & Replace Entities by Text Content](FindEntitiesByTextContent/README.md) | One box: which entities mention this text? Searches every text field of every type, then optionally replaces it. |
-| [ᝯㄝₓ Merge Performer Tags To Scenes](MergePerformerTagsToScenes/README.md) | Copy a performer's tags onto every scene they appear in — one performer, one scene, or the whole library. |
+| [ᝯㄝₓ Merge Performer Tags To Scenes](MergePerformerTagsToScenes/README.md) | Add a performer's tags to every scene they appear in — one performer, one scene, or the whole library. |
 | [ᝯㄝₓ Normalize Parent Tags](NormalizeParentTags/README.md) | Two operations over the tag hierarchy: **Prune** removes a tag an entity's more specific tag already implies, **Roll Up** adds the ancestors it does not carry. |
-| [ᝯㄝₓ Propagate Tags and Performers to Related Entities](PropagateTagsAndPerformers/README.md) | Thirteen relationship paths — studio→scene, performer→gallery, gallery→image and the rest — each copying tags or performers along one of Stash's own links. |
-| [ᝯㄝₓ Scene Variants](SceneVariants/README.md) | A scene is often in your library twice, whole and cut. This derives the relation from what the scenes already carry rather than storing it. |
+| [ᝯㄝₓ Propagate Tags and Performers to Related Entities](PropagateTagsAndPerformers/README.md) | Thirteen relationship paths — studio→scene, performer→gallery, gallery→image and the rest — each carrying tags or performers along one of Stash's own links. |
+| [ᝯㄝₓ Scene Variants](SceneVariants/README.md) | A scene is often in your library twice, whole and cut. This works out which scenes are the same work from the stash-id they share — the identifier a stash-box, a shared metadata database, gives a scene — and puts a Variants tab on the scene page. |
 | [ᝯㄝₓ Tag Bundle Clipboard](TagBundleClipboard/README.md) | Copy a set of tags off one entity and paste it onto another, however unrelated the two are. |
+
+The ᝯㄝₓ prefix is the shared mark of this collection, put in front of every plugin name so they
+sort together and are found with one search in **Settings → Plugins**.
 
 ## Installing
 
@@ -39,7 +42,8 @@ There is **no build step**. A plugin folder is copied as-is:
 2. In Stash, go to **Settings → Plugins** and press **Reload plugins**.
 3. Reload the browser page. Stash pins its plugin scripts at app boot, so a reload of the *plugins*
    is not a reload of the *script your tab is running* — the plugins say so themselves with a red
-   banner and a **Reload UI** button when the two disagree.
+   banner and a **Reload UI** button when the two disagree, see
+   [the stale-script banner and the Reload UI button](GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button).
 
 Repeat per plugin. Beyond `GTTxCore`, nothing here depends on anything else being installed, and
 every cross-plugin feature degrades quietly when its sibling is absent or older. **A plugin that
@@ -55,8 +59,7 @@ plugin scripts by their declared dependencies but does not object when one is mi
   something into the form in front of you, where Stash's own Save is the next step.
 - **Amber means a control of ours writes; teal means it only reads.** Stash's own buttons are grey
   and blue, so the colour is also how you tell one of these plugins' controls from Stash's.
-- **An id in brackets is Stash's own database id** — the number in the URL — never a stash-box
-  Stash ID.
+- **An id in brackets is Stash's own database id** — the number in the URL — never a stash-id.
 - **Back up your database before the first library-wide run.** Undo reaches only what the open
   dialog wrote, and Stash has no undo of its own.
 
@@ -64,12 +67,13 @@ plugin scripts by their declared dependencies but does not object when one is mi
 
 | | |
 |---|---|
-| `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `CLAUDE.md`, `RELEASES.md` |
+| `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `CLAUDE.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
 | `GTTxCore/` | the shared half every other plugin binds at load, and requires |
 | `tests/` | `node tests/run.js` (or `npm test`). See [tests/README.md](tests/README.md) |
 | `tools/` | repo tooling — release-row generation and two live-Stash probes. See [tools/README.md](tools/README.md) |
 | `RELEASES.md` | every release of every plugin, one row per commit. **Generated** |
-| `CLAUDE.md` | the conventions above, argued rather than listed — the onboarding document |
+| `CLAUDE.md` | the rules, one table per kind — the onboarding document |
+| `docs/` | the reasoning behind each rule (`decisions/`), and dated readings of Stash's source (`stash-reference.md`) |
 
 ## Contributing
 
@@ -84,7 +88,7 @@ plugin scripts by their declared dependencies but does not object when one is mi
   run `node tools/gen-releases.js` in the commit *after* the one that shipped it — a release row
   cannot name the commit that adds it.
 - **READMEs and source describe the plugin, not its history.** No "since 1.2.0" in either; that
-  argument belongs in the plugin's own `CLAUDE.md`, which does not ship.
+  argument belongs in the plugin's own `NOTES.md`, which does not ship.
 - **Read [CLAUDE.md](CLAUDE.md) before adding a button, a dialog or a shared block.** Nearly every
   rule in it exists because something here guessed about Stash's markup and was wrong.
 - **Releasing to the public mirror goes through `node tools/release-drop.js`**, which

@@ -1,36 +1,21 @@
 # ᝯㄝₓ Normalize Parent Tags
 
-> ## ⚠ This release needs ᝯㄝₓ Core
->
-> From this version on, this plugin needs **[ᝯㄝₓ Core](../GTTxCore/README.md)** installed and
-> enabled. It holds the code every ᝯㄝₓ plugin used to carry its own copy of — the hover cards, the
-> tooltips, the Reload UI button, the rules that place a button in one of Stash's rows.
->
-> **If you install through a source index**, Stash installs it for you: it is declared as a
-> dependency and loaded first. **If you copy folders by hand, copy `GTTxCore/` too.**
->
-> Without it this plugin stops at load and says so once in the browser console. Your settings and
-> your library are untouched either way — the plugin id, every setting key and everything stored
-> under them are unchanged.
+Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTxCore/README.md), installed and enabled alongside
+it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
+copy must copy the `GTTxCore` folder too. Tag custom fields (two of the exclusion filters) and the
+`organized` flag on studios both depend on that Stash.
 
 > ## ⚠ Back up your database before the first run
 >
 > These tasks rewrite tag assignments across your entire library, and **Stash has no undo**. A
 > misconfigured Prune can strip a tagging scheme you spent years building, and the only way back
 > is restoring your database file. Stop Stash, copy `stash-go.sqlite` (next to your `config.yml`)
-> somewhere safe, start Stash again — then run the task. Review the dry-run log properly the
+> somewhere safe, start Stash again — then run the task. Read the plan properly the
 > first time; that is what it is for.
 >
 > The dialog does have an **[Undo](#undo)** button, but it only reaches its own writes and only
 > while it stays open. It is a way out of a run you regret in the moment, not a safety net — the
 > backup is the safety net.
-
-> **Requires Stash 0.31.0 or newer.** Tag custom fields (two of the exclusion filters) and the
-> `organized` flag on studios both depend on it.
->
-> **This plugin has not had a long life in other people's libraries.** It has automated tests
-> behind it, but that is not the same thing — which is another reason to take the backup above
-> and to read the review log before pressing Proceed.
 
 A front-end-only Stash plugin that adds three tasks to **Settings → Tasks → Plugin Tasks**:
 
@@ -58,8 +43,8 @@ path has no dialog and no undo, and every type is off by default.
 ## Prune and Roll Up on a single scene
 
 Turn on **Show Prune and Roll Up Buttons on a Scene** and a scene's edit row carries up to two
-extra buttons — **Prune…** when the scene holds a tag that a more specific tag on it already
-implies, and **Roll Up…** when it is missing a parent its own tags imply.
+extra buttons — **Prune Tags** when the scene holds a tag that a more specific tag on it already
+implies, and **Roll Up Tags** when it is missing a parent its own tags imply.
 
 **Each appears only when it would actually change something**, and goes away once it would not:
 prune everything a scene has to prune and its Prune button is gone on the next save. A scene can
@@ -69,7 +54,7 @@ redundant ancestor to remove and another parent to add.
 **Neither writes on the click.** They change the tag box in front of you — Prune takes the
 redundant tags out of it, Roll Up puts the missing parents in — and **Stash's own Save is what
 commits it**, exactly as if you had picked the tags from the dropdown yourself. Close the form
-without saving and nothing happened. That is why the captions have no trailing `…`: in these
+without saving and nothing happened. That is why the captions have no trailing "...": in these
 plugins the dots mean *this click opens a dialog first*, and a staging button is its own plan.
 
 **The buttons follow the box, not the server.** Stage a roll-up and the Roll Up button goes; take
@@ -78,7 +63,7 @@ move in its tooltip, and the count is what is in the box right now.
 
 On a Stash too old to let a plugin reach the tag box, the click opens the scoped review dialog
 instead — every change listed, **Proceed** to write, **Undo** to take it back — and the caption
-grows a `…` to say so.
+grows a "..." to say so.
 
 Every exclusion filter still applies, exactly as in a full run. The automatic modes are a separate
 question: a button is offered whether or not this plugin does that direction on its own, because
@@ -165,12 +150,12 @@ The tags are listed in the same order Stash itself sorts them — by **Sort Name
 one, otherwise by name, ignoring case and treating numbers as numbers (`Volume 2` before
 `Volume 10`) — so the line reads straight against your tag list without re-sorting it by eye.
 
-**Hovering a tag in that line** shows what it is — its aliases and its description, and clicking
+**Hovering a tag in that line** opens a tooltip saying what it is — its aliases and its description, and clicking
 it opens the tag:
 
 ```
 Hair Colour
-Stash tag id 45
+tag id 45
 Aliases: Hair Color, Haircolour, and 2 more
 Description: Every hair colour that occurs naturally, plus the dyed ones…
 ```
@@ -255,16 +240,16 @@ and Roll Up would do before running either.
 ```
 
 Each row reads **tag name followed by its id in brackets** — `Hair Colour (45)` is the tag
-with id 45, the same id the review log names it by and the one in `/tags/45`. The numbers that
+with id 45, the same id the plan names it by and the one in `/tags/45`. The numbers that
 *are* counts sit outside the brackets, in the badges on the right (`2 children`, `◆ 2 parents`),
 and the inspector's headings spell them out the same way — `Parents: 3`, never `Parents (3)`.
 
-**Hovering a tag name** shows what the row has no space for — the full name, the id, the tag's
+**Hovering a tag name** opens a tooltip with what the row has no space for — the full name, the id, the tag's
 aliases and its description:
 
 ```
 Hair Colour
-Stash tag id 45
+tag id 45
 Aliases: Hair Color, Haircolour, Hårfarge, and 4 more
 Description: Every hair colour that occurs naturally, plus the dyed ones that pass for…
 ```
@@ -432,10 +417,12 @@ but never removed, plus one that sets how the two name filters are written:
   space: with a separator of `,`, the entry `Body Art, Art Deco` is two substrings rather than
   four. The separator is matched literally, so punctuation needs no escaping, and spaces around
   each substring are trimmed.
-- **Never add tags marked via a Custom Field** / **Never remove tags marked via a Custom Field** — each shows a **ⓘ** beside its value once set; hover it for the field's description, how many entities carry it and the first ten of them. Nothing is read until you hover. The tooltip opens above the mark rather than under the pointer, where the cursor would sit on top of its first line. —
+- **Never add tags marked via a Custom Field** / **Never remove tags marked via a Custom Field** —
   enter a custom field name. **Only the presence of the field matters** — the value is never
   looked at, so any value at all (including a blank one) applies the exclusion. To lift it,
-  remove the field from the tag rather than setting it to something falsy.
+  remove the field from the tag rather than setting it to something falsy. Each shows a **ⓘ**
+  beside its value once set; hover it for what the field is — see
+  [the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips).
 
 These filters also apply wherever **another plugin borrows Prune or Roll Up**. ᝯㄝₓ Tag Bundle
 Clipboard's paste dialog offers both, and asks this plugin to work them out rather than working
@@ -464,17 +451,83 @@ server-side job, which is why the dialog appears instead of a job in the queue.
 **Keep the tab open.** The run lives in the page. Navigating away or closing the tab stops it —
 mid-run, that means the changes already written stay written and the rest are never made.
 
-## Notes / limitations
+## Settings
+
+All in **Settings → Plugins → ᝯㄝₓ Normalize Parent Tags**; every switch is off and every box empty
+until you change it.
+
+| Setting | Default | What it does |
+|---|---|---|
+| **Automatic mode per entity type** | every type Off | What happens by itself whenever Stash saves an entity, one mode per type — see [Automatic mode](#automatic-mode). |
+| **Exclude entities carrying this tag** | empty | An entity carrying this tag is left alone — see [Exclusion filters](#exclusion-filters). |
+| **Exclude entities marked as Organized** | off | An entity with Stash's Organized flag set is skipped. |
+| **Never add or remove tags set to Ignore auto tag** | off | Such a tag is neither added by Roll Up nor removed by Prune. |
+| **Never add tags whose name contains (space separated substring)** | empty | Roll Up does not add a tag whose name contains any of these. |
+| **Never remove tags whose name contains (space separated substring)** | empty | Prune does not remove a tag whose name contains any of these. |
+| **Separator for the two "name contains" settings** | empty (spaces) | The character those two lists are split on. |
+| **Never add tags marked via a Custom Field** | empty | Roll Up does not add a tag carrying this custom field. |
+| **Never remove tags marked via a Custom Field** | empty | Prune does not remove a tag carrying this custom field. |
+| **Show Prune and Roll Up Buttons on a Scene** | off | Draws the two staging buttons on a scene's Edit tab — see [Prune and Roll Up on a single scene](#prune-and-roll-up-on-a-single-scene). |
+
+## Relationship to the other plugins in this repo
+
+### If you also use the Merge Performer Tags To Scenes plugin
+
+That plugin's two auto-merge settings react to *this* plugin's writes, because from its point of
+view they look like any other edit:
+
+- **Auto Merge when the Scene is Saved** — every scene this plugin touches gets its performers' tags
+  merged back in, parents included.
+- **Auto Merge when the Performer is Saved** — every performer this plugin touches has their tags pushed
+  out to *all* of their scenes.
+
+Neither plugin is misbehaving; they pull in opposite directions by design. So while this plugin is
+applying changes, Undo included, it holds the
+[bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease), and that plugin's auto-merge stands
+down until the apply finishes, fails, is stopped or the tab is closed. It runs both ways: this
+plugin's [automatic mode](#automatic-mode) stands down while *that* plugin's library-wide task
+holds the lease, and takes a short lease of its own while it writes, so auto-merge does not chase
+each automatic prune. If you set scenes to
+**PRUNE** and run **Auto Merge when the Scene is Saved** you are still asking for two opposite things
+on every save — the tags a performer contributes will keep arriving, and Prune will keep removing
+the redundant ones — but they will not trade writes back and forth over the same scene.
+
+That plugin also has a library-wide task of its own, which rewrites scenes the same way this one
+does. If it is mid-run when you start a task here, the dialog says so and names what it is doing.
+It does not stop you — you pressed the button — but running both at once means each may undo part
+of the other, so it is usually worth letting the first one finish.
+
+If either auto-merge setting is on when you start a run, the dialog tells you which, and whether
+the installed copy respects the lease. If it does not,
+you have two options: turn its auto-merge off for the duration of the run, or press **Rescan**
+afterwards and apply the second, much smaller plan. Performers are processed first either way, so
+that the wider scene-fanning merge happens before the scene and image passes rather than after
+them. If both auto-merge settings are off, there is no interaction at all.
+
+### If you also use the Tag Bundle Clipboard plugin
+
+Its paste dialog can prune the parent tags a paste makes redundant, or roll a paste up to its
+parents. Those are this plugin's two operations, and it asks this plugin to work out the answer —
+so your [exclusion filters](#exclusion-filters) apply there without that plugin knowing what they
+are, and both modes disappear from its dialog if this plugin is not running on the page. It needs
+**ᝯㄝₓ Normalize Parent Tags 3.2.0 or newer**; with an older copy it says so and offers neither. It asks a
+question rather than reading these settings, so renaming one costs that plugin no change at all.
+
+If the entity type being pasted onto is set to PRUNE or ROLLUP here, that dialog
+withdraws the choice and says why: pressing Stash's **Save** is what this plugin reacts to, so the
+decision is already being made on every save and choosing differently for one paste would not
+survive it.
+
+### Plugins outside this repo
+
+This only covers plugins running in your browser. A plugin with server-side **hooks** — the
+Python or executable kind that Stash runs on `Scene.Update.Post` and similar — runs inside Stash
+itself, cannot be asked to stand down from here, and will react to this plugin's changes like any
+other edit. If you have one that touches tags, disable it for the run.
+
+## Notes and limitations
 
 - **Read carefully:** [⚠ Back up your database before the first run](#-back-up-your-database-before-the-first-run)
-- **If your exclusion filters look reset, that is a bug this plugin used to have.** Stash's
-  `configurePlugin` replaces a plugin's whole settings block rather than merging into it, so
-  saving from the **Auto Mode Settings...** dialog used to take every other setting with it — and
-  so did the one-time migration of the older per-type settings. Nothing warned you and the
-  settings page kept showing the old values until it was reloaded, so the loss usually surfaced
-  much later. It is fixed: every setting this plugin writes now carries the rest of the block with
-  it. There is no way to recover what was cleared, so check the exclusion filters once after
-  updating.
 - A run always covers your whole library, for every type it is not set to Off. Filters and
   selections in the scene, image or performer lists are not read.
 - Changes are written as add/remove deltas rather than as a wholesale rewrite of each entity's
@@ -495,64 +548,6 @@ mid-run, that means the changes already written stay written and the rest are ne
 - Entities that need the same change are updated together in one request, so a run makes far
   fewer requests than it lists changes.
 
-## Relationship to the other plugins in this repo
-
-### If you also use the Merge Performer Tags To Scenes plugin
-
-That plugin's two auto-merge settings react to *this* plugin's writes, because from its point of
-view they look like any other edit:
-
-- **Auto Merge On Scene Updates** — every scene this plugin touches gets its performers' tags
-  merged back in, parents included.
-- **Auto Merge On Performer Updates** — every performer this plugin touches has their tags pushed
-  out to *all* of their scenes.
-
-Neither plugin is misbehaving; they pull in opposite directions by design. So the two are built
-to cooperate: **while this plugin is applying changes, it asks Merge Performer Tags To Scenes to
-stand down, and it does.** Auto-merge resumes the moment the apply finishes — including if it
-fails, if you press Stop, or if you close the tab mid-run. Nothing is switched off in the
-settings, and other browser tabs are unaffected.
-
-That cooperation now runs both ways. This plugin's [automatic mode](#automatic-mode) stands down
-in turn while *that* plugin's library-wide task is writing, and it takes its own short-lived
-notice while it writes, so auto-merge does not chase each automatic prune. If you set scenes to
-**PRUNE** and run **Auto Merge On Scene Updates** you are still asking for two opposite things
-on every save — the tags a performer contributes will keep arriving, and Prune will keep removing
-the redundant ones — but they will not trade writes back and forth over the same scene.
-
-That plugin also has a library-wide task of its own, which rewrites scenes the same way this one
-does. If it is mid-run when you start a task here, the dialog says so and names what it is doing.
-It does not stop you — you pressed the button — but running both at once means each may undo part
-of the other, so it is usually worth letting the first one finish.
-
-If either auto-merge setting is on when you start a run, the dialog tells you which, and whether
-the installed version is new enough to stand down. If it is older than the cooperation protocol,
-you have two options: turn its auto-merge off for the duration of the run, or press **Rescan**
-afterwards and apply the second, much smaller plan. Performers are processed first either way, so
-that the wider scene-fanning merge happens before the scene and image passes rather than after
-them. If both auto-merge settings are off, there is no interaction at all.
-
-### If you also use the Tag Bundle Clipboard plugin
-
-Its paste dialog can prune the parent tags a paste makes redundant, or roll a paste up to its
-parents. Those are this plugin's two operations, and it asks this plugin to work out the answer —
-so your [exclusion filters](#exclusion-filters) apply there without that plugin knowing what they
-are, and both modes disappear from its dialog if this plugin is not running on the page. It needs
-this plugin at **3.2.0 or newer**; with an older copy it says so and offers neither. It asks a
-question rather than reading these settings, so renaming one costs that plugin no change at all.
-
-If the entity type being pasted onto is set to PRUNE or ROLLUP here, that dialog
-withdraws the choice and says why: pressing Stash's **Save** is what this plugin reacts to, so the
-decision is already being made on every save and choosing differently for one paste would not
-survive it.
-
-### Plugins outside this repo
-
-This only covers plugins running in your browser. A plugin with server-side **hooks** — the
-Python or executable kind that Stash runs on `Scene.Update.Post` and similar — runs inside Stash
-itself, cannot be asked to stand down from here, and will react to this plugin's changes like any
-other edit. If you have one that touches tags, disable it for the run.
-
 ## Troubleshooting
 
 ### The README link in settings
@@ -563,25 +558,13 @@ easy to miss. Both open the same page.
 
 ### Checking which version is actually running
 
-**Reload plugins cannot replace the script your browser is already running.** It re-reads the
-plugin folder on the server; the JavaScript in your open page was fetched and executed when the
-page loaded, and it stays until the page reloads. So an update always needs a page reload — but a
-plain **F5** is normally enough: Stash serves plugin scripts so that a normal reload picks up a
-changed file. Keep **Ctrl+Shift+R** (**Cmd+Shift+R**) for the case where it does not.
-
-The version beside the plugin's name in **Settings → Plugins** does not settle this: it is read
-from the manifest, which is current the instant you reload plugins, even when the script running in
-the page is older. That combination — new version in the heading, old behaviour on screen — is
-exactly what a cached script looks like.
-
 **The plugin says so when it happens.** A stale script is called out in red, in two places, both
-naming the version you are running, the version installed, and the fix:
+naming the version you are running, the version installed, and carrying the red **Reload UI**
+button — see [the stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button):
 
 - **Settings → Plugins → ᝯㄝₓ Normalize Parent Tags**, at the top of the group and above the
   description — so it shows even with the group collapsed. It disappears once the two agree.
 - **Every dialog the plugin opens**, in a box of its own under the title.
-
-**A red Reload UI button appears beside Stash's own Reload plugins** while any ᝯㄝₓ plugin's script is out of date, at the top of Settings → Plugins. Pressing it reloads the page, which is the whole fix: **Reload plugins** re-reads the plugin folder on the server and cannot replace a script this page has already run. Any other Stash tab you have open needs the same. **The same red button is in every dialog's own stale banner**, so a warning found while a dialog is open can be acted on where it is read.
 
 It says which script is running in your browser's console too (**F12** → Console), on every page
 load:
@@ -591,10 +574,9 @@ load:
 page reads the manifest instead, which can be newer than the script your browser has cached.
 ```
 
-If that number is not the one you just installed, the page is running an old copy. In order:
-reload (F5); check that the new `.js` really is in `<stash-config-dir>/plugins/` — a file that was
-never copied cannot be refreshed into existence; then hard-refresh; then, if it still will not
-budge, open DevTools → **Network**, tick **Disable cache**, and reload with DevTools open.
+If that number is not the one you just installed, the page is running an old copy: reload the
+page, and check that the new `.js` really is in `<stash-config-dir>/plugins/` — a file that was
+never copied cannot be refreshed into existence.
 
 **Normalize Parent Tags... also refuses to write.** Opening it asks Stash which version is
 installed and compares it with the script that is running; on a mismatch **Proceed stays disabled**
@@ -632,7 +614,8 @@ describes the old ones.
    ```
 3. In Stash, go to **Settings → Plugins** and click **Reload plugins** (or restart Stash).
 4. Refresh your browser (F5) so the plugin's JavaScript is loaded.
-5. Enable the entity types you want in **Settings → Plugins → ᝯㄝₓ Normalize Parent Tags**.
+5. Every type is Off until you say otherwise. Set what should happen by itself, if anything, with
+   **Auto Mode Settings...** in **Settings → Plugins → ᝯㄝₓ Normalize Parent Tags**.
 
 ## Licence
 

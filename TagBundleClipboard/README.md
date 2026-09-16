@@ -1,17 +1,9 @@
 # ᝯㄝₓ Tag Bundle Clipboard
 
-> ## ⚠ This release needs ᝯㄝₓ Core
->
-> From this version on, this plugin needs **[ᝯㄝₓ Core](../GTTxCore/README.md)** installed and
-> enabled. It holds the code every ᝯㄝₓ plugin used to carry its own copy of — the hover cards, the
-> tooltips, the Reload UI button, the rules that place a button in one of Stash's rows.
->
-> **If you install through a source index**, Stash installs it for you: it is declared as a
-> dependency and loaded first. **If you copy folders by hand, copy `GTTxCore/` too.**
->
-> Without it this plugin stops at load and says so once in the browser console. Your settings and
-> your library are untouched either way — the plugin id, every setting key and everything stored
-> under them are unchanged.
+Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTxCore/README.md), installed and enabled alongside
+it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
+copy must copy the `GTTxCore` folder too. Putting tags into an edit form depends on that Stash's UI
+plugin component patching.
 
 Copy a set of tags off one entity and paste it onto another, however unrelated the two are.
 
@@ -20,10 +12,6 @@ move tags only copy along Stash's own relationships — a scene's performers' ta
 images' tags. There is no relationship between two unrelated scenes to name, so there is no path to
 follow. This is the manual case: **you pick the source, you pick the target, and you pick which
 tags.**
-
-Requires Stash 0.31.0 or newer.
-
----
 
 ## How it works
 
@@ -106,17 +94,16 @@ reaches the library.
 **That plugin works them out, rather than this one copying its rules.** So every exclusion you have
 set there applies here — its Ignore-auto-tag toggle, its name filters, its custom-field filters — and
 so will any it gains in a future version, with nothing to update on this side. A tag spared that way
-says which filter spared it on its hover text. Its *entity* filters (Organized, excluded by tag name)
+says which filter spared it in its tooltip. Its *entity* filters (Organized, excluded by tag name)
 are not applied: those exist to keep an automatic pass off entities you did not mean it to touch, and
 you opened this dialog on this entity by hand.
 
 The choice needs the tag hierarchy, which is read once per page. If that read fails, both modes are
 held unavailable and the dialog says so.
 
-What is *not* borrowed is which entity types that plugin is set to include. Those scope its library
-sweep — its own settings page notes that images are "usually the largest type and the slowest to
-scan", which is a reason to untick a type that has nothing to do with whether a tag on an image
-should imply its parents. There is no sweep here: one entity, chosen by hand.
+What is *not* borrowed is which entity types that plugin's task dialog covers. Its seven selectors
+scope a library-wide sweep, and there is no sweep here: one entity, chosen by hand. Its automatic
+modes are a different matter, below.
 
 Those settings are read when the dialog opens. If you change them in another tab while it is sitting
 open, **switch back to this one and the list re-plans against the new ones**, with a line in the log
@@ -128,21 +115,6 @@ one.
 is not offered at all** and the log says why: that plugin acts on Stash's **Save**, which is the
 button this dialog hands off to, so the decision is already being made on every save and choosing
 differently for one paste would not survive it.
-
-## What is not offered
-
-**Tags** and **Scene Markers**, and both absences are deliberate:
-
-- A **Tag** carries parent and child tags rather than tags of its own, so a bundle of tags has
-  nowhere to land on one.
-- A **Scene Marker** does carry tags, but has no detail page to put a Copy button on.
-
-## Settings
-
-| Setting | |
-|---|---|
-| **Bundles Kept on the Clipboard** | How many bundles to keep before the oldest is discarded. Leave it empty for 5. Anything from 1 to 50; a value outside that is clamped rather than refused. Lowering it discards nothing until the next copy. |
-| **Log to the Browser Console** | Print each copy and each paste under the `[tbc]` prefix, so a session can be read back after the dialog has been closed. |
 
 ## Where the buttons are
 
@@ -163,6 +135,13 @@ Tags*, *Paste Tags* — and then explains what pressing it does.
 If another of these plugins is installed, its buttons and these share the row in a fixed order
 rather than whichever loaded first.
 
+## Settings
+
+| Setting | |
+|---|---|
+| **Bundles Kept on the Clipboard** | How many bundles to keep before the oldest is discarded. Leave it empty for 5. Anything from 1 to 50; a value outside that is clamped rather than refused. Lowering it discards nothing until the next copy. |
+| **Log to the Browser Console** | Print each copy and each paste under the `[tbc]` prefix, so a session can be read back after the dialog has been closed. |
+
 ## Relationship to the other plugins in this repo
 
 - **ᝯㄝₓ Merge Performer Tags To Scenes** and **ᝯㄝₓ Propagate Tags and Performers to Related
@@ -179,12 +158,21 @@ rather than whichever loaded first.
   cannot tell from any other.
 - **ᝯㄝₓ Custom Fields Bulk Editor** is unrelated.
 
+## Notes and limitations
+
+**Tags** and **Scene Markers**, and both absences are deliberate:
+
+- A **Tag** carries parent and child tags rather than tags of its own, so a bundle of tags has
+  nowhere to land on one.
+- A **Scene Marker** does carry tags, but has no detail page to put a **⮺ Tags** button on.
+
 ## Troubleshooting
 
 **The 📋Tags… button is not there.** Three things it needs, in order: you are on one of the six
 entity pages; the **Edit** tab is open, since the button sits in the edit form's own button row; and
-your Stash exposes plugin component patching, without which there is no way to put tags into a form.
-The last of those prints one line to the browser console saying so.
+your Stash exposes plugin component patching — the extension points its plugin API gives a UI
+plugin for adding to its forms — without which there is no way to put tags into a form. The last
+of those prints one line to the browser console saying so.
 
 **Neither button is there, and the settings page looks fine.** Check **Settings → Plugins** shows
 `ᝯㄝₓ Tag Bundle Clipboard`. If the folder was copied over an older version and only some files
@@ -192,33 +180,28 @@ landed, the settings page can look completely normal while the buttons are gone 
 found by ids built from the plugin id, which no rename moves, while everything else matches on the
 name.
 
-**Why is this button hidden?** Type this into the browser console:
-
-```js
-__GTTx__.StashPluginCoop.debugButtons = true
-```
-
-Every plugin here that draws a control into Stash's own chrome then explains, in the console, which
-of its buttons it is showing and why. It takes effect on the next tick — no reload, no setting.
-Set it back to `false` to stop.
+**Why is this button hidden?** Turn on the [debug switch](../GTTxCore/README.md#the-debug-switch)
+(`__GTTx__.StashPluginCoop.debugButtons = true` in the browser console) and each button reports
+whether it is shown or hidden and why, prefixed `[tbc gate]`, on the next tick.
 
 **A bundle I copied in another tab is not in the list.** The list is read when the dialog opens.
 Close it and open it again.
 
 ### Checking which version is actually running
 
-Stash serves plugin scripts with caching on, so a browser can go on running the old file after an
-update. The plugin says which one it loaded, in the console, when the page loads:
+**The plugin says so when it happens.** A stale script is called out in red, in two places — the
+plugin's own settings group and the paste dialog's head — both naming the version you are running,
+the version installed, and carrying the red **Reload UI** button — see
+[the stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button).
+
+It says which script it loaded in the browser console too (**F12** → Console), on every page load:
 
 ```
 [tbc] TagBundleClipboard.js <version> loaded.
 ```
 
-If that number disagrees with the one beside the plugin's name in **Settings → Plugins**, a red
-banner appears in the plugin's own settings group saying so, and the paste dialog carries the same
-warning in its head. Press **Ctrl+Shift+R** (⌘+Shift+R on a Mac).
-
-**A red Reload UI button appears beside Stash's own Reload plugins** while any ᝯㄝₓ plugin's script is out of date, at the top of Settings → Plugins. Pressing it reloads the page, which is the whole fix: **Reload plugins** re-reads the plugin folder on the server and cannot replace a script this page has already run. Any other Stash tab you have open needs the same. **The same red button is in every dialog's own stale banner**, so a warning found while a dialog is open can be acted on where it is read.
+If that is not the version you just installed, reload the page, and check the new `.js` really is
+in `<stash-config-dir>/plugins/`.
 
 ## Installing
 

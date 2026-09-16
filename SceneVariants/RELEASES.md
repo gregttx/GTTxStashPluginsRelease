@@ -3,11 +3,19 @@
 # SceneVariants — releases
 
 Newest first. Each version links to the commit that shipped it; the note is that commit's
-own subject. The reasoning behind a release is in `CLAUDE.md`, and what the plugin does now
+own subject. The reasoning behind a release is in `NOTES.md`, and what the plugin does now
 is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.6.1 (`4430fff`) | 2026-09-16 | SceneVariants 1.6.1: the pane re-reads when the scene's stash-ids change under it |
+| 1.6.0 (`1ebf30f`) | 2026-09-16 | SceneVariants 1.6.0: a save that adds a shared stash-id says which set it joined |
+| 1.5.2 (`ac018e9`) | 2026-09-16 | SceneVariants 1.5.2: each dropped stash-id is probed as its own set |
+| 1.5.1 (`97d65cd`) | 2026-09-16 | SceneVariants 1.5.1: the lone survivor is checked exactly |
+| 1.5.0 (`879edf7`) | 2026-09-16 | SceneVariants 1.5.0: deleting a stash-id asks before the plugin's marks come off with it |
+| 1.4.4 (`b0ec483`) | 2026-09-14 | SceneVariants 1.4.4: the flag tag's default is spelled with ✅ |
+| 1.4.3 (`856c59c`) | 2026-09-02 | SceneVariants 1.4.3: the pane's Synchronize button is unavailable while a dialog is open |
+| 1.4.2 (`4fcd6bb`) | 2026-09-02 | Review fixes 2026-09-02: the All row is drawn once, and sixty more |
 | 1.4.1 (`19eded8`) | 2026-09-01 | SceneVariants 1.4.1: the review divider is a full-width drag bar, not a corner grip |
 | 1.4.0 (`943b9da`) | 2026-09-01 | SceneVariants 1.4.0: the field's own display links each stash-box line, and the migrate scan flags pseudo-plus-real drift |
 | 1.3.1 (`8d12dd8`) | 2026-09-01 | SceneVariants 1.3.1: a save re-reads the pane, and the review score explains itself on hover |

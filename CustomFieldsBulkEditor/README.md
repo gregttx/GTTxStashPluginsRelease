@@ -1,17 +1,9 @@
 # ᝯㄝₓ Custom Fields Bulk Editor
 
-> ## ⚠ This release needs ᝯㄝₓ Core
->
-> From this version on, this plugin needs **[ᝯㄝₓ Core](../GTTxCore/README.md)** installed and
-> enabled. It holds the code every ᝯㄝₓ plugin used to carry its own copy of — the hover cards, the
-> tooltips, the Reload UI button, the rules that place a button in one of Stash's rows.
->
-> **If you install through a source index**, Stash installs it for you: it is declared as a
-> dependency and loaded first. **If you copy folders by hand, copy `GTTxCore/` too.**
->
-> Without it this plugin stops at load and says so once in the browser console. Your settings and
-> your library are untouched either way — the plugin id, every setting key and everything stored
-> under them are unchanged.
+Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTxCore/README.md), installed and enabled alongside
+it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
+copy must copy the `GTTxCore` folder too. `custom_fields` on the entity types, and
+`CustomFieldsInput` on their update mutations, are what this plugin is built on.
 
 > ## Backing up your database first is recommended
 >
@@ -24,16 +16,13 @@
 > undo. Read the list before pressing Apply — that is what it is for — and for a first run over a
 > large selection, stop Stash and copy `stash-go.sqlite` (next to your `config.yml`) somewhere safe.
 
-> **Requires Stash 0.31.0 or newer.** `custom_fields` on the entity types, and `CustomFieldsInput`
-> on their update mutations, are what this plugin is built on.
-
 Stash stores custom fields on seven kinds of entity and lets you edit them **one record at a time**.
 Its API has no such limit. This plugin adds the two things that are missing: a **view** of what a
 whole selection — or the whole library — carries, and **one write across it**.
 
 ---
 
-## Using it
+## Usage
 
 **Two ways in.** For a selection:
 
@@ -248,27 +237,6 @@ in the log stays: every message, and the report of every Apply with its `before 
 `custom_fields` field at all, so the marker list (`/scenes/markers`) shows no menu item. That is a
 schema fact, not a gap in this plugin.
 
-## Settings
-
-One switch and two names, in Settings → Plugins:
-
-| Setting | Default | What it does |
-| --- | --- | --- |
-| **Skip Images in the Whole-Library Task** | off | Leaves Images out of the library-wide task, so it covers the other six types only. Images are usually the most numerous type by a wide margin, and reading them can be most of the wait. The dialog says in an `[INFO]` line when it is on. It applies to the descriptions task too, where a field only images carry will then read as an orphan. |
-| **Description Store Tag Name** | `ᱜ╦╦🞮 🗃️🔌 🛂🧲 🛠🛈🖫 ❌∙` | The name of the tag that holds every custom field's description. Changing it **renames the existing tag** rather than starting a second store — the tag is found by a marker custom field (`ᱜ╦╦🞮_🛂🧲_🛠🛈🖫_desc_store`), not by its name. Leave it empty to go back to the default. Once a store exists, a **🔗** appears on the value's own line, left of **Edit**, linking to the tag the descriptions are actually on — found by that marker, so it is right even before a rename has been applied. Hover it for what that tag is: its picture, its aliases, its parents, its children and its description. |
-| **Hide from Add Lists — Custom Field Name** | `ᱜ╦╦🞮_exclude_from_add_list` | Entities carrying this custom field are hidden from Stash's add/select dropdowns. Any value other than empty, `0` or `false` counts as marked. Clear the setting to switch the filtering off. Renaming that field with the dialog's **Rename** mode moves this setting with it, so the two cannot drift apart. A **ⓘ** beside the value hovers to the field's own description, how many entities carry it and the first ten of them — read on hover, never on the page's own redraw. The tooltip opens above the mark rather than under the pointer, where the cursor would sit on top of its first line. |
-
-The first two are read when you press a task button, so flipping one and running the task in the
-same session does what it says. **Skip Images** does not affect a selection — the **"..."** menu acts
-on exactly what you selected, image lists included.
-
-**The two names are written into your settings the first time the plugin loads**, since Stash has no
-default value for a plugin setting and the boxes would otherwise read as empty while the plugin used
-the defaults above. Whatever you have put there is never written over — including a box you have
-**cleared on purpose**, which is a different thing from one that was never set: an empty **Hide from
-Add Lists** means no filtering at all, and an empty **Description Store Tag Name** goes back to the
-default name.
-
 ## Custom field descriptions
 
 Settings → Tasks → **Manage Custom Field Descriptions...** scans the library and shows every custom
@@ -355,12 +323,33 @@ write and says so rather than overwriting what is there.
 newer release may keep things in there that an older one would drop. Load that version (or newer),
 or delete the tag's description by hand — which loses the descriptions in it.
 
+## Settings
+
+One switch and two names, in Settings → Plugins:
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| **Skip Images in the Whole-Library Task** | off | Leaves Images out of the library-wide task, so it covers the other six types only. Images are usually the most numerous type by a wide margin, and reading them can be most of the wait. The dialog says in an `[INFO]` line when it is on. It applies to the descriptions task too, where a field only images carry will then read as an orphan. |
+| **Description Store Tag Name** | `ᱜ╦╦🞮 🗃️🔌 🛂🧲 🛠🛈🖫 ❌∙` | The name of the tag that holds every custom field's description. Changing it **renames the existing tag** rather than starting a second store — the tag is found by a marker custom field (`ᱜ╦╦🞮_🛂🧲_🛠🛈🖫_desc_store`), not by its name. Leave it empty to go back to the default. Once a store exists, a **🔗** appears on the value's own line, left of **Edit**, linking to the tag the descriptions are actually on — found by that marker, so it is right even before a rename has been applied. Hover it for what that tag is: its picture, its aliases, its parents, its children and its description. |
+| **Hide from Add Lists - Custom Field Name** | `ᱜ╦╦🞮_exclude_from_add_list` | Entities carrying this custom field are hidden from Stash's add/select dropdowns. Any value other than empty, `0` or `false` counts as marked. Clear the setting to switch the filtering off. Renaming that field with the dialog's **Rename** mode moves this setting with it, so the two cannot drift apart. A **ⓘ** beside the value hovers to the field's own description, how many entities carry it and the first ten of them — read on hover, never on the page's own redraw ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)). |
+
+The first two are read when you press a task button, so flipping one and running the task in the
+same session does what it says. **Skip Images** does not affect a selection — the **"..."** menu acts
+on exactly what you selected, image lists included.
+
+**The two names are written into your settings the first time the plugin loads**, since Stash has no
+default value for a plugin setting and the boxes would otherwise read as empty while the plugin used
+the defaults above. Whatever you have put there is never written over — including a box you have
+**cleared on purpose**, which is a different thing from one that was never set: an empty **Hide from
+Add Lists** means no filtering at all, and an empty **Description Store Tag Name** goes back to the
+default name.
+
 ## Relationship to the other plugins in this repo
 
-While it writes, this plugin takes a **bulk-edit lease** on the shared object the ᝯㄝₓ plugins use,
+While it writes, this plugin takes a [bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease),
 so `ᝯㄝₓ Merge Performer Tags To Scenes` and `ᝯㄝₓ Normalize Parent Tags` stand their automatic
-modes down until it finishes rather than reacting to every entity it touches. If one of *them* is
-writing when you open the dialog, the head says so — advisory, not a lock; you started this by hand
+modes down until it finishes rather than reacting to every entity it touches. If one of *them* holds
+a lease when you open the dialog, the head says so — advisory, not a lock; you started this by hand
 and it will not refuse.
 
 Nothing else overlaps: no other plugin here touches custom fields, and none of them puts anything in
@@ -368,16 +357,10 @@ the list-view menu.
 
 ## Troubleshooting
 
-**The menu item is not there.** Type this in the browser console (F12 → Console) and open the menu
-again:
-
-```js
-__GTTx__.StashPluginCoop.debugButtons = true
-```
-
-Every ᝯㄝₓ plugin that draws a control into Stash's own UI answers to that one switch. This one will
-say which of the three conditions is not met — not a list view, no open menu, or nothing selected —
-on the next tick. Set it back to `false` to stop.
+**The menu item is not there.** Turn on the
+[debug switch](../GTTxCore/README.md#the-debug-switch) (`__GTTx__.StashPluginCoop.debugButtons = true`
+in the browser console) and open the menu again: this plugin says which of the three conditions is
+not met — not a list view, no open menu, or nothing selected — on the next tick.
 
 If it says **not a list view** on a page that plainly is one: the plugin works out what a list holds
 from the URL, and a few of Stash's lists live at a URL that names something else — a gallery's own
@@ -392,7 +375,7 @@ link to a *relative* of their own type are handled: a tag card names its parent 
 its parent studio, and the row's own entity is the one it links twice. Report which list, and the two
 numbers.
 
-**The settings group is plain — no README link under the description, no hover boxes on the
+**The settings group is plain — no README link under the description, no tooltips on the
 settings, and the stale-script warning could not appear there either.** This plugin finds its own
 block on **Settings → Plugins** by the group's heading, which is the plugin's name, and it is the
 only plugin here with no second route in. So the name in `CustomFieldsBulkEditor.js` and the name in
@@ -403,21 +386,17 @@ the console says any of this.
 
 ### Checking which version is actually running
 
-**Your browser is running an older copy of the plugin.** Stash serves plugin scripts with caching
-on, so an update can leave the new version installed on the server while the page in front of you
-goes on running the old one. You do not have to go looking for this — the plugin says so in red, in
-two places:
+**Your browser may be running an older copy of the plugin.** An update can leave the new version
+installed on the server while the page in front of you goes on running the old one, and the plugin
+says so in red, in two places: at the top of **its settings group**, above the description, so it
+shows even with the group collapsed; and in **either dialog**, in a box of its own under the title.
+Both name the version you are running, the version installed, and carry the red **Reload UI**
+button — see [the stale-script banner and the Reload UI
+button](../GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button).
 
-- **Its settings group**, at the top, above the description — so it shows even with the group
-  collapsed.
-- **Either dialog**, in a box of its own under the title.
-
-**A red Reload UI button appears beside Stash's own Reload plugins** while any ᝯㄝₓ plugin's script is out of date, at the top of Settings → Plugins. Pressing it reloads the page, which is the whole fix: **Reload plugins** re-reads the plugin folder on the server and cannot replace a script this page has already run. Any other Stash tab you have open needs the same. **The same red button is in every dialog's own stale banner**, so a warning found while a dialog is open can be acted on where it is read.
-
-Both name the version you are running, the version installed, and the fix: reload the page, and if
-the warning comes back, hard-refresh with **Ctrl+Shift+R** (⌘+Shift+R on a Mac). **Apply** stays
-disabled while they disagree — but never Undo, since stranding you with changes you cannot take back
-would be worse than the mismatch. The warning goes into the log too, so **Copy log** carries it.
+**Apply** stays disabled while they disagree — but never Undo, since stranding you with changes you
+cannot take back would be worse than the mismatch. The warning goes into the log too, so **Copy
+log** carries it.
 
 It catches an update, not an edit: the two numbers only differ once the version changes, so a script
 edited in place without a version bump looks current to this check.

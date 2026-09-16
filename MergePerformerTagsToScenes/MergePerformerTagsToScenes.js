@@ -75,7 +75,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.1.0';
+  var PLUGIN_VERSION      = '4.1.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -1254,7 +1254,7 @@
   }
 
   function taskTagTooltip(t, id) {
-    var lines = [taskOneLine((t && t.name) || 'unnamed'), 'Stash tag id ' + id];
+    var lines = [taskOneLine((t && t.name) || 'unnamed'), 'tag id ' + id];
 
     var aliases = taskAliasList(t);
     if (aliases.length) {

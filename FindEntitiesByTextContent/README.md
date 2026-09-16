@@ -1,17 +1,8 @@
 # ᝯㄝₓ Find & Replace Entities by Text Content
 
-> ## ⚠ This release needs ᝯㄝₓ Core
->
-> From this version on, this plugin needs **[ᝯㄝₓ Core](../GTTxCore/README.md)** installed and
-> enabled. It holds the code every ᝯㄝₓ plugin used to carry its own copy of — the hover cards, the
-> tooltips, the Reload UI button, the rules that place a button in one of Stash's rows.
->
-> **If you install through a source index**, Stash installs it for you: it is declared as a
-> dependency and loaded first. **If you copy folders by hand, copy `GTTxCore/` too.**
->
-> Without it this plugin stops at load and says so once in the browser console. Your settings and
-> your library are untouched either way — the plugin id, every setting key and everything stored
-> under them are unchanged.
+Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTxCore/README.md), installed and enabled alongside
+it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
+copy must copy the `GTTxCore` folder too.
 
 Which entities in your library mention this text — and can I change it everywhere at once?
 
@@ -19,9 +10,7 @@ Stash cannot be asked. It will filter a scene list on a scene's own `details`, a
 performer list on a performer's own `details`, and nothing at all on whichever custom fields
 an entity happens to carry. This plugin is that one question, with one box to type it into.
 
-Requires Stash 0.31.0 or newer.
-
-## Using it
+## Usage
 
 **Settings → Tasks → Plugin Tasks → Find & Replace Entities by Text Content...**
 
@@ -130,9 +119,7 @@ rather than on the server:
   the same size: one number to answer, two lists, because offering a replacement back in the
   search box would suggest a value that has never been typed there.
 
-**Replace itself is never remembered.** It is off every time the dialog opens. "Remember
-filters" keeps the types, which decide what is *read*; whether a write is on offer at all is
-the one default worth being conservative about.
+**Replace itself is never remembered.** It is off every time the dialog opens.
 
 Neither is a plugin setting, and neither writes anything: they live in the browser's own
 storage. A private window, or a browser set to block site data, simply remembers nothing.
@@ -144,9 +131,8 @@ storage. A private window, or a browser set to block site data, simply remembers
 Tick **Replace** and a second line appears: what to put in place of the text you searched
 for. The tick is only available once the box above says what to look for - a replacement
 replaces what a search found, so there is nothing for it to offer before that. The **Replace** button then rewrites every entity on the list — so **the list you are
-looking at is the plan**. There is no second review dialog, because the list already names
-every entity, which attributes matched and how many times each; putting a plan in front of a
-plan would say nothing new.
+looking at is the plan**. There is no second review dialog: the list already names every
+entity, which attributes matched and how many times each.
 
 Three things follow from that, and all three are worth knowing before the first press:
 
@@ -162,8 +148,6 @@ writes alone.
   the box unticked — the default — `beach` finds `Beach day`, and replacing with `shore`
   leaves `shore day`; ticked, only `beach` exactly as typed is found. A replacement acts on
   the setting the *search* ran with, which is what makes the list on screen the plan.
-  Guessing that a capitalised match wanted a capitalised replacement is a rule nobody asked
-  for, and a wrong guess is a wrong word in your library.
 - **An empty box deletes the text it finds.** That is a thing to want, so it is allowed; a
   replacement that is *the same* as what you searched for is refused, because it would
   change nothing.
@@ -194,9 +178,6 @@ is an exact per-field inverse, not a restore of the whole record, so an unrelate
 in between is not reverted. The list on screen still describes what was found *before* the
 write — press **Refresh** to search again.
 
-While it writes it takes the shared bulk lease, so the other ᝯㄝₓ plugins' automatic modes
-stand down for it.
-
 ## Nothing is written until you ask
 
 With **Replace** off this is a read of your library and a list of links: there is no undo
@@ -204,16 +185,15 @@ because there is nothing to undo, and the head says so where a writing dialog wo
 to back up first. Ticking Replace swaps that sentence for the backup one, which is the only
 honest thing either of them can say in the other's state.
 
-Either way it does note in its head when another ᝯㄝₓ plugin is rewriting the library while
-you search, since a result may then be a moment behind.
+Either way it does note in its head when another ᝯㄝₓ plugin holds a bulk-edit lease while you
+search, since a result may then be a moment behind.
 
 ## Matching
 
 A plain substring. A short word matches inside longer ones — "sea" inside "season" — which is
 why the text around every result is on the line: so you can see which it was.
 
-**Case-sensitive** is off by default, which is what every search here has always done: `beach`
-also finds `Beach`. Tick it and the text must match exactly as typed. Three things follow:
+**Case-sensitive** is off by default: `beach` also finds `Beach`. Tick it and the text must match exactly as typed. Three things follow:
 
 - It applies to a **replacement** as well, which finds what the search found.
 - A search reads it when it **starts**, so changing it takes effect on the next search — and a
@@ -226,9 +206,23 @@ also finds `Beach`. Tick it and the text must match exactly as typed. Three thin
 **It is remembered**, in this browser, without needing **Remember filters** on — that box keeps
 the entity types, and somebody who wants case-sensitive matching usually wants it every search.
 
-## Why it reads everything
+## No settings
 
-There is no server-side filter that can answer "does any text field of any type contain this
+There are none, on purpose. Every choice this plugin offers — what to look for, which types
+to read, what to replace with, what to remember — is made inside the dialog, where you
+already are. Its group on the settings page carries the description and nothing else.
+
+## Relationship to the other plugins in this repo
+
+While **Replace** writes, this plugin takes a
+[bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease), so the other ᝯㄝₓ plugins' automatic
+modes stand down for it; while another plugin holds one, the dialog's head says so. Nothing else
+overlaps: no other plugin here searches text, and the descriptions ᝯㄝₓ Custom Fields Bulk Editor
+keeps are reached by ᝯㄝₓ Entity Name Maintainer, not by this search.
+
+## Notes and limitations
+
+**Why it reads everything.** There is no server-side filter that can answer "does any text field of any type contain this
 string". Each type's filter names its own fields, so a query would have to be built per type
 and OR-ed across fields; and custom fields can only be filtered by naming the key up front,
 with no way to ask for whichever keys an entity happens to carry. So the rows come back and
@@ -238,29 +232,27 @@ Pause.
 Turning off the types you do not need is the way to make it quick — which is why they all
 start off.
 
-## No settings
+## Troubleshooting
 
-There are none, on purpose. Every choice this plugin offers — what to look for, which types
-to read, what to replace with, what to remember — is made inside the dialog, where you
-already are. Its group on the settings page carries the description and nothing else.
+**The task button does nothing.** The click is handled in the browser — there is no
+server-side job behind it. If Stash instead shows an "added job to queue" toast, the page is
+running a script that does not recognise the button; reload the page.
+
+**A type is skipped with a warning.** Your Stash has none of the text fields this plugin
+looks for on that type. That is the introspection check doing its job rather than a failure;
+the other types are searched normally.
+
+### Checking which version is actually running
+
+**A red banner says the page is running an older script**, on the settings group and in the
+dialog, each with a red **Reload UI** button. Press it, or reload the page — see [the
+stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button).
 
 ## Installing
 
 Copy the `FindEntitiesByTextContent` folder into your Stash plugins directory
 (`<stash-config-dir>/plugins/`) and press **Reload plugins** in Settings → Plugins.
 
-## Troubleshooting
+## Licence
 
-**The task button does nothing.** The click is handled in the browser — there is no
-server-side job behind it. If Stash instead shows an "added job to queue" toast, the page is
-running a script that does not recognise the button; reload with Ctrl+Shift+R.
-
-**A red banner says the page is running an older script.** Stash serves plugin JS with
-caching on, so the browser can still be running the file it fetched before the update. Press
-Ctrl+Shift+R (⌘+Shift+R on a Mac).
-
-**A red Reload UI button appears beside Stash's own Reload plugins** while any ᝯㄝₓ plugin's script is out of date, at the top of Settings → Plugins. Pressing it reloads the page, which is the whole fix: **Reload plugins** re-reads the plugin folder on the server and cannot replace a script this page has already run. Any other Stash tab you have open needs the same. **The same red button is in every dialog's own stale banner**, so a warning found while a dialog is open can be acted on where it is read.
-
-**A type is skipped with a warning.** Your Stash has none of the text fields this plugin
-looks for on that type. That is the introspection check doing its job rather than a failure;
-the other types are searched normally.
+Same terms as the rest of this repository.

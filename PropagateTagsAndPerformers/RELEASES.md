@@ -3,11 +3,15 @@
 # PropagateTagsAndPerformers — releases
 
 Newest first. Each version links to the commit that shipped it; the note is that commit's
-own subject. The reasoning behind a release is in `CLAUDE.md`, and what the plugin does now
+own subject. The reasoning behind a release is in `NOTES.md`, and what the plugin does now
 is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.4.1 (`ed8e8b9`) | 2026-09-14 | PropagateTagsAndPerformers 4.4.1: the child-tag exclusion setting reads "child tags" |
+| 4.4.0 (`05d543e`) | 2026-09-14 | PropagateTagsAndPerformers 4.4.0: a tag and everything under it can be kept out |
+| 4.3.0 (`9e53be6`) | 2026-09-14 | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |
+| 4.2.1 (`6187590`) | 2026-09-10 | PropagateTagsAndPerformers 4.2.1: a write evicts the list query too, so a page listing what it wrote refetches |
 | 4.2.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 4.1.3 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 4.1.2 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |

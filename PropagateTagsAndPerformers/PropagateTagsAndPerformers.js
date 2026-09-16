@@ -42,6 +42,7 @@
     entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
     entityTipGender = C.entityTipGender, entityTipLines = C.entityTipLines,
     entityTipDetail = C.entityTipDetail, entityTip = C.entityTip,
+    splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny,
     cfTipCarriers = C.cfTipCarriers, cfTipTitle = C.cfTipTitle, cfTipLoad = C.cfTipLoad,
     cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen, cfTipArm = C.cfTipArm,
     cfTipTick = C.cfTipTick, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
@@ -81,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '4.2.0';
+  var PLUGIN_VERSION = '4.4.1';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -802,6 +803,9 @@
     // The one filter here whose rule belongs to another plugin, which is why it is
     // asked rather than copied. See `nptPruners`.
     f5SkipTagsNormalizeWouldPrune: false,
+    f6ExcludeTagNameContains: '',
+    f7TagNameSeparator: '',
+    f8ExcludeTagSubtreeName: '',
 
     g1LogToConsole: false,
   };
@@ -1321,6 +1325,7 @@
   //    three are silence, because a tag exclusion filter works perfectly well with no
   //    sentence explaining it.
   var F1_KEY = 'f1ExcludeTargetWithTagName';
+  var F8_KEY = 'f8ExcludeTagSubtreeName';
   var F4_KEY = 'f4ExcludeTagWithCustomFieldName';
   var F4_DEFAULT = DEFAULTS[F4_KEY];
   var F4_DESCRIPTION = 'Never propagate a tag marked via this Custom Field. Used by the ' +
@@ -1843,6 +1848,10 @@
     if (s.f3ExcludeTagWithIgnoreAutoTag) out.push('tags set to Ignore auto tag are never copied');
     var field = (s.f4ExcludeTagWithCustomFieldName || '').trim();
     if (field) out.push('tags carrying the custom field "' + field + '" are never copied');
+    var terms = splitTerms(s.f6ExcludeTagNameContains, (s.f7TagNameSeparator || '').trim());
+    if (terms.length) out.push('tags whose name contains "' + terms.join('", "') + '" are never copied');
+    var under = (s.f8ExcludeTagSubtreeName || '').trim();
+    if (under) out.push('"' + under + '" and every tag under it are never copied');
     return out;
   }
 
@@ -1877,8 +1886,11 @@
     // Only when the exclusion box holds something: `aliases` is a list per tag, and
     // asking for it across the whole library to answer a question nobody has posed
     // is the same dead weight `custom_fields` is below.
-    if ((s.f1ExcludeTargetWithTagName || '').trim()) fields += ' aliases';
+    var under = (s.f8ExcludeTagSubtreeName || '').trim();
+    if ((s.f1ExcludeTargetWithTagName || '').trim() || under) fields += ' aliases';
     if ((s.f4ExcludeTagWithCustomFieldName || '').trim()) fields += ' custom_fields';
+    // The subtree filter walks the hierarchy, and only it does.
+    if (under) fields += ' parents { id }';
     return 'query PTPTags { findTags(filter: { per_page: -1 }) { tags { ' + fields + ' } } }';
   }
 
@@ -2053,9 +2065,10 @@
   // and no custom fields on the relationship, so the two performer paths are
   // governed by the entity-level filters alone. The settings say "tags" for that
   // reason.
-  function makeFilters(s, tagMap, excludeTagId) {
+  function makeFilters(s, tagMap, excludeTagId, under) {
     var wantCustom = (s.f4ExcludeTagWithCustomFieldName || '').trim();
     var ignoreAuto = !!s.f3ExcludeTagWithIgnoreAutoTag;
+    var terms = splitTerms(s.f6ExcludeTagNameContains, (s.f7TagNameSeparator || '').trim());
     return {
       excludeTagId: excludeTagId,
       // Why a tag was refused, or null. A reason rather than a boolean so the log
@@ -2072,6 +2085,11 @@
         if (ignoreAuto && t.ignore_auto_tag) return 'Ignore auto tag is set';
         if (wantCustom && t.custom_fields && hasOwn(t.custom_fields, wantCustom)) {
           return 'it carries the custom field "' + wantCustom + '"';
+        }
+        var term = terms.length ? nameMatchesAny(t.name || '', terms) : null;
+        if (term) return 'its name contains "' + term + '"';
+        if (under && under.ids[String(id)]) {
+          return 'it is "' + tagName(tagMap, under.rootId) + '" or a tag under it';
         }
         return null;
       },
@@ -2126,13 +2144,52 @@
   function resolveExclusionTagId(settings, tagMap) {
     var wanted = (settings.f1ExcludeTargetWithTagName || '').trim();
     if (!wanted) return null;
-    var list = [];
-    for (var id in tagMap) if (hasOwn(tagMap, id)) list.push(tagMap[id]);
-    var hit = pickTagByNameOrAlias(list, wanted);
-    if (hit) return String(hit.id);
+    var hit = tagIdByNameOrAlias(tagMap, wanted);
+    if (hit) return hit;
     throw new Error('The exclusion tag "' + wanted + '" does not exist, by name or by ' +
       'alias. Nothing was planned: running without it would write to the entities it ' +
       'is there to protect. Create the tag, or clear that setting.');
+  }
+
+  function tagIdByNameOrAlias(tagMap, wanted) {
+    var list = [];
+    for (var id in tagMap) if (hasOwn(tagMap, id)) list.push(tagMap[id]);
+    var hit = pickTagByNameOrAlias(list, wanted);
+    return hit ? String(hit.id) : null;
+  }
+
+  // The "never copy this tag or anything under it" filter: the root's id and the set of
+  // ids it covers, itself included, or null when the box is empty. Resolved like the
+  // exclusion tag above and, like it, a name matching nothing stops the run: copying
+  // the very tags the filter keeps out is the direction nothing here can undo.
+  //
+  // The subtree is walked *upward*, from every tag's `parents` - Stash gives a tag its
+  // parents on the same list query that gives its name, where `children` would be a
+  // second list per tag. It repeats until nothing joins, which is what makes a cycle
+  // in the hierarchy safe.
+  function subtreeFilter(settings, tagMap) {
+    var wanted = (settings.f8ExcludeTagSubtreeName || '').trim();
+    if (!wanted) return null;
+    var rootId = tagIdByNameOrAlias(tagMap, wanted);
+    if (!rootId) {
+      throw new Error('The subtree tag "' + wanted + '" does not exist, by name or by ' +
+        'alias. Nothing was planned: running without it would copy the tags it is there ' +
+        'to keep out. Create the tag, or clear that setting.');
+    }
+    var ids = {};
+    ids[rootId] = true;
+    var grew = true;
+    while (grew) {
+      grew = false;
+      for (var id in tagMap) {
+        if (!hasOwn(tagMap, id) || ids[id]) continue;
+        var parents = tagMap[id].parents || [];
+        for (var i = 0; i < parents.length; i++) {
+          if (parents[i] && ids[String(parents[i].id)]) { ids[id] = true; grew = true; break; }
+        }
+      }
+    }
+    return { rootId: rootId, ids: ids };
   }
 
   // ── Planning ──────────────────────────────────────────────────────────────
@@ -2880,7 +2937,17 @@
           { text: '.' }];
         self.log('INFO', partsText(ex), ex);
       }
-      self.filters = makeFilters(self.settings, self.tagMap, excludeTagId);
+      var under = subtreeFilter(self.settings, self.tagMap);
+      if (under) {
+        var n = 0;
+        for (var k in under.ids) if (hasOwn(under.ids, k)) n++;
+        var un = [{ text: 'Excluded subtree resolved: ' },
+          { text: tagLabel(self.tagMap, under.rootId), href: entityHref('tag', under.rootId),
+            ent: { type: 'tags', id: under.rootId } },
+          { text: ', ' + plural(n, 'tag') + ' including itself.' }];
+        self.log('INFO', partsText(un), un);
+      }
+      self.filters = makeFilters(self.settings, self.tagMap, excludeTagId, under);
       return nptPruners(self.settings).then(function (npt) {
         self.npt = npt;
         self.logPruneFilter(npt);
@@ -4471,11 +4538,11 @@
   // ── The one exclusion filter that lives here ──────────────────────────────
   //
   // `f5SkipTagsNormalizeWouldPrune` had a row on Stash's settings page beside the
-  // other four filters, and it does not any more: it is declared in no `.yml`, so
+  // other seven filters, and it does not any more: it is declared in no `.yml`, so
   // nothing renders it and this checkbox is the only editor it has. Two reasons, and
   // the second is the one that made it worth moving:
   //
-  //   - **Its rule is another plugin's.** The other four are answered by this
+  //   - **Its rule is another plugin's.** The other seven are answered by this
   //     plugin's own tables; this one is answered by asking `NormalizeParentTags`
   //     what it would prune, which is a question with no answer at all when that
   //     plugin is absent, disabled, or older than the release that publishes
@@ -4576,7 +4643,7 @@
       'Every path only ever adds; nothing is removed from the source or the target. ' +
       'The order below is the order a run walks them in, and it matters: what an ' +
       'earlier path adds is what a later one reads. The exclusion filters apply to all ' +
-      'of them - four in the plugin settings, and the fifth under the paths here.'));
+      'of them - seven in the plugin settings, and the eighth under the paths here.'));
     this.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
     head.appendChild(this.noteEl);
     this.modal.appendChild(head);
@@ -5211,7 +5278,8 @@
   function autoContext(settings) {
     return gqlRequest(tagQuery(settings), null).then(function (data) {
       var tagMap = buildTagMap(((data.findTags || {}).tags) || []);
-      var filters = makeFilters(settings, tagMap, resolveExclusionTagId(settings, tagMap));
+      var filters = makeFilters(settings, tagMap, resolveExclusionTagId(settings, tagMap),
+        subtreeFilter(settings, tagMap));
       // The sibling's answer is a snapshot of its settings, taken here with the tag
       // map and the filters because it has the same lifetime as both.
       return nptPruners(settings).then(function (npt) {
@@ -5978,21 +6046,26 @@
 
 
 
-  var EXCL_LINK_ID = 'ptp2re-exclusion-tag';
+  // The two rows that name a tag, each with its own link and its own lookup cache.
+  var TAG_ROWS = [
+    { key: F1_KEY, linkId: 'ptp2re-exclusion-tag' },
+    { key: F8_KEY, linkId: 'ptp2re-exclusion-subtree' },
+  ];
   var EXCL_MARK = '🔗';      // link symbol
   var EXCL_TTL_MS = 15000;             // so a tag created just now is found without a reload
-  var _exclFor = null, _exclAt = 0, _exclWait = null;
+  var _excl = {};                      // per row: { name, at, wait }
 
-  function lookupExclusionTag(name) {
-    if (name === _exclFor && Date.now() - _exclAt < EXCL_TTL_MS) return _exclWait;
-    _exclFor = name;
-    _exclAt = Date.now();
+  function lookupExclusionTag(row, name) {
+    var st = _excl[row.key] || (_excl[row.key] = { name: null, at: 0, wait: null });
+    if (name === st.name && Date.now() - st.at < EXCL_TTL_MS) return st.wait;
+    st.name = name;
+    st.at = Date.now();
     // One query for both halves, through the filter's own OR. `per_page: -1` for the
     // reason the sibling's lookup gives: Stash compiles EQUALS to SQL LIKE, where _
     // and % are wildcards, so a name carrying either can match far more tags than one
     // page holds - and the exact match falling off page 1 would silently say the tag
     // does not exist.
-    _exclWait = gqlRequest(
+    st.wait = gqlRequest(
       'query PTPExclusionTag($filter: FindFilterType, $tag_filter: TagFilterType) {' +
       '  findTags(filter: $filter, tag_filter: $tag_filter) { tags { id name aliases ' +
       'description parents { name } children { name } } }' +
@@ -6010,16 +6083,21 @@
       // than a second copy of the rule.
       return pickTagByNameOrAlias(((data.findTags || {}).tags) || [], name);
     }, function () { return null; });   // a link is not worth an error
-    return _exclWait;
+    return st.wait;
   }
 
-  function dropExclusionLink() {
-    var node = document.getElementById(EXCL_LINK_ID);
+  function dropExclusionLink(row) {
+    var node = document.getElementById(row.linkId);
     if (node && node.parentNode) node.parentNode.removeChild(node);
   }
 
   function exclusionTagTick() {
-    if (!settingRow(F1_KEY)) return;
+    TAG_ROWS.forEach(tagRowTick);
+  }
+
+  function tagRowTick(tagRow) {
+    var KEY = tagRow.key;
+    if (!settingRow(KEY)) return;
     // From the cache rather than the row: Stash renders a STRING setting's value into
     // a span, and the dialog's own saves never reach the React state behind it.
     if (!_autoSettings) {
@@ -6029,16 +6107,16 @@
       if (!_autoSettingsWait) autoSettings().then(function () { exclusionTagTick(); }, function () {});
       return;
     }
-    var name = String(_autoSettings[F1_KEY] || '').trim();
-    if (!name) { dropExclusionLink(); return; }
-    lookupExclusionTag(name).then(function (tag) {
-      var row = settingRow(F1_KEY);
-      if (!row || name !== _exclFor) return;      // the box moved on while we asked
-      if (!tag) { dropExclusionLink(); return; }
-      var node = document.getElementById(EXCL_LINK_ID);
+    var name = String(_autoSettings[KEY] || '').trim();
+    if (!name) { dropExclusionLink(tagRow); return; }
+    lookupExclusionTag(tagRow, name).then(function (tag) {
+      var row = settingRow(KEY);
+      if (!row || name !== _excl[KEY].name) return;      // the box moved on while we asked
+      if (!tag) { dropExclusionLink(tagRow); return; }
+      var node = document.getElementById(tagRow.linkId);
       if (!node) {
         node = el('a', 'ptp2re-tagicon', EXCL_MARK);
-        node.id = EXCL_LINK_ID;
+        node.id = tagRow.linkId;
         node.target = linkTarget();
         node.rel = 'noopener noreferrer';
       }
@@ -7018,6 +7096,11 @@
       ids.forEach(function (id) {
         client.cache.evict({ id: TARGETS[target].label + ':' + String(id) });
       });
+      // The list query too. Apollo drops an evicted object out of any list that held
+      // it and calls the read complete, so evicting only the objects emptied a
+      // performer page's scene list rather than refreshing it. An evicted root field
+      // is an incomplete read, and that is what makes the list refetch.
+      client.cache.evict({ id: 'ROOT_QUERY', fieldName: TARGETS[target].find });
       if (client.cache.gc) client.cache.gc();
     } catch (e) {
       console.error('[ptp2re] cache eviction failed:', e);

@@ -16,12 +16,13 @@
 //
 // **The tab itself never writes.** It reads two queries - the variants and the tag tree
 // they are classified against - and draws a list of links. What writes is a dialog with
-// the whole plan listed first, reached three ways: the two tasks in Settings - Tasks
-// (the stash-id migration and the flag), and the tab's own Synchronize Variants button.
-// Every write takes a lease and is undoable while its dialog stays open.
+// the whole plan listed first, reached five ways: the three tasks in Settings - Tasks
+// (the stash-id migration, the flag and the library-wide review), the tab's own
+// Synchronize Variants button, and the offer that follows a save in the scene's edit
+// form. Every write takes a lease and is undoable while its dialog stays open.
 //
-// The design notes, and the reasoning behind the parts that look arbitrary, are in
-// CLAUDE.md next to this file.
+// The rules this file follows are in CLAUDE.md next to it; the reasoning behind the
+// parts that look arbitrary is in NOTES.md.
 (function () {
   'use strict';
 
@@ -43,19 +44,13 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipRatingBadge = C.tipRatingBadge,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
-    tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
-    entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
-    entityTipGender = C.entityTipGender, entityTipLines = C.entityTipLines,
-    entityTipDetail = C.entityTipDetail, entityTip = C.entityTip,
-    cfTipCarriers = C.cfTipCarriers, cfTipTitle = C.cfTipTitle, cfTipLoad = C.cfTipLoad,
-    cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen, cfTipArm = C.cfTipArm,
-    cfTipTick = C.cfTipTick, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
+  var coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
+    copyToClipboard = C.copyToClipboard, tipRatingBadge = C.tipRatingBadge,
+    tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
+    entityTip = C.entityTip, cfTipTick = C.cfTipTick,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    entityTipName = C.entityTipName;
+    hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, byClass = C.byClass,
+    coreSettingElement = C.settingElement, coreSettingRow = C.settingRow;
 
   var PLUGIN_ID   = 'SceneVariants';
   var PLUGIN_NAME = 'ᝯㄝₓ Scene Variants';
@@ -71,10 +66,9 @@
   // version over the previous one's behaviour is the normal look of a stale script,
   // not a contradiction.
   //
-  // The major digit is zero and stays there until the plugin has been used in a live
-  // Stash: it is the claim that the thing works, and no test in this repo can check a
-  // guess about Stash's markup or about a filter field name.
-  var PLUGIN_VERSION = '1.4.1';
+  // The number the .yml and the manifest carry; a dialog compares it with what Stash
+  // reports installed and refuses to write from a script that is not the one installed.
+  var PLUGIN_VERSION = '1.6.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -118,9 +112,6 @@
   // paints its task button with.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
 
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-  }
 
   function trim(text) {
     return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
@@ -201,15 +192,16 @@
   // like the field above and for the same reason: a tag name is flat and unowned. The tag
   // is machine-kept and not a source of truth - it says what the last run of the task
   // found, nothing fresher.
-  var FLAG_DEFAULT = 'ᱜ╦╦🞮⸎✱MultiVariants❌∙';
-  // The name this shipped under for one release, only ever written by the seed - treated
-  // as unanswered so the rename reaches a box nobody chose deliberately, the same trade
+  var FLAG_DEFAULT = 'ᱜ╦╦🞮⸎✱MultiVariants✅∙';
+  // The names this shipped under before, only ever written by the seed - treated as
+  // unanswered so a rename reaches a box nobody chose deliberately, the same trade
   // CustomFieldsBulkEditor's legacy hide-field name makes.
-  var LEGACY_FLAG_DEFAULT = 'ᱜ╦╦🞮_Multiple_Variants';
+  var LEGACY_FLAG_DEFAULTS = ['ᱜ╦╦🞮_Multiple_Variants', 'ᱜ╦╦🞮⸎✱MultiVariants❌∙'];
+  function isLegacyFlag(v) { return LEGACY_FLAG_DEFAULTS.indexOf(v) !== -1; }
 
   function flagTagName(s) {
     var v = trim((s || settings()).a4VariantFlagTag);
-    return !v || v === LEGACY_FLAG_DEFAULT ? FLAG_DEFAULT : v;
+    return !v || isLegacyFlag(v) ? FLAG_DEFAULT : v;
   }
 
   // `stashdb.org:9f3c1e2a-...`: the provider, then the id. The endpoint is a GraphQL URL
@@ -455,10 +447,10 @@
     var missing = [], k;
     for (k in SEED_DEFAULTS) {
       if (!hasOwn(SEED_DEFAULTS, k)) continue;
-      // The legacy default was only ever written by the seed, so it is an unanswered
+      // A legacy default was only ever written by the seed, so it is an unanswered
       // box wearing an old spelling, not an answer.
       if (!hasOwn(raw, k) ||
-        (k === 'a4VariantFlagTag' && raw[k] === LEGACY_FLAG_DEFAULT)) missing.push(k);
+        (k === 'a4VariantFlagTag' && isLegacyFlag(raw[k]))) missing.push(k);
     }
     if (!missing.length) return;
     _seededField = true;
@@ -684,11 +676,12 @@
       return Promise.resolve(splitValues(customField(scene, field)));
     }
     // Only where the scene has no stash-id of its own, which after a migration is every
-    // partial-length one and is the only case where the field says something the
-    // stash-ids do not: a scene that still carries them derives the same values from
-    // them, and the field a migration wrote holds exactly those. A query per scene page
-    // to re-read what is already in hand is the two-round-trip version of a lookup this
-    // plugin deliberately does in one.
+    // partial-length one: a scene that carries stash-ids is matched on those, and the
+    // field a migration wrote holds exactly them. A query per scene page to re-read what
+    // is already in hand is the two-round-trip version of a lookup this plugin
+    // deliberately does in one. The one case the field would add something is a scene
+    // grouped by Create Variant Group that later gained a real stash-id through a
+    // scrape; the migration task's scan is where that drift is reported.
     if (ids && ids.length) return Promise.resolve([]);
     return gqlRequest('query SVRSceneFields($id: ID!) { findScene(id: $id) ' +
       '{ id custom_fields } }', { id: String(scene && scene.id) })
@@ -1016,7 +1009,7 @@
     if (!values.length) return null;
     var had = customField(scene, field);
     var value = values.join('\n');
-    var clear = cls.role === 'pl' && (scene.stash_ids || []).length > 0;
+    var clear = cls.role === 'pl';
     if (String(had == null ? '' : had) === value && !clear) return null;
     return {
       id: String(scene.id),
@@ -1076,10 +1069,11 @@
     if (_active) { if (!extra || !extra.auto) _active.focus(); return; }
     _active = new Run(task, extra);
     _active.scope = scope || null;
+    if (_paneLock) _paneLock(true);
     _active.begin();
   }
 
-  // One dialog, two tasks. The chrome, the log, the counters, the write batching and the
+  // One dialog, five tasks. The chrome, the log, the counters, the write batching and the
   // undo bookkeeping are the same machinery; what differs per task - the title, the
   // legend, the scan, the input builders, the verbs - lives on a task object rather than
   // in a second three-hundred-line copy of this one.
@@ -1351,7 +1345,8 @@
           input.value = String(self.weights[w[0]]);
           self.renderSets(false);
           if (self.remember) self.saveWeights();
-          self.msg('INFO', 'Re-sorted: an attribute difference is worth ' +
+          self.msg('INFO', 'Re-sorted: a title difference is worth ' +
+            self.weights.title + ', a cover ' + self.weights.cover + ', another attribute ' +
             self.weights.attr + ', a tag ' + self.weights.tag + ', a performer ' +
             self.weights.performer + ', a group ' + self.weights.group + '.');
         });
@@ -1415,6 +1410,9 @@
   Run.prototype.renderSets = function (first) {
     var self = this;
     var w = this.weights;
+    // The radios of the last render are detached with their rows; only this render's
+    // are worth clearing later.
+    this.srcRadios = [];
     this.show(this.setsEl, true);
     this.show(this.splitEl, true);
     this.sets.forEach(function (set) { set.score = scoreOf(set.delta, w); });
@@ -1495,10 +1493,8 @@
   // for the same reason - nothing here knows what the source deliberately dropped, so
   // a value only the target holds is its own.
   //
-  // A set already written is *committed* rather than carried: Undo reaches the set in
-  // front of you, and moving on says so. Keeping every set's writes undoable would
-  // mean a dialog whose Proceed can never be pressed again after the first set, which
-  // is exactly the one-set-at-a-time review this task exists to avoid.
+  // `changes` is not trimmed here: Undo reaches every set written while this dialog
+  // has been open, in reverse order, so moving on to the next set takes nothing away.
   Run.prototype.planSet = function () {
     if (this.state !== 'listing' || !this.source ||
       String(this.source.id) === this.plannedFrom) return;
@@ -1566,8 +1562,9 @@
       self.setState('listing');
       self.progress(self.progressText());
     }, function (err) {
+      self.plannedFrom = null;
       self.setState('listing');
-      self.msg('ERROR', 'The covers could not be read: ' +
+      self.msg('ERROR', 'The set could not be planned: ' +
         (err && err.message ? err.message : String(err)));
     });
   };
@@ -1609,8 +1606,11 @@
       seen[j.group] = true;
       groups.push(j.group);
     });
-    if (!groups.length) return;
+    // Rebuilt from nothing: a second plan, or a rescan, would otherwise draw a second
+    // row of boxes under the first, and the old row would go on steering the jobs.
+    this.allBar.textContent = '';
     this.allBoxes = [];
+    if (!groups.length) { this.show(this.allBar, false); return; }
     groups.forEach(function (g) {
       var lab = el('label', 'svr-all');
       var b = el('input', 'svr-all-box');
@@ -1665,10 +1665,9 @@
     }
     if (this.rememberBox) this.rememberBox.disabled = busy;
     this.show(this.syncSetBtn, true);
-    // Pressing it a second time on the set already listed is the one thing it must
-    // not do: a fresh plan *commits* whatever the last one wrote, so the press that
-    // looks like a no-op is the one that takes Undo away. Nothing about the listing
-    // says the button has already been used on this source, so the button says it.
+    // Pressing it a second time on the set already listed would only disable the
+    // boxes in front of you and list the same jobs again below. Nothing about the
+    // listing says the button has already been used on this source, so the button says it.
     var why = busy ? 'Let the pass finish, or stop it, before changing what it covers.'
       : this.stale ? 'Reload the page first: this tab is running an older script.'
         : !this.source ? 'Open a set and pick the scene whose values are right.'
@@ -1730,11 +1729,7 @@
     entityTip(link, 'scenes', job.id);
     line.appendChild(link);
     line.appendChild(el('span', null, tail));
-    this.logEl.appendChild(line);
-    this.logText.push('[GROUP?]  ' + name + tail);
-    this.capLog();
-    if (this.spinEl) this.logEl.appendChild(this.spinEl);
-    this.scrollLog();
+    this.appendLine(line, '[GROUP?]  ' + name + tail);
     this.candidates.push({ job: job, box: box });
   };
 
@@ -1784,14 +1779,9 @@
       else if (full && full !== text) tailEl.title = full;
       line.appendChild(tailEl);
     }
-    this.logEl.appendChild(line);
-    // A sibling of the line rather than a child, so the line's own text stays exactly
-    // what the listing says and the sub-list travels under it.
-    if (sub) this.logEl.appendChild(sub);
-    this.logText.push(head + name + tail);
-    this.capLog();
-    if (this.spinEl) this.logEl.appendChild(this.spinEl);
-    this.scrollLog();
+    // The sub-list is a sibling of the line rather than a child, so the line's own text
+    // stays exactly what the listing says and the sub-list travels under it.
+    this.appendLine(line, head + name + tail, sub);
     this.jobs.push(job);
   };
 
@@ -1886,11 +1876,7 @@
       ? 'Writing "' + this.field + ' = ' + value + '" into ' +
         plural(jobs.length, 'scene') + ' - one new variant set.'
       : 'Taking the flag tag off ' + plural(jobs.length, 'scene') + '.');
-    var lease = acquireLease(task.leaseLabel);
-    this.writeAll(jobs, task.writeInput, task.verb, lease).then(function () {
-      lease.release();
-      self.setState('listing');
-      self.progress(self.progressText());
+    this.writeThen(null, jobs, task.writeInput, task.verb, task.leaseLabel, function () {
       self.msg('INFO', 'Done: ' + plural(self.written, 'scene') + ' ' + task.verb +
         (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
         (self.stopped ? ' (stopped early; what was written stays written, and Undo takes ' +
@@ -1898,14 +1884,22 @@
     });
   };
 
+  // Every line the log gains goes through here: rendered node, plain text for Copy
+  // log, the DOM cap, the spinner back at the end, and the scroll. `sub` is an optional
+  // sibling drawn under the line.
+  Run.prototype.appendLine = function (line, text, sub) {
+    this.logEl.appendChild(line);
+    if (sub) this.logEl.appendChild(sub);
+    this.logText.push(text);
+    this.capLog();
+    if (this.spinEl) this.logEl.appendChild(this.spinEl);
+    this.scrollLog();
+  };
+
   Run.prototype.msg = function (kind, message) {
     var line = el('div', 'svr-line svr-' + kind);
     line.textContent = '[' + kind + '] ' + message;
-    this.logEl.appendChild(line);
-    this.logText.push('[' + kind + '] ' + message);
-    this.capLog();
-    if (this.spinEl) this.logEl.appendChild(this.spinEl);   // back to the end
-    this.scrollLog();
+    this.appendLine(line, '[' + kind + '] ' + message);
     if (settings().b1LogToConsole) console.info('[svr] ' + kind + ': ' + message);
   };
 
@@ -1932,11 +1926,7 @@
     tailParts.forEach(function (part) {
       line.appendChild(el('span', part.cls || null, part.text));
     });
-    this.logEl.appendChild(line);
-    this.logText.push(text);
-    this.capLog();
-    if (this.spinEl) this.logEl.appendChild(this.spinEl);
-    this.scrollLog();
+    this.appendLine(line, text);
   };
 
   // The oldest rendered lines are dropped past the cap, as in every sibling dialog: a
@@ -1971,8 +1961,9 @@
   };
 
   Run.prototype.progressText = function () {
-    var parts = ['Scanned ' + this.scanned + (this.total ? ' of ' + this.total : '') +
-      ' ' + this.task.scanNoun + (this.scanned === 1 && !this.total ? '' : 's')];
+    var parts = ['Scanned ' + (this.total
+      ? this.scanned + ' of ' + plural(this.total, this.task.scanNoun)
+      : plural(this.scanned, this.task.scanNoun))];
     // Right after the scanned count, where the review task's own denominator belongs:
     // sets are what that scan is for, and scenes are only how it found them.
     if (this.setCount) parts.push(plural(this.setCount, 'variant set') + ' found');
@@ -2054,6 +2045,7 @@
     this.source = null;
     this.sourceSet = null;
     this.plannedFrom = null;
+    this.pruned = 0;
     this.setsEl.textContent = '';
     this.show(this.setsEl, false);
     this.show(this.splitEl, false);
@@ -2081,6 +2073,7 @@
       this.backdrop.parentNode.removeChild(this.backdrop);
     }
     _active = null;
+    if (_paneLock) _paneLock(false);
     // A run that wrote - or put back - changed the very scenes the pane behind this
     // dialog is listing, and that list was read before the dialog opened. Closing is
     // when the user comes back to it, so closing is when it re-reads. An undo counts:
@@ -2220,7 +2213,32 @@
 
   // ── Writing, and taking it back ───────────────────────────────────────────
 
+  // The one road every write takes, forward or back: the lease is taken here and given
+  // back whatever happens, the dialog returns to its listing, and only then is the
+  // outcome said. `before` is the write-phase step a task may need before its first
+  // scene - the flag task creates its tag there when the library has none, because a
+  // tag must not be created by a scan, and a failure has to leave a listing nobody has
+  // acted on.
+  Run.prototype.writeThen = function (before, jobs, build, verb, leaseLabel, say) {
+    var self = this;
+    var lease = acquireLease(leaseLabel);
+    function settle(err) {
+      lease.release();
+      self.setState('listing');
+      self.progress(self.progressText());
+      if (err) {
+        self.msg('ERROR', 'Nothing was written: ' +
+          (err && err.message ? err.message : String(err)));
+      } else say();
+    }
+    Promise.resolve().then(function () { return before ? before() : null; })
+      .then(function () { return self.writeAll(jobs, build, verb, lease); })
+      .then(function () { settle(null); },
+        function (err) { settle(err || new Error('unknown failure')); });
+  };
+
   Run.prototype.go = function () {
+    if (this.state !== 'listing') return;
     var self = this, task = this.task;
     // Read before the state change: mid-write every box is disabled, and a selection
     // has to be what the user saw at the moment of the press.
@@ -2228,52 +2246,35 @@
     this.setState('writing');
     this.stopped = false;
     this.msg('INFO', 'Writing ' + plural(jobs.length, task.planUnit || 'scene') + '.');
-    var lease = acquireLease(task.leaseLabel);
-    // `prepare` is the write-phase step a task may need before its first scene - the
-    // flag task creates its tag here when the library has none, because a tag must not
-    // be created by a scan, and a failure has to leave a listing nobody has acted on.
-    Promise.resolve().then(function () { return task.prepare ? task.prepare(self) : null; })
-      .then(function () {
-        return self.writeAll(jobs, task.writeInput, task.verb, lease);
-      })
-      .then(function () {
-        lease.release();
-        self.setState('listing');
-        self.progress(self.progressText());
+    this.writeThen(task.prepare ? function () { return task.prepare(self); } : null,
+      jobs, task.writeInput, task.verb, task.leaseLabel, function () {
         self.msg('INFO', 'Done: ' + plural(self.written, task.planUnit || 'scene') + ' ' + task.verb +
           (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
           (self.stopped ? ' (stopped early; what was written stays written, and Undo takes ' +
             'back exactly that)' : '') + '.');
-      }, function (err) {
-        lease.release();
-        self.setState('listing');
-        self.msg('ERROR', 'Nothing was written: ' +
-          (err && err.message ? err.message : String(err)));
       });
   };
 
   Run.prototype.undo = function () {
+    if (this.state !== 'listing') return;
     var self = this, task = this.task;
     var jobs = this.changes.slice().reverse();
     this.setState('undoing');
     this.stopped = false;
     this.msg('INFO', 'Putting back what ' + plural(jobs.length, this.task.planUnit || 'scene') +
       ' held before.');
-    var lease = acquireLease(task.leaseLabel + ' (undo)');
     this.written = 0;
     this.failed = 0;
     // `changes` is emptied a scene at a time by the write itself rather than upfront, so
     // a stopped or failed reversal still knows what it did not reach. Empty at the end
     // means back to a listing nobody has used, and Proceed offers the same jobs again.
-    this.writeAll(jobs, task.undoInput, 'put back', lease).then(function () {
-      lease.release();
-      self.setState('listing');
-      self.progress(self.progressText());
-      self.msg('INFO', 'Undone: ' + plural(self.written, task.planUnit || 'scene') + ' put back' +
-        (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
-        (self.stopped ? ' (stopped early; what was put back stays put back)' : '') + '.');
-      self.written = 0;
-    });
+    this.writeThen(null, jobs, task.undoInput, 'put back', task.leaseLabel + ' (undo)',
+      function () {
+        self.msg('INFO', 'Undone: ' + plural(self.written, task.planUnit || 'scene') + ' put back' +
+          (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
+          (self.stopped ? ' (stopped early; what was put back stays put back)' : '') + '.');
+        self.written = 0;
+      });
   };
 
   // Batched so the log and the counters stay live on a long run, and so a failure is one
@@ -2287,8 +2288,12 @@
       lease.renew();
       var slice = jobs.slice(i, i + WRITE_CHUNK);
       return Promise.all(slice.map(function (job) {
-        var req = build(job, self);
-        return gqlRequest(req.query, req.variables).then(function () {
+        // The builder runs inside the promise so a throw in it is this job's failure,
+        // logged like a refused write, rather than an exception out of the click.
+        return Promise.resolve().then(function () {
+          var req = build(job, self);
+          return gqlRequest(req.query, req.variables);
+        }).then(function () {
           self.written++;
           self.dirty = true;
           if (verb === self.task.verb) self.changes.push(job);
@@ -2628,7 +2633,7 @@
       // choice - so a listing of hundreds scans by number. `tail` carries the same
       // words as text for the log.
       var word = '  shares its ids with ';
-      var rest = ' other ' + (job.others === 1 ? 'scene' : 'scenes');
+      var rest = plural(job.others, 'other scene').replace(/^\d+/, '');
       return { head: '[FLAG]    ', cls: 'svr-op-flag',
         tail: word + job.others + rest,
         tailParts: [{ text: word },
@@ -3436,7 +3441,7 @@
       'what it loses, blue a value replaced. Every line starts ticked - it is ' +
       'the edit you just made - except titles, which start unticked: a title is the ' +
       'one value a variant most deliberately owns. ' +
-      'Proceed writes only the ticked lines; Cancel leaves the variants as they are. ' +
+      'Proceed writes only the ticked lines; Close leaves the variants as they are. ' +
       'The offer can be switched off in this plugin\u2019s settings.';
     t.leaseLabel = 'Variant propagation';
     return t;
@@ -3460,7 +3465,7 @@
   var SAVE_SNAPSHOT_QUERY = 'query SVRSaveSnapshot($id: ID!) { findScene(id: $id) { ' +
     'id title date code director details rating100 organized urls ' +
     'studio { id } tags { id } performers { id } groups { group { id } scene_index } ' +
-    'stash_ids { endpoint stash_id } } }';
+    'custom_fields stash_ids { endpoint stash_id } } }';
 
   // The single-scene save mutation's input, or null for anything else - our own
   // requests (`__svr`), bulk updates, and everything that is not a scene save.
@@ -3556,7 +3561,14 @@
 
   function offerPropagate(input, before) {
     var changed = changedAttrs(before, input);
-    if (!changed || _active) return;
+    if (!changed) return;
+    // An open dialog is never stolen; it is told instead, so an offer that did not
+    // come is explained rather than missing.
+    if (_active) {
+      _active.msg('INFO', 'Scene ' + input.id + ' was saved with changes to ' +
+        Object.keys(changed).join(', ') + '; no propagate offer while this dialog is open.');
+      return;
+    }
     // Enough scene for `findVariants`: the id, and the stash-ids as the save left
     // them. The dialog's scan reads everything else fresh.
     var scene = { id: String(input.id),
@@ -3565,25 +3577,313 @@
       removed: removedIn(before, input) });
   }
 
+  // ── Taking a stash-id off a scene that has variants ───────────────────────
+  //
+  // The bin beside a stash-id in the edit form only edits the form: the id leaves the
+  // scene when Save posts `stash_ids` without it, and Save posts the *whole* scene -
+  // `tag_ids` and the custom-field map (`custom_fields: { full }`) with it. So the
+  // save is both the moment to ask and the only place to write the answer: a tag or
+  // field line taken off separately while the form was open would be put straight
+  // back by the form's own map. OK folds the cleanup into the save being held; Cancel
+  // puts the id back into it, so the scene keeps the id and every other edit lands.
+  // The one write the save cannot carry - the flag coming off the *other* scene when
+  // it is the last one left in the set - follows the save, under a lease.
+
+  var CLEANUP_TITLE = 'Remove Stash-id';
+
+  function sameStashId(a, b) { return a.endpoint === b.endpoint && a.stash_id === b.stash_id; }
+
+  // The scenes sharing any of `ids`, or any of `vals` (the ids' own lines unless given)
+  // through the field. Enough scene for `findVariants`: it reads `custom_fields` off the
+  // scene when the scene carries the map, so no query goes out for the field itself.
+  function probeSet(sceneId, field, ids, vals) {
+    var cf = {}; cf[field] = (vals || variantValues(ids)).join('\n');
+    return findVariants({ id: String(sceneId), stash_ids: ids, custom_fields: cf });
+  }
+
+  // What removing the save's missing stash-ids leaves to tidy, or null when nothing:
+  // the field line, the flag on this scene (only if nothing still ties it to a set),
+  // and the flag on a lone survivor. Read from the save's own values where it carries
+  // them, since those are what will land.
+  function planStashIdCleanup(before, input, s) {
+    var gone = (before.stash_ids || []).filter(function (e) {
+      return !(input.stash_ids || []).some(function (k) { return sameStashId(k, e); });
+    });
+    if (!gone.length) return Promise.resolve(null);
+    var field = fieldName(s), goneVals = variantValues(gone);
+    var full = (input.custom_fields || {}).full;
+    var lines = splitValues(full && hasOwn(full, field) ? full[field] : customField(before, field));
+    var keep = lines.filter(function (l) { return goneVals.indexOf(l) === -1; });
+    return tagTree().then(function (tags) {
+      var hit = tagsMatchingName(tags, flagTagName(s))[0];
+      var flagId = hit ? String(hit.id) : null;
+      var tagIds = hasOwn(input, 'tag_ids') ? (input.tag_ids || []).map(String) : idsOfList(before, 'tags');
+      var flagged = !!flagId && tagIds.indexOf(flagId) !== -1;
+      // One probe per dropped id: each names its own set, and a scene that is the only
+      // one left in one set may sit in another with company.
+      var probes = gone.map(function (e) { return probeSet(input.id, field, [e]); });
+      probes.push(flagged ? probeSet(input.id, field, input.stash_ids || [], keep) : { rows: [] });   // what still binds this scene
+      return Promise.all(probes).then(function (r) {
+        var still = r.pop().rows.length;
+        var sets = r.map(function (ans, i) {
+          var left = ans.rows;
+          var survivor = left.length === 1 && flagId &&
+            idsOfList(left[0].scene, 'tags').indexOf(flagId) !== -1 ? left[0].scene : null;
+          return { value: variantValue(gone[i]), others: left.length, survivor: survivor, lone: false };
+        });
+        var mine = variantValues(input.stash_ids).concat(keep);
+        // Each survivor looked up once, whichever sets it is left in.
+        var seen = {}, checks = [];
+        sets.forEach(function (st) {
+          if (!st.survivor || hasOwn(seen, String(st.survivor.id))) return;
+          seen[String(st.survivor.id)] = true;
+          checks.push(survivorAlone(st.survivor, input, mine, field).then(function (alone) {
+            sets.forEach(function (o) {
+              if (o.survivor && String(o.survivor.id) === String(st.survivor.id)) o.lone = alone;
+            });
+          }));
+        });
+        return Promise.all(checks).then(function () {
+          var lone = [], ids = {};
+          sets.forEach(function (st) {
+            if (st.lone && !hasOwn(ids, String(st.survivor.id))) {
+              ids[String(st.survivor.id)] = true;
+              lone.push(st.survivor);
+            }
+          });
+          var plan = { gone: gone, field: field, keep: keep, flagId: flagId,
+            flagName: flagTagName(s), cfChanged: keep.length !== lines.length,
+            unflagSelf: flagged && !still, still: flagged ? still : 0,
+            sets: sets, lone: lone };
+          return plan.cfChanged || plan.unflagSelf || plan.lone.length ? plan : null;
+        });
+      });
+    });
+  }
+
+  // Whether the one scene left in the dropped id's set has no variant anywhere else:
+  // its own ids and lines are read and matched, since the dropped id never named the
+  // other sets it may sit in. The edited scene counts only through what it still
+  // carries after the save. A lookup that fails answers "not alone" - a flag left on
+  // is the flag task's to take off, a flag taken off wrongly is a lost mark.
+  function survivorAlone(sc, input, mine, field) {
+    return gqlRequest('query SVRSurvivor($id: ID!) { findScene(id: $id) ' +
+      '{ id custom_fields stash_ids { endpoint stash_id } } }', { id: String(sc.id) })
+      .then(function (d) {
+        var full = (d || {}).findScene || {};
+        var vals = variantValues(full.stash_ids).concat(splitValues(customField(full, field)));
+        return findVariants({ id: String(sc.id), stash_ids: full.stash_ids || [],
+          custom_fields: full.custom_fields || {} }).then(function (r) {
+          var others = r.rows.filter(function (row) { return String(row.scene.id) !== String(input.id); });
+          var withMe = mine.some(function (v) { return vals.indexOf(v) !== -1; });
+          return !others.length && !withMe;
+        });
+      }).then(null, function () { return false; });
+  }
+
+  function cleanupLines(p) {
+    var out = p.gone.map(function (e) {
+      return 'The stash-id ' + variantValue(e) + ' comes off this scene.';
+    });
+    if (p.cfChanged) {
+      out.push('Remove ' + (p.gone.length === 1 ? 'its line' : 'their lines') + ' from the "' +
+        p.field + '" custom field' + (p.keep.length
+          ? ', keeping ' + plural(p.keep.length, 'other line') + '.'
+          : ' - the field comes off the scene.'));
+    }
+    if (p.unflagSelf) {
+      out.push('Remove the tag "' + p.flagName + '" from this scene: no other scene shares ' +
+        'what it still carries.');
+    } else if (p.still) {
+      out.push('Keep the tag "' + p.flagName + '" on this scene: it still shares a variant ' +
+        'stash-id with ' + plural(p.still, 'other scene') + '.');
+    }
+    var named = {};
+    p.sets.forEach(function (st) {
+      var which = p.gone.length > 1 ? ' in ' + st.value + '\'s set' : ' in the set';
+      if (st.survivor && st.lone) {
+        if (hasOwn(named, String(st.survivor.id))) return;
+        named[String(st.survivor.id)] = true;
+        out.push('Remove the tag "' + p.flagName + '" from ' + (st.survivor.title || 'scene') + ' [' +
+          st.survivor.id + '] too: it is the only variant left' + which + '.');
+      } else if (st.survivor) {
+        if (hasOwn(named, String(st.survivor.id))) return;
+        named[String(st.survivor.id)] = true;
+        out.push((st.survivor.title || 'Scene') + ' [' + st.survivor.id + '] keeps its tag: it still ' +
+          'shares a variant stash-id with another scene.');
+      } else if (st.others > 1) {
+        out.push(plural(st.others, 'other scene') + ' stay' + which + ' and keep their tag.');
+      }
+    });
+    return out;
+  }
+
+  // Folds the plan into the save's own input; returns the scene ids whose flag the
+  // save cannot carry and a bulk write must take off afterwards.
+  function applyStashIdCleanup(p, input) {
+    var after = [];
+    if (p.cfChanged) {
+      var cf = input.custom_fields || (input.custom_fields = {});
+      var v = p.keep.join('\n');
+      if (cf.full) { if (v) cf.full[p.field] = v; else delete cf.full[p.field]; }
+      else if (v) { (cf.partial || (cf.partial = {}))[p.field] = v; }
+      else cf.remove = (cf.remove || []).concat([p.field]);
+    }
+    if (p.unflagSelf) {
+      if (hasOwn(input, 'tag_ids')) {
+        input.tag_ids = (input.tag_ids || []).filter(function (t) { return String(t) !== p.flagId; });
+      } else after.push(String(input.id));
+    }
+    p.lone.forEach(function (sc) { after.push(String(sc.id)); });
+    return after;
+  }
+
+  function unflagAfterSave(ids, flagId) {
+    if (!ids.length) return;
+    var lease = acquireLease('Variant cleanup');
+    gqlRequest(BULK_TAG_MUTATION, { input: { ids: ids, tag_ids: { ids: [flagId], mode: 'REMOVE' } } })
+      .then(function () { lease.release(); }, function (err) {
+        lease.release();
+        console.warn('[svr] the flag tag could not be removed from scene ' + ids.join(', ') +
+          ': ' + err.message);
+      });
+  }
+
+  // One question, two answers. Built from the same chrome as `Run` so the two dialogs
+  // read as one plugin; Escape is Cancel, through the footer like everywhere else.
+  // `info` makes it a message box: one Close, and no backup line, since it writes nothing.
+  function confirmDialog(title, lines, info) {
+    injectStyle();
+    return new Promise(function (resolve) {
+      var backdrop = el('div', 'svr-backdrop'), modal = el('div', 'svr-modal svr-confirm');
+      backdrop.appendChild(modal);
+      var head = el('div', 'svr-head');
+      head.appendChild(el('div', 'svr-title', PLUGIN_SHORT_NAME + ' - ' + title));
+      if (!info) {
+        head.appendChild(el('div', 'svr-warn', 'Backing up your database before proceeding is recommended.'));
+      }
+      modal.appendChild(head);
+      var body = el('div', 'svr-confirm-body');
+      lines.forEach(function (t) { body.appendChild(el('div', 'svr-line', t)); });
+      modal.appendChild(body);
+      var foot = el('div', 'svr-foot');
+      var ok = button('OK'), cancel = button(info ? 'Close' : 'Cancel');
+      paintButton(ok, PLUGIN_BTN_VARIANT);
+      if (info) ok.className += ' svr-hidden';
+      var stub = { closeBtn: cancel };
+      function done(v) {
+        unwireEscape(stub);
+        if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        resolve(v);
+      }
+      ok.addEventListener('click', function () { done(true); });
+      cancel.addEventListener('click', function () { done(false); });
+      foot.appendChild(ok);
+      foot.appendChild(cancel);
+      modal.appendChild(foot);
+      document.body.appendChild(backdrop);
+      wireEscape(stub);
+      var first = info ? cancel : ok;
+      if (first.focus) first.focus();
+    });
+  }
+
+  // ── A stash-id put on: the set it joins ───────────────────────────────────
+  //
+  // The mirror of the question above, as a notice rather than a write: a save that
+  // adds a stash-id other scenes carry has made or grown a variant set, and the field
+  // line and the flag tag that record that are the two tasks' to write. Nothing is
+  // held - the save is through - and nothing is written; the box says what happened
+  // and which tasks catch up. An id nobody else carries is not a set, and is not news.
+  var JOINED_TITLE = 'Variant Set Joined';
+
+  function noteJoinedSets(before, input, s) {
+    var added = (input.stash_ids || []).filter(function (e) {
+      return !(before.stash_ids || []).some(function (k) { return sameStashId(k, e); });
+    });
+    if (!added.length) return;
+    var field = fieldName(s);
+    Promise.all([tagTree()].concat(added.map(function (e) { return probeSet(input.id, field, [e]); })))
+      .then(function (r) {
+        var flagName = flagTagName(s);
+        var hit = tagsMatchingName(r[0], flagName)[0];
+        var flagId = hit ? String(hit.id) : null;
+        var lines = [];
+        r.slice(1).forEach(function (ans, i) {
+          var others = ans.rows.map(function (row) { return row.scene; });
+          if (!others.length) return;
+          var flagged = others.some(function (sc) {
+            return flagId && idsOfList(sc, 'tags').indexOf(flagId) !== -1;
+          });
+          lines.push('The stash-id ' + variantValue(added[i]) + ' is shared with ' +
+            plural(others.length, 'other scene') + ': ' + others.map(function (sc) {
+              return (sc.title || 'scene') + ' [' + sc.id + ']';
+            }).join(', ') + '. This ' + (flagged ? 'extends' : 'creates') + ' a multi-variant set.');
+        });
+        if (!lines.length) return;
+        lines.push('Running ' + TASK_NAME.replace(/\.\.\.$/, '') + ' and ' +
+          FLAG_TASK_NAME.replace(/\.\.\.$/, '') + ' is recommended, so the "' + field +
+          '" custom field and the "' + flagName + '" tag catch up with it.');
+        confirmDialog(JOINED_TITLE, lines, true);
+      }, function (err) {
+        console.warn('[svr] could not look up the set a stash-id on scene ' + input.id +
+          ' joins: ' + err.message);
+      });
+  }
+
+  // The held save, with the answer folded in. Resolves to the ids to unflag after it,
+  // or null when the save goes through as posted.
+  function askStashIdCleanup(before, input, args, s) {
+    return planStashIdCleanup(before, input, s).then(null, function (err) {
+      console.warn('[svr] could not plan the stash-id cleanup for scene ' + input.id +
+        ', so the save goes through as posted: ' + err.message);
+      return null;
+    }).then(function (p) {
+      if (!p) return null;
+      return confirmDialog(CLEANUP_TITLE, cleanupLines(p)).then(function (ok) {
+        var body = JSON.parse(args[1].body), inp = body.variables.input;
+        var after = ok ? applyStashIdCleanup(p, inp) : [];
+        if (!ok) inp.stash_ids = (inp.stash_ids || []).concat(p.gone);
+        var init = {}, k;
+        for (k in args[1]) if (hasOwn(args[1], k)) init[k] = args[1][k];
+        init.body = JSON.stringify(body);
+        args[1] = init;
+        return { input: inp, after: after, flagId: p.flagId };
+      });
+    });
+  }
+
   function watchSave(orig, self, args, input) {
+    args = Array.prototype.slice.call(args);
+    var settingsNow = null;
     return settingsReady().then(function (s) {
-      if (!s.c1PropagateOnSave) return null;
+      settingsNow = s;
+      // The snapshot serves two readers: the propagate offer, behind its switch, and
+      // the stash-id question, which has no switch and needs only saves carrying ids.
+      if (!s.c1PropagateOnSave && !hasOwn(input, 'stash_ids')) return null;
       return gqlRequest(SAVE_SNAPSHOT_QUERY, { id: String(input.id) }).then(function (d) {
         return (d || {}).findScene || null;
       }, function () { return null; });   // a lost snapshot must not lose the save
     }).then(function (before) {
-      var resp = orig.apply(self, args);
-      // A side listener, never a link in the save's own chain: nothing this plugin
-      // does can delay or fail the response Stash is waiting for.
-      resp.then(function (r) {
-        if (!r || !r.ok) return;
-        // A mounted pane's rows and deltas describe the scene this save just changed,
-        // so it re-reads - whatever the propagate switch says, since the staleness
-        // does not depend on it. The same door the dialogs' dirty close uses.
-        if (_paneRefresh) _paneRefresh();
-        if (before) offerPropagate(input, before);
-      }, function () {});
-      return resp;
+      var asked = before && hasOwn(input, 'stash_ids')
+        ? askStashIdCleanup(before, input, args, settingsNow) : Promise.resolve(null);
+      return asked.then(function (a) {
+        if (a) input = a.input;
+        var resp = orig.apply(self, args);
+        // A side listener, never a link in the save's own chain: nothing this plugin
+        // does can delay or fail the response Stash is waiting for.
+        resp.then(function (r) {
+          if (!r || !r.ok) return;
+          if (a) unflagAfterSave(a.after, a.flagId);
+          // A mounted pane's rows and deltas describe the scene this save just changed,
+          // so it re-reads - whatever the propagate switch says, since the staleness
+          // does not depend on it. The same door the dialogs' dirty close uses.
+          if (_paneRefresh) _paneRefresh();
+          if (before && settingsNow.c1PropagateOnSave) offerPropagate(input, before);
+          if (before && hasOwn(input, 'stash_ids')) noteJoinedSets(before, input, settingsNow);
+        }, function () {});
+        return resp;
+      });
     }, function () { return orig.apply(self, args); });
   }
 
@@ -4172,6 +4472,9 @@
     // one of those did nothing at all, which is how Find & Replace shipped a row that
     // stayed on screen with the checkbox that reveals it switched off.
     '.svr-hidden{display:none !important;}' +
+    // The stash-id question: the same chrome, narrower, with a plain list for a body.
+    '.svr-confirm{width:min(60rem,94vw);}' +
+    '.svr-confirm-body{padding:.75rem 1rem;line-height:1.5;}' +
     // ── This dialog's own ───────────────────────────────────────────────────
     //
     // A planned scene is not a message, so it does not wear one of the three message
@@ -4321,8 +4624,8 @@
     '.nav-tabs .svr-tab-link:focus,.nav-tabs .svr-tab-link.active{color:#ffb648;}' +
     // ── The tab's pane ──────────────────────────────────────────────────────
     //
-    // Not the shared dialog chrome: this plugin puts up no dialog, so a backdrop, a log
-    // and a footer would be a stylesheet for markup that never exists. It is not a card
+    // Not the shared dialog chrome: the pane is not a dialog, so a backdrop, a log
+    // and a footer would be a stylesheet for markup that never exists here. It is not a card
     // either - the pane sits inside Stash's own tab content, beside Details and File
     // Info, so it takes no background and no border of its own and lets the page's
     // showing through. The greys are the dialogs' greys all the same - #a7b6c2 and
@@ -4527,23 +4830,6 @@
   }
 
 
-
-
-
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
   function button(label, className) {
     var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
     b.type = 'button';
@@ -4558,14 +4844,6 @@
       .replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
   }
 
-  function hasClass(node, name) {
-    return (' ' + String((node && node.className) || '') + ' ').indexOf(' ' + name + ' ') !== -1;
-  }
-
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
   // ── The tab ───────────────────────────────────────────────────────────────
   //
   // A real tab beside Details, Queue, Markers, Group, Filter, File Info, History and
@@ -4867,9 +5145,12 @@
   // `{ rows, why }` and `why` is a whole sentence, because every one of the empty answers
   // needs one. The effect is keyed on the scene id so that walking the queue re-runs it,
   // and its cleanup drops the answer to a scene the user has already left.
-  // The closing dialog's way back into the mounted pane's hooks: plain DOM code cannot
-  // reach a `useState`, so the pane leaves a callback here for as long as it is mounted.
+  // The dialog's way back into the mounted pane's hooks: plain DOM code cannot reach a
+  // `useState`, so the pane leaves two callbacks here for as long as it is mounted -
+  // one to re-read after a dialog that wrote closes, one to lock the Synchronize button
+  // while any dialog is open.
   var _paneRefresh = null;
+  var _paneLock = null;
 
   function VariantsPane(React) {
     return function (props) {
@@ -4882,22 +5163,36 @@
       // or null while nobody has asked or nothing has answered.
       var cov = React.useState(null);
       var coverDiff = cov[0], setCoverDiff = cov[1];
+      // Whether one of this plugin's dialogs is open: the Synchronize button is a
+      // control that starts a run, so it is unavailable, with the reason on it, while
+      // one runs. Read at mount so a pane mounted under an open dialog starts locked.
+      var lk = React.useState(!!_active);
+      var locked = lk[0], setLocked = lk[1];
 
       // Re-registered every render so the callback always closes over the current
       // stamp; unregistered on unmount so a task run from the settings page pokes
       // nothing.
       React.useEffect(function () {
         _paneRefresh = function () { setStamp(stamp + 1); };
-        return function () { _paneRefresh = null; };
+        _paneLock = function (on) { setLocked(!!on); };
+        return function () { _paneRefresh = null; _paneLock = null; };
       });
 
+      // Keyed on the scene's *evidence* as well as its id. A save that took a stash-id
+      // off reaches the page in two steps: the response, which fires `_paneRefresh`
+      // while Stash's cache still holds the old scene, and then the re-render with the
+      // new one. A key of the id alone re-read on the first step with the old ids -
+      // finding the same variants - and did nothing on the second, so the rows it
+      // showed were the ones the save had just detached.
+      var evidence = variantValues(scene.stash_ids).join('\n') + '|' +
+        (customField(scene, fieldName()) || '');
       React.useEffect(function () {
         var live = true;
         setFound(null);
         setCoverDiff(null);
         findVariants(scene).then(function (result) { if (live) setFound(result); });
         return function () { live = false; };
-      }, [scene.id, stamp]);
+      }, [scene.id, evidence, stamp]);
 
       // **After the list, never before it.** Comparing covers means reading the
       // pictures, and a tab that waited for them would show nothing while it did -
@@ -4950,7 +5245,7 @@
           [plural(boxes.length, 'stash-box entry', 'stash-box entries') + ': ']
             .concat(boxes.map(function (l, i) {
               return React.createElement('a', {
-                key: 'box' + i, href: l.url, target: linkTarget(), rel: 'noopener',
+                key: 'box' + i, href: l.url, target: linkTarget(), rel: 'noopener noreferrer',
                 className: 'svr-boxlink',
                 title: 'Open ' + l.url + (linkTarget() ? ' in a new tab' : ''),
               }, l.value);
@@ -4964,9 +5259,14 @@
         kids.push(React.createElement('button', {
           key: 'sync', type: 'button',
           className: 'btn btn-sm ' + PLUGIN_BTN_VARIANT + ' svr-sync-btn',
-          title: 'Push this scene’s attribute values to its variants. Everything ' +
-            'that differs is listed first with a checkbox per line; tags, performers ' +
-            'and URLs are only ever added, and nothing is written until you approve.',
+          disabled: locked,
+          title: locked
+            ? 'A ' + PLUGIN_SHORT_NAME + ' dialog is already open. Finish or close it ' +
+              'before starting another.'
+            : 'Push this scene’s attribute values to its variants. Everything ' +
+              'that differs is listed first with a checkbox per line; tags, performers ' +
+              'and URLs are only ever added, a group is joined at this scene\u2019s own ' +
+              'position, and nothing is written until you approve.',
           onClick: function () { startRun(SYNC_TASK, scene); },
         }, SYNC_TASK_NAME));
       }
@@ -5020,9 +5320,7 @@
   // construction: no version suffix, no localisation, nothing formatted for display.
   // Two plugins here shipped this broken by matching heading text instead, twice, so
   // the ids are the anchor and the heading is only a fallback.
-  function settingElement(key) {
-    return document.getElementById('plugin-' + PLUGIN_ID + '-' + key);
-  }
+  function settingElement(key) { return coreSettingElement(PLUGIN_ID, key); }
 
   // Walks up from any one of our settings to the group box that contains it. Trying
   // every key rather than a named one means removing or renaming a setting cannot
@@ -5066,13 +5364,7 @@
     return false;
   }
 
-  function settingRow(key) {
-    var node = settingElement(key);
-    for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting')) return node;
-    }
-    return null;
-  }
+  function settingRow(key) { return coreSettingRow(PLUGIN_ID, key); }
 
   // The two pages that show a group headed with our name do not head it the same way.
   // Settings - Tasks passes the plugin name straight through, but Settings - Plugins
@@ -5274,8 +5566,6 @@
   }
 
 
-
-
   function ensureStaleNotice(group) {
     var installed = installedFromHeading(group);
     var node = document.getElementById(STALE_ID);
@@ -5316,16 +5606,12 @@
     link.id = README_LINK_ID;
     link.href = README_URL;
     link.target = linkTarget();
-    link.rel = 'noreferrer';
+    link.rel = 'noopener noreferrer';
     link.title = 'Open this plugin’s documentation';
     link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
     var slot = readmeLinkSlot(group);
     slot.parent.insertBefore(link, slot.before);
   }
-    // circled Latin small letter i
-
-
-
 
 
   var TAG_LINK_MARK = '🔗';      // link symbol
@@ -5447,7 +5733,7 @@
         var a = el('a', 'svr-cflink', '↗' + links[j].url.split('/')[2]);
         a.href = links[j].url;
         a.target = linkTarget();
-        a.rel = 'noopener';
+        a.rel = 'noopener noreferrer';
         a.title = 'Open ' + links[j].url + (linkTarget() ? ' in a new tab' : '');
         wrap.appendChild(a);
       }

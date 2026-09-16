@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '1.2.0';
+  var PLUGIN_VERSION = '1.3.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -60,6 +60,35 @@
   // plural passes its own; everything else takes an "s".
   function plural(n, one, many) {
     return n + ' ' + (n === 1 ? one : (many || one + 's'));
+  }
+
+  // A "name contains" setting is a list of substrings, and a tag is excluded when its
+  // name contains any one of them. Whitespace separates them by default, which costs
+  // the ability to write a substring containing a space; `sep` buys it back by
+  // separating on something the user's tag names never contain instead.
+  //
+  // Split on a *string*, never a RegExp: `.` and `|` are plausible separators and
+  // would otherwise have to be escaped by the user. Each term is trimmed, so a list
+  // written as "a, b" does not carry a leading space into the match, and empty terms
+  // are dropped - a setting of nothing but separators must leave an empty list, never
+  // a term matching every tag in the library.
+  function splitTerms(value, sep) {
+    var raw = String(value == null ? '' : value);
+    var out = [];
+    (sep ? raw.split(sep) : raw.split(/\s+/)).forEach(function (term) {
+      var t = term.trim();
+      if (t) out.push(t);
+    });
+    return out;
+  }
+
+  // The term the name contains, or null - a term rather than a boolean so a log can
+  // say which one did it.
+  function nameMatchesAny(name, terms) {
+    for (var i = 0; i < terms.length; i++) {
+      if (name.indexOf(terms[i]) !== -1) return terms[i];
+    }
+    return null;
   }
 
   // "..." is what a *caption* promises; a title quotes the caption inside a sentence,
@@ -219,7 +248,6 @@
     }
     done(fallback());
   }
-
 
 
   function domBus() {
@@ -393,7 +421,6 @@
     node.addEventListener('focus', open);
     node.addEventListener('blur', shut);
   }
-
 
 
   // ── The tooltip a resolved tag's link carries ─────────────────────────────
@@ -733,13 +760,6 @@
     node.addEventListener('blur', shut);
   }
 
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
 
   // ── The tooltip a custom-field setting carries ────────────────────────────
   //
@@ -1012,7 +1032,6 @@
     });
     anchor.parentNode.insertBefore(b, anchor);
   }
-
 
 
   function computedStyleOf(node) {
@@ -1874,7 +1893,6 @@
   function descCollapsed(sub) { return hasClass(sub, 'gttxcore-desc-collapsed'); }
 
 
-
   function pxOf(value) {
     var n = parseFloat(value);
     return n > 0 ? n : 0;
@@ -2170,6 +2188,7 @@
     byClass: byClass, gqlRequest: gqlRequest, settingElement: settingElement,
     settingRow: settingRow, coopObject: coopObject, coop: coop,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
+    splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
     linkTarget: linkTarget,
     tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace, tipRatingBadge: tipRatingBadge,
     tipOpen: tipOpen, tipClose: tipClose, tagTip: tagTip,

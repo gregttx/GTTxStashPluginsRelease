@@ -3,7 +3,7 @@
 # CustomFieldsBulkEditor — releases
 
 Newest first. Each version links to the commit that shipped it; the note is that commit's
-own subject. The reasoning behind a release is in `CLAUDE.md`, and what the plugin does now
+own subject. The reasoning behind a release is in `NOTES.md`, and what the plugin does now
 is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |

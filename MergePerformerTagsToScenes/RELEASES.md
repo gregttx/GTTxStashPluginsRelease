@@ -3,11 +3,12 @@
 # MergePerformerTagsToScenes — releases
 
 Newest first. Each version links to the commit that shipped it; the note is that commit's
-own subject. The reasoning behind a release is in `CLAUDE.md`, and what the plugin does now
+own subject. The reasoning behind a release is in `NOTES.md`, and what the plugin does now
 is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.1.1 (`4fcd6bb`) | 2026-09-02 | Review fixes 2026-09-02: the All row is drawn once, and sixty more |
 | 4.1.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 4.0.3 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 4.0.2 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |
