@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.1.1';
+  var PLUGIN_VERSION = '3.1.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -1821,6 +1821,14 @@
     this.undoBtn.disabled = busy;
     this.rescanBtn.disabled = busy;
     this.closeBtn.disabled = busy;
+    // Green once the pass has run: the listing describes a library this dialog has
+    // already changed, and nothing is waiting on the user. Undo does not take the green
+    // away - it is an offer. Failures and a stale script stay grey: those say
+    // "something is wrong", not "nothing to do". The Close that `swapCancelForClose`
+    // shows over a disabled Apply is not painted: an empty name box is waiting for
+    // input, which is the opposite of nothing to do.
+    paintButton(this.closeBtn, state === 'applied' && !this.failed && !this.stale
+      ? 'btn-success' : 'btn-secondary');
     [this.modeSel, this.nameInput, this.valueInput].forEach(function (n) {
       n.disabled = !listing;
     });

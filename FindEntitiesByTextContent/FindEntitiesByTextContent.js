@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.1.1';
+  var PLUGIN_VERSION = '3.1.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -953,6 +953,7 @@
     this.needle = '';
     this.loadingWhat = '';
     this.stale = false;
+    this.searchFailed = false;
     // 'idle' before a search, 'running', 'paused' (by hand), 'full' (the buffer filled),
     // 'done'. One word decides the button caption, the cursor and what the counters say.
     this.state = 'idle';
@@ -1429,6 +1430,13 @@
     this.allOffBtn.disabled = busy || !toggles.length ||
       toggles.every(function (b) { return !b._bag[b._key]; });
     this.syncReplace(busy);
+    // Green when nothing is left to write: the search has run out and left nothing on
+    // the list to replace. Undo does not take the green away - it is an offer, not
+    // something waiting on the user. A failed search and a stale script stay grey:
+    // those say "something is wrong", not "nothing to do". Only ever while the
+    // button reads Close - a green Cancel would promise the wrong thing.
+    paintButton(this.cancelBtn, this.state === 'done' && !this.writing && !this.stale &&
+      !this.searchFailed && !this.replaceScope().length ? 'btn-success' : 'btn-secondary');
     this.spin(this.state === 'running' || this.writing);
   };
 
@@ -1648,6 +1656,7 @@
     this.results = [];
     this.scanned = 0;
     this.matched = 0;
+    this.searchFailed = false;
     this.total = null;
     this.scannedPer = {};
     this.totals = {};
@@ -1694,6 +1703,7 @@
       return self.step(epoch);
     }).then(null, function (e) {
       if (self.state !== 'running') return;
+      self.searchFailed = true;
       self.msg('ERROR', 'The search failed: ' + (e && e.message ? e.message : String(e)));
       self.finish();
     });
@@ -1707,6 +1717,7 @@
     this.syncFooter();
     this.step(this.epoch).then(null, function (e) {
       if (self.state !== 'running') return;
+      self.searchFailed = true;
       self.msg('ERROR', 'The search failed: ' + (e && e.message ? e.message : String(e)));
       self.finish();
     });

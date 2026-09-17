@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '4.4.1';
+  var PLUGIN_VERSION = '4.4.2';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -2616,8 +2616,12 @@
     // would plan against a library being changed underneath it, and Close would
     // abandon the reversal halfway with no way back to it.
     var undoing = state === 'undoing';
+    // Nothing to proceed on: the dialog has scanned and found no work, so there is
+    // nothing to abandon and "Cancel" would be answering a question nobody asked.
+    // Close is the same act with the honest word on it.
+    var nothingToDo = ready && !this.plan.length;
     this.show(this.proceedBtn, scanning || ready);
-    this.show(this.cancelBtn, scanning || ready);
+    this.show(this.cancelBtn, (scanning || ready) && !nothingToDo);
     // Offered during the scan too: it is the longer phase, and stopping it is how a
     // user gets back to Path Settings without abandoning the dialog the way Cancel does.
     this.show(this.stopBtn, scanning || applying || undoing);
@@ -2629,7 +2633,7 @@
     // Offered in ready as well, but only once the plan has stopped matching what it
     // was built from: a stopped scan or a path setting changed underneath it.
     this.show(this.rescanBtn, done || (ready && this.planStale));
-    this.show(this.closeBtn, done);
+    this.show(this.closeBtn, done || nothingToDo);
     // Unavailable while anything is in flight: the paths it edits are the ones the pass
     // in flight is *using* - a save behind a running scan produces a plan built half
     // from each setting, and behind a write it describes something the batches are not
@@ -2647,6 +2651,12 @@
     // already made, and stranding the user with changes they cannot take back would
     // be a worse outcome than the mismatch it is protecting them from.
     this.proceedBtn.disabled = !ready || !this.plan.length || this.stale || this.planStale;
+    // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
+    // does not take the green away - it is an offer, not something waiting on the user.
+    // Errors, a stopped pass, a plan the paths have moved under and a stale script stay
+    // grey: those say "something is wrong", not "nothing to do".
+    paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
+      !this.stale && !this.planStale ? 'btn-success' : 'btn-secondary');
     this.spin(scanning || applying || undoing);
   };
 

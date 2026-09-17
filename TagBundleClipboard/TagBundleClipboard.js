@@ -35,7 +35,7 @@
     }
     return;
   }
-  var pickControl = C.pickControl,
+  var pickControl = C.pickControl, findEditContainer = C.findEditContainer,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
@@ -69,7 +69,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '2.1.0';
+  var PLUGIN_VERSION = '2.2.3';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -1605,6 +1605,11 @@
     this.addBtn.textContent = n ? ('Add ' + plural(n, 'tag')) : 'Add';
     this.addBtn.disabled = !n;
     this.undoBtn.disabled = !this._undo.length;
+    // Green when nothing is left to add: an empty clipboard, no bundle picked, every
+    // tag already there, or an Add that has landed. Undo does not take the green away -
+    // it is an offer, not something waiting on the user. A missing tag box stays grey:
+    // that says "something is wrong", not "nothing to do".
+    this.closeBtn.className = 'btn ' + (n || c.noForm ? 'btn-secondary' : 'btn-success') + ' btn-sm';
   };
 
   PasteRun.prototype.add = function () {
@@ -2019,22 +2024,9 @@
   // ordering"; what follows is a copy, not a redesign, and the comments kept here are
   // the ones that would otherwise invite one.
 
-  // The edit form. `.edit-buttons` is Scene's own row, confirmed live. Every other page
-  // checked so far renders its edit form inside `.details-edit` instead, a container
-  // Stash swaps between two states: a detail-view navbar carrying a Delete button, and
-  // the edit form itself carrying Cancel/Save in its place. We want the edit-form
-  // instance, so skip any `.details-edit` that carries a Delete.
-  function findEditContainer() {
-    var c = document.querySelector('.edit-buttons');
-    if (c) return c;
-    var candidates = document.querySelectorAll('.details-edit');
-    for (var i = 0; i < candidates.length; i++) {
-      if (!candidates[i].querySelector('button.delete')) return candidates[i];
-    }
-    return null;
-  }
-
-  // The other half of that swap: the detail-view navbar, carrying Delete. Confirmed
+  // The edit form is ᝯㄝₓ Core's `findEditContainer`: `.edit-buttons` on a Scene, else
+  // the `.details-edit` that carries no Delete. This is the other half of that swap: the
+  // detail-view navbar, carrying Delete. Confirmed
   // live for Performer and Group; Studio, Scene, Gallery and Image are the same guess.
   function findDetailContainer() {
     var candidates = document.querySelectorAll('.details-edit');
@@ -2208,6 +2200,43 @@
       'is removed.';
   }
 
+  // ── Is there anything to copy? ────────────────────────────────────────────
+  //
+  // `⮺ Tags` is not drawn while the entity carries no tag - removed rather than
+  // disabled, at the user's call over the repo's disabled-with-a-reason rule: a button
+  // that can never act on this page is noise in the action row. The question is asked
+  // with the click's own query, once when the route is first seen and again on a
+  // DOM-driven tick at most every `PROBE_MIN_MS`, which is what brings the button back
+  // after a save put the first tag on: the page re-renders, the bus fires, the tick
+  // asks. The interval tick never asks, so a page nobody touches costs nothing. A read
+  // that fails counts as tagged: the button shows and its click says what went wrong.
+  // The answer lives per entity, not on the button, since the button may not exist.
+  var PROBE_MIN_MS = 2000;
+  var _copyState = {};   // `type:id` -> { empty, at, probing }
+
+  function probeCopy(rt, fromDom) {
+    var key = rt.type + ':' + rt.id;
+    var st = _copyState[key];
+    if (st && (st.probing || !fromDom || Date.now() - st.at < PROBE_MIN_MS)) return;
+    st = _copyState[key] = { empty: st ? st.empty : false, at: st ? st.at : 0, probing: true };
+    var e = ENTITIES[rt.type];
+    gqlRequest(tagQueryFor(rt.type), { id: String(rt.id) }).then(function (data) {
+      var ent = data && data[e.one];
+      return ent ? (ent.tags || []).length === 0 : false;
+    }, function () { return false; }).then(function (empty) {
+      var was = st.empty;
+      st.probing = false;
+      st.at = Date.now();
+      st.empty = empty;
+      if (was !== empty) tick();   // draw or remove now, not on the next second
+    });
+  }
+
+  function copyEmpty(rt) {
+    var st = _copyState[rt.type + ':' + rt.id];
+    return !!st && !st.probing && st.empty;
+  }
+
   function pasteTitle() {
     return 'Paste Tags\n\nPick a bundle from the clipboard and choose which of its ' +
       'tags to add to the tag box on this form. Tags already here cannot be picked, ' +
@@ -2218,7 +2247,7 @@
   // re-render, so there is nothing durable to track. Each tick rebuilds its opinion of
   // which buttons should exist from the route and the containers, and an id keeps a
   // re-render that kept ours from producing a second one.
-  function buttonsTick() {
+  function buttonsTick(fromDom) {
     var rt = currentRoute();
     if (!rt) {
       gateLogOnce('route', 'not on a Scene/Image/Gallery/Performer/Studio/Group page');
@@ -2232,7 +2261,11 @@
     // The copy button, on the detail view.
     var copyBox = findCopyContainer();
     var copy = document.getElementById(COPY_BTN_ID);
-    if (!copyBox) {
+    probeCopy(rt, fromDom);
+    if (copyBox && copyEmpty(rt)) {
+      gateLogOnce('copy', ENTITIES[rt.type].label + ' ' + rt.id + ' carries no tags - "⮺ Tags" not shown');
+      if (copy && copy.parentNode) copy.parentNode.removeChild(copy);
+    } else if (!copyBox) {
       gateLogOnce('copy', 'no detail button row or tab strip on ' + ENTITIES[rt.type].label +
         ' - "⮺ Tags" not shown');
       if (copy && copy.parentNode) copy.parentNode.removeChild(copy);
@@ -2289,14 +2322,16 @@
   // mutations is coalesced into one tick.
   var _tickTimer = null;
 
-  function tick() {
+  // `fromDom` marks a tick the bus raised - the page changed - from one the interval
+  // or a click raised; only the former re-asks whether there is anything to copy.
+  function tick(fromDom) {
     try { settingsTick(); } catch (e) { console.error('[tbc] settings tick:', e); }
-    try { buttonsTick(); } catch (e) { console.error('[tbc] buttons tick:', e); }
+    try { buttonsTick(fromDom === true); } catch (e) { console.error('[tbc] buttons tick:', e); }
   }
 
   function scheduleTick() {
     if (_tickTimer) return;
-    _tickTimer = setTimeout(function () { _tickTimer = null; tick(); }, 100);
+    _tickTimer = setTimeout(function () { _tickTimer = null; tick(true); }, 100);
   }
 
   // The shared bus rather than an observer of our own - see `domBus`. This is called at
@@ -2318,13 +2353,13 @@
       startObserver();
       tick();
     });
-    window.addEventListener('popstate', function () { setTimeout(tick, 300); });
+    window.addEventListener('popstate', function () { setTimeout(function () { tick(); }, 300); });
   }
   document.addEventListener('click', function () {
-    setTimeout(tick, 0);
-    setTimeout(tick, 300);
+    setTimeout(function () { tick(); }, 0);
+    setTimeout(function () { tick(); }, 300);
   }, true);
-  setInterval(tick, 1000);
+  setInterval(function () { tick(); }, 1000);
   settings();   // warm the settings cache so the first copy knows the bundle limit
   startObserver();
   tick();

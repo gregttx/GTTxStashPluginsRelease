@@ -75,7 +75,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.1.1';
+  var PLUGIN_VERSION      = '4.1.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -1569,19 +1569,29 @@
     // would plan against a library being changed underneath it, and Close would
     // abandon the reversal halfway with no way back to it.
     var undoing = state === 'undoing';
+    // Nothing to proceed on: the dialog has scanned and found no work, so there is
+    // nothing to abandon and "Cancel" would be answering a question nobody asked.
+    // Close is the same act with the honest word on it.
+    var nothingToDo = ready && !this.plan.length;
     this.show(this.proceedBtn, scanning || ready);
-    this.show(this.cancelBtn, scanning || ready);
+    this.show(this.cancelBtn, (scanning || ready) && !nothingToDo);
     this.show(this.stopBtn, applying || undoing);
     // Offered in ready as well as done: a rescan leaves the dialog holding a fresh
     // plan over a library an earlier pass already changed, and that is exactly when
     // the user is deciding between merging more and taking back what is there.
     this.show(this.undoBtn, (ready || done) && this.undoable.length > 0);
     this.show(this.rescanBtn, done);
-    this.show(this.closeBtn, done);
+    this.show(this.closeBtn, done || nothingToDo);
     // Undo is deliberately not gated on `stale`: it takes back tags this dialog has
     // already added, and stranding the user with a merge they cannot reverse would be
     // worse than the mismatch it is protecting them from.
     this.proceedBtn.disabled = !ready || !this.plan.length || this.stale;
+    // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
+    // does not take the green away - it is an offer, not something waiting on the user.
+    // Errors, a stopped pass and a stale script stay grey: those say "something is
+    // wrong", not "nothing to do".
+    paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
+      !this.stale ? 'btn-success' : 'btn-secondary');
     this.spin(scanning || applying || undoing);
   };
 

@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.1.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 3.1.1 (`f1fb23f`) | 2026-08-29 | Measure two drag limits, gate one row, name one issue |
 | 3.1.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 3.0.1 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |

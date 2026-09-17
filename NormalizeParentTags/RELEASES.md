@@ -8,6 +8,9 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.5.1 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
+| 5.5.0 (`0ce2a33`) | 2026-09-16 | NormalizeParentTags 5.5.0: Set All Prune, Roll Up and Off under the selectors |
+| 5.4.0 (`ba19cc3`) | 2026-09-16 | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |
 | 5.3.2 (`9e53be6`) | 2026-09-14 | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |
 | 5.3.1 (`4fcd6bb`) | 2026-09-02 | Review fixes 2026-09-02: the All row is drawn once, and sixty more |
 | 5.3.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |

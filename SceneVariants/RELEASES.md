@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.7.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
+| 1.7.1 (`3e227e0`) | 2026-09-17 | SceneVariants 1.7.1: Select All and Unselect All are held back when they would change nothing |
+| 1.7.0 (`eb49bf5`) | 2026-09-17 | SceneVariants 1.7.0: Select All and Unselect All for the [GROUP?] candidates |
+| 1.6.3 (`50a13f5`) | 2026-09-17 | SceneVariants 1.6.3: the flag listing names untitled scenes by file, and the footer captions its pairs |
+| 1.6.2 (`09b6b26`) | 2026-09-16 | SceneVariants 1.6.2: the pane button reads Synchronize Variant... for one variant |
 | 1.6.1 (`4430fff`) | 2026-09-16 | SceneVariants 1.6.1: the pane re-reads when the scene's stash-ids change under it |
 | 1.6.0 (`1ebf30f`) | 2026-09-16 | SceneVariants 1.6.0: a save that adds a shared stash-id says which set it joined |
 | 1.5.2 (`ac018e9`) | 2026-09-16 | SceneVariants 1.5.2: each dropped stash-id is probed as its own set |

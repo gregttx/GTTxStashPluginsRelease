@@ -8,6 +8,10 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.2.3 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
+| 2.2.2 (`ba19cc3`) | 2026-09-16 | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |
+| 2.2.1 (`a42a79a`) | 2026-09-16 | TagBundleClipboard 2.2.1: ⮺ Tags is removed, not disabled, on a tagless entity |
+| 2.2.0 (`dbff7e7`) | 2026-09-16 | TagBundleClipboard 2.2.0: ⮺ Tags is disabled while the entity carries no tag |
 | 2.1.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 2.0.2 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |
 | 2.0.1 (`e08e523`) | 2026-08-28 | pickControl: one rule for which Stash select a staged change goes into |

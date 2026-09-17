@@ -17,7 +17,8 @@ tags.**
 
 **Copy.** Open any Scene, Image, Gallery, Performer, Studio or Group and press **⮺ Tags** on its
 detail view. Every tag it carries goes onto a clipboard as one bundle, named for the entity it came
-from.
+from. On an entity with no tags there is no button; it appears by itself once a tag is saved
+onto the entity.
 
 **Paste.** Open the Edit tab of any other entity of any of those six types and press
 **📋Tags…**. A dialog lists the bundles on the clipboard, newest first. Pick one, tick the tags you
@@ -32,7 +33,9 @@ Save is what commits them.** Close the form without saving and nothing has happe
 
 That is why this dialog, alone among the plugins here, does not tell you to back up your database
 first. Its **Undo** hands the tag box back exactly what it held before the last Add — including
-anything you had typed in by hand since — and Stash's own Reset is still behind it.
+anything you had typed in by hand since — and Stash's own Reset is still behind it. **Close** is
+green whenever nothing is left to add: an empty clipboard, every tag already there, or an Add that
+has landed, whether or not you take Undo up on its offer.
 
 ## The clipboard
 

@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '1.3.0';
+  var PLUGIN_VERSION = '1.4.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -1096,6 +1096,22 @@
     ensureRowSpacing(container);
     insertOrdered(container, button, node);
     applyButtonSpacing(container, button);
+  }
+
+  // The edit form's own button row, on any entity page. `.edit-buttons` is Scene's row,
+  // confirmed live. Every other page checked so far renders its edit form inside
+  // `.details-edit` instead, a container Stash swaps between two states: a detail-view
+  // navbar carrying a Delete button, and the edit form itself carrying Cancel/Save in its
+  // place. The edit-form instance is the one wanted, so a `.details-edit` carrying a
+  // Delete is skipped. Null where no edit form is open.
+  function findEditContainer() {
+    var c = document.querySelector('.edit-buttons');
+    if (c) return c;
+    var candidates = document.querySelectorAll('.details-edit');
+    for (var i = 0; i < candidates.length; i++) {
+      if (!candidates[i].querySelector('button.delete')) return candidates[i];
+    }
+    return null;
   }
 
 
@@ -2203,7 +2219,7 @@
     pxOf: pxOf, sideMargin: sideMargin, neighbourGap: neighbourGap,
     nonZeroLength: nonZeroLength, stashButtonMargins: stashButtonMargins, fillNeighbourGaps: fillNeighbourGaps,
     ensureRowSpacing: ensureRowSpacing, applyButtonSpacing: applyButtonSpacing, insertOrdered: insertOrdered,
-    insertBeforeImportantAction: insertBeforeImportantAction,
+    insertBeforeImportantAction: insertBeforeImportantAction, findEditContainer: findEditContainer,
     // What a caller prints when it finds no core at all. Written once here, even
     // though by definition the caller that needs it cannot read it from here.
     missingMessage: PLUGIN_NAME + ' is not installed or is disabled. Install it from '

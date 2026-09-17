@@ -10,6 +10,15 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-17 | 3.1.2 (`46f966b`) | 2.1.1 (`46f966b`) | 3.1.2 (`46f966b`) |  | 4.1.2 (`46f966b`) | 5.5.1 (`46f966b`) | 4.4.2 (`46f966b`) | 1.7.2 (`46f966b`) | 2.2.3 (`46f966b`) | Close is green in every dialog once nothing is left to write |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.7.1 (`3e227e0`) |  | SceneVariants 1.7.1: Select All and Unselect All are held back when they would change nothing |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.7.0 (`eb49bf5`) |  | SceneVariants 1.7.0: Select All and Unselect All for the [GROUP?] candidates |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.6.3 (`50a13f5`) |  | SceneVariants 1.6.3: the flag listing names untitled scenes by file, and the footer captions its pairs |
+| 2026-09-16 |  |  |  |  |  | 5.5.0 (`0ce2a33`) |  |  |  | NormalizeParentTags 5.5.0: Set All Prune, Roll Up and Off under the selectors |
+| 2026-09-16 |  |  |  |  |  |  |  | 1.6.2 (`09b6b26`) |  | SceneVariants 1.6.2: the pane button reads Synchronize Variant... for one variant |
+| 2026-09-16 |  |  |  | 1.4.0 (`ba19cc3`) |  | 5.4.0 (`ba19cc3`) |  |  | 2.2.2 (`ba19cc3`) | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 2.2.1 (`a42a79a`) | TagBundleClipboard 2.2.1: ⮺ Tags is removed, not disabled, on a tagless entity |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 2.2.0 (`dbff7e7`) | TagBundleClipboard 2.2.0: ⮺ Tags is disabled while the entity carries no tag |
 | 2026-09-16 |  |  |  |  |  |  |  | 1.6.1 (`4430fff`) |  | SceneVariants 1.6.1: the pane re-reads when the scene's stash-ids change under it |
 | 2026-09-16 |  |  |  |  |  |  |  | 1.6.0 (`1ebf30f`) |  | SceneVariants 1.6.0: a save that adds a shared stash-id says which set it joined |
 | 2026-09-16 |  |  |  |  |  |  |  | 1.5.2 (`ac018e9`) |  | SceneVariants 1.5.2: each dropped stash-id is probed as its own set |

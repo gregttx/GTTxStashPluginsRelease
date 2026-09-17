@@ -102,7 +102,8 @@ searched fields on is left out of the breakdown — the log says it was skipped.
   current search *on* and there is no other way to say *start over*. When that button
   already says Search, Refresh would do the same thing, so it is not offered.
 - **Cancel**, or the Escape key, closes it. Once a search has run out it reads **Close**
-  instead — the same button, saying which of the two pressing it now means.
+  instead — the same button, saying which of the two pressing it now means — and that Close is
+  green when the list holds nothing to replace, grey while Replace still has something to do.
 
 The **×** at the right-hand end of the box empties it. It is there only while there is
 something to empty.

@@ -204,7 +204,9 @@ stray keypress should do.
 **Stop Scanning** ends the review without closing the dialog. The scan is the long phase, and it is
 where you find out that a path you wanted is off — so stopping it leaves the plan built so far on
 screen, withdraws **Proceed** (half a plan is not a plan), and hands back **Path Settings...** and
-**Rescan**. Cancel is still there for walking away entirely.
+**Rescan**. Cancel is still there for walking away entirely — and where a review found nothing
+to change, the button says **Close** instead, in green, since there is nothing to cancel and nothing
+left to write. The green comes back after a pass has run clean; it stays grey after a stop or an error.
 
 ## Order matters, and it is fixed
 

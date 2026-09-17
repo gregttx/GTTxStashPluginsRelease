@@ -47,7 +47,7 @@
   var coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
-    entityTip = C.entityTip, cfTipTick = C.cfTipTick,
+    entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
     hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, byClass = C.byClass,
     coreSettingElement = C.settingElement, coreSettingRow = C.settingRow;
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '1.6.1';
+  var PLUGIN_VERSION = '1.7.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -120,6 +120,19 @@
 
   function oneLine(text) {
     return String(text == null ? '' : text).replace(/\s+/g, ' ').replace(/^ | $/g, '');
+  }
+
+  // What a listing calls a scene: its title, else its file's name the way Stash's own
+  // lists do - a long one cut to the start of its stem and its extension - else its
+  // id. Only a query that asks for `files { basename }` can answer with the file.
+  var STEM_MAX = 32;
+  function sceneName(sc) {
+    var name = entityTipName(sc);
+    if (!name) return 'Scene ' + sc.id;
+    if (sc.title || name.length <= STEM_MAX + 8) return name;
+    var dot = name.lastIndexOf('.');
+    var ext = dot > 0 && name.length - dot <= 6 ? name.slice(dot + 1) : '';
+    return (ext ? name.slice(0, dot) : name).slice(0, STEM_MAX) + '...' + ext;
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -1099,6 +1112,7 @@
     this.failed = 0;
     this.state = 'scanning';
     this.stopped = false;
+    this.scanFailed = false;
     this.build();
   }
 
@@ -1222,8 +1236,23 @@
     this.closeBtn.addEventListener('click', function () { self.close(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
-    [this.goBtn, this.stopBtn, this.syncSetBtn, this.groupBtn, this.untagBtn,
-      this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
+    // A task may caption Proceed with what it writes; the candidate pair is captioned
+    // as what it acts on and walled off from the rest of the row, both shown with it.
+    if (this.task.goLabel) foot.appendChild(el('span', 'svr-foot-label', this.task.goLabel));
+    this.candLabel = el('span', 'svr-foot-label svr-hidden', 'Selected [Group?]: ');
+    this.candSep = el('span', 'svr-foot-sep svr-hidden', '-');
+    // At the row's right end, shown with the candidate pair: the [GROUP?] boxes are the
+    // only ones this listing has, and the two set them all at once. Grey: they write
+    // nothing, and the pair reads the boxes only when pressed.
+    this.selAllBtn = button('Select All', 'svr-selall svr-hidden');
+    this.unselAllBtn = button('Unselect All', 'svr-unselall svr-hidden');
+    this.selAllBtn.title = 'Tick every [GROUP?] line still open.';
+    this.unselAllBtn.title = 'Untick every [GROUP?] line still open.';
+    this.selAllBtn.addEventListener('click', function () { self.tickCandidates(true); });
+    this.unselAllBtn.addEventListener('click', function () { self.tickCandidates(false); });
+    [this.goBtn, this.stopBtn, this.syncSetBtn, this.candLabel, this.groupBtn, this.untagBtn,
+      this.candSep, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn,
+      this.selAllBtn, this.unselAllBtn]
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -1316,6 +1345,15 @@
             : '';
     this.goBtn.disabled = !!why;
     this.goBtn.title = why || ('Write ' + plural(ticked, this.task.planUnit || 'scene') + '.');
+    // Green when nothing is left to write: every listed job written or none listed, no
+    // candidate pair or set still offered. Undo does not take the green away - it is an
+    // offer, not something waiting on the user. A failed scan and a stale script stay
+    // grey: those say "something is wrong", not "nothing to do".
+    var left = this.sets.length;
+    this.jobs.forEach(function (j) { if (self.changes.indexOf(j) === -1) left++; });
+    this.candidates.forEach(function (c) { if (self.changes.indexOf(c.job) === -1) left++; });
+    paintButton(this.closeBtn, !busy && !this.stale && !this.scanFailed && !left
+      ? 'btn-success' : 'btn-secondary');
     this.refreshAllBar();
   };
 
@@ -1682,14 +1720,24 @@
 
   Run.prototype.syncCandidates = function () {
     if (!this.candidates.length) return;
-    var busy = this.state !== 'listing', selected = 0, self = this;
+    var busy = this.state !== 'listing', selected = 0, open = 0, self = this;
     this.candidates.forEach(function (c) {
       var done = self.changes.indexOf(c.job) !== -1;
       c.box.disabled = busy || done;
-      if (!done && c.box.checked) selected++;
+      if (done) return;
+      open++;
+      if (c.box.checked) selected++;
     });
+    this.show(this.candLabel, true);
     this.show(this.groupBtn, true);
     this.show(this.untagBtn, true);
+    this.show(this.candSep, true);
+    this.show(this.selAllBtn, true);
+    this.show(this.unselAllBtn, true);
+    // Each is held back when it would change nothing: every open box already ticked,
+    // or none.
+    this.selAllBtn.disabled = busy || selected === open;
+    this.unselAllBtn.disabled = busy || !selected;
     var why = busy ? 'Still working.'
       : this.stale ? 'Reload the page first: this tab is running an older script.' : '';
     this.groupBtn.disabled = !!why || selected < 2;
@@ -1857,6 +1905,12 @@
   // ponytail: after a partial failure a retry press mints a new id, so the retried
   // scenes form a set of their own rather than joining the ones that succeeded - Undo
   // and one clean press is the way back.
+  // A box already settled by a write stays as it is, like the hand leaves it.
+  Run.prototype.tickCandidates = function (on) {
+    this.candidates.forEach(function (c) { if (!c.box.disabled) c.box.checked = on; });
+    this.syncFooter();
+  };
+
   Run.prototype.actCandidates = function (group) {
     if (this.state !== 'listing') return;
     var self = this, task = this.task, jobs = [];
@@ -2052,12 +2106,17 @@
     this.show(this.weightBar, false);
     this.show(this.allBar, false);
     this.show(this.syncSetBtn, false);
+    this.show(this.candLabel, false);
     this.show(this.groupBtn, false);
     this.show(this.untagBtn, false);
+    this.show(this.candSep, false);
+    this.show(this.selAllBtn, false);
+    this.show(this.unselAllBtn, false);
     this.scanned = 0;
     this.total = 0;
     this.written = 0;
     this.failed = 0;
+    this.scanFailed = false;
     this.msg('INFO', '--- Rescan ---');
     this.begin();
   };
@@ -2134,6 +2193,7 @@
         self.setState('listing');
         self.progress(finalProgress || self.progressText());
       }, function (err) {
+        self.scanFailed = true;
         self.setState('listing');
         self.msg('ERROR', 'The scan failed: ' + (err && err.message ? err.message : String(err)));
         self.progress(self.progressText());
@@ -2392,7 +2452,7 @@
   // scenes carrying a stash-id, scenes carrying the field, and - so a scene that has
   // lost both is still unflagged - scenes carrying the flag tag itself.
   var FLAG_SCENE_SEL =
-    '{ count scenes { id title tags { id } custom_fields ' +
+    '{ count scenes { id title files { basename } tags { id } custom_fields ' +
     'stash_ids { endpoint stash_id } } }';
 
   var FLAG_BY_STASHID_QUERY =
@@ -2522,11 +2582,11 @@
             // two are indistinguishable from here. Listed as a [GROUP?] candidate and
             // decided by the buttons instead.
             if (flagged && !keys.length) {
-              run.candLine({ id: id, title: sc.title || ('Scene ' + sc.id) });
+              run.candLine({ id: id, title: sceneName(sc) });
               return;
             }
             if (!!flagged === (n > 0)) return;
-            var job = { id: id, title: sc.title || ('Scene ' + sc.id), flag: n > 0, others: n };
+            var job = { id: id, title: sceneName(sc), flag: n > 0, others: n };
             run.jobs.push(job);
             run.jobLine(job);
           });
@@ -2607,6 +2667,7 @@
 
   var FLAG_TASK = {
     title: 'Flag Variants',
+    goLabel: '[Flag]/[Unflag]: ',
     legend: 'One line per scene: FLAG where the tag goes on, because at least one other ' +
       'scene shares one of its variant stash-id lines, and UNFLAG where it comes off, ' +
       'because none does any more. Only the flag tag moves; nothing else on the scene ' +
@@ -4466,6 +4527,9 @@
     '.svr-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.svr-foot button{margin-right:.5rem;}' +
+    '.svr-foot-label{color:#7d8f9c;}' +
+    '.svr-foot-sep{color:#7d8f9c;padding:0 .75rem;}' +
+    '.svr-selall{margin-left:auto;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
     // one of these rules is a single class, so the last one written wins - and this one
     // is written before the strips and rows that set their own `display`. A `-hidden` on
@@ -5254,7 +5318,9 @@
       // The one control in the pane, and the reading half's only door into a write:
       // it opens the synchronize dialog, which re-reads and lists everything before
       // anything moves. Amber because pressing through leads to writes, dots because
-      // the click itself only asks.
+      // the click itself only asks. The caption counts - "Synchronize Variant..." under
+      // a summary that says "1 other variant" - while the tooltip and the dialog's title
+      // stay generic: they describe what the task does, not this scene's set.
       if (found.rows.length) {
         kids.push(React.createElement('button', {
           key: 'sync', type: 'button',
@@ -5268,7 +5334,7 @@
               'and URLs are only ever added, a group is joined at this scene\u2019s own ' +
               'position, and nothing is written until you approve.',
           onClick: function () { startRun(SYNC_TASK, scene); },
-        }, SYNC_TASK_NAME));
+        }, found.rows.length === 1 ? SYNC_TASK_NAME.replace('Variants', 'Variant') : SYNC_TASK_NAME));
       }
       found.rows.forEach(function (row) {
         kids.push(VariantRow(React, row, !!(coverDiff && coverDiff[String(row.scene.id)])));

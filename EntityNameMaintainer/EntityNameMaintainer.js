@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.1.0';
+  var PLUGIN_VERSION = '2.1.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1128,10 +1128,9 @@
     return !this.hits.length || this.changes.length > 0;
   };
 
-  // Green where every sibling's Close is grey, and only ever here: this dialog opens by
-  // itself on a rename the user did not ask it about, so "you are done, nothing is
-  // waiting on you" is worth saying. Grey while a listing is still unacted on, which is
-  // the state the confirm exists for - so an armed Close is never green, without that
+  // The repo's green Close - nothing left to write, Undo or not - with this dialog's
+  // own predicate under it: grey while a listing is still unacted on, which is the
+  // state the confirm exists for, so an armed Close is never green, without that
   // needing to be a condition of its own. Not the repo's amber/teal pair: neither says
   // "finished", and Close writes nothing either way.
   //

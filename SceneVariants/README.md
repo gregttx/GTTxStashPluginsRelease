@@ -56,7 +56,7 @@ two settings resolve to the **same tag**, or to two tags one of which sits under
 says so in a line above the list: that is a settings mistake rather than a scene one.
 
 The tab itself writes nothing: it is two read queries and a list of links. Its one control, the
-**Synchronize Variants...** button at the top of the pane, opens the dialog described under
+**Synchronize Variants...** button at the top of the pane (**Synchronize Variant...** when there is one), opens the dialog described under
 [Synchronizing a variant set](#synchronizing-a-variant-set) — amber because pressing through it
 leads to writes. While any of this plugin's dialogs is open the button is unavailable, and its
 tooltip says so; close that dialog first.
@@ -127,7 +127,9 @@ no longer shows: the dialog keeps the last thousand lines on screen so a library
 cannot bog the page down, and says how many it is hiding.
 
 **Close** (or Escape) ends the scan at any point — nothing has been written, so there is nothing to
-leave half-done, and reopening the task starts a fresh one. Once a write is under way that exit is
+leave half-done, and reopening the task starts a fresh one. It turns green once nothing is left to
+write: the scan found nothing, or everything it listed has been written, whether or not you take
+Undo up on its offer. Once a write is under way that exit is
 gone and **Stop** takes over: it ends after the batch in flight, what landed stays landed, and Undo
 still covers exactly the scenes that were written.
 
@@ -151,8 +153,10 @@ The matching is the tab's own: a scene's lines are its stash-ids plus whatever i
 holds, and sharing any one line is sharing the work. The plan lists every scene the task would
 touch and closes with how many **multi-variant sets** the scan found — **[FLAG]** with how many other
 scenes share its ids (the count in blue for exactly one, amber for a real choice), **[UNFLAG]**
-where none does any more — and nothing is written until **Proceed**. **Undo** puts the tag back the
-way it was on every scene written, for as long as the dialog stays open.
+where none does any more — and nothing is written until **Proceed**, captioned in the footer with
+**[Flag]/[Unflag]:** for what it writes. A scene with no title is named by its file, the way
+Stash's own lists name it, a long name cut to the start of its stem and its extension. **Undo**
+puts the tag back the way it was on every scene written, for as long as the dialog stays open.
 
 If no tag answers to the configured name yet, Proceed creates it first, fully furnished: an
 **orphan** (no parents, so hierarchy plugins never touch it), **ignored by auto-tagging**, aliased
@@ -171,7 +175,7 @@ A scene carrying the flag with **no stash-id and no variant field value at all**
 by machine. The task cannot tell a flag that outlived its evidence from one you just put on
 yourself to say "these are variants of each other" — so those scenes are listed as **[GROUP?]**
 lines instead, each with a checkbox, all ticked by default, and the decision is yours, through two
-buttons in the same footer:
+buttons in the same footer, captioned **Selected [Group?]:** and set apart from Copy log:
 
 - **Create Variant Group** writes one shared **pseudo stash-id** — `pseudo:` and 32 hex digits,
   minted on the press — into the variant field of the ticked scenes. From then on they are a
@@ -180,6 +184,9 @@ buttons in the same footer:
   set; the `pseudo` prefix sits where a real line carries the provider's host, so the field never
   pretends a stash-box was consulted.
 - **Remove Tag** takes the flag off the ticked scenes — for the ones whose flag is a leftover.
+
+**Select All** and **Unselect All**, at the right end of the footer, tick or untick every
+[GROUP?] line still open; a line already written stays as it is.
 
 So making a set out of scenes no stash-box knows about is: put the flag tag on them, run
 **Flag Variants...**, tick them, press **Create Variant Group**. Each press mints a fresh id, so

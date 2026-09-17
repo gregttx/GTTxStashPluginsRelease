@@ -40,11 +40,12 @@ each entity rather than to the whole library at once — see [Automatic mode](#a
 path has no dialog and no undo, and every type is off by default.
 
 
-## Prune and Roll Up on a single scene
+## Prune and Roll Up on a single entity
 
-Turn on **Show Prune and Roll Up Buttons on a Scene** and a scene's edit row carries up to two
-extra buttons — **Prune Tags** when the scene holds a tag that a more specific tag on it already
-implies, and **Roll Up Tags** when it is missing a parent its own tags imply.
+Turn on **Show Prune and Roll Up Buttons on an Entity** and the edit form of a scene, image,
+gallery, performer, studio or group carries up to two extra buttons — **Prune Tags** when the
+entity holds a tag that a more specific tag on it already implies, and **Roll Up Tags** when it is
+missing a parent its own tags imply. A scene marker has no page of its own and gets none.
 
 **Each appears only when it would actually change something**, and goes away once it would not:
 prune everything a scene has to prune and its Prune button is gone on the next save. A scene can
@@ -105,8 +106,10 @@ is saved. The Images selector is marked **(slow)** here for the same reason, and
 label says why. The Auto Mode Settings dialog does not mark it, since nothing there starts a
 whole-library pass.
 
-Change a selector and the plan on screen stops being what **Proceed** would write, so Proceed is
-disabled and **Rescan** appears; pressing it re-plans against the new selection. **Keep this
+Under the selectors, **Set All Prune**, **Set All Roll Up** and **Set All Off** move all seven at
+once. Change a selector, by hand or with one of those, and the plan on screen stops being what
+**Proceed** would write, so Proceed is disabled and **Rescan** appears; pressing it re-plans
+against the new selection. **Keep this
 selection for the next time this dialog opens** does what it says — it lives in your browser, not
 in the plugin settings, so it is yours and not every tab's.
 
@@ -173,13 +176,13 @@ hierarchy is named — for Prune that tag is always one that survives the run, s
 "this is redundant *because of* that". Tags at the same level are tie-broken on the lower tag id
 so that repeated runs log identically.
 
-Nothing has been written at this point. **Cancel** walks away with your library untouched — and where the review found nothing to do, the button says **Close** instead, since there is nothing to cancel.
+Nothing has been written at this point. **Cancel** walks away with your library untouched — and where the review found nothing to do, the button says **Close** instead, in green, since there is nothing to cancel and nothing left to write.
 
 **Phase 2 — apply.** **Proceed** — amber, the colour every control in these plugins that writes
 wears — performs the changes and continues the log with what was actually written, plus any
 errors. The log is scrollable throughout, **Copy log** puts the whole
 thing on the clipboard, **Rescan** starts a fresh review pass without closing the dialog, and
-**Close** dismisses it.
+**Close** dismisses it — green once the pass has run clean, grey if it stopped early or hit an error.
 
 **Rescan** matters more than it looks. The plan is worked out in full before the first change is
 written, so anything that alters tags *while* phase 2 runs — another browser tab, a scan, the
@@ -340,8 +343,8 @@ A type set to **PRUNE** has any tag another tag on the same entity implies remov
 Stash saves one; a type set to **ROLLUP** has every ancestor added; **OFF** is left alone. A type
 that is not mentioned at all is OFF.
 
-**The Auto Mode Settings... dialog is the editor for it** — seven selectors and an amber **Save**,
-so nobody has to type the line.
+**The Auto Mode Settings... dialog is the editor for it** — seven selectors, the same three
+**Set All** buttons, and an amber **Save**, so nobody has to type the line.
 
 **On the settings page you get that dialog instead of Stash's text editor.** In the **Automatic
 mode per entity type** row, the value is shown in words — `Performers=Off, Scenes=Prune, Scene
@@ -467,7 +470,7 @@ until you change it.
 | **Separator for the two "name contains" settings** | empty (spaces) | The character those two lists are split on. |
 | **Never add tags marked via a Custom Field** | empty | Roll Up does not add a tag carrying this custom field. |
 | **Never remove tags marked via a Custom Field** | empty | Prune does not remove a tag carrying this custom field. |
-| **Show Prune and Roll Up Buttons on a Scene** | off | Draws the two staging buttons on a scene's Edit tab — see [Prune and Roll Up on a single scene](#prune-and-roll-up-on-a-single-scene). |
+| **Show Prune and Roll Up Buttons on an Entity** | off | Draws the two staging buttons on an entity's edit form (scene, image, gallery, performer, studio or group), for a scene on its Edit tab — see [Prune and Roll Up on a single entity](#prune-and-roll-up-on-a-single-entity). |
 
 ## Relationship to the other plugins in this repo
 

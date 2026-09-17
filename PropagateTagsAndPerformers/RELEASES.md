@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.4.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 4.4.1 (`ed8e8b9`) | 2026-09-14 | PropagateTagsAndPerformers 4.4.1: the child-tag exclusion setting reads "child tags" |
 | 4.4.0 (`05d543e`) | 2026-09-14 | PropagateTagsAndPerformers 4.4.0: a tag and everything under it can be kept out |
 | 4.3.0 (`9e53be6`) | 2026-09-14 | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |

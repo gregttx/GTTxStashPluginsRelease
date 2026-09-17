@@ -39,7 +39,7 @@ There is also a **library-wide task**, in **Settings → Tasks → Plugin Tasks*
   **Review.** Clicking the task opens a dialog and scans the library without writing anything. It
   lists every tag it would add to every scene, names the performer each one comes from, and shows
   which exclusion filters are active. **Proceed** stays disabled until the scan finishes, and stays
-  disabled if there is nothing to do. **Cancel** walks away with your library untouched.
+  disabled if there is nothing to do. **Cancel** walks away with your library untouched — and where the review found nothing to merge, the button says **Close** instead, in green, since there is nothing to cancel and nothing left to write.
 
   **Apply.** **Proceed** performs the merge and continues the log with what was actually written.
   **Stop** halts after the current scene — what has already been written stays written. **Copy log**

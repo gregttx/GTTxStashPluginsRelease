@@ -40,7 +40,8 @@ far through it is while you wait.
 
 **The way out is one button wearing two words.** It says **Cancel** while **Apply** is live — there
 is a write on offer and Cancel is what declines it — and **Close** whenever Apply is off, because
-then there is nothing to decline. Both do the same thing.
+then there is nothing to decline. Both do the same thing. Close turns green once Apply has written
+its changes clean: nothing is left to write, whether or not you take Undo up on its offer.
 
 **Press Escape** at any point to close the dialog, exactly as that button would. While a write
 is actually in flight it does nothing — the button is disabled at that moment, and Stop is not

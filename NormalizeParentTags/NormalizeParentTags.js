@@ -31,6 +31,7 @@
     return;
   }
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, insertBeforeImportantAction = C.insertBeforeImportantAction,
+    findEditContainer = C.findEditContainer,
     applyButtonSpacing = C.applyButtonSpacing, domBus = C.domBus,
     coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
@@ -63,7 +64,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.3.2';
+  var PLUGIN_VERSION = '5.5.1';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1480,6 +1481,8 @@
     // Amber wherever the selector is set to something that writes, the same rule the
     // buttons follow. A <select> has no Bootstrap variant to borrow.
     '.npt-mode-on{border-color:#ffb648;color:#ffb648;}' +
+    // The Set All row spans the grid and sits at its right edge.
+    '.npt-modes-all{grid-column:1/-1;display:flex;justify-content:flex-end;gap:.4rem;}' +
     // The run dialog's panel lives in the padded head; the settings dialog's is the
     // whole body, so it brings its own side padding rather than touching the border.
     '.npt-modesbody{padding:.5rem 1rem;}' +
@@ -1665,6 +1668,26 @@
       wrap.appendChild(row);
       selects[t.key] = sel;
     });
+    // Three buttons under the grid, at its right, that set every selector at once.
+    // They go through the same path a hand-moved selector does - `modes`, the paint
+    // and one `onChange` - so the run dialog's Rescan and the settings dialog's Save
+    // react exactly as they would to seven separate changes.
+    var all = el('div', 'npt-modes-all');
+    var allBtns = [MODE_PRUNE, MODE_ROLLUP, MODE_OFF].map(function (m) {
+      var b = button('Set All ' + MODE_LABEL[m], 'npt-set-all');
+      b.title = 'Set every type to ' + MODE_LABEL[m] + '.';
+      b.addEventListener('click', function () {
+        TYPES.forEach(function (t) {
+          modes[t.key] = m;
+          selects[t.key].value = m;
+          paintMode(selects[t.key]);
+        });
+        if (onChange) onChange(null, m);
+      });
+      all.appendChild(b);
+      return b;
+    });
+    wrap.appendChild(all);
     return {
       el: wrap,
       selects: selects,
@@ -1679,6 +1702,7 @@
       },
       enable: function (on) {
         TYPES.forEach(function (t) { selects[t.key].disabled = !on; });
+        allBtns.forEach(function (b) { b.disabled = !on; });
       },
     };
   }
@@ -2107,6 +2131,12 @@
     // already made, and stranding the user with changes they cannot take back would
     // be a worse outcome than the mismatch it is protecting them from.
     this.proceedBtn.disabled = !ready || !this.plan.length || this.stale || this.selectionDirty;
+    // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
+    // does not take the green away - it is an offer, not something waiting on the user.
+    // Errors, a stopped pass, a moved selector and a stale script stay grey: those say
+    // "something is wrong", not "nothing to do".
+    paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
+      !this.stale && !this.selectionDirty ? 'btn-success' : 'btn-secondary');
     this.spin(scanning || applying || undoing);
   };
 
@@ -4416,12 +4446,12 @@
     console.info('[npt gate] ' + line);
   }
 
-  // ── Manual buttons on a Scene ─────────────────────────────────────────────
+  // ── Manual buttons on an entity page ──────────────────────────────────────
   //
-  // **Prune Tags and Roll Up Tags, on the scene's own edit row, and only when they would
-  // do something.** Everything this plugin did was library-wide or automatic; the one
-  // thing it could not do was answer "what would this scene change?" without a run over
-  // everything.
+  // **Prune Tags and Roll Up Tags, on the entity's own edit form, and only when they
+  // would do something.** Everything this plugin did was library-wide or automatic; the
+  // one thing it could not do was answer "what would this entity change?" without a run
+  // over everything. Every type with a page of its own gets them - a marker has none.
   //
   // **A click stages into the tag box in front of you and writes nothing.** Stash's own
   // Save is what commits it, exactly as if the tags had been picked from the dropdown by
@@ -4433,26 +4463,39 @@
   // patching - the click falls back to the scoped review dialog and the caption grows the
   // dots, resolved per tick rather than at build time. The user opted into the button,
   // not into a particular mechanism.
-  var SCENE_TYPE = null;
-  TYPES.forEach(function (t) { if (t.key === 'scenes') SCENE_TYPE = t; });
+  // The types with a page: the ones `ROUTES` names, in `TYPES` order.
+  var PAGE_TYPES = TYPES.filter(function (t) { return !!ROUTES[t.key]; });
 
   var PRUNE_BTN_CLASS = 'npt-prune-btn';
   var ROLLUP_BTN_CLASS = 'npt-rollup-btn';
-  var SCENE_BTNS = [
+  var ENTITY_BTNS = [
     { mode: MODE_PRUNE, cls: PRUNE_BTN_CLASS, base: 'Prune Tags',
-      title: 'Take out the tags on this scene that a more specific tag on it already ' +
-        'implies. They are removed from the tag box in front of you; nothing is written ' +
-        'until you press Stash\'s own Save.' },
+      title: function (noun) {
+        return 'Take out the tags on this ' + noun + ' that a more specific tag on it ' +
+          'already implies. They are removed from the tag box in front of you; nothing is ' +
+          'written until you press Stash\'s own Save.';
+      } },
     { mode: MODE_ROLLUP, cls: ROLLUP_BTN_CLASS, base: 'Roll Up Tags',
-      title: 'Put in the parent tags this scene\'s own tags imply and it does not carry. ' +
-        'They are added to the tag box in front of you; nothing is written until you ' +
-        'press Stash\'s own Save.' },
+      title: function (noun) {
+        return 'Put in the parent tags this ' + noun + '\'s own tags imply and it does not ' +
+          'carry. They are added to the tag box in front of you; nothing is written until ' +
+          'you press Stash\'s own Save.';
+      } },
   ];
 
-  function getSceneId() {
-    var m = window.location.pathname.match(/^\/scenes\/(\d+)(?:\/|$)/);
-    return m ? m[1] : null;
+  // `{ type, id, key }` for the entity page showing, else null. `key` is what a capture,
+  // a probe and a staged form are matched on: the type as well as the id, because
+  // `/performers/7` and `/scenes/7` are two pages.
+  function pageEntity() {
+    for (var i = 0; i < PAGE_TYPES.length; i++) {
+      var t = PAGE_TYPES[i];
+      var m = window.location.pathname.match(new RegExp('^' + ROUTES[t.key] + '(\\d+)(?:[/?#]|$)'));
+      if (m) return { type: t, id: m[1], key: t.key + ':' + m[1] };
+    }
+    return null;
   }
+
+  function pageKey() { var p = pageEntity(); return p ? p.key : null; }
 
   // ── The scene's own tag control ───────────────────────────────────────────
   //
@@ -4473,7 +4516,7 @@
           // `values` is tracked on the entry rather than read back off props, so it can
           // be corrected the moment we stage into the control instead of waiting for
           // React to re-render and capture it again.
-          _tagCaptures.push({ props: props, sceneId: getSceneId(), values: props.values || [] });
+          _tagCaptures.push({ props: props, page: pageKey(), values: props.values || [] });
           if (_tagCaptures.length > TAG_CAPTURE_LIMIT) _tagCaptures.shift();
         }
         return [props];
@@ -4492,84 +4535,83 @@
     if (_warnedNoStaging) return;
     _warnedNoStaging = true;
     console.warn('[npt] this Stash does not expose PluginApi component patching, so the ' +
-      'scene buttons cannot put tags into the edit form. They open the review dialog ' +
-      'instead, which writes when you press Proceed.');
+      'Prune and Roll Up buttons cannot put tags into the edit form. They open the review ' +
+      'dialog instead, which writes when you press Proceed.');
   }
 
   // What the box is expected to hold: our own last staged list if we have written to it,
-  // otherwise whatever the scene carries on the server. The picking rule is ᝯㄝₓ Core's -
+  // otherwise whatever the entity carries on the server. The picking rule is ᝯㄝₓ Core's -
   // newest first, skipping a capture that shares nothing with this, because neither
   // recency nor an exact match is enough on its own. See `pickControl`.
-  var _stagedForm = { sceneId: null, ids: null };
+  var _stagedForm = { key: null, ids: null };
 
-  function sceneTagControl(expectedIds) {
-    var sid = getSceneId();
-    return pickControl(_tagCaptures, function (c) { return c.sceneId === sid; }, expectedIds);
+  function entityTagControl(expectedIds) {
+    var key = pageKey();
+    return pickControl(_tagCaptures, function (c) { return c.page === key; }, expectedIds);
   }
 
   // ── What the buttons are looking at ───────────────────────────────────────
   //
-  // `{ id, status, ent, ctx }`. The scene and the hierarchy are read once - the ctx is
-  // the same one the auto reaction builds - and the *plan* is re-derived on every tick
-  // from whatever the tag box holds right now. That is the `apiPrepare` shape and it is
-  // what makes these buttons live: stage a roll-up and the Roll Up button goes, take a
-  // tag out of the box by hand and it comes back.
-  var sceneCheck = null;
+  // `{ key, type, id, label, status, ent, ctx }`. The entity and the hierarchy are read
+  // once - the ctx is the same one the auto reaction builds - and the *plan* is
+  // re-derived on every tick from whatever the tag box holds right now. That is the
+  // `apiPrepare` shape and it is what makes these buttons live: stage a roll-up and the
+  // Roll Up button goes, take a tag out of the box by hand and it comes back.
+  var entityCheck = null;
 
-  function invalidateSceneCheck() { sceneCheck = null; }
-
-  function checkScene(id) {
+  function checkEntity(check) {
+    var type = check.type;
     autoSettings().then(function (s) {
       return autoGraph(s).then(function (graph) {
         var excludeTagId = autoExcludeTagId(graph, s);
         if (excludeTagId === false) throw new Error('the exclusion tag could not be resolved');
         var ctx = { settings: s, graph: graph, filters: makeFilters(s, graph),
           excludeTagId: excludeTagId };
-        return gqlRequest(autoEntityQuery(SCENE_TYPE), { ids: [String(id)] })
+        return gqlRequest(autoEntityQuery(type), { ids: [String(check.id)] })
           .then(function (data) {
-            var ent = ((data[SCENE_TYPE.find] || {})[SCENE_TYPE.node] || [])[0];
-            if (!sceneCheck || sceneCheck.id !== id) return;
-            sceneCheck.status = 'done';
-            sceneCheck.ent = ent || null;
-            sceneCheck.ctx = ctx;
-            gateLog('probed scene ' + id + (ent ? '' : ' - it could not be read'));
-            sceneButtonsTick();
+            var ent = ((data[type.find] || {})[type.node] || [])[0];
+            if (entityCheck !== check) return;
+            check.status = 'done';
+            check.ent = ent || null;
+            check.ctx = ctx;
+            gateLog('probed ' + check.label + (ent ? '' : ' - it could not be read'));
+            entityButtonsTick();
           });
       });
     }).catch(function (e) {
-      if (!sceneCheck || sceneCheck.id !== id) return;
-      sceneCheck.status = 'done';
-      sceneCheck.ent = null;
-      sceneCheck.why = 'the probe failed: ' + (e && e.message ? e.message : e);
-      gateLog('probe failed for scene ' + id + ': ' + sceneCheck.why);
+      if (entityCheck !== check) return;
+      check.status = 'done';
+      check.ent = null;
+      check.why = 'the probe failed: ' + (e && e.message ? e.message : e);
+      gateLog('probe failed for ' + check.label + ': ' + check.why);
     });
   }
 
   // The tag ids the box holds, falling back to the server's where there is no control to
   // read - which is what a Stash without component patching looks like.
-  function sceneFormTagIds(check) {
+  function formTagIds(check) {
     var server = ((check.ent || {}).tags || []).map(function (t) { return String(t.id); });
     if (!stagingAvailable()) return server;
-    var expected = _stagedForm.sceneId === check.id ? _stagedForm.ids : server;
-    var control = sceneTagControl(expected);
+    var expected = _stagedForm.key === check.key ? _stagedForm.ids : server;
+    var control = entityTagControl(expected);
     if (!control) return server;
     return (control.values || []).map(function (t) { return String(t.id); });
   }
 
-  // One planner, over a scene whose tags are whatever the form says. `planEntity` is what
-  // the library walk and the auto reaction both call, so a button cannot come to disagree
-  // with the run behind it.
-  function scenePlan(check, mode) {
+  // One planner, over an entity whose tags are whatever the form says. `planEntity` is
+  // what the library walk and the auto reaction both call, so a button cannot come to
+  // disagree with the run behind it.
+  function entityPlan(check, mode) {
     if (!check.ent || !check.ctx) return null;
-    var ids = sceneFormTagIds(check);
-    return planEntity(SCENE_TYPE, {
+    var ids = formTagIds(check);
+    return planEntity(check.type, {
       id: check.ent.id, organized: check.ent.organized,
       tags: ids.map(function (id) { return { id: id }; }),
     }, mode, check.ctx);
   }
 
-  function removeSceneButtons() {
-    SCENE_BTNS.forEach(function (spec) {
+  function removeEntityButtons() {
+    ENTITY_BTNS.forEach(function (spec) {
       var b = document.querySelector('.' + spec.cls);
       if (b && b.parentNode) b.parentNode.removeChild(b);
     });
@@ -4594,19 +4636,19 @@
         found.forEach(function (t) { byId[String(t.id)] = t; });
         return ids.map(function (id) {
           if (byId[id]) return byId[id];
-          var t = (sceneCheck && sceneCheck.ctx) ? sceneCheck.ctx.graph.byId[id] : null;
+          var t = (entityCheck && entityCheck.ctx) ? entityCheck.ctx.graph.byId[id] : null;
           return { id: id, name: (t && t.name) || id, aliases: [], image_path: null };
         });
       });
   }
 
   // Resolves to a status string: 'staged' with a count, 'nochange', or 'nocontrol'.
-  function stageScene(check, mode) {
-    var delta = scenePlan(check, mode);
+  function stageEntity(check, mode) {
+    var delta = entityPlan(check, mode);
     if (!delta) return Promise.resolve({ status: 'nochange' });
-    var current = sceneFormTagIds(check);
-    var expected = _stagedForm.sceneId === check.id ? _stagedForm.ids : current;
-    var control = sceneTagControl(expected);
+    var current = formTagIds(check);
+    var expected = _stagedForm.key === check.key ? _stagedForm.ids : current;
+    var control = entityTagControl(expected);
     if (!control) return Promise.resolve({ status: 'nocontrol' });
 
     if (mode === MODE_PRUNE) {
@@ -4619,7 +4661,7 @@
       // Recorded immediately: React will re-render and capture the control again, but
       // this keeps the next tick correct even if it does not.
       control.values = kept;
-      _stagedForm = { sceneId: check.id, ids: kept.map(function (t) { return String(t.id); }) };
+      _stagedForm = { key: check.key, ids: kept.map(function (t) { return String(t.id); }) };
       return Promise.resolve({ status: 'staged', count: removed });
     }
 
@@ -4631,7 +4673,7 @@
       var next = (control.values || []).concat(chips);
       control.props.onSelect(next);
       control.values = next;
-      _stagedForm = { sceneId: check.id, ids: next.map(function (t) { return String(t.id); }) };
+      _stagedForm = { key: check.key, ids: next.map(function (t) { return String(t.id); }) };
       return { status: 'staged', count: chips.length };
     });
   }
@@ -4654,36 +4696,36 @@
     setTimeout(function () {
       btn._nptFlashUntil = 0;
       if (token === _flashToken && btn._nptLabel) btn.textContent = btn._nptLabel;
-      sceneButtonsTick();
+      entityButtonsTick();
     }, FLASH_MS);
   }
 
-  function buildSceneButton(spec, id, label) {
+  function buildEntityButton(spec) {
     var btn = el('button', 'btn ' + PLUGIN_BTN_VARIANT + ' ' + spec.cls, spec.base);
     btn.type = 'button';
     btn._coopOwner = PLUGIN_ID;   // read by `insertOrdered`'s cross-plugin priority scan
     btn.addEventListener('click', function (ev) {
       if (ev && ev.preventDefault) ev.preventDefault();
-      var check = sceneCheck;
-      if (!check || check.id !== getSceneId() || check.status !== 'done') return;
+      var check = entityCheck;
+      if (!check || check.key !== pageKey() || check.status !== 'done') return;
       if (!stagingAvailable()) {
         warnNoStagingOnce();
         if (_active) { _active.focus(); return; }
-        startRun(TASK_RUN, { type: SCENE_TYPE, id: id, label: label, mode: spec.mode });
+        startRun(TASK_RUN, { type: check.type, id: check.id, label: check.label, mode: spec.mode });
         return;
       }
       btn.disabled = true;
-      stageScene(check, spec.mode).then(function (r) {
+      stageEntity(check, spec.mode).then(function (r) {
         btn.disabled = false;
         if (r.status === 'staged') {
           flash(btn, (spec.mode === MODE_PRUNE ? 'Removed ' : 'Added ') + r.count);
-          gateLog(stripEllipsis(spec.base) + ' staged ' + r.count + ' on scene ' + id);
+          gateLog(stripEllipsis(spec.base) + ' staged ' + r.count + ' on ' + check.label);
         } else if (r.status === 'nocontrol') {
           flash(btn, 'No tag box');
         } else {
           flash(btn, 'No change');
         }
-        sceneButtonsTick();
+        entityButtonsTick();
       }, function (e) {
         btn.disabled = false;
         flash(btn, 'Failed');
@@ -4693,48 +4735,50 @@
     return btn;
   }
 
-  function sceneButtonsTick() {
+  function entityButtonsTick() {
     // **The page first, the setting second.** This tick runs every second on every page
     // in Stash, and asking the server about a setting no page here can use is a query per
     // tab for nothing - the same reasoning ᝯㄝₓ Core's own tick follows. A page that is
-    // not a scene cannot want these buttons, whatever the setting says.
-    var id = getSceneId();
-    if (!id) { removeSceneButtons(); return; }
+    // not an entity's cannot want these buttons, whatever the setting says.
+    var page = pageEntity();
+    if (!page) { removeEntityButtons(); return; }
     var s = _autoSettings;
-    if (!s) { autoSettings().then(function () { sceneButtonsTick(); }, function () {}); return; }
+    if (!s) { autoSettings().then(function () { entityButtonsTick(); }, function () {}); return; }
     if (!s.d1ShowSceneButtons) {
-      gateLogOnce('sc:setting', 'scene buttons: the setting is off');
-      removeSceneButtons();
+      gateLogOnce('sc:setting', 'entity buttons: the setting is off');
+      removeEntityButtons();
       return;
     }
-    gateLogOnce('sc:setting', 'scene buttons: the setting is on');
-    // The edit row, which on a Scene means the Edit tab is open - and the Edit tab is
-    // also where the tag box these buttons write into lives.
-    var container = document.querySelector('.edit-buttons');
+    gateLogOnce('sc:setting', 'entity buttons: the setting is on');
+    // The edit form's button row - which is also where the tag box these buttons write
+    // into lives. `.edit-buttons` on a Scene, the `.details-edit` without a Delete
+    // elsewhere; absent until the Edit tab or form is open.
+    var container = findEditContainer();
     if (!container) {
-      gateLogOnce('sc:container', 'scene buttons: no .edit-buttons row yet - on a Scene ' +
-        'that means the Edit tab is not open');
-      removeSceneButtons();
+      gateLogOnce('sc:container', 'entity buttons: no edit row yet - the Edit tab or ' +
+        'form is not open');
+      removeEntityButtons();
       return;
     }
-    gateLogOnce('sc:container', 'scene buttons: row found on scene ' + id);
+    gateLogOnce('sc:container', 'entity buttons: row found on ' + page.type.label + ' ' + page.id);
 
-    if (!sceneCheck || sceneCheck.id !== id) {
-      sceneCheck = { id: id, status: 'pending', ent: null, ctx: null, why: '' };
-      checkScene(id);
+    if (!entityCheck || entityCheck.key !== page.key) {
+      entityCheck = { key: page.key, type: page.type, id: page.id,
+        label: page.type.label + ' ' + page.id, status: 'pending', ent: null, ctx: null, why: '' };
+      checkEntity(entityCheck);
       return;
     }
-    if (sceneCheck.status !== 'done') return;
+    if (entityCheck.status !== 'done') return;
 
-    var label = SCENE_TYPE.label + ' ' + id;
+    var label = entityCheck.label, noun = page.type.label.toLowerCase();
     var dots = stagingAvailable() ? '' : '...';
-    SCENE_BTNS.forEach(function (spec) {
-      var delta = scenePlan(sceneCheck, spec.mode);
+    ENTITY_BTNS.forEach(function (spec) {
+      var delta = entityPlan(entityCheck, spec.mode);
       var n = delta ? (spec.mode === MODE_PRUNE ? delta.remove.length : delta.add.length) : 0;
       var showing = document.querySelector('.' + spec.cls);
-      gateLogOnce('sc:' + spec.mode, spec.base + ', scene ' + id + ': ' +
+      gateLogOnce('sc:' + spec.mode, spec.base + ', ' + label + ': ' +
         (n ? 'SHOWN - ' + plural(n, 'tag') : 'hidden' +
-          (sceneCheck.why ? ' - ' + sceneCheck.why : ' - nothing to do')));
+          (entityCheck.why ? ' - ' + entityCheck.why : ' - nothing to do')));
       if (!n) {
         if (showing && showing._nptFlashUntil > Date.now()) return;   // let it say so first
         if (showing && showing.parentNode) showing.parentNode.removeChild(showing);
@@ -4743,10 +4787,10 @@
       // The count is on the title rather than the caption: a caption is a cross-plugin
       // contract - the siblings' dedup matches on button text - and a number in it would
       // change on every edit of the box.
-      var title = spec.title + ' ' + plural(n, 'tag') + ' in the box right now.' +
+      var title = spec.title(noun) + ' ' + plural(n, 'tag') + ' in the box right now.' +
         (dots ? ' This Stash cannot be patched to reach the box, so the click opens the ' +
           'review dialog instead.' : '');
-      var btn = showing || buildSceneButton(spec, id, label);
+      var btn = showing || buildEntityButton(spec);
       btn._nptLabel = spec.base + dots;
       btn.title = title;
       if (btn.textContent !== btn._nptLabel && !btn.disabled) {
@@ -4775,7 +4819,7 @@
 
   function npTick() {
     settingsTick();
-    try { sceneButtonsTick(); } catch (e) {
+    try { entityButtonsTick(); } catch (e) {
       if (window.console && console.error) console.error('[npt]', e);
     }
   }

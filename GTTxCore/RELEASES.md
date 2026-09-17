@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.4.0 (`ba19cc3`) | 2026-09-16 | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |
 | 1.3.0 (`9e53be6`) | 2026-09-14 | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |
 | 1.2.1 (`4fcd6bb`) | 2026-09-02 | Review fixes 2026-09-02: the All row is drawn once, and sixty more |
 | 1.2.0 (`658a9d9`) | 2026-08-31 | GTTxCore 1.2.0 + SceneVariants 0.23.0: rating banner and organized mark on hover cards and variant covers |
