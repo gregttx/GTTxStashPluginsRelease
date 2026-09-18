@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.0.0 (`c4ac7aa`) | 2026-09-18 | GTTxCore 2.0.0: one Show Counts on Headings switch, and Custom Fields counts its rows |
+| 1.7.0 (`409b555`) | 2026-09-18 | GTTxCore 1.7.0: a tag's Parent Tags and Sub-Tags carry their counts under Show Tag Counts |
+| 1.6.0 (`e2349f2`) | 2026-09-18 | GTTxCore 1.6.0: Show Performer Counts puts the count after the word Performers above every performer list |
+| 1.5.1 (`fcbda92`) | 2026-09-18 | GTTxCore 1.5.1: a tag badge is known by data-sort-name, not by a link into /tags/ |
+| 1.5.0 (`6e16e9a`) | 2026-09-18 | GTTxCore 1.5.0: Show Tag Counts puts the count after the word Tags above every tag list |
 | 1.4.0 (`ba19cc3`) | 2026-09-16 | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |
 | 1.3.0 (`9e53be6`) | 2026-09-14 | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |
 | 1.2.1 (`4fcd6bb`) | 2026-09-02 | Review fixes 2026-09-02: the All row is drawn once, and sixty more |

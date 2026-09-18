@@ -33,7 +33,7 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 
 ## What you actually see
 
-Four things, and all of them are off until you turn them on.
+Five things, and all of them are off until you turn them on.
 
 ### The Scene Tagger's duration mismatch
 
@@ -87,6 +87,25 @@ Stash's own links do. It reaches every ᝯㄝₓ plugin at once — this is the 
 kept — and takes effect on the next link drawn rather than on the next page load.
 
 It is off by default, which is a new tab.
+
+### The counts on the Tags, Performers and Custom Fields headings
+
+The word **Tags** above a tag list says nothing about how long the list is, and on a scene
+carrying forty the number is what you want before reading them.
+
+Turn on **Show Counts on Headings** and the heading reads **Tags (12)** — Stash's own word, with
+the count in brackets after it — on the details view and the edit form of every scene, image,
+gallery, performer, studio, group and tag. **Performers (3)** and **Custom Fields (5)** read the
+same way wherever an entity has them, and on a tag's own page so do **Parent Tags** and
+**Sub-Tags**. On a details page with the colon style, it reads **Tags (12):**.
+
+The count is what the page shows: the tags, performer cards or fields listed under the heading,
+or the chips and rows in the form you are editing, so on the edit form it follows every one you
+add or remove before you save. The empty row for the next custom field is not counted. Nothing is
+read from your library for it, and nothing but the heading's text changes.
+
+It is off by default because it changes a page this plugin does not own. Turn it off and every
+heading goes back to Stash's own word on the next tick.
 
 ### Dev Mods
 

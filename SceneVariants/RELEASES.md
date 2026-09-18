@@ -8,6 +8,14 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.9.1 (`15ad7c6`) | 2026-09-18 | SceneVariants 1.9.1: the drift score is green at 1 as well as 0 |
+| 1.9.0 (`113c143`) | 2026-09-18 | SceneVariants 1.9.0: the drift score is per variant, and Partial-length reads Partial-duration |
+| 1.8.4 (`907b83f`) | 2026-09-18 | SceneVariants 1.8.4: the dimension's value reads Full-duration, not Full-length |
+| 1.8.3 (`a8d8936`) | 2026-09-17 | SceneVariants 1.8.3: the review dialog calls its number the drift score too |
+| 1.8.2 (`24a4509`) | 2026-09-17 | SceneVariants 1.8.2: the drift score's tooltip hangs on the whole phrase |
+| 1.8.1 (`2546239`) | 2026-09-17 | SceneVariants 1.8.1: the drift score's tooltip lists the weights in force and where to change them |
+| 1.8.0 (`651eb9f`) | 2026-09-17 | SceneVariants 1.8.0: the Variants tab shows its set's drift score at the review task's weights |
+| 1.7.3 (`71659f2`) | 2026-09-17 | SceneVariants 1.7.3: Flag Variants sits second in Settings - Tasks, Review Variant Sets last |
 | 1.7.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 1.7.1 (`3e227e0`) | 2026-09-17 | SceneVariants 1.7.1: Select All and Unselect All are held back when they would change nothing |
 | 1.7.0 (`eb49bf5`) | 2026-09-17 | SceneVariants 1.7.0: Select All and Unselect All for the [GROUP?] candidates |

@@ -6,7 +6,7 @@
 // A scene is often in the library twice: the whole thing, and a cut out of it. Stash
 // has no first-class relation for "these two files are the same work", so the Variants
 // tab this plugin adds to the scene page is that relation, derived rather than stored:
-// the scenes sharing this one's stash-id, with whichever of them is the full-length one
+// the scenes sharing this one's stash-id, with whichever of them is the full-duration one
 // named as such.
 //
 // **One word for one idea: variant.** The plan this came from says "sibling set" for the
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '1.7.2';
+  var PLUGIN_VERSION = '1.9.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -143,7 +143,7 @@
   // The two tag names are the user's, not this plugin's, and they are deliberately
   // empty by default. A library that has not adopted the convention still gets the
   // tab - the variants are found from the stash-id, which owes nothing to a tag -
-  // and every row simply reads as unclassified. Inventing a default like "Full Length"
+  // and every row simply reads as unclassified. Inventing a default like "Full Duration"
   // would name a tag most libraries do not have and then quietly classify nothing,
   // which looks exactly like a broken plugin.
   var DEFAULTS = {
@@ -183,7 +183,7 @@
   // ── The variant stash-id custom field ─────────────────────────────────────
   //
   // A stash-id is meant to name the *work*, and a stash-box has one entry for the full
-  // scene - so a partial-length cut carrying the same stash-id is claiming to be the
+  // scene - so a partial-duration cut carrying the same stash-id is claiming to be the
   // thing it was cut out of. The migration task moves that claim into a custom field of
   // this plugin's own and takes the stash-id off, which leaves the identity where the
   // variant lookup can still read it and out of everywhere Stash treats a stash-id as an
@@ -596,6 +596,19 @@
       fl: withDescendants(fl), pl: withDescendants(pl) };
   }
 
+  // The tag ids never pushed and never scored: both dimension sets, descendants
+  // included, and whatever answers to the flag tag's name. A full-duration scene and its
+  // partial cut differ by these *by definition*.
+  function skipTagIds(tags, s, m) {
+    var skip = {}, id;
+    for (id in m.fl) if (hasOwn(m.fl, id)) skip[id] = true;
+    for (id in m.pl) if (hasOwn(m.pl, id)) skip[id] = true;
+    tagsMatchingName(tags, flagTagName(s)).forEach(function (t) {
+      skip[String(t.id)] = true;
+    });
+    return skip;
+  }
+
   // The two values are mutually exclusive by definition, so a configuration where one tag
   // can be both is a contradiction the plugin cannot resolve. Left unsaid it surfaces as
   // every scene under the overlap being flagged red - a scene-level error for a settings
@@ -616,11 +629,11 @@
     });
     if (same) {
       return '⚠ Both tag settings name the same tag (' + name(m.flRoots[0].id) +
-        '), so every scene carrying it is listed as a contradiction. The full-length and ' +
-        'partial-length tags are meant to be mutually exclusive.';
+        '), so every scene carrying it is listed as a contradiction. The full-duration and ' +
+        'partial-duration tags are meant to be mutually exclusive.';
     }
-    return '⚠ The full-length tag (' + name(m.flRoots[0].id) + ') and the ' +
-      'partial-length tag (' + name(m.plRoots[0].id) + ') are related in the tag ' +
+    return '⚠ The full-duration tag (' + name(m.flRoots[0].id) + ') and the ' +
+      'partial-duration tag (' + name(m.plRoots[0].id) + ') are related in the tag ' +
       'hierarchy, so ' + plural(shared.length, 'tag') + ' counts as both: ' +
       shared.map(name).join(', ') + '. The two are meant to be mutually exclusive.';
   }
@@ -665,7 +678,7 @@
     'filter: { per_page: -1 }) { scenes { ' + SCENE_FIELDS + ' } } }';
 
   // The other half of the same question, for the scenes whose stash-id has been moved
-  // into the custom field - and for the full-length ones carrying both, where either
+  // into the custom field - and for the full-duration ones carrying both, where either
   // query finds them. The one value is `fieldRegex`'s pattern: MATCHES_REGEX per line
   // rather than EQUALS on the whole value, because a scene with entries at two
   // providers stores two lines, and sharing any one of them is sharing the work.
@@ -681,7 +694,7 @@
   // What this scene's own custom field holds. `props.scene` is Stash's
   // `SceneDataFragment` and whether it carries `custom_fields` is Stash's to decide, so
   // the field is read off it when it is there and asked for by id when it is not - one
-  // query, on the scenes that need it, which after a migration is every partial-length
+  // query, on the scenes that need it, which after a migration is every partial-duration
   // one. A failure reads as "no values", which is what a scene that never had any looks
   // like anyway.
   function ownFieldValues(scene, field, ids) {
@@ -689,7 +702,7 @@
       return Promise.resolve(splitValues(customField(scene, field)));
     }
     // Only where the scene has no stash-id of its own, which after a migration is every
-    // partial-length one: a scene that carries stash-ids is matched on those, and the
+    // partial-duration one: a scene that carries stash-ids is matched on those, and the
     // field a migration wrote holds exactly them. A query per scene page to re-read what
     // is already in hand is the two-round-trip version of a lookup this plugin
     // deliberately does in one. The one case the field would add something is a scene
@@ -735,12 +748,12 @@
     var ids = ((scene && scene.stash_ids) || []).map(function (s) { return s.stash_id; })
       .filter(function (v) { return !!v; });
     return Promise.all([settingsReady(), tagTree()]).then(function (both) {
-      var m = matchers(both[1], both[0]);
-      var field = fieldName(both[0]);
+      var s = both[0], m = matchers(both[1], s);
+      var field = fieldName(s);
       return ownFieldValues(scene, field, ids).then(function (own) {
         // The scene's own stash-ids expressed the way the field stores them, plus
         // whatever the field already holds. A migrated partial has only the second; a
-        // full-length scene that has been through the task has both, and they agree.
+        // full-duration scene that has been through the task has both, and they agree.
         var values = variantValues(scene && scene.stash_ids).concat(own)
           .filter(function (v, i, all) { return all.indexOf(v) === i; });
         if (!ids.length && !values.length) {
@@ -789,6 +802,13 @@
             why: others.length
               ? 'Matched on ' + matchedOn(ids, own) + '.'
               : 'No other scene shares this one’s ' + matchedOn(ids, own) + '.',
+            // What the pane's drift score is priced and filtered by: the review
+            // task's own weights and its own tag exclusions, read here so the number
+            // on the tab is the number the listing would give this set.
+            skip: skipTagIds(both[1], s, m),
+            weights: weightsFrom(s),
+            remembered: anyRemembered(s),
+            coverCheck: !!s.c4CheckCoverMismatch,
           };
         });
       });
@@ -817,8 +837,8 @@
   // value is what the tab is about. The tag name goes on the row's hover text, where a
   // reader who does want to confirm the match can find it and nobody else has to look at it.
   var ROLES = {
-    fl: { label: 'Full-length' },
-    pl: { label: 'Partial-length' },
+    fl: { label: 'Full-duration' },
+    pl: { label: 'Partial-duration' },
     bad: { label: '⚠ both' },
   };
 
@@ -962,7 +982,7 @@
     return parts.join(' · ');
   }
 
-  // Full-length first, then longest. The order is the answer to "which of these did I
+  // Full-duration first, then longest. The order is the answer to "which of these did I
   // mean", and the ranking the plan sketches is only worth building once there is more
   // than one candidate at the top - which the user says is rare.
   var ROLE_RANK = { fl: 0, none: 1, bad: 1, pl: 2 };
@@ -979,15 +999,15 @@
   // ── The migration task ────────────────────────────────────────────────────
   //
   // A stash-id belongs to the *work*, and a stash-box holds one entry for the whole
-  // scene - so a partial-length cut wearing the same stash-id is claiming to be the
+  // scene - so a partial-duration cut wearing the same stash-id is claiming to be the
   // thing it was cut out of, and every part of Stash that treats a stash-id as an
   // assertion about the file believes it. The task moves that claim into this plugin's
   // own custom field and takes the stash-id off the cut.
   //
-  // Full-length scenes are written too, and keep their stash-ids. That is not symmetry
+  // Full-duration scenes are written too, and keep their stash-ids. That is not symmetry
   // for its own sake: with the field on both sides the variant lookup is one query over
   // one criterion, where a library half-migrated needs the union of two. Their stash-id
-  // is untouched, because on the full-length scene it is true.
+  // is untouched, because on the full-duration scene it is true.
   var TASK_NAME = 'Migrate Variant Stash-IDs...';
   var FLAG_TASK_NAME = 'Flag Variants...';
 
@@ -1365,7 +1385,7 @@
     var self = this;
     this.weightBar.className = 'svr-allbar';
     this.weightBar.textContent = '';
-    this.weightBar.appendChild(el('span', 'svr-all-label', 'A difference is worth:'));
+    this.weightBar.appendChild(el('span', 'svr-all-label', 'Drift score weights:'));
     [['title', 'title'], ['cover', 'cover'], ['attr', 'other attribute'],
       ['tag', 'tag'], ['performer', 'performer'], ['group', 'group']]
       .forEach(function (w) {
@@ -1376,7 +1396,7 @@
         input.min = '0';
         input.max = String(WEIGHT_MAX);
         input.value = String(self.weights[w[0]]);
-        input.title = 'What one ' + w[1] + ' difference adds to a set\u2019s score, ' +
+        input.title = 'What one ' + w[1] + ' difference adds to a set\u2019s drift score, ' +
           '0 to ' + WEIGHT_MAX + '.';
         input.addEventListener('change', function () {
           self.weights[w[0]] = clampWeight(input.value);
@@ -1416,6 +1436,9 @@
   // cache, since another tab may have changed something in the meantime.
   Run.prototype.saveWeights = function () {
     var self = this;
+    // The pane behind this dialog prices its drift score by these, so closing after
+    // a change re-reads it the way a write does.
+    self.dirty = true;
     return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
       var input = {}, k;
@@ -1474,9 +1497,11 @@
       // What the number is: a sorting value, priced by the weights strip - the one
       // question a bare number beside a title cannot answer. Set once here; a rescore
       // rewrites the text and the class and leaves the title standing.
-      set.scoreEl.title = 'A sorting value, not a count: every disagreement in the ' +
-        'counts to the right is worth the points its weight above assigns, and this ' +
-        'is their sum - the further apart the set has drifted, the higher it sorts.';
+      set.scoreEl.title = 'The set\u2019s drift score - a sorting value, not a count: ' +
+        'every disagreement in the counts to the right is worth the points its weight ' +
+        'above assigns, and this is their sum per variant - divided by the number of ' +
+        'other scenes in the set, rounded up - so a pair and a set of five are scored ' +
+        'alike. The further apart the set has drifted, the higher it sorts.';
       head.appendChild(set.scoreEl);
       var headText = el('span', null, plural(set.scenes.length, 'scene') + ': ' +
         (set.scenes[0].title || ('Scene ' + set.scenes[0].id)) +
@@ -2210,12 +2235,12 @@
       if (conflict) run.msg('WARN', conflict);
       var tags = tagIdsFor(m);
       if (!tags.length) {
-        run.msg('WARN', 'Neither the full-length nor the partial-length tag setting names ' +
+        run.msg('WARN', 'Neither the full-duration nor the partial-duration tag setting names ' +
           'a tag in your library, so there is nothing to classify. Name them in this ' +
           'plugin’s settings first.');
         return 'Nothing to scan.';
       }
-      run.msg('INFO', 'Looking through every scene tagged full-length or partial-length ' +
+      run.msg('INFO', 'Looking through every scene tagged full-duration or partial-duration ' +
         'for a stash-id to move into "' + field + '".');
       return run.scanPage(1, m, field, tags).then(function () {
         if (!run.jobs.length) {
@@ -2407,10 +2432,10 @@
 
   var MIGRATE_TASK = {
     title: 'Migrate Variant Stash-IDs',
-    legend: 'One line per scene: whether it is full-length or partial-length, the scene ' +
+    legend: 'One line per scene: whether it is full-duration or partial-duration, the scene ' +
       'with its id in brackets, and the value its custom field will hold. A ' +
-      'partial-length scene also has its stash-ids removed, which is what the migration ' +
-      'is for; a full-length one keeps them.',
+      'partial-duration scene also has its stash-ids removed, which is what the migration ' +
+      'is for; a full-duration one keeps them.',
     nothing: 'Nothing found to migrate.',
     scanNoun: 'tagged scene',
     planNoun: 'to migrate',
@@ -2735,7 +2760,7 @@
   // One job per attribute per variant, each a checkbox line, ticked by default except
   // titles. Scalars are replaces, listed old -> new; tags and performers are ADDs and
   // never removes, so whatever makes a variant deliberately different survives a
-  // Proceed with everything ticked. The dimension tags (full-length, partial-length
+  // Proceed with everything ticked. The dimension tags (full-duration, partial-duration
   // and everything under them) and the flag tag are never pushed at all: they are what
   // makes a variant a variant, and the flag is the flag task's to keep.
   //
@@ -3102,8 +3127,8 @@
   function reportCoverCheck(run, s) {
     if (!s.c4CheckCoverMismatch) {
       run.msg('INFO', 'Cover images are not compared: switch on "Compare Cover Images" ' +
-        'in this plugin\u2019s settings to have a set scored for a cover its members ' +
-        'disagree about.');
+        'in this plugin\u2019s settings to have a set\u2019s drift score count a cover ' +
+        'its members disagree about.');
       return;
     }
     var sets = 0;
@@ -3350,14 +3375,7 @@
       var s = both[0], m = matchers(both[1], s);
       if (run.auto && !s.c2PropagateTitleOnSave) run.titleOff = true;
       run.settings = s;
-      // The tag ids never pushed: both dimension sets, descendants included, and
-      // whatever answers to the flag tag's name.
-      var skip = {}, id;
-      for (id in m.fl) if (hasOwn(m.fl, id)) skip[id] = true;
-      for (id in m.pl) if (hasOwn(m.pl, id)) skip[id] = true;
-      tagsMatchingName(both[1], flagTagName(s)).forEach(function (t) {
-        skip[String(t.id)] = true;
-      });
+      var skip = skipTagIds(both[1], s, m);
       // Re-queried rather than taken off the pane: the pane's answer is as old as the
       // tab, and this is the read a write is planned from. The sibling is asked in the
       // same breath - one `prepare`, answered from its own caches.
@@ -3428,7 +3446,7 @@
       'outward: old -> new where a value would be replaced, and the tags, performers, ' +
       'groups or URLs that would be added - added only, never removed, so whatever ' +
       'makes a variant deliberately different stays. A group is joined at this ' +
-      'scene’s own position in it, since a variant is the same work. The full-length, partial-length and flag ' +
+      'scene’s own position in it, since a variant is the same work. The full-duration, partial-duration and flag ' +
       'tags are never pushed: they are what makes a variant a variant. Adds start ' +
       'ticked and replaces start unticked - overwriting is opted into, not out of. ' +
       'Green is what a variant gains, red what it loses, blue a value replaced. ' +
@@ -3497,7 +3515,7 @@
       'would be replaced, adds for the tags, performers, groups or URLs this save ' +
       'added - a group joined at this scene’s own position in it - and ' +
       'removes for the ones it took off, on variants still carrying them - a ' +
-      'variant\u2019s own extras are never touched. The full-length, partial-length ' +
+      'variant\u2019s own extras are never touched. The full-duration, partial-duration ' +
       'and flag tags are never pushed or removed. Green is what a variant gains, red ' +
       'what it loses, blue a value replaced. Every line starts ticked - it is ' +
       'the edit you just made - except titles, which start unticked: a title is the ' +
@@ -4079,6 +4097,12 @@
     return w;
   }
 
+  // The six in force, in the order the strip shows them.
+  function weightsText(w) {
+    return 'title ' + w.title + ', cover ' + w.cover + ', attribute ' + w.attr +
+      ', tag ' + w.tag + ', performer ' + w.performer + ', group ' + w.group;
+  }
+
   function clampWeight(v) {
     var n = Math.round(Number(v));
     if (isNaN(n) || n < 0) return 0;
@@ -4203,11 +4227,11 @@
   // - one differing attribute, one tag on one side only - and stay meaningful above
   // two, which pairwise counting does not.
   //
-  // The dimension and flag tags are left out: a full-length scene and its partial cut
+  // The dimension and flag tags are left out: a full-duration scene and its partial cut
   // differ by them *by definition*, and counting that would give every set in the
   // library the same baseline score and rank nothing.
   function setDelta(scenes, skip, coverBy) {
-    var out = { title: 0, attr: 0, tag: 0, performer: 0, group: 0, cover: 0 };
+    var out = { title: 0, attr: 0, tag: 0, performer: 0, group: 0, cover: 0, n: scenes.length };
     var n = scenes.length;
     // The same shape as an attribute: the members that disagree with the set's most
     // common cover. Only where the covers have actually been read - the comparison is
@@ -4267,10 +4291,17 @@
     });
   }
 
+  // Per variant, not per set: every count above is bounded by (members - 1) per item,
+  // so the raw sum grows with the set and a five-scene set outranked a pair that was
+  // just as far apart. Dividing by the other members reads as "how far one variant
+  // typically stands from the rest", the same number for the pair and the five, and
+  // the bands - priced in units of one difference - hold unchanged. Rounded up so a
+  // set with anything to do never shows 0.
   function scoreOf(delta, w) {
-    return (delta.title || 0) * w.title + delta.attr * w.attr + delta.tag * w.tag +
+    var sum = (delta.title || 0) * w.title + delta.attr * w.attr + delta.tag * w.tag +
       delta.performer * w.performer + delta.group * w.group +
       (delta.cover || 0) * w.cover;
+    return Math.ceil(sum / Math.max(1, (delta.n || 2) - 1));
   }
 
   // What a score's colour says: nothing to do, a little, a lot, or look at this one.
@@ -4287,8 +4318,10 @@
     return { mid: 5 * unit, high: Math.max(3 * w.attr, 10 * unit) };
   }
 
+  // Green reaches 1: one cheap difference per variant - a title, most often, which
+  // variants carry apart on purpose - is not a set worth a look.
   function scoreClass(score, w) {
-    if (!score) return 'svr-score-none';
+    if (score <= 1) return 'svr-score-none';
     var b = scoreBands(w);
     if (score >= b.high) return 'svr-score-high';
     if (score >= b.mid) return 'svr-score-mid';
@@ -4373,18 +4406,12 @@
       run.settings = s;
       run.weights = weightsFrom(s);
       run.remember = anyRemembered(s);
-      run.skip = {};
-      var id;
-      for (id in m.fl) if (hasOwn(m.fl, id)) run.skip[id] = true;
-      for (id in m.pl) if (hasOwn(m.pl, id)) run.skip[id] = true;
-      tagsMatchingName(both[1], flagTagName(s)).forEach(function (t) {
-        run.skip[String(t.id)] = true;
-      });
+      run.skip = skipTagIds(both[1], s, m);
       run.buildWeightBar();
       // Bound before the scan, so the first Synchronize Set can read it synchronously.
       var pruning = nptPruner(s).then(function (w) { run.pruner = w; });
       run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
-        '" line with another, to score how far each set has drifted apart.');
+        '" line with another, to give each set its drift score.');
       var seen = {}, scenes = [];
       // The count the listing is about, updated as pages land rather than only at the
       // end: a library-wide scan is the one place here that runs for minutes, and
@@ -4432,15 +4459,15 @@
 
   var REVIEW_TASK = {
     title: 'Review Variant Sets',
-    legend: 'Every multi-variant set in your library, worst first: the score beside ' +
-      'each is how far its members have drifted apart, counting the attributes they ' +
+    legend: 'Every multi-variant set in your library, worst first: the drift score ' +
+      'beside each is how far its members have drifted apart, counting the attributes they ' +
       'disagree on and the tags, performers and groups one carries and another does ' +
       'not. What each of those is worth is the strip above the listing, and Remember ' +
       'keeps your numbers for next time. Open a set and pick the scene whose values ' +
       'are right; Synchronize Set then lists exactly what would be pushed to the ' +
       'others, one checkbox line each - green for what a variant gains, red for what ' +
       'it loses, blue for a value replaced - and nothing is written until you press ' +
-      'Proceed. The full-length, partial-length and flag tags are never pushed, and ' +
+      'Proceed. The full-duration, partial-duration and flag tags are never pushed, and ' +
       'never counted against a set.',
     nothing: 'Pick a source scene and press Synchronize Set first.',
     scanNoun: 'scene',
@@ -4642,7 +4669,7 @@
     'cursor:ns-resize;background:#2b3a45;border-radius:4px;}' +
     '.svr-splitbar:hover{background:#425a6b;}' +
     '.svr-set{white-space:pre-wrap;}' +
-    // The score, banded: green where there is nothing to do, then yellow, amber and
+    // The score, banded: green at one or nothing to do, then yellow, amber and
     // red as a set drifts further apart. The weights decide where the bands fall, so
     // a user who reprices a difference reprices the colours with it.
     '.svr-score{font-weight:600;}' +
@@ -4699,6 +4726,7 @@
     // plugins share has to mean the same thing in both, and a *tab* pane is not that.
     '.svr-tabpane{padding:1rem;}' +
     '.svr-summary{color:#7d8f9c;margin-bottom:.5rem;}' +
+    '.svr-drift{color:#7d8f9c;margin-bottom:.5rem;}' +
     '.svr-boxlinks{color:#7d8f9c;margin:-.25rem 0 .5rem;}' +
     '.svr-boxlink{margin-right:.75rem;}' +
     '.svr-cflinks{margin-left:.5rem;}' +
@@ -4766,7 +4794,7 @@
     // the one that has to be noticed once it does - amber rather than the metadata
     // grey the counts wear.
     '.svr-dbadge-cover{color:#ffb648;}' +
-    // Green for the full-length one, because it is the answer the tab exists to give;
+    // Green for the full-duration one, because it is the answer the tab exists to give;
     // amber for a partial; red for the scene wearing both tags, which is a contradiction.
     // An untagged scene has no label at all, which is the only quiet state left.
     //
@@ -5223,10 +5251,12 @@
       var found = state[0], setFound = state[1];
       var bump = React.useState(0);
       var stamp = bump[0], setStamp = bump[1];
-      // `{ <scene id>: true }` for the variants whose cover is a different picture,
-      // or null while nobody has asked or nothing has answered.
+      // `{ <scene id>: <data url> }` for every cover read, the viewed scene's
+      // included, or null while nobody has asked or nothing has answered. A variant's
+      // badge is its entry differing from the viewed scene's; the drift score counts
+      // the same map the way the review task does.
       var cov = React.useState(null);
-      var coverDiff = cov[0], setCoverDiff = cov[1];
+      var coverBy = cov[0], setCoverBy = cov[1];
       // Whether one of this plugin's dialogs is open: the Synchronize button is a
       // control that starts a run, so it is unavailable, with the reason on it, while
       // one runs. Read at mount so a pane mounted under an open dialog starts locked.
@@ -5253,7 +5283,7 @@
       React.useEffect(function () {
         var live = true;
         setFound(null);
-        setCoverDiff(null);
+        setCoverBy(null);
         findVariants(scene).then(function (result) { if (live) setFound(result); });
         return function () { live = false; };
       }, [scene.id, evidence, stamp]);
@@ -5271,14 +5301,15 @@
           return readCover(found.self).then(function (mine) {
             if (!live || !mine) return null;
             var out = {}, chain = Promise.resolve();
+            out[String(found.self.id)] = mine;
             found.rows.forEach(function (row) {
               chain = chain.then(function () {
                 return readCover(row.scene).then(function (theirs) {
-                  if (theirs && theirs !== mine) out[String(row.scene.id)] = true;
+                  if (theirs) out[String(row.scene.id)] = theirs;
                 });
               });
             });
-            return chain.then(function () { if (live) setCoverDiff(out); });
+            return chain.then(function () { if (live) setCoverBy(out); });
           });
         }, function () { return null; });
         return function () { live = false; };
@@ -5299,6 +5330,38 @@
         found.rows.length
           ? plural(found.rows.length, 'other variant') + ' of this scene. ' + found.why
           : found.why));
+      // The set's drift score, the number the review task's listing would sort this
+      // set by: the same counts, the same exclusions and the same weights, so a set
+      // synchronized from here reads as the listing would show it afterwards. Priced
+      // by the weights the review dialog remembered, or its defaults. The cover count
+      // lands with the pictures, after the rows, like the badge.
+      if (found.self && found.rows.length) {
+        var members = [found.self].concat(found.rows.map(function (r) { return r.scene; }));
+        var delta = setDelta(members, found.skip || {}, coverBy);
+        var score = scoreOf(delta, found.weights);
+        // The tooltip hangs on the whole phrase, not the digit: a one-character hover
+        // target is hard to hit, and the words are part of the thing being explained.
+        kids.push(React.createElement('div', { key: 'drift', className: 'svr-drift' },
+          React.createElement('span', {
+            key: 'tip', className: 'svr-drift-tip',
+            title: deltaText(delta) + '. A sorting value, not a count: each ' +
+              'disagreement between this scene and its variants is worth its weight, ' +
+              'and this is their sum per variant - divided by the number of variants, ' +
+              'rounded up.\n' +
+              'Weights: ' + weightsText(found.weights) + ' (' +
+              (found.remembered ? 'remembered from' : 'the defaults of') + ' the ' +
+              REVIEW_TASK_NAME.replace(/\.\.\.$/, '') + ' dialog).\n' +
+              'Change them in Settings \u2192 Tasks \u2192 ' + PLUGIN_SHORT_NAME +
+              ' \u2192 ' + REVIEW_TASK_NAME + ', on the strip above the listing; ' +
+              'tick Remember there and this score follows.\n' +
+              'Green is nothing to do, or one point of it; yellow, amber and red as the set drifts ' +
+              'further apart.' +
+              (found.coverCheck ? '' : ' Covers are not compared while Compare Cover ' +
+                'Images is off.'),
+          }, ['Drift score: ', React.createElement('span', {
+            key: 's', className: 'svr-score ' + scoreClass(score, found.weights),
+          }, String(score))])));
+      }
       // The evidence lines back into the pages they name: one link per stash-box
       // entry, opening `https://<host>/scenes/<id>`. A pseudo line names nothing
       // upstream, so it gets none - and a scene with only one is a line with no links,
@@ -5336,8 +5399,10 @@
           onClick: function () { startRun(SYNC_TASK, scene); },
         }, found.rows.length === 1 ? SYNC_TASK_NAME.replace('Variants', 'Variant') : SYNC_TASK_NAME));
       }
+      var mine = coverBy && found.self ? coverBy[String(found.self.id)] : null;
       found.rows.forEach(function (row) {
-        kids.push(VariantRow(React, row, !!(coverDiff && coverDiff[String(row.scene.id)])));
+        var theirs = coverBy ? coverBy[String(row.scene.id)] : null;
+        kids.push(VariantRow(React, row, !!(mine && theirs && theirs !== mine)));
       });
       return React.createElement('div', { className: 'svr-tabpane' }, kids);
     };
@@ -5826,9 +5891,9 @@
   // a description already filed under this name is somebody's writing.
   var FIELD_DESCRIPTION = 'The stash-id of the work this scene is a variant of, as ' +
     '<provider>:<stash-id>, one per line.\n\n' +
-    'Written by ' + PLUGIN_NAME + '. A partial-length scene carries this instead of a ' +
+    'Written by ' + PLUGIN_NAME + '. A partial-duration scene carries this instead of a ' +
     'real stash-id, because a stash-id names the whole work and a cut is not it; a ' +
-    'full-length scene carries it as well as one. The Variants tab matches on this ' +
+    'full-duration scene carries it as well as one. The Variants tab matches on this ' +
     'field and on stash-ids together, so a scene is found by either.';
 
   function describeVariantField() {

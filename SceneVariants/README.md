@@ -12,8 +12,8 @@ The relation is derived from stash-ids. A **stash-box** is an external metadata 
 scrapes from (stashdb.org is one); a **stash-id** is a scene's identifier there, and it names the
 **work**, not the file — so two scenes carrying the same stash-id are the same work. The stash-ids
 a scene carries, plus the lines in the custom field this plugin's migration task writes, are its
-**evidence**: sharing any one line with another scene is being the same work. Full-length versus
-partial-length — the whole work or a cut out of it — is the one **dimension** the plugin knows,
+**evidence**: sharing any one line with another scene is being the same work. Full-duration versus
+partial-duration — the whole work or a cut out of it — is the one **dimension** the plugin knows,
 told apart by two tags you name in the settings.
 
 ## Usage
@@ -27,16 +27,26 @@ Details   Queue   Markers   Filter   File Info   History   Variants   Edit
 ──────────────────────────────────────────────────────────┴────────────────
 2 other variants of this scene. Matched on 1 stash-id.
   ┌────────┐  Cool Shoot
-  │ cover  │  Full-length · 1920×1080 · 41:12
+  │ cover  │  Full-duration · 1920×1080 · 41:12
   └────────┘
   ┌────────┐  Cool Shoot - Clip 2
-  │ cover  │  Partial-length · 1920×1080 · 4:03
+  │ cover  │  Partial-duration · 1920×1080 · 4:03
   └────────┘
 ```
 
 The tab sits just before **Edit**, which stays last, and is amber — the one tab in the tab strip
 Stash did not put there. It is always there, including on scenes with no variants to show, and its
 first line says which of the reasons applies.
+
+Under that line, a scene with variants shows its set's **drift score** — the same number the
+[Review Variant Sets](#finding-the-sets-worth-synchronizing) listing sorts by, counted the same
+way, priced by the weights you remembered there (or that dialog's defaults until you do), and
+coloured by the same bands: green at one or nothing to do, then yellow, amber and red as the
+set drifts further apart. Hovering it gives the counts behind it, the six weights in force, and
+where to change them. With **Compare Cover Images**
+on, a differing cover is priced in once the pictures have been read, after the rows. The number
+is re-read whenever the pane is: after a **Synchronize Variants...** run that wrote, after a save,
+and after the review dialog's weights have been changed and remembered.
 
 Each cover and title is a link — every link this plugin draws opens where
 [ᝯㄝₓ Core's link setting](../GTTxCore/README.md#links-cards-and-tooltips) says — and a cover plays
@@ -48,8 +58,8 @@ both. A `pseudo:` line names nothing upstream, so it gets none. The same links a
 field's own display in a detail panel's **Custom Fields** section: a `↗stashdb.org` link beside the
 value, one per `host:id` line it holds.
 
-Rows are ordered full-length first, then longest running time. The value starts the line under
-each title, so a short list reads as a column: **Full-length** is green and **Partial-length**
+Rows are ordered full-duration first, then longest running time. The value starts the line under
+each title, so a short list reads as a column: **Full-duration** is green and **Partial-duration**
 amber; a scene with neither tag has no label; a scene carrying **both** is shown in red — the two
 are mutually exclusive by definition, so the contradiction is reported rather than resolved. If the
 two settings resolve to the **same tag**, or to two tags one of which sits under the other, the tab
@@ -89,14 +99,14 @@ performers on both scenes agree, however each page has them sorted. A variant th
 nothing says so. The tag that decided a row's label is on the row's tooltip, which is how an alias
 or a child tag says which one it matched.
 
-### Migrating a partial-length scene's stash-id
+### Migrating a partial-duration scene's stash-id
 
-A stash-box has one entry for the whole scene, so a partial-length cut wearing that same stash-id
+A stash-box has one entry for the whole scene, so a partial-duration cut wearing that same stash-id
 is claiming to be the thing it was cut out of — and everything in Stash that reads a stash-id as a
 fact about the file believes it: scraping, **Submit to Stash-box**, duplicate detection.
 
 **Settings → Tasks → ᝯㄝₓ Scene Variants → Migrate Variant Stash-IDs...** moves that claim somewhere
-it is true. For every scene carrying your partial-length tag, it writes the stash-id into a custom
+it is true. For every scene carrying your partial-duration tag, it writes the stash-id into a custom
 field and takes the stash-id off:
 
 ```
@@ -104,14 +114,14 @@ field and takes the stash-id off:
 ```
 
 One line per stash-id, written as `<provider>:<stash-id>`, so a scene that carries two ids keeps
-both. Full-length scenes get the same field **and keep their stash-ids**, which is what lets the tab
+both. Full-duration scenes get the same field **and keep their stash-ids**, which is what lets the tab
 find a whole variant set with one query instead of two.
 
 The scan also flags an inconsistent state it does not resolve: a scene carrying a `pseudo:` line —
 a hand-made variant group — **and** a real stash-id at once is making two different claims about
 what names the work. Each such scene gets a *Potential drift* line saying so, and saying that a
 Proceed would rewrite the field from the real stash-id and drop the pseudo line, taking the scene
-out of its hand-made set. A full-length scene carrying only its real stash-id is the ordinary case
+out of its hand-made set. A full-duration scene carrying only its real stash-id is the ordinary case
 and is never flagged.
 
 Nothing is written until you press **Proceed**: the review dialog lists every scene it would touch
@@ -197,10 +207,10 @@ covers Proceed, and closing the dialog leaves the undecided candidates for the n
 
 The Variants tab and the save dialog both start from a scene you are already looking at. The
 **Review Variant Sets...** task in Settings → Tasks starts from the library instead: it finds every
-multi-variant set and scores how far its members have drifted apart, worst first.
+multi-variant set and gives each a **drift score** for how far its members have drifted apart, worst first.
 
 ```
- A difference is worth: title [1] cover [5] other attribute [5] tag [1] performer [1] group [1]   ☐ Remember
+ Drift score weights: title [1] cover [5] other attribute [5] tag [1] performer [1] group [1]   ☐ Remember
 ──────────────────────────────────────────────────────────────────────────────────────────
 ▸ 28  3 scenes: Work - Variant A + 2 more   (1 title, 4 attr, 5 tag, 2 perf, 0 group)
 ▸ 12  2 scenes: Rescanned One + 1 more      (1 title, 1 attr, 1 tag, 0 perf, 0 group, 1 cover)
@@ -211,14 +221,17 @@ The line above the listing is the **weight strip**: six numbers, one per kind of
 editable from 0 to 100, and the listing re-scores and re-sorts as you type. The title has a weight
 of its own, one point by default where another attribute is five, because variants are named
 apart on purpose. Tick **Remember** and the six are kept in the plugin's settings for next time;
-untick it and they are forgotten — the keys are removed rather than written as zeros.
+untick it and they are forgotten — the keys are removed rather than written as zeros. The
+remembered weights are also what the Variants tab prices its own drift score by.
 
-The score is the set's counts, each priced by the weight strip: for every attribute, the members
+The drift score is the set's counts, each priced by the weight strip: for every attribute, the members
 that disagree with the set's most common value; for tags, performers and groups, every membership
-a member is missing from what the set carries between them. Hovering the number says so — it is a
-sorting value, not a count of anything. The full-length, partial-length and flag tags are **not**
+a member is missing from what the set carries between them — then divided by the number of other
+scenes in the set and rounded up, so it reads as how far one variant typically stands from the rest
+and a pair and a set of five are scored alike. Hovering the number says so — it is a
+sorting value, not a count of anything. The full-duration, partial-duration and flag tags are **not**
 counted: a cut differs from the whole work by those by definition. They are still offered in the
-plan; they never move a score.
+plan; they never move a drift score.
 
 **Hover a set line for how it is split.** A column per variant (four at most), each header naming
 the scene with its resolution and running time under it, and a row per attribute or list they do
@@ -246,8 +259,8 @@ looks like one that is broken. It also counts what it read: `340 covers read; 6 
 about one.`, or the covers it could not read at all, which is what a Stash serving its images from
 another origin looks like from inside the page.
 
-The number is coloured by how far apart the set is — **green** where there is nothing to do,
-**yellow** below five of the cheapest difference the weight strip prices, **amber** from there, and
+The number is coloured by how far apart the set is — **green** at one or nothing to do,
+**yellow** from two and below five of the cheapest difference the weight strip prices, **amber** from there, and
 **red** from whichever is larger of three attribute differences and ten cheap ones. The bands are
 read off your own weights rather than fixed in points, so repricing a difference reprices the
 colours with it.
@@ -263,7 +276,7 @@ the plan the tab's own button produces: one checkbox line per difference, adds a
 All boxes, the ▸ pickers, and nothing written until **Proceed**. Each press of **Synchronize
 Set...** re-reads that set's scenes first, so a second source picked out of a set you have just
 written to is planned from what the library holds now rather than from what the scan saw. The
-set's score and counts are restated on the line they are already drawn on — **the listing does not
+set's drift score and counts are restated on the line they are already drawn on — **the listing does not
 re-sort**; re-sorting is what **Rescan** is for. **Undo** reaches every set written while the
 dialog has been open, in reverse order. On the set already listed the button is unavailable, with
 the reason on it.
@@ -341,7 +354,7 @@ The rules, each visible in the plan:
   third. The line re-says what is picked — `Add 1 of 2 tags: Blonde` — and a line with nothing
   picked counts as no change at all, whatever its own checkbox says. Each name is a link with its
   card, which is exactly what a pick is decided from.
-- **The full-length, partial-length and flag tags are never pushed at all**, descendants included:
+- **The full-duration, partial-duration and flag tags are never pushed at all**, descendants included:
   they are what makes a variant a variant, and the flag is the flag task's to keep.
 - **The cover is pushed too, where it differs — with *Compare Cover Images* turned on.** A variant
   that was rescanned and lost the cover that came from a stash-box gets the source's back. It is
@@ -376,7 +389,7 @@ save, it also knows what the save **removed** — a tag taken off, a URL replace
 same removal on variants still carrying the value, which the manual button never can: it has no
 way to tell a value the source dropped from a value the variant deliberately owns. A replaced URL
 is one combined *Update URLs* line per variant (an add line and a remove line would each write the
-whole list and clobber each other), and the full-length, partial-length and flag tags are
+whole list and clobber each other), and the full-duration, partial-duration and flag tags are
 protected from removal exactly as they are from the adds. Unlike the manual dialog, **everything
 here starts ticked** — each line is the edit you just made by hand, which is stronger evidence of
 intent than a long-standing difference — except title lines, which start unticked even when opted
@@ -423,9 +436,9 @@ All under **Settings → Plugins → ᝯㄝₓ Scene Variants**, all optional:
 
 | Setting | Default | What it does |
 |---|---|---|
-| Full-length Tag | empty | The name of the tag you put on a scene that is the whole work. |
-| Partial-length Tag | empty | The name of the tag you put on a cut of one. |
-| Variant Stash-ID Custom Field | `ᱜ╦╦🞮_Variant_Stash_ID` | The custom field the [migration task](#migrating-a-partial-length-scenes-stash-id) writes into. A **ⓘ** beside the value carries a tooltip with the field's description, how many scenes carry it and the first ten ([placement](../GTTxCore/README.md#links-cards-and-tooltips)). |
+| Full-duration Tag | empty | The name of the tag you put on a scene that is the whole work. |
+| Partial-duration Tag | empty | The name of the tag you put on a cut of one. |
+| Variant Stash-ID Custom Field | `ᱜ╦╦🞮_Variant_Stash_ID` | The custom field the [migration task](#migrating-a-partial-duration-scenes-stash-id) writes into. A **ⓘ** beside the value carries a tooltip with the field's description, how many scenes carry it and the first ten ([placement](../GTTxCore/README.md#links-cards-and-tooltips)). |
 | Variant Flag Tag | `ᱜ╦╦🞮⸎✱MultiVariants✅∙` | The tag the [Flag Variants task](#flagging-the-scenes-that-have-variants) keeps on every scene that has at least one other variant; the task's Proceed creates it if it does not exist yet. |
 | Log to the Browser Console | off | Print each variant lookup to the console under `[svr]`: the scene, how many variants were found and what they were matched on. A failed query is reported whatever this says. |
 | Offer to Propagate Edits to Variants | on | Open the [propagate dialog](#propagating-an-edit-when-you-save) when a save changed something the variants do not have. |
@@ -493,12 +506,12 @@ moves, and only the last two open by themselves.
 line says which of the reasons applies — "this scene carries no stash-id" is the usual one. It
 carries no count in its caption; the pane counts its own rows in its first line instead.
 
-**Rows say Full-length and Partial-length** rather than echoing your tag names back; the tag that
+**Rows say Full-duration and Partial-duration** rather than echoing your tag names back; the tag that
 decided a row is on the row's tooltip.
 
 **Scene pages only.** There is nothing on a performer, studio or group.
 
-**One dimension, and it is built in.** Full-length versus partial-length is the only distinction
+**One dimension, and it is built in.** Full-duration versus partial-duration is the only distinction
 the plugin knows; the two tag names are the only part of it you can configure.
 
 **No scrubber on the covers, and no O-counter.** A cover carries the preview loop, the rating and

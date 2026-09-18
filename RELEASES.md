@@ -10,6 +10,21 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-18 |  |  |  | 2.0.0 (`c4ac7aa`) |  |  |  |  |  | GTTxCore 2.0.0: one Show Counts on Headings switch, and Custom Fields counts its rows |
+| 2026-09-18 |  |  |  | 1.7.0 (`409b555`) |  |  |  |  |  | GTTxCore 1.7.0: a tag's Parent Tags and Sub-Tags carry their counts under Show Tag Counts |
+| 2026-09-18 |  |  |  | 1.6.0 (`e2349f2`) |  |  |  |  |  | GTTxCore 1.6.0: Show Performer Counts puts the count after the word Performers above every performer list |
+| 2026-09-18 |  |  |  | 1.5.1 (`fcbda92`) |  |  |  |  |  | GTTxCore 1.5.1: a tag badge is known by data-sort-name, not by a link into /tags/ |
+| 2026-09-18 |  |  |  | 1.5.0 (`6e16e9a`) |  |  |  |  |  | GTTxCore 1.5.0: Show Tag Counts puts the count after the word Tags above every tag list |
+| 2026-09-18 |  |  |  |  |  | 5.5.3 (`56e09fa`) |  |  |  | NormalizeParentTags 5.5.3: the button holds its size through the flash |
+| 2026-09-18 |  |  |  |  |  | 5.5.2 (`6a9f3c9`) |  |  |  | NormalizeParentTags 5.5.2: Prune Tags and Roll Up Tags are disabled, never removed, when there is nothing to do |
+| 2026-09-18 |  |  |  |  |  |  |  | 1.9.1 (`15ad7c6`) |  | SceneVariants 1.9.1: the drift score is green at 1 as well as 0 |
+| 2026-09-18 |  |  |  |  |  |  |  | 1.9.0 (`113c143`) |  | SceneVariants 1.9.0: the drift score is per variant, and Partial-length reads Partial-duration |
+| 2026-09-18 |  |  |  |  |  |  |  | 1.8.4 (`907b83f`) |  | SceneVariants 1.8.4: the dimension's value reads Full-duration, not Full-length |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.8.3 (`a8d8936`) |  | SceneVariants 1.8.3: the review dialog calls its number the drift score too |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.8.2 (`24a4509`) |  | SceneVariants 1.8.2: the drift score's tooltip hangs on the whole phrase |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.8.1 (`2546239`) |  | SceneVariants 1.8.1: the drift score's tooltip lists the weights in force and where to change them |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.8.0 (`651eb9f`) |  | SceneVariants 1.8.0: the Variants tab shows its set's drift score at the review task's weights |
+| 2026-09-17 |  |  |  |  |  |  |  | 1.7.3 (`71659f2`) |  | SceneVariants 1.7.3: Flag Variants sits second in Settings - Tasks, Review Variant Sets last |
 | 2026-09-17 | 3.1.2 (`46f966b`) | 2.1.1 (`46f966b`) | 3.1.2 (`46f966b`) |  | 4.1.2 (`46f966b`) | 5.5.1 (`46f966b`) | 4.4.2 (`46f966b`) | 1.7.2 (`46f966b`) | 2.2.3 (`46f966b`) | Close is green in every dialog once nothing is left to write |
 | 2026-09-17 |  |  |  |  |  |  |  | 1.7.1 (`3e227e0`) |  | SceneVariants 1.7.1: Select All and Unselect All are held back when they would change nothing |
 | 2026-09-17 |  |  |  |  |  |  |  | 1.7.0 (`eb49bf5`) |  | SceneVariants 1.7.0: Select All and Unselect All for the [GROUP?] candidates |

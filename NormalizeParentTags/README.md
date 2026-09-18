@@ -47,10 +47,11 @@ gallery, performer, studio or group carries up to two extra buttons — **Prune 
 entity holds a tag that a more specific tag on it already implies, and **Roll Up Tags** when it is
 missing a parent its own tags imply. A scene marker has no page of its own and gets none.
 
-**Each appears only when it would actually change something**, and goes away once it would not:
-prune everything a scene has to prune and its Prune button is gone on the next save. A scene can
-show both at once — they are independent questions, and a tag with two parents can leave one
-redundant ancestor to remove and another parent to add.
+**Both are always there once the edit form is open, and each is enabled only when it would
+actually change something**: prune everything a scene has to prune and its Prune button greys out,
+saying why on hover, rather than disappearing and letting the row close up under your pointer.
+They are independent questions, and a tag with two parents can leave one redundant ancestor to
+remove and another parent to add, so both can be live at once.
 
 **Neither writes on the click.** They change the tag box in front of you — Prune takes the
 redundant tags out of it, Roll Up puts the missing parents in — and **Stash's own Save is what

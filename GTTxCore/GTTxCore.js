@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '1.4.0';
+  var PLUGIN_VERSION = '2.0.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -1379,12 +1379,188 @@
     root.className += ' ' + PASTE_CLASS;
   }
 
+  // ── The counts on the Tags, Performers and Custom Fields headings ─────────
+  //
+  // "Tags" above a tag list says nothing about how long the list is, and on a scene
+  // carrying forty the number is what is worth knowing before reading them. With the
+  // one setting on, the heading reads `Tags (40)`: Stash's own word, the count in
+  // brackets after it, on the details view and the edit form of every entity that has
+  // one - and the same for `Performers (3)` and `Custom Fields (5)`.
+  //
+  // Three shapes, read off Stash's source (docs/stash-reference.md):
+  //   Scene, Gallery, Image details    `<h6>Tags</h6>` with the `.tag-item` badges as
+  //                                    its following siblings; `<h6>Performers</h6>` with
+  //                                    a `.row` of `.performer-card`s after it
+  //   Performer, Studio, Group details `DetailItem id="tags"`: `.detail-item.tags`
+  //                                    holding `.detail-item-title` and `.detail-item-value`
+  //                                    (nothing there lists performers)
+  //   Tag details                      `DetailItem id="parent_tags"` and `id="sub_tags"`,
+  //                                    the same badges - a tag's own two lists count
+  //                                    under the tags setting
+  //   every edit form                  `renderField("tag_ids" | "performer_ids" |
+  //                                    "parent_ids" | "child_ids", …)`: a `.form-group`
+  //                                    with `data-field`, its `<label>`, and the select
+  //                                    whose chips are `.react-select__multi-value`
+  //   Custom Fields, details           `.custom-fields`, a `CollapseButton` whose word is
+  //                                    the `<span>` in `.collapse-button`, over one
+  //                                    `DetailItem` per field
+  //   Custom Fields, edit form         `.custom-fields-input`, the same button, over one
+  //                                    `.custom-fields-row` per field plus the empty
+  //                                    `.custom-fields-new` row for the next one
+  //
+  // **The count is read off the page, never off the server.** This plugin reads no
+  // library, and the page already holds everything it is about to count: a badge or a
+  // card in the details, a chip in the form. A tag badge is `TagLink`'s
+  // `SortNameLinkComponent`, the one `.tag-item` that carries `data-sort-name`; a
+  // performer's or a group's badge is the same class without it. **Not the link's
+  // target**: on a scene a tag badge links to the scenes list filtered by that tag,
+  // `/scenes?…`, and a first version that looked for `/tags/` in the href counted
+  // nothing there - seen live. An `<h6>` is the tags heading because tag badges follow
+  // it, and the performers heading because performer cards do - never by what it says,
+  // so the locale does not matter.
+  //
+  // **The text node is edited, never replaced.** React holds the text node it rendered
+  // and writes the next value into that same node; `textContent = …` on the heading
+  // would swap it for one React does not know, and Stash's next update - "Tag" becoming
+  // "Tags" as a second one is picked - would land in a node no longer on the page. So
+  // the first text node's `nodeValue` is rewritten, the base text is kept on the node,
+  // and a value that is neither the base nor what was last written is React's and
+  // becomes the new base. A DetailItem's trailing colon is a text node of its own, so
+  // `Tags:` reads `Tags (3):`.
+  var TAG_BADGE = '.tag-item[data-sort-name]';
+
+  function isTagBadge(node) {
+    return node.nodeType === 1 && hasClass(node, 'tag-item') &&
+      node.getAttribute && node.getAttribute('data-sort-name') != null;
+  }
+
+  function countIn(root, sel) {
+    return root.querySelectorAll ? root.querySelectorAll(sel).length : 0;
+  }
+
+  // One row per heading counted, all under the one setting: the edit form's field, how
+  // many of its things one sibling after an `<h6>` holds (none where no page draws it as
+  // an `<h6>`), and the DetailItem that lists them where one does - or, for a heading
+  // that is neither, the `box` holding it, the `head` inside it and how to `count` it.
+  // A tag's parents and sub-tags are tag lists; custom fields count their rows.
+  var HEAD_COUNTS = [
+    { field: 'tag_ids', item: '.detail-item.tags', itemSel: TAG_BADGE,
+      after: function (s) { return isTagBadge(s) ? 1 : 0; } },
+    { field: 'parent_ids', item: '.detail-item.parent_tags', itemSel: TAG_BADGE },
+    { field: 'child_ids', item: '.detail-item.sub_tags', itemSel: TAG_BADGE },
+    { field: 'performer_ids',
+      after: function (s) { return s.nodeType === 1 ? countIn(s, '.performer-card') : 0; } },
+    { box: '.custom-fields', head: '.collapse-button span',
+      count: function (b) { return countIn(b, '.detail-item'); } },
+    { box: '.custom-fields-input', head: '.collapse-button span',
+      count: function (b) { return countIn(b, '.custom-fields-row') - countIn(b, '.custom-fields-new'); } },
+  ];
+
+  var _headCountNodes = [];
+
+  function headCountLabel(base, n) { return base.replace(/\s*$/, '') + ' (' + n + ')'; }
+
+  function firstTextNode(node) {
+    for (var c = node.firstChild; c; c = c.nextSibling) {
+      if (c.nodeType === 3 && /\S/.test(c.nodeValue || '')) return c;
+    }
+    return null;
+  }
+
+  // `{ node, n }` for every counted heading on the page. Cheap, and asked before the
+  // settings are read: a page with none of these needs no answer (§8).
+  function headCountTargets() {
+    if (!document.querySelectorAll) return [];
+    var out = [], i, j, c;
+    var h6 = document.querySelectorAll('h6');
+    for (i = 0; i < h6.length; i++) {
+      for (j = 0; j < HEAD_COUNTS.length; j++) {
+        c = HEAD_COUNTS[j];
+        if (!c.after) continue;
+        var n = 0;
+        for (var s = h6[i].nextSibling; s && s.tagName !== 'H6'; s = s.nextSibling) n += c.after(s);
+        if (n) { out.push({ node: h6[i], n: n }); break; }
+      }
+    }
+    for (j = 0; j < HEAD_COUNTS.length; j++) {
+      c = HEAD_COUNTS[j];
+      if (c.item) {
+        var items = document.querySelectorAll(c.item);
+        for (i = 0; i < items.length; i++) {
+          var title = items[i].querySelector('.detail-item-title');
+          var value = items[i].querySelector('.detail-item-value');
+          if (title && value) out.push({ node: title, n: countIn(value, c.itemSel) });
+        }
+      }
+      if (c.field) {
+        var groups = document.querySelectorAll('.form-group[data-field="' + c.field + '"]');
+        for (i = 0; i < groups.length; i++) {
+          var label = groups[i].querySelector('label');
+          if (label) out.push({ node: label, n: countIn(groups[i], '.react-select__multi-value') });
+        }
+      }
+      if (c.box) {
+        var boxes = document.querySelectorAll(c.box);
+        for (i = 0; i < boxes.length; i++) {
+          var head = boxes[i].querySelector(c.head);
+          if (head) out.push({ node: head, n: c.count(boxes[i]) });
+        }
+      }
+    }
+    return out;
+  }
+
+  // Returns the text node written, or null where the heading has none.
+  function headCountPaint(node, n) {
+    var t = firstTextNode(node);
+    if (!t) return null;
+    var cur = String(t.nodeValue);
+    if (t._gttxHeadBase == null || (cur !== t._gttxHeadBase && cur !== t._gttxHeadLast)) {
+      t._gttxHeadBase = cur;
+    }
+    var want = headCountLabel(t._gttxHeadBase, n);
+    if (cur !== want) t.nodeValue = want;
+    t._gttxHeadLast = want;
+    return t;
+  }
+
+  // Stash's own word back, only where the node still says what this wrote.
+  function headCountRestore(t) {
+    if (t._gttxHeadBase != null && t.nodeValue === t._gttxHeadLast) t.nodeValue = t._gttxHeadBase;
+    t._gttxHeadBase = null;
+    t._gttxHeadLast = null;
+  }
+
+  function headCountClear() {
+    _headCountNodes.forEach(headCountRestore);
+    _headCountNodes = [];
+  }
+
+  function headCountTick(targets) {
+    if (!settings().a4HeadingCounts) {
+      if (_headCountNodes.length) headCountClear();
+      return;
+    }
+    var live = [];
+    targets.forEach(function (tg) {
+      var t = headCountPaint(tg.node, tg.n);
+      if (t) live.push(t);
+    });
+    // A node React dropped went with its page; one still on the page but no longer
+    // over a list gets its word back.
+    _headCountNodes.forEach(function (t) {
+      if (live.indexOf(t) === -1) headCountRestore(t);
+    });
+    _headCountNodes = live;
+  }
+
   // ── Settings ──────────────────────────────────────────────────────────────
 
   var DEFAULTS = {
     a1TaggerDuration: false,
     a2SelectPaste: false,
     a3SameTab: false,
+    a4HeadingCounts: false,
     b1DevMods: '',
   };
   var _settings = null;
@@ -1424,6 +1600,12 @@
         var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
         var out = {}, k;
         for (k in DEFAULTS) if (hasOwn(DEFAULTS, k)) out[k] = hasOwn(raw, k) ? raw[k] : DEFAULTS[k];
+        // The one heading-counts switch replaced two, `a4TagCount` and `a5PerformerCount`,
+        // the day after they shipped. A map that has either on and has never had the new
+        // key written reads as on; the old keys are left where they are.
+        if (!hasOwn(raw, 'a4HeadingCounts') && (raw.a4TagCount || raw.a5PerformerCount)) {
+          out.a4HeadingCounts = true;
+        }
         _settings = out;
         _settingsAt = Date.now();
         _settingsInFlight = null;
@@ -2167,11 +2349,13 @@
       document.querySelectorAll('.scene-metadata') : [];
     var boxes = document.querySelectorAll ?
       document.querySelectorAll('.react-select__input-container') : [];
-    if (group || cards.length || boxes.length) {
+    var heads = headCountTargets();
+    if (group || cards.length || boxes.length || heads.length) {
       try { loadSettings(false); } catch (e) { /* a settings read is never fatal */ }
     }
     try { durationTick(cards); } catch (e) { fail(e); }
     try { selectPasteTick(boxes); } catch (e) { fail(e); }
+    try { headCountTick(heads); } catch (e) { fail(e); }
     try { layoutTick(); } catch (e) { fail(e); }
     if (group) { try { settingsTick(group); } catch (e) { fail(e); } }
   }
@@ -2232,6 +2416,7 @@
   ns.gttxcore = {
     durationBand: durationBand, durationTick: durationTick, durationClear: durationClear,
     selectPasteTick: selectPasteTick,
+    headCountTick: headCountTick, headCountTargets: headCountTargets, headCountClear: headCountClear,
     parseDevMods: parseDevMods, formatDevMods: formatDevMods, applyDevMods: applyDevMods,
     devMods: DEV_MODS, openDevMods: openDevMods, tick: tick,
     settings: function () { return settings(); },

@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.5.3 (`56e09fa`) | 2026-09-18 | NormalizeParentTags 5.5.3: the button holds its size through the flash |
+| 5.5.2 (`6a9f3c9`) | 2026-09-18 | NormalizeParentTags 5.5.2: Prune Tags and Roll Up Tags are disabled, never removed, when there is nothing to do |
 | 5.5.1 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 5.5.0 (`0ce2a33`) | 2026-09-16 | NormalizeParentTags 5.5.0: Set All Prune, Roll Up and Off under the selectors |
 | 5.4.0 (`ba19cc3`) | 2026-09-16 | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |

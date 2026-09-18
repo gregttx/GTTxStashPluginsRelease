@@ -64,7 +64,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.5.1';
+  var PLUGIN_VERSION = '5.5.3';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -4448,10 +4448,14 @@
 
   // ── Manual buttons on an entity page ──────────────────────────────────────
   //
-  // **Prune Tags and Roll Up Tags, on the entity's own edit form, and only when they
-  // would do something.** Everything this plugin did was library-wide or automatic; the
-  // one thing it could not do was answer "what would this entity change?" without a run
-  // over everything. Every type with a page of its own gets them - a marker has none.
+  // **Prune Tags and Roll Up Tags, on the entity's own edit form, disabled with a
+  // reason when they would do nothing.** Everything this plugin did was library-wide or
+  // automatic; the one thing it could not do was answer "what would this entity
+  // change?" without a run over everything. Every type with a page of its own gets
+  // them - a marker has none. They used to be drawn only with work to do and removed
+  // once it was done, and live that was a hazard: a click removed the button a second
+  // later, the row closed up, and the next click landed on whatever slid under the
+  // pointer - Delete, at worst. A disabled button holds the row still.
   //
   // **A click stages into the tag box in front of you and writes nothing.** Stash's own
   // Save is what commits it, exactly as if the tags had been picked from the dropdown by
@@ -4470,12 +4474,20 @@
   var ROLLUP_BTN_CLASS = 'npt-rollup-btn';
   var ENTITY_BTNS = [
     { mode: MODE_PRUNE, cls: PRUNE_BTN_CLASS, base: 'Prune Tags',
+      none: function (noun) {
+        return 'Nothing to prune: no tag in the box is implied by a more specific tag ' +
+          'on this ' + noun + '.';
+      },
       title: function (noun) {
         return 'Take out the tags on this ' + noun + ' that a more specific tag on it ' +
           'already implies. They are removed from the tag box in front of you; nothing is ' +
           'written until you press Stash\'s own Save.';
       } },
     { mode: MODE_ROLLUP, cls: ROLLUP_BTN_CLASS, base: 'Roll Up Tags',
+      none: function (noun) {
+        return 'Nothing to roll up: every parent this ' + noun + '\'s tags imply is ' +
+          'already in the box.';
+      },
       title: function (noun) {
         return 'Put in the parent tags this ' + noun + '\'s own tags imply and it does not ' +
           'carry. They are added to the tag box in front of you; nothing is written until ' +
@@ -4685,12 +4697,20 @@
   var FLASH_MS = 1400;
   var _flashToken = 0;
 
-  // **The button is its own feedback, and staging is what takes it away.** A successful
-  // Prune leaves nothing to prune, so the very next tick would remove the button - and
-  // with it the only thing telling the user the click worked. The flash holds the button
-  // on the page for its own duration; after that the tick has it.
+  // **The button is its own feedback.** A successful Prune leaves nothing to prune, so
+  // the very next tick would disable the button and restore its caption - and with it
+  // the only thing telling the user the click worked. The flash holds the caption for
+  // its own duration; after that the tick has it.
+  //
+  // **The button keeps its size through the flash.** A caption that grows the button
+  // moves every button after it in the row, for the flash's duration, under a pointer
+  // that has just clicked there. So the width is pinned to the caption's own before
+  // the text changes - once, off a laid-out button; a zero width is an unlaid one and
+  // is not pinned - and the flash captions are kept short enough to fit inside it:
+  // a sign and a count, three digits at most in practice, never a word and a number.
   function flash(btn, text) {
     var token = ++_flashToken;
+    if (!btn.style.minWidth && btn.offsetWidth > 0) btn.style.minWidth = btn.offsetWidth + 'px';
     btn.textContent = text;
     btn._nptFlashUntil = Date.now() + FLASH_MS;
     setTimeout(function () {
@@ -4715,19 +4735,20 @@
         return;
       }
       btn.disabled = true;
+      btn._nptBusy = true;
       stageEntity(check, spec.mode).then(function (r) {
-        btn.disabled = false;
+        btn._nptBusy = false;
         if (r.status === 'staged') {
-          flash(btn, (spec.mode === MODE_PRUNE ? 'Removed ' : 'Added ') + r.count);
+          flash(btn, (spec.mode === MODE_PRUNE ? '\u2212' : '+') + r.count);
           gateLog(stripEllipsis(spec.base) + ' staged ' + r.count + ' on ' + check.label);
         } else if (r.status === 'nocontrol') {
-          flash(btn, 'No tag box');
+          flash(btn, 'No box');
         } else {
           flash(btn, 'No change');
         }
         entityButtonsTick();
       }, function (e) {
-        btn.disabled = false;
+        btn._nptBusy = false;
         flash(btn, 'Failed');
         console.error('[npt]', e);
       });
@@ -4777,27 +4798,23 @@
       var n = delta ? (spec.mode === MODE_PRUNE ? delta.remove.length : delta.add.length) : 0;
       var showing = document.querySelector('.' + spec.cls);
       gateLogOnce('sc:' + spec.mode, spec.base + ', ' + label + ': ' +
-        (n ? 'SHOWN - ' + plural(n, 'tag') : 'hidden' +
+        (n ? 'ENABLED - ' + plural(n, 'tag') : 'disabled' +
           (entityCheck.why ? ' - ' + entityCheck.why : ' - nothing to do')));
-      if (!n) {
-        if (showing && showing._nptFlashUntil > Date.now()) return;   // let it say so first
-        if (showing && showing.parentNode) showing.parentNode.removeChild(showing);
-        return;
-      }
       // The count is on the title rather than the caption: a caption is a cross-plugin
       // contract - the siblings' dedup matches on button text - and a number in it would
       // change on every edit of the box.
-      var title = spec.title(noun) + ' ' + plural(n, 'tag') + ' in the box right now.' +
-        (dots ? ' This Stash cannot be patched to reach the box, so the click opens the ' +
-          'review dialog instead.' : '');
+      var title = !n ? (entityCheck.why || spec.none(noun))
+        : spec.title(noun) + ' ' + plural(n, 'tag') + ' in the box right now.' +
+          (dots ? ' This Stash cannot be patched to reach the box, so the click opens the ' +
+            'review dialog instead.' : '');
       var btn = showing || buildEntityButton(spec);
       btn._nptLabel = spec.base + dots;
       btn.title = title;
-      if (btn.textContent !== btn._nptLabel && !btn.disabled) {
-        // Not while a flash is in flight: that caption is this button's own feedback.
-        if (btn.textContent === spec.base || btn.textContent === spec.base + '...') {
-          btn.textContent = btn._nptLabel;
-        }
+      // Not while a stage or its flash is in flight: that caption is this button's own
+      // feedback, and the button stays as the click left it until the flash is over.
+      if (!btn._nptBusy && !(btn._nptFlashUntil > Date.now())) {
+        btn.disabled = !n;
+        if (btn.textContent !== btn._nptLabel) btn.textContent = btn._nptLabel;
       }
       if (!showing) {
         insertBeforeImportantAction(container, btn);
