@@ -18,9 +18,9 @@ and UI plugin component patching (staging into an edit form) both depend on that
 > stays open. It is a way out of a run you regret in the moment, not a safety net — the backup is
 > the safety net.
 >
-> The two **automatic** settings deserve the same caution for a different reason: they write on
-> every save, with no dialog and nothing to undo them. The manual buttons are the safe way to try
-> this plugin out.
+> The two **automatic** modes deserve the same caution for a different reason: they react to
+> every save, and with **Silent Auto-propagation** on they write with no dialog and nothing to
+> undo them. The manual buttons are the safe way to try this plugin out.
 
 ## What it does
 
@@ -93,7 +93,8 @@ along with the paths.
 footer, opposite Save and Cancel, and set every path in one press. The last one asks for common tags
 wherever a path offers them and plain *On* everywhere else, since only the two group aggregations
 have the choice. Each of the three says what it does on hover, and so does every path's name — what
-it copies onto what, what its third mode means where it has one, and which path reverses it.
+it copies onto what, what its third mode means where it has one, and which path reverses it. A bulk
+button whose press would change nothing is unavailable, and says so.
 
 **System view**, from the footer, puts the same thirteen buttons on a diagram of what they do: one
 box per entity type, with the tags and — where the type has them — the performers inside it, and one
@@ -231,8 +232,28 @@ hovering the line says so.
 
 ## The automatic modes
 
-Both react to Stash's own saves, immediately, with no dialog, no review and no undo — so treat them
-as the sharp end of this plugin, and try the task first.
+Both react to Stash's own saves, immediately — so treat them as the sharp end of this plugin, and
+try the task first. Each has a switch in the **Automatic Propagation and Depropagate Assist** dialog, opened from its row
+under **Settings → Plugins**, and so do the two options below.
+
+**Silent Auto-propagation**, off by default, is what decides whether a reaction asks. Off, a
+reaction plans what the save calls for and opens a small dialog: one line per addition — the
+entity, the tag or performer, and where it came from — each with a box, all ticked. Untick what
+you do not want and press **OK**, which is unavailable while nothing is ticked; **Select All** and **Unselect All** set every box, each unavailable when every box already is; **Cancel** and
+Escape write nothing. On, a reaction writes the moment Stash saves, with no dialog, no review and
+no undo. The switch is greyed out while neither mode is on. When another plugin is waiting for
+your answer before it reads the scene — Scene Variants does, for its own propagate offer — the
+dialog says so, with the time it has left; if that runs out while the dialog is open, a warning
+replaces it, because what you add here will then not be in that plugin's offer.
+
+**Suggest Tag Auto-removal — Depropagate assist**, off by default, is the reverse offer. When a
+save removes a performer, studio or group from a scene, and the path from that entity into
+scenes is on, the scene is read once *before* the save goes out — the save waits for that one
+small read — and once after it lands. The tags the removed entity brought that the scene still
+carries, and that no other related entity of the scene carries, are listed in the same dialog,
+**unticked**. Tick the ones to remove and press OK, which stays unavailable until something is ticked; nothing else is touched. Only a scene's own
+save is watched: a marker deleted, an image taken out of a gallery or a scene taken out of a
+group is a save of something else, and is not offered.
 
 **Auto Propagate when the Target is Saved** reacts to a save of one of the four entities anything is
 written to. Save a scene and every enabled path that copies *into* scenes runs on that one scene.
@@ -276,8 +297,9 @@ Both automatic modes share the rest of their behaviour:
 
 ## Manual buttons and staging
 
-With **Show Manual Buttons** on, each enabled path adds a small button to the Edit tab of its
-target — a scene with the performer-tags and studio-tags paths both enabled shows two buttons, not
+Every button has a switch of its own in the **Manual Buttons Settings** dialog, opened from the
+button on the Manual Buttons row under **Settings → Plugins**; with its switch on, each enabled
+path adds a small button to the Edit tab of its target — a scene with the performer-tags and studio-tags paths both enabled shows two buttons, not
 one that tries to name both, and a path with no button setting simply has no button. Each button
 is labelled consistently: `"Add [all|common] [Tags|Perfs] from all <plural>"` —
 for example **"Add all Tags from all Performers"** on a scene, or **"Add common Tags from all
@@ -338,8 +360,8 @@ across many different pages at once, and there is no single form to stage the re
 therefore always end in **"..."** and always open the review dialog, which lists every change across
 every entity the source reaches before a single one is written. This is the widest write the plugin
 offers from one click. Everything else works the same as the target-side buttons: the gating
-above, the dedup check against `MergePerformerTagsToScenes`, the same **Show Manual Buttons**
-toggle, and the same place in the row, before Delete.
+above, the dedup check against `MergePerformerTagsToScenes`, a switch of its own in **Manual
+Buttons Settings**, and the same place in the row, before Delete.
 
 **Placement beyond the performer and studio pages is unverified against a running Stash**, except
 Scene and Gallery, whose markup was read off a live instance — see the note under the button table.
@@ -350,9 +372,9 @@ be on, that is most likely it.
 ### Every button, by page
 
 All 24 of this plugin's buttons, plus the 2 from `MergePerformerTagsToScenes` that share these
-rows. Every one of them additionally needs **Show Manual Buttons** on — the setting has that name in
-both plugins — and every one is hidden when clicking it would add nothing — see
-"When a button appears" above.
+rows. Every one of this plugin's additionally needs its own switch on in **Manual Buttons
+Settings** (the two from `MergePerformerTagsToScenes` need that plugin's **Show Manual Buttons**),
+and every one is hidden when clicking it would add nothing — see "When a button appears" above.
 
 Within a row the order is fixed: `Save · …this plugin's buttons… · MPTTS's button · Delete`.
 Group's Edit tab has no Delete, so everything there appends after Save.
@@ -436,15 +458,32 @@ no source-side button. `NormalizeParentTags` adds no entity-page button at all.
 All under **Settings → Plugins → ᝯㄝₓ Propagate Tags and Performers to Related Entities**. Each
 description shows one line on the page; hover it, or the setting's name, for the rest.
 
-**Show Manual Buttons** — draws the [manual buttons](#manual-buttons-and-staging) on the pages an
-enabled path reaches.
+**Manual Buttons** — one row, listing the [manual buttons](#manual-buttons-and-staging) that are
+on, a line per page — *Scene Edit tab: all buttons* where every button on a page is on, and a
+caption in grey where its path is off — and holding the button that opens the **Manual Buttons
+Settings** dialog. All twenty-four are in that dialog, a switch each, in two columns side by
+side: **On target entity Edit tabs**, the buttons that pull tags or performers into the entity in
+front of you, and **On source entity pages**, the buttons that push them out. Each column is a box
+per page, the page named once in the box's head and each switch carrying only its caption; a
+page whose paths are off in Path Settings gets a dimmed *Inactive paths* box of its own, since
+those buttons do not appear until the path is on. **Show All** and **Show None** set every switch
+at once, each unavailable when every switch already is, and **Save Immediately** is in the same dialog — it makes an Edit-tab button review in
+the dialog instead of staging into the form, and has no row of its own on this page. The setting
+itself is one line of text
+(`target:tags:studio>scene, source:tags:performer>scene`) and can be typed by hand — it is read
+forgivingly, in any order and any case. A button nobody names is off. Upgrading from a release
+that had **Show Manual Buttons** on starts with every button on.
 
-**Save Immediately** — makes an Edit-tab button review in the dialog instead of staging into the
-form.
-
-**Auto Propagate when the Target is Saved** and **Auto Propagate when the Source is Saved** — the
-two [automatic modes](#the-automatic-modes), with no dialog and no undo. The source-side one fans
-out: saving one performer can rewrite every scene they appear in.
+**Automatic Propagation and Depropagate Assist** — one row, naming whichever of the two
+[automatic modes](#the-automatic-modes) are on and holding the button that opens the **Automatic Propagation and Depropagate Assist**
+dialog, a switch for each: **Auto Propagate when the Target is Saved** and **Auto
+Propagate when the Source is Saved**, and two options: **Silent Auto-propagation**, off by default
+and greyed out while neither mode is on, without which a reaction asks before it writes; and
+**Suggest Tag Auto-removal — Depropagate assist**, off by default, which offers the tags a removed
+performer, studio or group brought to a scene for removal. The source-side mode fans out: saving one
+performer can rewrite every scene they appear in. The setting is one line of text (`target, source,
+silent, depropagate`) and can be typed by hand; a word nobody names is off. Upgrading from a
+release that had either old switch on starts with that mode on, and asking.
 
 **Paths** — one row, listing the paths that are on in three columns and holding the button that
 opens the **Path Settings** dialog (the propagate dialog's own footer is the other way in). All thirteen are in that dialog, in three columns read top to
@@ -547,12 +586,13 @@ currently says.
 added (F12 → Console; **not** the Stash server log or the Logs page — this is a UI plugin and
 cannot write there).
 
-Four of those switches are not Stash's blue. **Save Immediately** and the two
-automatic modes are **amber**, the plugin's colour for a setting that makes it write without
-showing you a plan first; the logging switch is **teal**, for one that only talks to the console.
-Everything else stays blue. In **Settings → Tasks → Plugin Tasks** the one task, **Propagate
-All...**, is amber for the same reason, and **Path Settings** — wherever it appears — is teal: it
-writes a setting, not your library.
+One of those switches is not Stash's blue: the logging switch is **teal**, for one that only
+talks to the console. The boxes inside the dialogs are **amber** — the two automatic modes and
+**Save Immediately** — the plugin's colour for a setting that makes it write without showing you
+a plan first. Everything else stays blue. In **Settings → Tasks → Plugin Tasks** the one task,
+**Propagate All...**, is amber for the same reason, and **Path Settings**, **Manual Buttons
+Settings** and **Automatic Propagation and Depropagate Assist** — wherever they appear — are teal: they write a setting,
+not your library.
 
 ## Relationship to the other plugins in this repo
 
@@ -597,7 +637,8 @@ paths enabled on a scene, "Add all Tags from all Performers" copies the performe
 leaves the studio's alone; the studio's button is what copies those — which is what the caption,
 the tooltip and the setting description each say it does.
 
-Clicking one does one of two things, depending on **Save Immediately**:
+Clicking one does one of two things, depending on **Save Immediately** (in Manual Buttons
+Settings):
 
 - **Off (the default) — stages.** The tags or performers it would add are pushed straight into the
   open edit form's own tag or performer box, exactly as if you had picked them from the dropdown

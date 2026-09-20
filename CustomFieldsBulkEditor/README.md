@@ -112,7 +112,8 @@ with no colours to paste into anything.
 - The counters above it say how many entities were read, how many carry any custom field at all,
   how many fields that is in total, how many lines the filters leave showing, and **how many
   entities Apply covers** — which is not the same number, since one entity carrying five fields is
-  five lines and one write. **Apply**'s own tooltip says it too. While a read or a write is
+  five lines and one write. **Apply**'s own tooltip says it too, and when the filters leave no
+  entity at all, Apply is unavailable until they are widened. While a read or a write is
   running, a cursor cycles under the last line: the counters say how far it has got, the cursor
   says it is still going.
 - The filters are what decide the scope, so they are **unavailable while a write is running**. The

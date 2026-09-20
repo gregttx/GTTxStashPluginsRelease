@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.1.3 (`b44e245`) | 2026-09-20 | EntityNameMaintainer 2.1.3: the renamed entity is read as the save left it |
+| 2.1.2 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 2.1.1 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 2.1.0 (`f065c69`) | 2026-08-29 | One setting decides where every link opens, and three fixes beside it |
 | 2.0.1 (`694d485`) | 2026-08-29 | All nine plugins: the README link points at the public mirror |

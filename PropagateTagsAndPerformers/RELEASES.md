@@ -8,6 +8,19 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.2.2 (`e9a80b2`) | 2026-09-20 | PropagateTagsAndPerformers 5.2.2: a bulk button with nothing to do is unavailable |
+| 5.2.1 (`9da8af3`) | 2026-09-20 | PropagateTagsAndPerformers 5.2.1: OK is unavailable while nothing is ticked |
+| 5.2.0 (`549fc1e`) | 2026-09-20 | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |
+| 5.1.4 (`ab2d37e`) | 2026-09-20 | PropagateTagsAndPerformers 5.1.4: the depropagate offer holds the save on the settling registry |
+| 5.1.3 (`ae8cf25`) | 2026-09-19 | Core 2.2.0, PropagateTagsAndPerformers 5.1.3, SceneVariants 1.9.5: a save settles before the propagate offer |
+| 5.1.2 (`85d5d63`) | 2026-09-19 | PropagateTagsAndPerformers 5.1.2: "was likely from", and the pick dialog a size of its own |
+| 5.1.1 (`5e48ecd`) | 2026-09-19 | PropagateTagsAndPerformers 5.1.1: the row and dialog are "Automatic Propagation and Depropagate Assist" |
+| 5.1.0 (`b3fa23c`) | 2026-09-19 | PropagateTagsAndPerformers 5.1.0: a reaction asks unless Silent is on, and the Depropagate assist |
+| 5.0.3 (`2e24a13`) | 2026-09-19 | PropagateTagsAndPerformers 5.0.3: the rows in a box indented under their head |
+| 5.0.2 (`d90be80`) | 2026-09-19 | PropagateTagsAndPerformers 5.0.2: captions wrap, toggles at the right edge, bigger box heads |
+| 5.0.1 (`1a151ec`) | 2026-09-19 | PropagateTagsAndPerformers 5.0.1: the buttons dialog grouped by page, the automatic modes in a dialog |
+| 5.0.0 (`c3656cd`) | 2026-09-19 | PropagateTagsAndPerformers 5.0.0: Manual Buttons Settings, a switch per button |
+| 4.4.3 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 4.4.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 4.4.1 (`ed8e8b9`) | 2026-09-14 | PropagateTagsAndPerformers 4.4.1: the child-tag exclusion setting reads "child tags" |
 | 4.4.0 (`05d543e`) | 2026-09-14 | PropagateTagsAndPerformers 4.4.0: a tag and everything under it can be kept out |

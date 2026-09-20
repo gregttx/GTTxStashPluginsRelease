@@ -10,10 +10,10 @@ and offers to bring the rest along.
 
 ## What it does
 
-It watches the tab you are working in for a rename. The moment one lands it reads the name
-the entity had a second earlier, then walks every text field of every Scene, Image,
+It watches the tab you are working in for a rename. The moment one lands it reads the entity
+as it was a second earlier, then walks every text field of every Scene, Image,
 Gallery, Performer, Studio, Group and Tag looking for it, and puts up a dialog listing what
-it found.
+it found. The renamed entity itself is read as your save left it, and whatever that save changed on it is yours, not a mention to fix: swap a name and an alias in one save and the alias now holding the old name is left alone, while a details box the save carried unchanged is still offered.
 
 The fields it looks in:
 

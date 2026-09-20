@@ -34,7 +34,7 @@
     findEditContainer = C.findEditContainer,
     applyButtonSpacing = C.applyButtonSpacing, domBus = C.domBus,
     coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
     entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
@@ -64,7 +64,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.5.3';
+  var PLUGIN_VERSION = '5.5.4';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -2653,7 +2653,8 @@
     // whether the copy landed and says nothing about buttons.
     var self = this;
     copyToClipboard(this.lines.join('\n'), function (ok) {
-      self.copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
     });
   };
@@ -4704,13 +4705,12 @@
   //
   // **The button keeps its size through the flash.** A caption that grows the button
   // moves every button after it in the row, for the flash's duration, under a pointer
-  // that has just clicked there. So the width is pinned to the caption's own before
-  // the text changes - once, off a laid-out button; a zero width is an unlaid one and
-  // is not pinned - and the flash captions are kept short enough to fit inside it:
-  // a sign and a count, three digits at most in practice, never a word and a number.
+  // that has just clicked there. So Core's `holdWidth` pins the width before the text
+  // changes, and the flash captions are kept short enough to fit inside it: a sign and
+  // a count, three digits at most in practice, never a word and a number.
   function flash(btn, text) {
     var token = ++_flashToken;
-    if (!btn.style.minWidth && btn.offsetWidth > 0) btn.style.minWidth = btn.offsetWidth + 'px';
+    holdWidth(btn);
     btn.textContent = text;
     btn._nptFlashUntil = Date.now() + FLASH_MS;
     setTimeout(function () {

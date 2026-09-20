@@ -37,7 +37,7 @@
     return;
   }
   var coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
-    linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard,
+    linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth,
     tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.1.2';
+  var PLUGIN_VERSION = '3.1.4';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -1896,9 +1896,11 @@
 
   Run.prototype.syncApply = function () {
     var rename = this.modeSel.value === 'rename';
+    // `!this.covered`: the scope is the listing, and a listing filtered down to no
+    // entity leaves Apply nothing to write - an amber button that writes nothing.
     this.applyBtn.disabled = this.state !== 'listing' ||
       !String(this.nameInput.value || '').replace(/^\s+|\s+$/g, '') || this.stale ||
-      (rename && !this.renameName);
+      (rename && !this.renameName) || !this.covered;
     // **What Apply covers, on the button that does it.** With the "Apply to" select
     // gone the scope is the listing, and a listing is counted in lines while a write is
     // counted in entities - so the number the user needs before pressing is one nothing
@@ -2979,6 +2981,7 @@
 
   Run.prototype.apply = function () {
     var self = this;
+    if (!this.covered) return;   // guarded in the handler, not only at render
     var planned = this.plan();
     this.reportSkips(planned);
     if (!planned.changes.length) {
@@ -3227,7 +3230,8 @@
         ? parts.concat(kids[i]._cfbeText) : parts.concat([kids[i].textContent || '']);
     }
     copyToClipboard(parts.join('\n'), function (ok) {
-      self.copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
     });
   };

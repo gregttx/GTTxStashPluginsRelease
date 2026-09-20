@@ -44,8 +44,8 @@
     }
     return;
   }
-  var coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, tipRatingBadge = C.tipRatingBadge,
+  var coop = C.coop, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
+    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
     entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '1.9.1';
+  var PLUGIN_VERSION = '1.9.6';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1320,8 +1320,11 @@
   }
 
   Run.prototype.tickedJobs = function () {
-    var out = [];
+    var out = [], self = this;
     this.jobs.forEach(function (j) {
+      // A written job is settled whether or not its line has a box: a task without
+      // boxes has nothing to lock, so the check is on `changes` itself.
+      if (self.changes.indexOf(j) !== -1) return;
       if (j.box && (!j.box.checked || j.box.disabled)) return;
       // An additive line with every individual item unticked adds nothing, so it is
       // not a change however its master box stands.
@@ -1361,7 +1364,8 @@
     var why = busy ? 'Still working.'
       : this.stale ? 'Reload the page first: this tab is running an older script.'
         : !this.jobs.length ? this.task.nothing
-          : !ticked ? 'Nothing is ticked.'
+          : !ticked ? (this.jobs.every(function (j) { return self.changes.indexOf(j) !== -1; })
+            ? 'Everything listed is written.' : 'Nothing is ticked.')
             : '';
     this.goBtn.disabled = !!why;
     this.goBtn.title = why || ('Write ' + plural(ticked, this.task.planUnit || 'scene') + '.');
@@ -2085,7 +2089,8 @@
     var text = [this.progressEl.textContent].concat(this.logText).join('\n');
     var was = this.copyBtn.textContent;
     copyToClipboard(text, function (ok) {
-      self.copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = was; }, 2000);
     });
   };
@@ -3638,6 +3643,34 @@
     return out;
   }
 
+  // The offer waits for the save to settle. A sibling reacting to this same save -
+  // PropagateTagsAndPerformers adding a new performer's tags - writes after it lands,
+  // under a lease, as a bulk mutation this watch cannot see, so an offer built from
+  // the save's input alone listed the performer and never the tags. Every reaction
+  // registers itself on Core's `settling` the moment it sees the save; this waits for
+  // those releases (a bounded wait - a stuck reaction is not a lost offer), reads the
+  // scene again, and offers the diff of the two snapshots on the two lists a
+  // reaction can move. The cover and the stash-ids still come from the input, which
+  // is the only place they are.
+  var SETTLE_MS = 120000;
+
+  function offerSettled(input, before) {
+    settled('scene', [String(input.id)], SETTLE_MS, PLUGIN_SHORT_NAME).then(function () {
+      return gqlRequest(SAVE_SNAPSHOT_QUERY, { id: String(input.id) }).then(function (d) {
+        return (d || {}).findScene || null;
+      }, function () { return null; });
+    }).then(function (after) {
+      var seen = input;
+      if (after) {
+        seen = {};
+        for (var k in input) if (hasOwn(input, k)) seen[k] = input[k];
+        seen.tag_ids = idsOfList(after, 'tags');
+        seen.performer_ids = idsOfList(after, 'performers');
+      }
+      offerPropagate(seen, before);
+    });
+  }
+
   function offerPropagate(input, before) {
     var changed = changedAttrs(before, input);
     if (!changed) return;
@@ -3958,7 +3991,7 @@
           // so it re-reads - whatever the propagate switch says, since the staleness
           // does not depend on it. The same door the dialogs' dirty close uses.
           if (_paneRefresh) _paneRefresh();
-          if (before && settingsNow.c1PropagateOnSave) offerPropagate(input, before);
+          if (before && settingsNow.c1PropagateOnSave) offerSettled(input, before);
           if (before && hasOwn(input, 'stash_ids')) noteJoinedSets(before, input, settingsNow);
         }, function () {});
         return resp;
@@ -4657,12 +4690,15 @@
     // The divider under this block is `.svr-splitbar`, a full-width drag bar of our
     // own - `resize:vertical`'s corner grip was tedious to keep re-finding as the log
     // grew, per live use. The min/max-height here still clamp whatever the drag sets.
+    // The minimum is six lines (.8rem at 1.5 line-height): a log that grows through a
+    // long pass takes the listing's height first, and below six lines a set list
+    // reads as a scrollbar with a caption.
     //
     // `flex:0 1 auto` rather than `0 0 auto`: the dragged height is kept while there
     // is room for it, and given up before the log's own minimum pushes the footer off
     // the bottom of a short window. `color-scheme:dark` keeps the box's own scrollbar
     // in the dialog's colours - CustomFieldsBulkEditor's lesson.
-    '.svr-sets{flex:0 1 auto;overflow:auto;height:22vh;min-height:3rem;' +
+    '.svr-sets{flex:0 1 auto;overflow:auto;height:22vh;min-height:7.2rem;' +
     'max-height:46vh;color-scheme:dark;padding:0 1rem;font-family:ui-monospace,' +
     'SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;line-height:1.5;}' +
     '.svr-splitbar{flex:0 0 auto;height:8px;margin:.15rem 1rem .35rem;' +

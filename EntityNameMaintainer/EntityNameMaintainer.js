@@ -46,7 +46,7 @@
     return;
   }
   var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
     entityTipCountry = C.entityTipCountry, entityTipGender = C.entityTipGender,
@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.1.1';
+  var PLUGIN_VERSION = '2.1.3';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -821,8 +821,23 @@
     // else's text, and its own name field is the one field the rename has already
     // settled. Everything *else* on it is still fair game - a performer's details can
     // name them.
-    var ownName = self && self.typeKey === spec.key && self.id === String(ent.id)
-      ? self.nameField : null;
+    var own = self && self.typeKey === spec.key && self.id === String(ent.id) ? self : null;
+    var ownName = own ? own.nameField : null;
+    // The renamed entity is read as the save left it - the save's input over what the
+    // scan read - and a field the save changed is the user's own edit, not a mention
+    // to fix: an alias set to the old name when name and alias are swapped is the case
+    // in point. `pending.stale` is the entity as read before the save; without it every
+    // field stays fair game.
+    var pend = own && own.pending;
+    var stale = pend && pend.stale;
+    function fresh(f) {
+      if (!pend || !pend.input || !hasOwn(pend.input, f.name)) return ent[f.name];
+      var v = pend.input[f.name];
+      // ponytail: the form posts custom_fields as { full }; a { partial, remove } write reads as stored.
+      if (f.kind === 'map') return v && v.full && typeof v.full === 'object' ? v.full : ent[f.name];
+      return v;
+    }
+    function norm(x) { return x == null ? '' : String(x); }
     var seq = {};
     function add(label, field, kind, slot, source, pos) {
       var n = (seq[label] = (seq[label] || 0) + 1);
@@ -834,9 +849,10 @@
     }
     shapes.forEach(function (f) {
       if (f.name === ownName) return;
-      var v = ent[f.name];
+      var v = fresh(f);
       if (f.kind === 'string') {
         if (typeof v !== 'string') return;
+        if (stale && norm(stale[f.name]) !== v) return;   // typed in this save
         occurrences(v, needle).forEach(function (p) {
           add(FIELD_LABEL[f.name] || f.name, f.name, 'string', null, v, p);
         });
@@ -846,6 +862,7 @@
         if (!v || !v.length) return;
         v.forEach(function (str, idx) {
           if (typeof str !== 'string') return;
+          if (stale && (stale[f.name] || []).indexOf(str) === -1) return;   // added in this save
           occurrences(str, needle).forEach(function (p) {
             add(FIELD_LABEL[f.name] || f.name, f.name, 'list', idx, str, p);
           });
@@ -856,13 +873,16 @@
       // another, and they are two different attribute names because replacing in one
       // renames a field while replacing in the other edits its contents.
       if (!v || typeof v !== 'object') return;
+      var wasMap = stale && stale[f.name] && typeof stale[f.name] === 'object' ? stale[f.name] : null;
       Object.keys(v).forEach(function (key) {
+        if (stale && !(wasMap && hasOwn(wasMap, key))) return;   // a field added in this save
         occurrences(key, needle).forEach(function (p) {
           add(CF_NAME_LABEL, 'custom_fields', 'cfname', key, key, p);
         });
         // Only strings. A custom field can hold a number or an object, and neither is
         // text a rename has any business rewriting.
         if (typeof v[key] !== 'string') return;
+        if (stale && wasMap[key] !== v[key]) return;   // a value typed in this save
         occurrences(v[key], needle).forEach(function (p) {
           add(CF_VALUE_LABEL, 'custom_fields', 'cfvalue', key, v[key], p);
         });
@@ -892,20 +912,21 @@
 
   var _active = null;
 
-  function openRun(spec, id, oldName, newName, settings) {
+  function openRun(spec, id, oldName, newName, settings, pending) {
     if (_active) { _active.focus(); return; }
-    _active = new Run(spec, id, oldName, newName, settings);
+    _active = new Run(spec, id, oldName, newName, settings, pending);
     _active.begin();
   }
 
-  function Run(spec, id, oldName, newName, settings) {
+  function Run(spec, id, oldName, newName, settings, pending) {
     this.spec = spec;
     this.id = String(id);
     this.oldName = oldName;
     this.newName = newName;
     // The entity the rename happened to, so the scan can leave its own name field out
-    // of the listing - see `scanEntity`.
-    this.origin = { typeKey: spec.key, id: String(id), nameField: spec.nameField };
+    // of the listing and read the rest as the save left it - see `scanEntity`.
+    this.origin = { typeKey: spec.key, id: String(id), nameField: spec.nameField,
+      pending: pending || null };
     this.settings = settings || DEFAULTS;
     this.warnAbove = numSetting(this.settings, 'b1WarnAbove');
     this.stopAbove = numSetting(this.settings, 'c1StopAbove');
@@ -1627,7 +1648,8 @@
     this.logText.forEach(function (l) { lines.push(l); });
     var was = this.copyBtn.textContent;
     copyToClipboard(lines.join('\n'), function (ok) {
-      self.copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = was; }, 2000);
     });
   };
@@ -2179,7 +2201,7 @@
         return null;
       }
       _stats.matched++;
-      return { spec: spec, id: String(input.id), to: to };
+      return { spec: spec, id: String(input.id), to: to, input: input };
     }
     return null;
   }
@@ -2198,6 +2220,28 @@
       }, function () { return null; });
   }
 
+  // The entity as it was a moment before the save: its name, and every searchable field,
+  // which is the stale version the save's pending changes are read against in
+  // `scanEntity`. The name alone when the shapes cannot be read, so a rename is still
+  // seen; null when the entity cannot be read at all.
+  function snapshotBefore(spec, id) {
+    return describeFields().then(function (shapes) {
+      var sel = ['id', spec.nameField];
+      (shapes[spec.key] || []).forEach(function (f) {
+        if (sel.indexOf(f.name) === -1) sel.push(f.name);
+      });
+      return gqlRequest('query ENM_Before($id: ID!) { ' + spec.one + '(id: $id) { ' +
+        sel.join(' ') + ' } }', { id: id }).then(function (data) { return data[spec.one] || null; });
+    }, function () {
+      return currentName(spec, id).then(function (name) {
+        if (name == null) return null;
+        var e = {};
+        e[spec.nameField] = name;
+        return e;
+      });
+    }).then(null, function () { return null; });
+  }
+
   // `held` is the lease that was already being held **when the mutation was posted**, not
   // one sampled now. That distinction is the whole of this function's correctness, and
   // getting it wrong is what made the plugin open a dialog for some renames and not
@@ -2211,7 +2255,7 @@
   //     response, in the same instant this would. Sampled here it looked identical to a
   //     bulk run, so the dialog silently never opened; and whether the sibling reacts at
   //     all depends on the entity, which is why it read as a property of the tag.
-  function onRename(spec, id, from, to, held) {
+  function onRename(spec, id, from, to, held, pending) {
     if (_active) {
       trace(spec.label + ' ' + id + ' renamed "' + from + '" to "' + to +
         '", but a dialog is already open; only one at a time.');
@@ -2226,8 +2270,8 @@
     }
     trace(spec.label + ' ' + id + ' renamed "' + from + '" to "' + to + '"; opening.');
     loadSettings().then(function (s) {
-      openRun(spec, id, from, to, s);
-    }, function () { openRun(spec, id, from, to, DEFAULTS); });
+      openRun(spec, id, from, to, s, pending);
+    }, function () { openRun(spec, id, from, to, DEFAULTS, pending); });
   }
 
   // **Nothing here reads the response body, and that is a decision paid for in the
@@ -2261,9 +2305,10 @@
       trace(rename.spec.update + ' for ' + rename.spec.label + ' ' + rename.id +
         ' posts ' + rename.spec.nameField + ' as "' + rename.to + '"' +
         (held ? '; ' + held.owner + ' already holds a lease (' + held.label + ')' : '') + '.');
-      var before = null;
-      return currentName(rename.spec, rename.id).then(function (was) {
-        before = was;
+      var before = null, stale = null;
+      return snapshotBefore(rename.spec, rename.id).then(function (snap) {
+        stale = snap;
+        before = snap ? snap[rename.spec.nameField] : null;
         return orig(input, init);
       }).then(function (resp) {
         // Only after the write is known to have landed, and only if the name actually
@@ -2289,7 +2334,8 @@
         // absence of a GraphQL error in a body five plugins are all cloning at once.
         currentName(rename.spec, rename.id).then(function (now) {
           if (now === rename.to) {
-            onRename(rename.spec, rename.id, before, rename.to, held);
+            onRename(rename.spec, rename.id, before, rename.to, held,
+              { input: rename.input, stale: stale });
             return;
           }
           trace(rename.spec.label + ' ' + rename.id + ': the save came back but it is ' +

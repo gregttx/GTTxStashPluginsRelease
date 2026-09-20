@@ -38,7 +38,7 @@
   var pickControl = C.pickControl, findEditContainer = C.findEditContainer,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
@@ -69,7 +69,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '2.2.3';
+  var PLUGIN_VERSION = '2.2.4';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -1278,7 +1278,8 @@
     var self = this;
     var orig = this.copyBtn.textContent;
     copyToClipboard(this.lines.join('\n'), function (ok) {
-      self.copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = orig; }, FLASH_MS);
     });
   };
@@ -2146,6 +2147,7 @@
   }
 
   function flash(btn, text) {
+    holdWidth(btn);
     btn.textContent = text;
     setTimeout(function () { btn.textContent = btn._tbcLabel; }, FLASH_MS);
   }
@@ -2170,7 +2172,9 @@
     btn.textContent = 'Working...';
     copyBundle(rt.type, rt.id).then(function (r) {
       btn.disabled = false;
-      flash(btn, r.count ? ('Copied ' + plural(r.count, 'tag')) : 'No tags');
+      // A tick and the count: "Copied 12 tags" is three times the width of the icon
+      // caption it replaces, and the row moved under the pointer for the flash.
+      flash(btn, r.count ? ('\u2713 ' + r.count) : 'None');
     }, function (err) {
       btn.disabled = false;
       btn.textContent = btn._tbcLabel;

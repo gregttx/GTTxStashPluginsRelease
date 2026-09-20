@@ -24,7 +24,7 @@
     }
     return;
   }
-  var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
+  var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen,
@@ -75,7 +75,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.1.2';
+  var PLUGIN_VERSION      = '4.1.3';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -2519,7 +2519,8 @@
     var text = this.lines.join('\n');
     var self = this;
     function done(ok) {
-      self.copyBtn.textContent = ok ? 'Copied' : 'Copy failed';
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
     }
     var nav = window.navigator;
@@ -3156,9 +3157,10 @@
       var orig = btn.textContent;
 
       // Shows each message in turn and then restores the caption. Splitting the
-      // messages keeps every one of them shorter than the button's own label, so the
-      // button never changes width. The token makes a later click supersede a running
-      // sequence instead of the two fighting over the caption.
+      // messages keeps every one of them shorter than the button's own label, and
+      // `holdWidth` below is what keeps a shorter one from narrowing it. The token makes
+      // a later click supersede a running sequence instead of the two fighting over the
+      // caption.
       function flash() {
         var texts = Array.prototype.slice.call(arguments);
         var token = ++_sceneFlashToken;
@@ -3179,6 +3181,7 @@
       }
 
       btn.disabled = true;
+      holdWidth(btn);
 
       if (stagingActive()) {
         btn.textContent = 'Adding...';

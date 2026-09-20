@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.9.6 (`549fc1e`) | 2026-09-20 | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |
+| 1.9.5 (`ae8cf25`) | 2026-09-19 | Core 2.2.0, PropagateTagsAndPerformers 5.1.3, SceneVariants 1.9.5: a save settles before the propagate offer |
+| 1.9.4 (`e43382a`) | 2026-09-18 | SceneVariants 1.9.4: the review listing keeps six lines however the log grows |
+| 1.9.3 (`4469263`) | 2026-09-18 | SceneVariants 1.9.3: Proceed settles once every migrated scene is written |
+| 1.9.2 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 1.9.1 (`15ad7c6`) | 2026-09-18 | SceneVariants 1.9.1: the drift score is green at 1 as well as 0 |
 | 1.9.0 (`113c143`) | 2026-09-18 | SceneVariants 1.9.0: the drift score is per variant, and Partial-length reads Partial-duration |
 | 1.8.4 (`907b83f`) | 2026-09-18 | SceneVariants 1.8.4: the dimension's value reads Full-duration, not Full-length |

@@ -34,9 +34,9 @@
     return;
   }
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
-    coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
+    coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
     entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '4.4.2';
+  var PLUGIN_VERSION = '5.2.2';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -134,6 +134,8 @@
   // from the run dialog's own footer and from the button that takes over the Paths
   // settings row - both places a user is already looking at what it edits.
   var TASK_PATHS = 'Path Settings...';
+  var TASK_BUTTONS = 'Manual Buttons Settings...';
+  var TASK_AUTO = 'Automatic Propagation and Depropagate Assist...';
   // On a constant because `setState` swaps it for the reason the button is unavailable
   // and has to be able to put it back.
   var PATHS_BTN_TIP = 'Choose which of the thirteen paths run. Saving there changes ' +
@@ -751,8 +753,8 @@
   // the declaration order is gone by the time Stash has parsed it, and the settings
   // page renders the keys sorted alphabetically. The blocks are
   //
-  //   a1-a4  what starts a run: the buttons, the staging flag directly under them,
-  //          then the two automatic modes
+  //   a1-a3  what starts a run: the buttons, the staging flag (dialog-only, set
+  //          where the buttons are), then the two automatic modes as one line
   //   b1-b5  paths into Scenes
   //   c1-c2  paths into Galleries
   //   d1     paths into Images
@@ -776,15 +778,22 @@
   // default here: these writes are library-wide and opting in per path is how the
   // user says which relationships they have actually thought about.
   var DEFAULTS = {
-    a1ShowManualButtons: false,
+    // The twenty-four manual buttons as one line - see the block under `pathCommon`.
+    // `a1ShowManualButtons`, the one switch this replaced, is read only by the
+    // migration in `settingsFrom` and retired by the buttons dialog's first Save.
+    a1ManualButtons: '',
     // Inverted on purpose, the one setting here that is. The behaviour we want by
     // default is staging, so it has to be what "off" selects - otherwise the box
     // would read off while acting on, and the first click on it would send true
     // rather than false. Any new boolean whose desired default is "on" needs the
     // same treatment; a *destructive* default needs the opposite.
+    // Dialog-only: no row in the yml; set in Manual Buttons Settings, beside the
+    // buttons it is about, and stored under this key by that dialog's Save.
     a2SaveImmediately: false,
-    a3AutoOnTargetUpdate: false,
-    a4AutoOnSourceUpdate: false,
+    // The two automatic modes as one line - see `parseAuto`. `a3AutoOnTargetUpdate`
+    // and `a4AutoOnSourceUpdate`, the two switches this replaced, are read only by
+    // the migration in `settingsFrom` and retired by the auto dialog's first Save.
+    a3AutoPropagation: '',
 
     // The thirteen path toggles and the two "common tags only" modifiers, as one
     // line. See the block below for why they are a string rather than fifteen rows.
@@ -915,6 +924,136 @@
   function pathOn(s, path) { return pathMode(s, path) !== PATH_OFF; }
 
   function pathCommon(s, path) { return pathMode(s, path) === PATH_COMMON; }
+
+  // ── The manual buttons setting ────────────────────────────────────────────
+  //
+  // Twenty-four buttons - one on the Edit tab of a target for each of the thirteen
+  // paths into it, one on the source's own page for each of the eleven paths that
+  // have one - and a switch each, as one line for the reason `b1Paths` is one: a
+  // Stash setting has no repeated group, and twenty-four BOOLEAN rows would bury the
+  // page. The token is the side and the path id, `target:tags:performer>scene`, so
+  // the vocabulary is the one `PATHS` already has. Read forgivingly, written back
+  // as only the buttons that are on, in page order; a button nobody names is off.
+  var BUTTON_PAIR = /\b(target|source)\s*:\s*([A-Za-z]+:[A-Za-z]+>[A-Za-z]+)/gi;
+  var BUTTON_PAGES = ['scene', 'gallery', 'image', 'group', 'performer', 'studio'];
+
+  // Page by page rather than in pipeline order: what the dialog lists and the row
+  // shows is "which buttons are on which page", and the run order means nothing to
+  // a button.
+  function manualButtons() {
+    var out = [];
+    BUTTON_PAGES.forEach(function (page) {
+      PATHS.forEach(function (p) {
+        if (p.target === page) out.push({ key: 'target:' + p.id, side: 'target', path: p });
+      });
+    });
+    BUTTON_PAGES.forEach(function (page) {
+      PATHS.forEach(function (p) {
+        if (p.sourceType === page && hasOwn(SOURCE_BUTTON_LABELS, p.id)) {
+          out.push({ key: 'source:' + p.id, side: 'source', path: p });
+        }
+      });
+    });
+    return out;
+  }
+
+  function parseButtons(raw) {
+    var on = {}, text = String(raw == null ? '' : raw), m;
+    BUTTON_PAIR.lastIndex = 0;
+    while ((m = BUTTON_PAIR.exec(text)) !== null) {
+      var p = pathById(m[2].toLowerCase()), side = m[1].toLowerCase();
+      if (!p || (side === 'source' && !hasOwn(SOURCE_BUTTON_LABELS, p.id))) continue;
+      on[side + ':' + p.id] = true;
+    }
+    return on;
+  }
+
+  function formatButtons(on) {
+    return manualButtons().filter(function (b) { return on && on[b.key]; })
+      .map(function (b) { return b.key; }).join(', ');
+  }
+
+  // The only readers, like `pathOn` for the paths.
+  function buttonOn(s, side, path) {
+    return !!((s && s.buttons) || {})[side + ':' + path.id];
+  }
+
+  function anyButtonOn(s) {
+    var on = (s && s.buttons) || {};
+    for (var k in on) if (hasOwn(on, k) && on[k]) return true;
+    return false;
+  }
+
+  // Where a button lives, in words - `Scene Edit tab`, `Performer page` - and the
+  // caption it wears there, the same strings the button itself is drawn with. Two
+  // functions rather than one joined string: the dialog and the settings row group
+  // by the first and list the second, and a caption carrying its page six times
+  // over was what made both unreadable.
+  function buttonView(b) {
+    return b.side === 'target'
+      ? TARGETS[b.path.target].label + ' Edit tab'
+      : SOURCES[b.path.sourceType].label + ' page';
+  }
+
+  function buttonCaption(b, s) {
+    return b.side === 'target' ? buttonLabel(b.path, s) : sourceButtonLabel(b.path, s);
+  }
+
+  // The buttons grouped by where they live, in `manualButtons()` order: one entry
+  // per side and page, carrying its buttons.
+  function buttonViews() {
+    var out = [], byView = {};
+    manualButtons().forEach(function (b) {
+      var view = buttonView(b);
+      if (!byView[view]) {
+        byView[view] = { side: b.side, view: view, buttons: [] };
+        out.push(byView[view]);
+      }
+      byView[view].buttons.push(b);
+    });
+    return out;
+  }
+
+  // ── The two automatic modes as one setting ────────────────────────────────
+  //
+  // `target` and `source`, the two reactions `reactToTargets` and `reactToSources`
+  // gate on, as one line in the same shape as the buttons: read forgivingly,
+  // written back as only the modes that are on. Each had a BOOLEAN row of its own
+  // on Stash's settings page; the pair is edited in the Automatic Propagation and Depropagate Assist
+  // dialog now, and the old keys are read by the migration in `settingsFrom` only.
+  var AUTO_MODES = ['target', 'source', 'silent', 'depropagate'];
+  var AUTO_ROWS = [
+    ['target', 'Auto Propagate when the Target is Saved',
+      'Whenever Stash saves a scene, gallery, image or group, every enabled path that ' +
+      'copies into it runs on that one entity. One small read per save, so it is the ' +
+      'cheaper of the two.'],
+    ['source', 'Auto Propagate when the Source is Saved',
+      'Whenever Stash saves an entity, its tags or performers are pushed into every ' +
+      'entity an enabled path copies them to. This one fans out: saving a popular ' +
+      'performer can rewrite every scene they appear in.'],
+    // The two options below qualify the two modes above. `silent` is the one that
+    // makes a reaction write with no plan in front of it, which is why it is off
+    // until asked for and greyed out while there is no reaction for it to silence.
+    ['silent', 'Silent Auto-propagation',
+      'On, a reaction writes the moment Stash saves. Off, a dialog lists what the ' +
+      'save would add - every line ticked - and nothing is written until you press OK.'],
+    ['depropagate', 'Suggest Tag Auto-removal - Depropagate assist',
+      'When a performer, studio or group is removed from a scene on an active path, ' +
+      'offer to remove the tags it brought that no other related entity of that scene ' +
+      'carries. Listed unticked; only what you tick is removed, and only on OK.'],
+  ];
+
+  function parseAuto(raw) {
+    var on = {}, text = String(raw == null ? '' : raw).toLowerCase();
+    AUTO_MODES.forEach(function (m) {
+      if (new RegExp('\\b' + m + '\\b').test(text)) on[m] = true;
+    });
+    return on;
+  }
+
+  function formatAuto(on) {
+    return AUTO_MODES.filter(function (m) { return on && on[m]; }).join(', ');
+  }
 
   // The setting in words rather than in tokens, for the settings row: `Tags:
   // Performers → Scenes (Common tags only)`, one entry per enabled path and every one
@@ -1419,6 +1558,24 @@
       migrateLegacyPaths(s.b1Paths);
     }
     s.paths = parsePaths(s.b1Paths);
+    // Show Manual Buttons was one switch for every button: on, every button starts on.
+    // Read-side only - the dialog's first Save writes the old key false in the same
+    // write, which is what stops a saved "none" coming back as "all".
+    if (!String(s.a1ManualButtons).replace(/^\s+|\s+$/g, '') && raw.a1ShowManualButtons) {
+      var every = {};
+      manualButtons().forEach(function (b) { every[b.key] = true; });
+      s.a1ManualButtons = formatButtons(every);
+    }
+    s.buttons = parseButtons(s.a1ManualButtons);
+    // The two automatic modes had a switch each: on, that mode starts on. Read-side
+    // only, and retired by the auto dialog's first Save, for the reason above.
+    if (!String(s.a3AutoPropagation).replace(/^\s+|\s+$/g, '')) {
+      var was = {};
+      if (raw.a3AutoOnTargetUpdate) was.target = true;
+      if (raw.a4AutoOnSourceUpdate) was.source = true;
+      s.a3AutoPropagation = formatAuto(was);
+    }
+    s.auto = parseAuto(s.a3AutoPropagation);
     // The seed goes first and the import may then replace what it seeded - which is
     // what makes a sibling's own field name win while the default still lands for
     // everyone else. Both write the same key, so they are merged into **one**
@@ -1506,6 +1663,25 @@
     // of the column's tracks, since a row here is two cells and half a gap would sit
     // under the labels only.
     '.ptp2re-path-gap{grid-column:1/-1;height:.6rem;}' +
+    // The buttons dialog: two equal columns side by side with a bar between, never
+    // one under the other - `1fr 1fr` rather than the paths dialog's wrapping flex,
+    // because two `max-content` columns of captions wrapped in the narrow modal and
+    // the second landed under the first, past the fold. Inside each, a box per page
+    // under a head of its own, with a rule between boxes.
+    '.ptp2re-btncols{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;margin:.5rem 0;}' +
+    '.ptp2re-btncol{min-width:0;}' +
+    '.ptp2re-btncol+.ptp2re-btncol{border-left:1px solid #394b59;padding-left:1rem;}' +
+    '.ptp2re-btncol-head{color:#d6dee4;font-size:1rem;font-weight:600;margin-bottom:.5rem;' +
+    'text-align:center;}' +
+    '.ptp2re-btngroup{border-top:1px solid #394b59;padding:.4rem 0 .5rem;}' +
+    '.ptp2re-btngroup-head{color:#c9d3db;font-size:.95rem;font-weight:600;margin-bottom:.3rem;}' +
+    // Inside a box the caption column takes what is left and wraps - the longest
+    // caption is two lines in the narrow modal - and the toggle column is at the
+    // column's right edge, so every On/Off lines up down the column rather than
+    // sitting wherever its caption ends. Indented a little under the head, so the
+    // head reads as the head and the rows as its rows.
+    '.ptp2re-btngroup .ptp2re-paths-col{grid-template-columns:minmax(0,1fr) max-content;' +
+    'padding-left:.6rem;}' +
     '.ptp2re-path-name{color:#d6dee4;font-size:.9rem;}' +
     // The per-path toggle. Everything visual comes from Bootstrap's own `btn btn-sm`
     // plus the variant the paint swaps, so this rule only has to stop thirteen buttons
@@ -1533,6 +1709,14 @@
     '.ptp2re-opt input{accent-color:#ffc107;margin-top:.2rem;flex:0 0 auto;}' +
     '.ptp2re-opt-off{opacity:.6;cursor:default;}' +
     '.ptp2re-optnote{color:#7d8f9c;font-size:.8rem;margin:0 0 .25rem 1.4rem;}' +
+    // The pick dialog's lines: a box and a plan line, the line in the log's own face.
+    // Between the settings dialogs' width and the run dialog's: a line here names an
+    // entity, a tag and where it came from, and a few of them should not wrap.
+    '.ptp2re-modal.ptp2re-mid{width:min(76rem,94vw);}' +
+    '.ptp2re-pick{display:flex;flex-direction:column;gap:.15rem;min-height:8rem;}' +
+    '.ptp2re-pick-row{display:flex;align-items:flex-start;gap:.45rem;margin:0;' +
+    'font-family:monospace;font-size:.8rem;line-height:1.35;cursor:pointer;}' +
+    '.ptp2re-pick-row input{accent-color:#ffc107;margin-top:.15rem;flex:0 0 auto;}' +
     // ── The diagram view ────────────────────────────────────────────────────
     //
     // Everything on the canvas is absolutely placed from `diagramGeometry`, in the
@@ -1608,6 +1792,11 @@
     // plugin writes along. The mode in brackets stays grey - it qualifies the line
     // rather than being a second thing that is on.
     '.ptp2re-pathstring-on{color:#ffb648;}' +
+    // The buttons row: a column per side, each a line per page, wrapping rather than
+    // growing - the three-column list overflowed the row with twenty-four captions.
+    '.ptp2re-btnstring{display:grid;grid-template-columns:1fr 1fr;gap:.1rem 1.5rem;}' +
+    '.ptp2re-btnstring>div{min-width:0;}' +
+    '.ptp2re-btnstring-head{color:#7d8f9c;font-size:.8rem;}' +
     '.ptp2re-pathstring-mode{color:#a7b6c2;font-size:.8rem;}' +
     // The row's own "I could not read this" line. The stale banner's red, because it
     // is the same kind of message: something is configured and not in force.
@@ -1697,14 +1886,6 @@
     // of a react-bootstrap Form.Switch, which is what it renders today, and
     // `accent-color` covers a plain checkbox if that ever changes. Whichever is not
     // in use costs nothing.
-    '#plugin-PropagateTagsAndPerformers-a2SaveImmediately,' +
-    '#plugin-PropagateTagsAndPerformers-a3AutoOnTargetUpdate,' +
-    '#plugin-PropagateTagsAndPerformers-a4AutoOnSourceUpdate{accent-color:#ffc107;}' +
-    '#plugin-PropagateTagsAndPerformers-a2SaveImmediately:checked~.custom-control-label::before,' +
-    '#plugin-PropagateTagsAndPerformers-a3AutoOnTargetUpdate:checked~.custom-control-label::before,' +
-    '#plugin-PropagateTagsAndPerformers-a4AutoOnSourceUpdate:checked~' +
-    '.custom-control-label::before' +
-    '{background-color:#ffc107;border-color:#ffc107;}' +
     '#plugin-PropagateTagsAndPerformers-g1LogToConsole{accent-color:#17a2b8;}' +
     '#plugin-PropagateTagsAndPerformers-g1LogToConsole:checked~.custom-control-label::before' +
     '{background-color:#17a2b8;border-color:#17a2b8;}' +
@@ -2417,6 +2598,14 @@
   // is now opened from *inside* the run dialog's footer: a run holding `_active` must
   // not stop the editor opening over it, and the editor closing must not clear the run.
   var _paths = null;
+  // The buttons dialog and the auto dialog get one each, for the same reason.
+  var _buttons = null;
+  var _auto = null;
+  // The pick dialog a reaction opens - the review with Silent off, or the removal
+  // offer - one at a time, queued: one save can raise both, and a source save can
+  // raise one per target type.
+  var _pick = null;
+  var _pickQueue = Promise.resolve();
 
   // `scope` is what a manual button's dialog adds: `{ pathId, target, ids }` for a
   // target-side button (this one entity) or `{ pathId, sourceId }` for a source-side
@@ -2429,6 +2618,18 @@
       if (_paths) { _paths.focus(); return; }
       _paths = new PathsDialog(taskName);
       _paths.build();
+      return;
+    }
+    if (taskName === TASK_BUTTONS) {
+      if (_buttons) { _buttons.focus(); return; }
+      _buttons = new ButtonsDialog(taskName);
+      _buttons.build();
+      return;
+    }
+    if (taskName === TASK_AUTO) {
+      if (_auto) { _auto.focus(); return; }
+      _auto = new AutoDialog(taskName);
+      _auto.build();
       return;
     }
     if (_active) { _active.focus(); return; }
@@ -2716,6 +2917,27 @@
   // Only the tail is rendered: a first run on a large library can plan six figures
   // of changes, and one node per change is a page that stops responding. The full
   // log stays in `lines`, which is what Copy log exports.
+  // A plan line's parts as nodes: a link where the part names a page, and the shared
+  // card on every name - the entity a change lands on, the tag or performer, and the
+  // entity it came from. Shared by the run log and the pick dialogs, so a line reads
+  // the same wherever it is shown.
+  function appendParts(node, parts) {
+    parts.forEach(function (seg) {
+      var span;
+      if (seg.href) {
+        span = el('a', 'ptp2re-elink', seg.text);
+        span.href = seg.href;
+        span.target = linkTarget();
+        span.rel = 'noopener noreferrer';
+      } else {
+        span = el('span', seg.ent ? 'ptp2re-hover' : null, seg.text);
+      }
+      if (seg.title) span.title = seg.title;
+      if (seg.ent) entityTip(span, seg.ent.type, seg.ent.id);
+      node.appendChild(span);
+    });
+  }
+
   Run.prototype.flush = function () {
     if (!this.pending.length) return;
     var pending = this.pending;
@@ -2731,24 +2953,7 @@
       // none anywhere else.
       if (p.parts) {
         node.appendChild(el('span', null, '[' + p.kind + '] '));
-        p.parts.forEach(function (seg) {
-          var span;
-          if (seg.href) {
-            span = el('a', 'ptp2re-elink', seg.text);
-            span.href = seg.href;
-            span.target = linkTarget();
-            span.rel = 'noopener noreferrer';
-          } else {
-            span = el('span', seg.ent ? 'ptp2re-hover' : null, seg.text);
-          }
-          if (seg.title) span.title = seg.title;
-          // Every name the log draws opens the same card: the entity a change lands on,
-          // the tag or performer being added, and the entity it came from. This was a
-          // card of the dialog's own until the siblings had one - same box, same
-          // placement arithmetic, same by-id read, in one place instead of two.
-          if (seg.ent) entityTip(span, seg.ent.type, seg.ent.id);
-          node.appendChild(span);
-        }, this);
+        appendParts(node, p.parts);
       }
       this.logEl.appendChild(node);
     }, this);
@@ -3875,7 +4080,8 @@
   // Says what happened on the button that was pressed, and puts its caption back.
   function copyFeedback(btn, label) {
     return function (ok) {
-      btn.textContent = ok ? 'Copied' : 'Copy failed';
+      holdWidth(btn);
+      btn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { btn.textContent = label; }, 2000);
     };
   }
@@ -3911,6 +4117,9 @@
       // and both listen on `document`, so without this the key would close both. The
       // editor is always the one on top while it is open.
       if (_paths && _paths !== run) return;
+      if (_buttons && _buttons !== run) return;
+      if (_auto && _auto !== run) return;
+      if (_pick && _pick !== run) return;
       var b = escapeButton(run);
       if (!b) return;
       if (ev.preventDefault) ev.preventDefault();
@@ -4234,6 +4443,19 @@
     PATHS.forEach(function (p) { self.toggles[p.id].paint(); });
     if (this.diaBoxes) this.paintDiagram();
     this.refreshSave();
+    this.refreshBulk();
+  };
+
+  // A bulk button that would change nothing is unavailable, and says why.
+  PathsDialog.prototype.refreshBulk = function () {
+    var self = this;
+    (this.bulkBtns || []).forEach(function (b) {
+      var idle = PATHS.every(function (p) {
+        return self.modes[p.id] === (pathStates(p).indexOf(b._mode) >= 0 ? b._mode : PATH_ON);
+      });
+      b.disabled = idle;
+      b.title = b._base + (idle ? ' Every path is already this way, so it has nothing to do.' : '');
+    });
   };
 
   // ── The diagram view ──────────────────────────────────────────────────────
@@ -4535,6 +4757,8 @@
         (pair[0] === PATH_OFF ? 'btn-secondary' : PLUGIN_BTN_VARIANT), pair[1]);
       b.type = 'button';
       b.title = pair[2];
+      b._base = pair[2];
+      b._mode = pair[0];
       b.addEventListener('click', function (e) {
         if (e && e.preventDefault) e.preventDefault();
         self.setAll(pair[0]);
@@ -4629,6 +4853,7 @@
     var self = this;
     PATHS.forEach(function (p) { self.toggles[p.id].el.disabled = !on; });
     (this.bulkBtns || []).forEach(function (b) { b.disabled = !on; });
+    if (on) this.refreshBulk();
     // Never re-enabled past the sibling being absent: `enable(true)` is "the settings
     // have landed", not "everything here is answerable".
     if (this.skipBox) this.skipBox.disabled = !on || !this.skipAvailable;
@@ -4809,6 +5034,624 @@
     if (_paths === this) _paths = null;
     // Whatever was saved changes which manual buttons belong on the page behind this.
     invalidateButtonProbes();
+  };
+
+  // ── The manual buttons dialog ─────────────────────────────────────────────
+  //
+  // One toggle per manual button, twenty-four in all, and the Save Immediately switch
+  // beside them: everything that decides what a page shows, in one place, where Show
+  // Manual Buttons used to be one switch for all of them and Save Immediately a row on
+  // its own. The toggles are the Path Settings toggles' shape - the button carries its
+  // state and takes the other one on a click - and the two columns are the two sides a
+  // button can be on: pulling in, on the target's Edit tab; pushing out, on the
+  // source's own page.
+  function ButtonsDialog(taskName) {
+    this.taskName = taskName;
+    this.on = {};
+    this.immediate = false;
+    this.settings = null;
+    this.saving = false;
+    this.stale = false;
+    this.stored = null;   // the buttons as read, formatted; null until they have been
+    this.storedImmediate = false;
+    this.toggles = [];
+    this.bulkBtns = [];
+  }
+
+  ButtonsDialog.prototype.refreshSave = function () {
+    if (!this.saveBtn) return;
+    this.saveBtn.disabled = this.saving || this.stale || this.stored === null ||
+      (this.stored === formatButtons(this.on) && this.immediate === this.storedImmediate);
+  };
+
+  ButtonsDialog.prototype.panel = function () {
+    var self = this, s = this.settings;
+    var wrap = el('div', 'ptp2re-btncols');
+    var cols = {};
+    [['target', 'On target entity Edit tabs',
+      'The Edit tab of a scene, gallery, image or group. A button there pulls tags or ' +
+      'performers into the entity in front of you - one per path that copies into it.'],
+     ['source', 'On source entity pages',
+      'The detail page of the entity a path reads from. A button there pushes its tags ' +
+      'or performers out to everything the path reaches, and always reviews first. The ' +
+      'two marker paths have none: a marker has no page of its own.']].forEach(function (c) {
+      var col = el('div', 'ptp2re-btncol');
+      var head = el('div', 'ptp2re-btncol-head', c[1]);
+      head.title = c[2];
+      col.appendChild(head);
+      wrap.appendChild(col);
+      cols[c[0]] = col;
+    });
+    this.toggles = [];
+    // A box per page, and a second box for the page where some of its paths are off:
+    // a button whose path is off is a switch that does nothing yet, and it says so in
+    // a box of its own rather than being hidden - hiding it would make the path
+    // setting look like a buttons setting. The caption alone names each button; the
+    // page is in the box's head, once.
+    buttonViews().forEach(function (v) {
+      [true, false].forEach(function (live) {
+        var here = v.buttons.filter(function (b) { return pathOn(s, b.path) === live; });
+        if (!here.length) return;
+        var group = el('div', 'ptp2re-btngroup' + (live ? '' : ' ptp2re-opt-off'));
+        var head = el('div', 'ptp2re-btngroup-head', v.view + ' (' +
+          (live ? 'Active' : 'Inactive') + (here.length === 1 ? ' path)' : ' paths)'));
+        head.title = live
+          ? 'On in Path Settings: each button here is drawn once it is switched on.'
+          : 'Off in Path Settings: a button here does not appear until its path is on.';
+        group.appendChild(head);
+        var grid = el('div', 'ptp2re-paths-col');
+        group.appendChild(grid);
+        here.forEach(function (b) {
+          var row = el('div', 'ptp2re-path-row');
+          var name = el('span', 'ptp2re-path-name', buttonCaption(b, s));
+          name.title = pathTip(b.path) + (live ? ''
+            : ' Its path is off in Path Settings, so this button does not appear until the path is on.');
+          row.appendChild(name);
+          var btn = el('button', null);
+          btn.type = 'button';
+          function paint() {
+            var on = !!self.on[b.key];
+            btn.textContent = on ? PATH_LABEL[PATH_ON] : PATH_LABEL[PATH_OFF];
+            btn.className = 'btn btn-sm ptp2re-toggle ' + (on ? PLUGIN_BTN_VARIANT : 'btn-secondary');
+            btn.title = 'Click to ' + (on ? 'hide' : 'show') + ' this button.';
+          }
+          paint();
+          btn.addEventListener('click', function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            self.on[b.key] = !self.on[b.key];
+            paint();
+            self.refreshSave();
+          });
+          row.appendChild(btn);
+          grid.appendChild(row);
+          self.toggles.push({ el: btn, paint: paint });
+        });
+        cols[v.side].appendChild(group);
+      });
+    });
+    return wrap;
+  };
+
+  ButtonsDialog.prototype.repaint = function () {
+    this.toggles.forEach(function (t) { t.paint(); });
+    this.refreshSave();
+    this.refreshBulk();
+  };
+
+  ButtonsDialog.prototype.refreshBulk = function () {
+    var self = this;
+    (this.bulkBtns || []).forEach(function (b) {
+      var idle = manualButtons().every(function (m) { return !!self.on[m.key] === b._on; });
+      b.disabled = idle;
+      b.title = b._base + (idle ? ' Every button is already this way, so it has nothing to do.' : '');
+    });
+  };
+
+  ButtonsDialog.prototype.setAll = function (on) {
+    var self = this;
+    manualButtons().forEach(function (b) { self.on[b.key] = on; });
+    this.repaint();
+  };
+
+  ButtonsDialog.prototype.enable = function (on) {
+    this.toggles.forEach(function (t) { t.el.disabled = !on; });
+    this.bulkBtns.forEach(function (b) { b.disabled = !on; });
+    if (on) this.refreshBulk();
+    if (this.immediateBox) this.immediateBox.disabled = !on;
+  };
+
+  ButtonsDialog.prototype.bulkRow = function () {
+    var self = this;
+    var row = el('div', 'ptp2re-paths-bulk');
+    this.bulkBtns = [
+      [false, 'Show None', 'Switch every button off. Nothing is stored until you press Save.'],
+      [true, 'Show All', 'Switch every button on. Nothing is stored until you press Save.'],
+    ].map(function (t) {
+      var b = el('button', 'btn btn-sm ' + (t[0] ? PLUGIN_BTN_VARIANT : 'btn-secondary'), t[1]);
+      b.type = 'button';
+      b.title = t[2];
+      b._base = t[2];
+      b._on = t[0];
+      b.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        self.setAll(t[0]);
+      });
+      row.appendChild(b);
+      return b;
+    });
+    return row;
+  };
+
+  // `a2SaveImmediately` had a row on Stash's settings page and does not any more: it
+  // is about the buttons and nothing else, so it is set where the buttons are. Stored
+  // under its old key, beside the buttons, in the one write Save makes.
+  ButtonsDialog.prototype.immediateRow = function () {
+    var self = this;
+    var label = el('label', 'ptp2re-opt');
+    var box = el('input', null);
+    box.type = 'checkbox';
+    box.addEventListener('change', function () {
+      self.immediate = !!box.checked;
+      self.refreshSave();
+    });
+    label.appendChild(box);
+    label.appendChild(el('span', null, 'Save Immediately'));
+    label.title = 'Make the Edit-tab buttons review in a dialog instead of staging in the form. ' +
+      'Off, a click stages the tags or performers in the open edit form, so you can check ' +
+      'them and press Save yourself. On - or on a Stash that cannot stage - a click opens a ' +
+      'dialog listing every change first, and nothing is written until you press Proceed. ' +
+      'Only the Edit-tab buttons: a button on a source\'s own page always reviews, and the ' +
+      'automatic modes always save.';
+    var note = el('div', 'ptp2re-optnote', 'Off, an Edit-tab button stages what it would ' +
+      'add in the form for Stash\'s own Save; on, it opens the review dialog. A button on ' +
+      'the source\'s own page always opens the dialog.');
+    this.immediateBox = box;
+    var wrap = el('div', null);
+    wrap.appendChild(label);
+    wrap.appendChild(note);
+    return wrap;
+  };
+
+  ButtonsDialog.prototype.build = function () {
+    injectStyle();
+    var self = this;
+
+    this.backdrop = el('div', 'ptp2re-backdrop');
+    this.modal = el('div', 'ptp2re-modal ptp2re-narrow');
+    this.backdrop.appendChild(this.modal);
+
+    var head = el('div', 'ptp2re-head');
+    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
+    head.appendChild(el('div', 'ptp2re-warn',
+      'A button switched on here is drawn on its page whenever its path is on in Path ' +
+      'Settings and a click would add something. Off is what a button does until you say ' +
+      'otherwise.'));
+    head.appendChild(el('div', 'ptp2re-legend',
+      'A button on an Edit tab pulls tags or performers into the entity in front of you; ' +
+      'one on a source\'s own page pushes its tags or performers out to everything the path ' +
+      'reaches, and always reviews first. The two marker paths have no source button: a ' +
+      'marker has no page of its own.'));
+    this.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
+    head.appendChild(this.noteEl);
+    this.modal.appendChild(head);
+
+    this.body = el('div', 'ptp2re-pathsbody');
+    this.modal.appendChild(this.body);
+
+    var foot = el('div', 'ptp2re-foot');
+    // Amber: this is the button that writes. See "one colour for a plugin wrote this".
+    this.saveBtn   = button('Save', 'ptp2re-proceed');
+    this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.cancelBtn = button('Cancel', 'ptp2re-cancel');
+    this.saveBtn.disabled = true;
+    this.saveBtn.addEventListener('click', function () { self.save(); });
+    this.cancelBtn.addEventListener('click', function () { self.close(); });
+    foot.appendChild(this.saveBtn);
+    foot.appendChild(this.cancelBtn);
+    foot.appendChild(this.bulkRow());
+    this.enable(false);
+    this.modal.appendChild(foot);
+
+    wireEscape(this);
+    document.body.appendChild(this.backdrop);
+    this.checkVersion();
+
+    loadSettings().then(function (loaded) {
+      if (_buttons !== self) return;
+      var s = loaded.settings;
+      self.settings = s;
+      // Built once the settings are in: four captions name the aggregation their
+      // path is set to, and a row drawn before that is a row redrawn.
+      self.body.appendChild(self.panel());
+      self.body.appendChild(self.immediateRow());
+      manualButtons().forEach(function (b) { self.on[b.key] = !!s.buttons[b.key]; });
+      self.stored = formatButtons(self.on);
+      self.storedImmediate = !!s.a2SaveImmediately;
+      self.immediate = self.storedImmediate;
+      self.immediateBox.checked = self.immediate;
+      self.repaint();
+      self.enable(true);
+      self.noteEl.textContent = '';
+    }, function (e) {
+      if (_buttons !== self) return;
+      self.noteEl.textContent = 'The current setting could not be read (' +
+        (e && e.message ? e.message : e) + '). Saving from here would replace it with ' +
+        'whatever is selected, so Save stays disabled - close this and try again.';
+    });
+  };
+
+  // Blocks Save for the reason the path editor's does: Save rewrites the whole
+  // string from the `what` this script knows. Shared with the auto dialog; `live`
+  // says whether the dialog is still the open one when the answer lands.
+  function staleGate(dlg, live, what) {
+    return checkInstalledVersion(function (installed) {
+      if (!live()) return;
+      dlg.stale = true;
+      dlg.saveBtn.disabled = true;
+      dlg.noteEl.parentNode.insertBefore(el('div', 'ptp2re-stale',
+        '⚠ This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
+        ', but ' + installed + ' is installed. Reload the page (F5); if this warning ' +
+        'comes back, hard-refresh with Ctrl+Shift+R (⌘+Shift+R on a Mac). Save stays ' +
+        'disabled until the script matches: it would rewrite the whole setting from the ' +
+        what + ' this older script knows, dropping anything the installed one has added.'),
+        dlg.noteEl);
+    });
+  }
+
+  ButtonsDialog.prototype.checkVersion = function () {
+    var self = this;
+    return staleGate(this, function () { return _buttons === self; }, 'buttons');
+  };
+
+  ButtonsDialog.prototype.focus = PathsDialog.prototype.focus;
+
+  ButtonsDialog.prototype.save = function () {
+    if (this.saving || this.saveBtn.disabled) return;
+    var self = this;
+    this.saving = true;
+    this.saveBtn.disabled = true;
+    this.cancelBtn.disabled = true;
+    this.enable(false);
+    this.noteEl.textContent = 'Saving...';
+    // The old master switch goes false in the same write: it is what the migration
+    // reads while this setting is empty, and a Show None saved over it would otherwise
+    // come back as Show All on the next load.
+    writeOwnSettings({
+      a1ManualButtons: formatButtons(this.on),
+      a2SaveImmediately: this.immediate,
+      a1ShowManualButtons: false,
+    }).then(function () {
+      invalidateAutoSettings();
+      if (_buttons !== self) return;
+      self.close();
+    }, function (e) {
+      self.saving = false;
+      if (_buttons !== self) return;
+      self.refreshSave();
+      self.cancelBtn.disabled = false;
+      self.enable(true);
+      self.noteEl.textContent = 'The setting could not be saved: ' +
+        (e && e.message ? e.message : e);
+    });
+  };
+
+  ButtonsDialog.prototype.close = function () {
+    unwireEscape(this);
+    if (this.backdrop && this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
+    if (_buttons === this) _buttons = null;
+  };
+
+  // ── The Automatic Propagation and Depropagate Assist dialog ──────────────────────────────
+  //
+  // Two switches that were two rows on Stash's settings page. A dialog for two
+  // checkboxes is not about room: both make the plugin write the library with no
+  // plan in front of it, and a row between the buttons and the paths did not say
+  // so loudly enough. Here they sit under a head that does, and nothing is stored
+  // until Save.
+  function AutoDialog(taskName) {
+    this.taskName = taskName;
+    this.on = {};
+    this.stored = null;   // the modes as read, formatted; null until they have been
+    this.saving = false;
+    this.stale = false;
+    this.boxes = [];
+  }
+
+  AutoDialog.prototype.refreshSave = function () {
+    if (!this.saveBtn) return;
+    this.saveBtn.disabled = this.saving || this.stale || this.stored === null ||
+      this.stored === formatAuto(this.on);
+  };
+
+  AutoDialog.prototype.panel = function () {
+    var self = this;
+    var wrap = el('div', null);
+    this.boxes = AUTO_ROWS.map(function (r) {
+      var label = el('label', 'ptp2re-opt');
+      var box = el('input', null);
+      box.type = 'checkbox';
+      box.addEventListener('change', function () {
+        self.on[r[0]] = !!box.checked;
+        self.refreshSave();
+        self.enable(true);
+      });
+      label.appendChild(box);
+      label.appendChild(el('span', null, r[1]));
+      label.title = r[2];
+      wrap.appendChild(label);
+      wrap.appendChild(el('div', 'ptp2re-optnote', r[2]));
+      return { key: r[0], el: box, label: label };
+    });
+    return wrap;
+  };
+
+  // Silent is greyed out, not hidden, while neither mode is on: it qualifies a
+  // reaction, and with no reaction there is nothing for it to say.
+  AutoDialog.prototype.enable = function (on) {
+    var idle = !this.on.target && !this.on.source;
+    this.boxes.forEach(function (b) {
+      var off = !on || (b.key === 'silent' && idle);
+      b.el.disabled = off;
+      b.label.className = 'ptp2re-opt' + (b.key === 'silent' && idle ? ' ptp2re-opt-off' : '');
+    });
+  };
+
+  AutoDialog.prototype.build = function () {
+    injectStyle();
+    var self = this;
+
+    this.backdrop = el('div', 'ptp2re-backdrop');
+    this.modal = el('div', 'ptp2re-modal ptp2re-narrow');
+    this.backdrop.appendChild(this.modal);
+
+    var head = el('div', 'ptp2re-head');
+    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
+    head.appendChild(el('div', 'ptp2re-warn',
+      'Both modes react to Stash\'s own saves immediately, with no dialog, no review ' +
+      'and no undo. They only ever add - but they add the moment Stash saves, so try the ' +
+      'task first.'));
+    head.appendChild(el('div', 'ptp2re-legend',
+      'Every enabled path is written along, and every exclusion filter applies. An ' +
+      'entity this plugin has just written to is left alone for a few seconds, which is ' +
+      'what stops a reversible pair of paths bouncing.'));
+    this.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
+    head.appendChild(this.noteEl);
+    this.modal.appendChild(head);
+
+    this.body = el('div', 'ptp2re-pathsbody');
+    this.modal.appendChild(this.body);
+
+    var foot = el('div', 'ptp2re-foot');
+    this.saveBtn   = button('Save', 'ptp2re-proceed');
+    this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.cancelBtn = button('Cancel', 'ptp2re-cancel');
+    this.saveBtn.disabled = true;
+    this.saveBtn.addEventListener('click', function () { self.save(); });
+    this.cancelBtn.addEventListener('click', function () { self.close(); });
+    foot.appendChild(this.saveBtn);
+    foot.appendChild(this.cancelBtn);
+    this.modal.appendChild(foot);
+
+    wireEscape(this);
+    document.body.appendChild(this.backdrop);
+    this.checkVersion();
+
+    loadSettings().then(function (loaded) {
+      if (_auto !== self) return;
+      self.body.appendChild(self.panel());
+      AUTO_MODES.forEach(function (m) { self.on[m] = !!loaded.settings.auto[m]; });
+      self.stored = formatAuto(self.on);
+      self.boxes.forEach(function (b) { b.el.checked = !!self.on[b.key]; });
+      self.refreshSave();
+      self.enable(true);
+      self.noteEl.textContent = '';
+    }, function (e) {
+      if (_auto !== self) return;
+      self.noteEl.textContent = 'The current setting could not be read (' +
+        (e && e.message ? e.message : e) + '). Saving from here would replace it with ' +
+        'whatever is selected, so Save stays disabled - close this and try again.';
+    });
+  };
+
+  AutoDialog.prototype.checkVersion = function () {
+    var self = this;
+    return staleGate(this, function () { return _auto === self; }, 'modes');
+  };
+
+  AutoDialog.prototype.focus = PathsDialog.prototype.focus;
+
+  AutoDialog.prototype.save = function () {
+    if (this.saving || this.saveBtn.disabled) return;
+    var self = this;
+    this.saving = true;
+    this.saveBtn.disabled = true;
+    this.cancelBtn.disabled = true;
+    this.enable(false);
+    this.noteEl.textContent = 'Saving...';
+    // The two old switches go false in the same write, for the reason the buttons
+    // dialog retires its own: the migration reads them while this setting is empty.
+    writeOwnSettings({
+      a3AutoPropagation: formatAuto(this.on),
+      a3AutoOnTargetUpdate: false,
+      a4AutoOnSourceUpdate: false,
+    }).then(function () {
+      invalidateAutoSettings();
+      if (_auto !== self) return;
+      self.close();
+    }, function (e) {
+      self.saving = false;
+      if (_auto !== self) return;
+      self.refreshSave();
+      self.cancelBtn.disabled = false;
+      self.enable(true);
+      self.noteEl.textContent = 'The setting could not be saved: ' +
+        (e && e.message ? e.message : e);
+    });
+  };
+
+  AutoDialog.prototype.close = function () {
+    unwireEscape(this);
+    if (this.backdrop && this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
+    if (_auto === this) _auto = null;
+  };
+
+  // ── The pick dialog ───────────────────────────────────────────────────────
+  //
+  // One line per change with a box in front of it, OK, Cancel, and the two bulk
+  // buttons. It is what an automatic reaction shows instead of writing blind, and
+  // what the removal offer shows; it plans nothing and writes nothing itself - the
+  // caller passes the lines and gets back the keys of the ticked ones, or null for
+  // Cancel and Escape. Deliberately not the run dialog: that one has a log, a
+  // progress line and an Undo for a run the user started, and this is a question
+  // about a save they made.
+  function PickDialog(title, warn, lines, ticked, held) {
+    this.title = title;
+    this.warn = warn;
+    this.lines = lines;       // [{ key, parts }]
+    this.ticked = ticked;     // every box starts this way
+    this.held = held || null; // { type, ids } this dialog holds on Core's settling registry
+    this.boxes = [];
+  }
+
+  // Queued behind whatever pick is open: the second dialog opens when the first
+  // closes rather than on top of it.
+  function pick(title, warn, lines, ticked, held) {
+    var dlg = new PickDialog(title, warn, lines, ticked, held);
+    var turn = _pickQueue.then(function () { return dlg.open(); });
+    _pickQueue = turn.then(function () {}, function () {});
+    return turn;
+  }
+
+  PickDialog.prototype.open = function () {
+    var self = this;
+    return new Promise(function (resolve) {
+      self.resolve = resolve;
+      _pick = self;
+      self.build();
+    });
+  };
+
+  PickDialog.prototype.build = function () {
+    injectStyle();
+    var self = this;
+    this.backdrop = el('div', 'ptp2re-backdrop');
+    this.modal = el('div', 'ptp2re-modal ptp2re-mid');
+    this.backdrop.appendChild(this.modal);
+
+    var head = el('div', 'ptp2re-head');
+    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.title));
+    head.appendChild(el('div', 'ptp2re-warn', this.warn));
+    this.waitEl = el('div', 'ptp2re-pick-wait hidden');
+    head.appendChild(this.waitEl);
+    this.modal.appendChild(head);
+    if (this.held) {
+      this.tickWait();
+      (function arm() {
+        self.waitTimer = setTimeout(function () { self.tickWait(); arm(); }, 1000);
+      }());
+    }
+
+    var body = el('div', 'ptp2re-pathsbody');
+    var list = el('div', 'ptp2re-pick');
+    this.lines.forEach(function (line) {
+      var row = el('label', 'ptp2re-pick-row');
+      var box = el('input', null);
+      box.type = 'checkbox';
+      box.checked = self.ticked;
+      box.addEventListener('change', function () { self.syncOk(); });
+      row.appendChild(box);
+      var text = el('span', null);
+      appendParts(text, line.parts);
+      row.appendChild(text);
+      list.appendChild(row);
+      self.boxes.push({ key: line.key, el: box });
+    });
+    body.appendChild(list);
+    this.modal.appendChild(body);
+
+    var foot = el('div', 'ptp2re-foot');
+    // Amber: OK is the button that writes.
+    this.okBtn = button('OK', 'ptp2re-proceed');
+    this.okBtn.className = this.okBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.closeBtn = button('Cancel', 'ptp2re-cancel');
+    this.okBtn.addEventListener('click', function () {
+      var keys = self.boxes.filter(function (b) { return b.el.checked; })
+        .map(function (b) { return b.key; });
+      if (!keys.length) return;   // guarded in the handler, not only at render
+      self.close(keys);
+    });
+    this.closeBtn.addEventListener('click', function () { self.close(null); });
+    foot.appendChild(this.okBtn);
+    foot.appendChild(this.closeBtn);
+    var bulk = el('div', 'ptp2re-paths-bulk');
+    this.bulkBtns = [[false, 'Unselect All'], [true, 'Select All']].map(function (t) {
+      var b = el('button', 'btn btn-sm ' + (t[0] ? PLUGIN_BTN_VARIANT : 'btn-secondary'), t[1]);
+      b.type = 'button';
+      b._on = t[0];
+      b.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        self.boxes.forEach(function (x) { x.el.checked = t[0]; });
+        self.syncOk();
+      });
+      bulk.appendChild(b);
+      return b;
+    });
+    foot.appendChild(bulk);
+    this.modal.appendChild(foot);
+    this.syncOk();
+
+    wireEscape(this);
+    document.body.appendChild(this.backdrop);
+    if (this.modal.scrollIntoView) this.modal.scrollIntoView();
+  };
+
+  // A sibling waiting on the save this dialog holds (SceneVariants, before it reads the
+  // scene for its own propagate offer) is named with the time it has left; once it has
+  // stopped waiting, the answer here can no longer reach it, and the line says so.
+  PickDialog.prototype.tickWait = function () {
+    var w = waitingOn(this.held.type, this.held.ids);
+    if (w) this.waiter = w;
+    if (!this.waiter) return;
+    var left = w ? Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) : 0;
+    var who = this.waiter.owner || 'A sibling plugin';
+    if (left > 0) {
+      this.waitEl.className = 'ptp2re-pick-wait ptp2re-note';
+      this.waitEl.textContent = '[INFO] ' + who + ' is waiting for this answer before it reads ' +
+        'the scene for its own propagate offer: ' +
+        (left >= 60 ? Math.floor(left / 60) + ' min ' + (left % 60) + ' s' : left + ' s') + ' left.';
+    } else {
+      this.waitEl.className = 'ptp2re-pick-wait ptp2re-warn';
+      this.waitEl.textContent = '[WARN] ' + who + ' stopped waiting and read the scene as it is ' +
+        'now: the changes made here will not be in its propagate offer.';
+    }
+  };
+
+  // Amber means the button writes: with nothing ticked OK would write nothing, so it
+  // is unavailable, with the reason, and Cancel is the way out.
+  PickDialog.prototype.syncOk = function () {
+    var any = this.boxes.some(function (b) { return b.el.checked; });
+    this.okBtn.disabled = !any;
+    this.okBtn.title = any ? '' : 'Nothing is ticked - tick a line to write it, or Cancel.';
+    // And the two bulk buttons: one that would change no box has nothing to do.
+    this.bulkBtns.forEach(function (b) {
+      var idle = this.boxes.every(function (x) { return x.el.checked === b._on; });
+      b.disabled = idle;
+      b.title = idle ? 'Every line is already ' + (b._on ? 'ticked.' : 'unticked.') : '';
+    }, this);
+  };
+
+  PickDialog.prototype.close = function (keys) {
+    unwireEscape(this);
+    if (this.waitTimer) clearTimeout(this.waitTimer);
+    if (this.backdrop && this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
+    if (_pick === this) _pick = null;
+    this.resolve(keys);
   };
 
 
@@ -5343,10 +6186,14 @@
     return guarded(function () {
       return autoContext(s).then(function (ctx) {
         var run = new AutoRun(s, ctx.tagMap, ctx.filters, ctx.npt);
-        return run.planEntities(target, paths, fresh).then(function () {
-          return run.apply(label);
-        });
+        return run.planEntities(target, paths, fresh).then(function () { return run; });
       });
+    }).then(function (run) {
+      // The plan is shown before it is written unless Silent is on. Outside
+      // `guarded()`: the user's own saves while the dialog waits must still be seen.
+      return s.auto.silent ? run : reviewAutoRun(run, { type: target, ids: fresh });
+    }).then(function (run) {
+      return run ? guarded(function () { return run.apply(label); }) : 0;
     }).then(function (n) {
       // The reaction has changed what a button would add, and it ran after the save
       // that triggered it - so the wrapper's own invalidation has already been spent
@@ -5356,11 +6203,177 @@
     });
   }
 
+  // With Silent off: the plan, a line per addition with every box ticked, and the
+  // plan cut down to what stayed ticked. Null for Cancel, and the run untouched where
+  // there is nothing to ask about.
+  function reviewAutoRun(run, held) {
+    var lines = [];
+    run.plan.forEach(function (entry) {
+      entry.add.forEach(function (id) {
+        lines.push({ key: planKey(entry.target, entry.kind, entry.id) + ':' + id,
+          parts: run.changeParts(entry, entry.kind, id) });
+      });
+    });
+    if (!lines.length) return Promise.resolve(run);
+    return pick('Automatic Propagation - review',
+      'These additions follow the save you just made. Untick any you do not want; ' +
+      'nothing is written until you press OK.', lines, true, held).then(function (keys) {
+      if (!keys) return null;
+      run.plan.forEach(function (entry) {
+        var prefix = planKey(entry.target, entry.kind, entry.id) + ':';
+        entry.add = entry.add.filter(function (id) { return keys.indexOf(prefix + id) !== -1; });
+      });
+      return run;
+    });
+  }
+
+  // ── Depropagate assist ────────────────────────────────────────────────────
+  //
+  // The reverse question, asked of a scene save that drops a related entity: which
+  // of the scene's tags came in along an active path from what was just removed, and
+  // no other related entity of the scene carries? Those are offered for removal,
+  // unticked. It needs the scene as it was *before* the save, since the save's input
+  // carries only the new list, so the read goes out ahead of the mutation and the
+  // mutation waits for it - one small query on a save that names one of these
+  // relations, and nothing at all otherwise.
+  //
+  // Scenes only, and the three relations a `sceneUpdate` carries whole. Markers
+  // leave through their own destroy, images leave a gallery through the image's save,
+  // and a group's scenes and sub-groups through theirs: each is a save of something
+  // other than the target, and none is asked about yet.
+  // ponytail: scene-side relations only; a row per other (target, input field) when asked for.
+  var DEPROP = [
+    { path: 'tags:performer>scene', after: function (i) { return i.performer_ids; } },
+    { path: 'tags:studio>scene', after: function (i) {
+      return i.studio_id === undefined ? undefined : (i.studio_id == null ? [] : [i.studio_id]);
+    } },
+    { path: 'tags:group>scene', after: function (i) {
+      var g = i.groups || i.movies;
+      return g && g.map(function (x) { return x.group_id != null ? x.group_id : x.movie_id; });
+    } },
+  ];
+
+  // The scene, its tags, and every active tag path's sources with theirs - named, since
+  // the offer says where a tag came from.
+  function depropQuery(paths) {
+    var parts = [TARGETS.scene.fields, 'tags { id name }'];
+    paths.forEach(function (p) {
+      var sel = (SOURCES[p.sourceType].fields) + ' tags { id name }';
+      for (var i = p.walk.length - 1; i >= 0; i--) sel = p.walk[i] + ' { ' + sel + ' }';
+      parts.push(sel);
+    });
+    return 'query PTP_deprop_findScene($id: ID!) { findScene(id: $id) { ' + parts.join(' ') + ' } }';
+  }
+
+  function depropPaths(s) {
+    return enabledPaths(s).filter(function (p) {
+      return p.target === 'scene' && p.kind === 'tags' && p.walk && !p.markerTags;
+    });
+  }
+
+  // Null at once where the assist has nothing to do with this save; otherwise a
+  // promise for what the save removes - `{ id, settings, removed }`, or null - that the
+  // wrapper waits on before forwarding. Never rejects: a failed read forwards the save.
+  function depropBefore(target, input) {
+    if (target !== 'scene' || !input || input.id == null) return null;
+    var touched = DEPROP.filter(function (d) { return d.after(input) !== undefined; });
+    if (!touched.length) return null;
+    // The settings cache, synchronously where it is warm - which is every save but the
+    // first - so a save with the assist off is forwarded with no wait at all.
+    if (_autoSettings && !_autoSettings.auto.depropagate) return null;
+    return autoSettings().then(function (s) {
+      if (!s.auto.depropagate) return null;
+      var paths = touched.map(function (d) { return pathById(d.path); })
+        .filter(function (p) { return pathOn(s, p); });
+      if (!paths.length) return null;
+      return gqlRequest(depropQuery(paths), { id: String(input.id) }).then(function (data) {
+        var ent = data.findScene;
+        if (!ent) return null;
+        var removed = [];
+        touched.forEach(function (d) {
+          var p = pathById(d.path);
+          if (paths.indexOf(p) === -1) return;
+          var after = d.after(input).map(String);
+          walkSources(ent, p).forEach(function (src) {
+            if (after.indexOf(String(src.id)) === -1) removed.push({ path: p, src: src });
+          });
+        });
+        return removed.length ? { id: String(ent.id), settings: s, removed: removed } : null;
+      });
+    }).then(null, function (e) {
+      console.error('[ptp2re] depropagate assist could not read the scene before the save:', e);
+      return null;
+    });
+  }
+
+  // After the save landed: the scene as it is now, and the offer. A tag is offered
+  // when a removed source carried it, the scene still has it, and no source the scene
+  // still has - along any active path - carries it. Read after the save rather than
+  // from the before-state, so a source added in the same save counts as backing.
+  function offerDepropagate(b) {
+    var s = b.settings, paths = depropPaths(s);
+    return gqlRequest(depropQuery(paths), { id: b.id }).then(function (data) {
+      var ent = data.findScene;
+      if (!ent) return 0;
+      var has = {}, backed = {}, seen = {}, lines = [];
+      (ent.tags || []).forEach(function (t) { has[String(t.id)] = t; });
+      paths.forEach(function (p) {
+        walkSources(ent, p).forEach(function (src) {
+          payloadOf(src, p).forEach(function (id) { backed[id] = true; });
+        });
+      });
+      b.removed.forEach(function (r) {
+        payloadOf(r.src, r.path).forEach(function (id) {
+          if (!has[id] || backed[id] || seen[id]) return;
+          seen[id] = true;
+          var st = r.path.sourceType;
+          lines.push({ key: id, parts: [
+            { text: entityLabel('scene', ent), href: entityHref('scene', ent.id),
+              ent: { type: 'scenes', id: String(ent.id) } },
+            { text: ' - ' },
+            { text: 'Tag "' + (has[id].name || 'unknown') + '" (' + id + ')',
+              href: entityHref('tag', id), ent: { type: 'tags', id: id } },
+            { text: ' - was likely from ' },
+            { text: SOURCES[st].label + ' "' + (displayName(r.src) || 'untitled') + '" (' + r.src.id + ')',
+              href: entityHref(st, r.src.id), ent: { type: tipType(st), id: String(r.src.id) } },
+          ] });
+        });
+      });
+      if (!lines.length) return 0;
+      return pick('Depropagate assist',
+        'Tags on this scene that came from a related entity the save removed, and that ' +
+        'no other related entity of the scene carries. Tick the ones to remove; nothing ' +
+        'is written until you press OK.', lines, false, { type: 'scene', ids: [b.id] }).then(function (keys) {
+        if (!keys || !keys.length) return 0;
+        return guarded(function () {
+          var lease = acquireLease('depropagate assist', AUTO_LEASE_TTL_MS);
+          return gqlRequest(bulkMutation('scene'),
+            { input: { ids: [b.id], tag_ids: { ids: keys, mode: 'REMOVE' } } }).then(function () {
+            lease.release();
+            markWritten('scene', b.id);
+            var wrote = { scene: {} };
+            wrote.scene[b.id] = true;
+            evictWritten(wrote);
+            invalidateButtonProbes();
+            if (s.g1LogToConsole) {
+              console.info('[' + PLUGIN_NAME + '] depropagate assist removed ' +
+                plural(keys.length, 'tag', 'tags') + ' from scene ' + b.id);
+            }
+            return keys.length;
+          }, function (e) { lease.release(); throw e; });
+        });
+      });
+    }).then(null, function (e) {
+      console.error('[ptp2re] depropagate assist:', e);
+      return 0;
+    });
+  }
+
   // A save of one or more entities of one type: copy into them whatever the enabled
   // paths say belongs there.
   function reactToTargets(target, ids) {
     return autoSettings().then(function (s) {
-      if (!s.a3AutoOnTargetUpdate) return 0;
+      if (!s.auto.target) return 0;
       return runAutoTargets(target, ids, s, 'auto: into ' + TARGETS[target].plural.toLowerCase());
     }).catch(function (e) {
       // Never rethrown into Stash's own fetch chain: the user's save succeeded, and a
@@ -5379,7 +6392,7 @@
   // built to avoid.
   function reactToSources(sourceType, ids, resolve) {
     return autoSettings().then(function (s) {
-      if (!s.a4AutoOnSourceUpdate) return 0;
+      if (!s.auto.source) return 0;
       var paths = enabledPaths(s).filter(function (p) { return p.sourceType === sourceType; });
       if (!paths.length) return 0;
       var byTarget = {};
@@ -5513,7 +6526,7 @@
   }
 
   // SettingsPluginsPanel.tsx gives every plugin setting an id built from the plugin
-  // id and the setting key - `plugin-PropagateTagsAndPerformers-a1ShowManualButtons`.
+  // id and the setting key - `plugin-PropagateTagsAndPerformers-a1ManualButtons`.
   // That is ours by construction: no version suffix, no localisation, nothing
   // formatted for display. Both siblings shipped this broken by matching heading
   // text instead, twice, so the ids are the anchor and the heading is only a
@@ -5974,14 +6987,17 @@
     if (node && node.style) node.style.display = 'none';
   }
 
-  function pathFieldTick() {
-    var row = settingRow('b1Paths');
-    if (!row) return;
+  // The takeover itself, shared by the two string settings a dialog edits: the
+  // line that replaces Stash's value, and the teal button that replaces its Edit.
+  // Returns the line, or null where the row is not on the page.
+  function takeOverRow(key, lineId, btnId, taskName) {
+    var row = settingRow(key);
+    if (!row) return null;
 
-    var line = document.getElementById(FIELD_LINE_ID);
+    var line = document.getElementById(lineId);
     if (!line) {
       line = el('div', 'ptp2re-pathstring');
-      line.id = FIELD_LINE_ID;
+      line.id = lineId;
     }
     // Beside Stash's own value rather than inside it: React owns that subtree and
     // reconciles it on every re-render, and a node of ours in the middle of one is
@@ -5997,36 +7013,35 @@
     }
     hide(slot);
 
-    var btn = document.getElementById(FIELD_BTN_ID);
+    var btn = document.getElementById(btnId);
     if (!btn) {
-      btn = el('button', 'btn btn-sm ' + READONLY_BTN_VARIANT, TASK_PATHS);
-      btn.id = FIELD_BTN_ID;
+      btn = el('button', 'btn btn-sm ' + READONLY_BTN_VARIANT, taskName);
+      btn.id = btnId;
       btn.type = 'button';
       btn._ptp2reOwn = true;
       btn.addEventListener('click', function (e) {
         if (e.preventDefault) e.preventDefault();
-        startRun(TASK_PATHS);
+        startRun(taskName);
       });
     }
     var edit = foreignButton(row);
     var btnHost = edit ? edit.parentNode : row;
     if (btn.parentNode !== btnHost) btnHost.appendChild(btn);
     hide(edit);
+    return line;
+  }
 
-    if (!_autoSettings) {
-      // Drawn when the answer lands rather than on the next tick: the re-entry is
-      // bounded by the cache it just filled, and a second of an empty line where the
-      // value used to be is exactly the flicker this replacement must not have.
-      if (!_autoSettingsWait) {
-        autoSettings().then(function () { pathFieldTick(); }, function () {});
-      }
-      return;
-    }
+  function pathFieldTick() {
+    var line = takeOverRow('b1Paths', FIELD_LINE_ID, FIELD_BTN_ID, TASK_PATHS);
+    if (!line) return;
 
-    var modes = _autoSettings.paths, canon = formatPaths(modes);
+    var s = settingsOr(pathFieldTick);
+    if (!s) return;
+
+    var modes = s.paths, canon = formatPaths(modes);
     // Redrawn only when the value moves: this runs every second, and rebuilding the
     // list under the user's pointer for an unchanged value is churn.
-    var raw = String(_autoSettings.b1Paths || '');
+    var raw = String(s.b1Paths || '');
     if (line._ptp2reText !== canon + '\u0000' + raw) {
       line._ptp2reText = canon + '\u0000' + raw;
       renderPathString(line, modes, raw);
@@ -6049,6 +7064,99 @@
     }
     _normalizedFrom = raw;
     savePaths(canon).then(null, function () {});
+  }
+
+  // The manual buttons row, the same way: the buttons that are on, in words, and
+  // the button opening the dialog that owns them. No canonical rewrite here - a
+  // hand-typed value is read forgivingly and shown as read, and the dialog's Save
+  // is what writes it back in form.
+  var BTN_LINE_ID = 'ptp2re-buttons-line';
+  var BTN_BTN_ID  = 'ptp2re-buttons-button';
+
+  function renderButtonString(box, s) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    if (!anyButtonOn(s)) {
+      box.appendChild(el('div', null, 'No manual buttons - none is shown anywhere.'));
+      return;
+    }
+    // A column per side and a line per page, the grouping the dialog has. A page
+    // with every button on says so in two words rather than listing five captions;
+    // a caption whose path is off is grey, since that button is not drawn anywhere.
+    var list = el('div', 'ptp2re-btnstring');
+    var cols = {};
+    [['target', 'On target entity Edit tabs'], ['source', 'On source entity pages']]
+      .forEach(function (c) {
+        cols[c[0]] = el('div', null);
+        cols[c[0]].appendChild(el('div', 'ptp2re-btnstring-head', c[1]));
+        cols[c[0]].lines = 0;
+        list.appendChild(cols[c[0]]);
+      });
+    buttonViews().forEach(function (v) {
+      var on = v.buttons.filter(function (b) { return s.buttons[b.key]; });
+      if (!on.length) return;
+      var off = on.filter(function (b) { return !pathOn(s, b.path); }).length;
+      var line = el('div', null);
+      line.appendChild(el('span', 'ptp2re-pathstring-on', v.view + ': '));
+      if (on.length === v.buttons.length) {
+        line.appendChild(el('span', off ? 'ptp2re-pathstring-mode' : 'ptp2re-pathstring-on',
+          'all buttons' + (off ? ' (' + plural(off, 'inactive path', 'inactive paths') + ')' : '')));
+      } else {
+        on.forEach(function (b, i) {
+          line.appendChild(el('span', pathOn(s, b.path) ? 'ptp2re-pathstring-on'
+            : 'ptp2re-pathstring-mode', (i ? ', ' : '') + buttonCaption(b, s)));
+        });
+      }
+      cols[v.side].appendChild(line);
+      cols[v.side].lines++;
+    });
+    ['target', 'source'].forEach(function (side) {
+      if (!cols[side].lines) cols[side].appendChild(el('div', 'ptp2re-pathstring-mode', 'none'));
+    });
+    box.appendChild(list);
+  }
+
+  // The settings cache, or null with a redraw of `tick` queued for when it lands:
+  // drawn then rather than on the next tick, since the re-entry is bounded by the
+  // cache it just filled, and a second of an empty line where the value used to be
+  // is exactly the flicker a takeover must not have.
+  function settingsOr(tick) {
+    if (_autoSettings) return _autoSettings;
+    if (!_autoSettingsWait) autoSettings().then(function () { tick(); }, function () {});
+    return null;
+  }
+
+  function buttonsFieldTick() {
+    var line = takeOverRow('a1ManualButtons', BTN_LINE_ID, BTN_BTN_ID, TASK_BUTTONS);
+    var s = line && settingsOr(buttonsFieldTick);
+    if (!s) return;
+    var canon = formatButtons(s.buttons) + '\u0000' + formatPaths(s.paths);
+    if (line._ptp2reText === canon) return;
+    line._ptp2reText = canon;
+    renderButtonString(line, s);
+  }
+
+  // The automatic modes row, the same way.
+  var AUTO_LINE_ID = 'ptp2re-auto-line';
+  var AUTO_BTN_ID  = 'ptp2re-auto-button';
+
+  function renderAutoString(box, s) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var on = AUTO_ROWS.filter(function (r) { return s.auto[r[0]]; });
+    if (!on.length) {
+      box.appendChild(el('div', null, 'Off - nothing is written when Stash saves an entity.'));
+      return;
+    }
+    on.forEach(function (r) { box.appendChild(el('div', 'ptp2re-pathstring-on', r[1])); });
+  }
+
+  function autoFieldTick() {
+    var line = takeOverRow('a3AutoPropagation', AUTO_LINE_ID, AUTO_BTN_ID, TASK_AUTO);
+    var s = line && settingsOr(autoFieldTick);
+    if (!s) return;
+    var canon = formatAuto(s.auto);
+    if (line._ptp2reText === canon) return;
+    line._ptp2reText = canon;
+    renderAutoString(line, s);
   }
     // circled Latin small letter i
 
@@ -6156,6 +7264,8 @@
     ensureReadmeLink();
     paintTaskButtons();
     pathFieldTick();
+    buttonsFieldTick();
+    autoFieldTick();
     exclusionTagTick();
     // The one setting here that names a custom field. From the settings cache rather than
     // the row, for the reason `exclusionTagTick` reads it there.
@@ -6430,14 +7540,15 @@
       if (event && event.preventDefault) event.preventDefault();
       var orig = btn.textContent;
       btn.disabled = true;
-      btn.textContent = 'Working...';
+      holdWidth(btn);
+      btn.textContent = 'Working\u2026';
       runManual(path, target, id, label).then(function (result) {
         btn.disabled = false;
         // The dialog is now the feedback, and it is on top of this button - a flash
         // underneath it would be a caption nobody can see, restored two seconds into a
         // review that may take minutes.
         if (result.mode === 'dialog') { btn.textContent = orig; return; }
-        btn.textContent = result.count ? ('Added ' + result.count) : 'No changes';
+        btn.textContent = result.count ? ('+' + result.count) : 'No change';
         // Only the staging branch reaches here, and it changes nothing on
         // the server - so the caption is restored and nothing is re-probed. A dialog's
         // writes invalidate from `Run.close`, where the eligibility they changed is
@@ -6619,17 +7730,20 @@
   // setting is off or the page is not one of the four.
   function manualButtonsTick() {
     autoSettings().then(function (s) {
-      var rt = s.a1ShowManualButtons ? currentRouteTarget() : null;
+      var any = anyButtonOn(s);
+      var rt = any ? currentRouteTarget() : null;
       if (!rt) {
-        gateLogOnce('t:route', s.a1ShowManualButtons
+        gateLogOnce('t:route', any
           ? 'no target buttons: this route is not one of the four target pages'
-          : 'no target buttons: Show Manual Buttons is off');
+          : 'no target buttons: no manual button is switched on');
         clearManualButtons(); return;
       }
-      var wanted = enabledPaths(s).filter(function (p) { return p.target === rt.target; });
+      var wanted = enabledPaths(s).filter(function (p) {
+        return p.target === rt.target && buttonOn(s, 'target', p);
+      });
       if (!wanted.length) {
         gateLogOnce('t:route', 'no target buttons on ' + TARGETS[rt.target].label + ' ' + rt.id +
-          ': no enabled path writes into a ' + TARGETS[rt.target].label.toLowerCase());
+          ': no enabled path with its button on writes into a ' + TARGETS[rt.target].label.toLowerCase());
         clearManualButtons(); return;
       }
       gateLogOnce('t:route', TARGETS[rt.target].label + ' ' + rt.id + ' - ' +
@@ -7162,7 +8276,8 @@
       if (event && event.preventDefault) event.preventDefault();
       var orig = btn.textContent;
       btn.disabled = true;
-      btn.textContent = 'Working...';
+      holdWidth(btn);
+      btn.textContent = 'Working\u2026';
       runManualSource(path, id, label).then(function () {
         btn.disabled = false;
         // Always the dialog on this side - there is no staging here - so the caption
@@ -7212,11 +8327,12 @@
 
   function manualSourceButtonsTick() {
     autoSettings().then(function (s) {
-      var rt = s.a1ShowManualButtons ? currentSourceRouteTarget() : null;
+      var any = anyButtonOn(s);
+      var rt = any ? currentSourceRouteTarget() : null;
       if (!rt) {
-        gateLogOnce('s:route', s.a1ShowManualButtons
+        gateLogOnce('s:route', any
           ? 'no source buttons: this route is not one of the six source pages'
-          : 'no source buttons: Show Manual Buttons is off');
+          : 'no source buttons: no manual button is switched on');
         clearManualSourceButtons(); return;
       }
       // The enabled-path filter is split off from the dedup one and runs *first*, so a
@@ -7225,11 +8341,12 @@
       // and why a Scene with its Edit tab open used to complain about a missing detail
       // navbar whether or not any path even reads from a Scene.
       var candidates = PATHS.filter(function (p) {
-        return p.sourceType === rt.sourceType && pathOn(s, p) && hasOwn(SOURCE_BUTTON_LABELS, p.id);
+        return p.sourceType === rt.sourceType && pathOn(s, p) && hasOwn(SOURCE_BUTTON_LABELS, p.id) &&
+          buttonOn(s, 'source', p);
       });
       if (!candidates.length) {
         gateLogOnce('s:paths', 'no source buttons on ' + SOURCES[rt.sourceType].label + ' ' + rt.id +
-          ': no enabled path reads from a ' + SOURCES[rt.sourceType].label.toLowerCase() +
+          ': no enabled path with its button on reads from a ' + SOURCES[rt.sourceType].label.toLowerCase() +
           ' (both marker paths have no detail page and never qualify)');
         clearManualSourceButtons(); return;
       }
@@ -7350,7 +8467,7 @@
   // asked for the tag library on every page load. Failure is ignored - this is a warm-up,
   // and the probe that actually needs the context will report its own.
   autoSettings().then(function (s) {
-    if (s.a1ShowManualButtons) probeContext(s).then(null, function () {});
+    if (anyButtonOn(s)) probeContext(s).then(null, function () {});
   }, function () {});
 
   // ── Task interception ─────────────────────────────────────────────────────
@@ -7440,16 +8557,24 @@
       }
     }
 
-    var p = _fetch.apply(this, arguments);
-    if (_writeDepth > 0 || typeof url !== 'string' || url.indexOf('/graphql') === -1 ||
-        !opts || !opts.body) {
-      return p;
+    var self = this, args = arguments;
+    function forward() { return _fetch.apply(self, args); }
+    var req = null;
+    if (_writeDepth === 0 && typeof url === 'string' && url.indexOf('/graphql') !== -1 &&
+        opts && opts.body) {
+      try { req = JSON.parse(opts.body); } catch (e) { req = null; }
     }
+    if (!req) return forward();
+
+    var q = req.query || '';
+    var v = req.variables || {};
+    var hit = targetOfMutation(q);
+    // The one case the save waits for us: the assist needs the scene as it was.
+    // Forwarded whatever the read does, so a failure there is never a failed save.
+    var before = hit && !hit.bulk ? depropBefore(hit.target, v.input) : null;
+    var p = before ? before.then(forward, forward) : forward();
 
     try {
-      var req = JSON.parse(opts.body);
-      var q = req.query || '';
-      var v = req.variables || {};
 
       // Our own settings being saved. Auto mode caches them for AUTO_SETTINGS_TTL_MS,
       // so without this, changing an exclusion filter and immediately saving an entity
@@ -7478,17 +8603,33 @@
         mutationSucceeded(p).then(function (ok) { if (ok) invalidateButtonProbes(); });
       }
 
+      if (before) {
+        // Registered on Core's settling registry like the reaction below, so a sibling
+        // reading the scene after this save waits for the offer to be answered.
+        var offered = settle(hit.target, v.input.id);
+        mutationSucceeded(p).then(function (ok) {
+          if (!ok) { offered(); return; }
+          before.then(function (b) { return b ? offerDepropagate(b) : 0; }).then(offered, offered);
+        });
+      }
+
       // A save of one of our four target types. The suppression check sits after the
       // match rather than before it, so the one-time "standing down" line is only
       // emitted for a mutation that would actually have been reacted to.
-      var hit = targetOfMutation(q);
       if (hit && !autoSuppressed()) {
         var ids = hit.bulk
           ? (v.input && v.input.ids) || []
           : (v.input && v.input.id != null ? [v.input.id] : []);
         if (ids.length) {
+          // Registered now, synchronously, so a sibling watching this same save finds
+          // it when the response lands; released once the reaction is over, which with
+          // Silent off is after the user has answered. Registered whatever the mode
+          // setting says - it is read asynchronously - and released at once when off.
+          var dones = ids.map(function (id) { return settle(hit.target, id); });
+          var release = function () { dones.forEach(function (d) { d(); }); };
           mutationSucceeded(p).then(function (ok) {
-            if (ok) reactToTargets(hit.target, ids);
+            if (!ok) { release(); return; }
+            reactToTargets(hit.target, ids).then(release, release);
           });
         }
       }
@@ -7552,6 +8693,11 @@
     enabledPaths: enabledPaths,
     parsePaths: parsePaths,
     formatPaths: formatPaths,
+    manualButtons: manualButtons,
+    parseButtons: parseButtons,
+    parseAuto: parseAuto,
+    formatAuto: formatAuto,
+    formatButtons: formatButtons,
     pathMode: pathMode,
     settingsFrom: settingsFrom,
     describeFilters: describeFilters,

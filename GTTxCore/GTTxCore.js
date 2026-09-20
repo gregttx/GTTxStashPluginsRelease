@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '2.0.0';
+  var PLUGIN_VERSION = '2.3.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -214,7 +214,77 @@
     if (!c.order) c.order = {};            // { pluginId: priority }
     if (!c.api) c.api = {};                // { pluginId: <what it answers for others> }
     if (!c.staleUI) c.staleUI = {};        // { pluginId: true } - and the Dev Mods demo
+    if (!c.settling) c.settling = {};      // { 'type:id': [{ promise, done }] } - see `settle`
+    if (!c.waiting) c.waiting = {};        // { 'type:id': [{ owner, until }] } - see `settled`
     return c;
+  }
+
+  // ── A save settles: reactions say so, and a watcher of the same save waits ──
+  //
+  // Two plugins can answer one save of one entity: one reacts to it by writing more
+  // onto the entity, another reads what the save changed and offers to copy it
+  // elsewhere. The second cannot see the first's write - it comes later, under a
+  // lease, as a bulk mutation - so it offered the save's own changes and nothing a
+  // sibling added. `settle(type, id)` is a reacting plugin saying "I am about to act
+  // on this entity", registered synchronously in its fetch wrapper the moment it sees
+  // the save, and returns the release to call when the reaction is over - written,
+  // cancelled or failed. `settled(type, ids, timeoutMs)` is the watcher waiting for
+  // every registration on those ids before it reads the entity again; it resolves
+  // true when they all released and false on the timeout, and at once when nothing
+  // registered. A reaction that asks the user first holds its registration through
+  // the question, which is the point: the watcher's offer comes after the answer.
+  function settle(type, id) {
+    var c = coop(), key = type + ':' + id;
+    var entry = {};
+    entry.promise = new Promise(function (res) { entry.done = res; });
+    (c.settling[key] = c.settling[key] || []).push(entry);
+    var released = false;
+    return function () {
+      if (released) return;
+      released = true;
+      var list = c.settling[key] || [];
+      var i = list.indexOf(entry);
+      if (i !== -1) list.splice(i, 1);
+      if (!list.length) delete c.settling[key];
+      entry.done();
+    };
+  }
+
+  function settled(type, ids, timeoutMs, owner) {
+    var c = coop(), waits = [], keys = [];
+    (ids || []).forEach(function (id) {
+      var key = type + ':' + id, list = c.settling[key] || [];
+      list.forEach(function (e) { waits.push(e.promise); });
+      if (list.length) keys.push(key);
+    });
+    if (!waits.length) return Promise.resolve(true);
+    // Who waits, and until when, on `coop().waiting` under the same keys - so the
+    // reaction holding the save can say so in its dialog, and say when the wait ran out.
+    var ms = timeoutMs || 30000;
+    var w = { owner: owner || '', until: Date.now() + ms };
+    keys.forEach(function (k) { (c.waiting[k] = c.waiting[k] || []).push(w); });
+    function forget() {
+      keys.forEach(function (k) {
+        var l = c.waiting[k] || [], i = l.indexOf(w);
+        if (i !== -1) l.splice(i, 1);
+        if (!l.length) delete c.waiting[k];
+      });
+    }
+    return new Promise(function (res) {
+      var t = setTimeout(function () { forget(); res(false); }, ms);
+      Promise.all(waits).then(function () { clearTimeout(t); forget(); res(true); });
+    });
+  }
+
+  // The waiter with the least time left on any of these ids, `{ owner, until }`, or null.
+  function waitingOn(type, ids) {
+    var c = coop(), best = null;
+    (ids || []).forEach(function (id) {
+      (c.waiting[type + ':' + id] || []).forEach(function (w) {
+        if (!best || w.until < best.until) best = w;
+      });
+    });
+    return best;
   }
 
   // **The two-argument shape, which is what seven of the eight callers used.**
@@ -249,6 +319,19 @@
     done(fallback());
   }
 
+
+  // **A button keeps its size through a temporary caption.** "Copied" is narrower than
+  // "Copy log" and "Working…" wider than "Add Tags", and either moves every button after
+  // it in the row for as long as the caption stays - under a pointer that has just
+  // clicked there, with Delete two buttons along. Called before the caption changes, it
+  // pins `min-width` to the laid-out width, once; a zero width is a button not laid out
+  // yet and is not pinned. A caption longer than the label still grows the button, so a
+  // caller keeps those short - a sign and a count, one word.
+  function holdWidth(btn) {
+    if (btn && btn.style && !btn.style.minWidth && btn.offsetWidth > 0) {
+      btn.style.minWidth = btn.offsetWidth + 'px';
+    }
+  }
 
   function domBus() {
     var ns = window.__GTTx__;
@@ -2386,10 +2469,10 @@
     hasOwn: hasOwn, hasClass: hasClass, el: el, stripEllipsis: stripEllipsis,
     pickControl: pickControl,
     byClass: byClass, gqlRequest: gqlRequest, settingElement: settingElement,
-    settingRow: settingRow, coopObject: coopObject, coop: coop,
+    settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, waitingOn: waitingOn,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
     splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
-    linkTarget: linkTarget,
+    linkTarget: linkTarget, holdWidth: holdWidth,
     tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace, tipRatingBadge: tipRatingBadge,
     tipOpen: tipOpen, tipClose: tipClose, tagTip: tagTip,
     tipText: tipText, tagTipNames: tagTipNames, tagLinkTitle: tagLinkTitle,

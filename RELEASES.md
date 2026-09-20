@@ -10,6 +10,23 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-20 |  | 2.1.3 (`b44e245`) |  |  |  |  |  |  |  | EntityNameMaintainer 2.1.3: the renamed entity is read as the save left it |
+| 2026-09-20 |  |  |  |  |  |  | 5.2.2 (`e9a80b2`) |  |  | PropagateTagsAndPerformers 5.2.2: a bulk button with nothing to do is unavailable |
+| 2026-09-20 | 3.1.4 (`446a817`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.1.4: Apply is unavailable over an empty scope |
+| 2026-09-20 |  |  |  |  |  |  | 5.2.1 (`9da8af3`) |  |  | PropagateTagsAndPerformers 5.2.1: OK is unavailable while nothing is ticked |
+| 2026-09-20 |  |  |  | 2.3.0 (`549fc1e`) |  |  | 5.2.0 (`549fc1e`) | 1.9.6 (`549fc1e`) |  | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |
+| 2026-09-20 |  |  |  |  |  |  | 5.1.4 (`ab2d37e`) |  |  | PropagateTagsAndPerformers 5.1.4: the depropagate offer holds the save on the settling registry |
+| 2026-09-19 |  |  |  | 2.2.0 (`ae8cf25`) |  |  | 5.1.3 (`ae8cf25`) | 1.9.5 (`ae8cf25`) |  | Core 2.2.0, PropagateTagsAndPerformers 5.1.3, SceneVariants 1.9.5: a save settles before the propagate offer |
+| 2026-09-19 |  |  |  |  |  |  | 5.1.2 (`85d5d63`) |  |  | PropagateTagsAndPerformers 5.1.2: "was likely from", and the pick dialog a size of its own |
+| 2026-09-19 |  |  |  |  |  |  | 5.1.1 (`5e48ecd`) |  |  | PropagateTagsAndPerformers 5.1.1: the row and dialog are "Automatic Propagation and Depropagate Assist" |
+| 2026-09-19 |  |  |  |  |  |  | 5.1.0 (`b3fa23c`) |  |  | PropagateTagsAndPerformers 5.1.0: a reaction asks unless Silent is on, and the Depropagate assist |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.3 (`2e24a13`) |  |  | PropagateTagsAndPerformers 5.0.3: the rows in a box indented under their head |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.2 (`d90be80`) |  |  | PropagateTagsAndPerformers 5.0.2: captions wrap, toggles at the right edge, bigger box heads |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.1 (`1a151ec`) |  |  | PropagateTagsAndPerformers 5.0.1: the buttons dialog grouped by page, the automatic modes in a dialog |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.0 (`c3656cd`) |  |  | PropagateTagsAndPerformers 5.0.0: Manual Buttons Settings, a switch per button |
+| 2026-09-18 |  |  |  |  |  |  |  | 1.9.4 (`e43382a`) |  | SceneVariants 1.9.4: the review listing keeps six lines however the log grows |
+| 2026-09-18 |  |  |  |  |  |  |  | 1.9.3 (`4469263`) |  | SceneVariants 1.9.3: Proceed settles once every migrated scene is written |
+| 2026-09-18 | 3.1.3 (`c1422c6`) | 2.1.2 (`c1422c6`) | 3.1.3 (`c1422c6`) | 2.1.0 (`c1422c6`) | 4.1.3 (`c1422c6`) | 5.5.4 (`c1422c6`) | 4.4.3 (`c1422c6`) | 1.9.2 (`c1422c6`) | 2.2.4 (`c1422c6`) | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 2026-09-18 |  |  |  | 2.0.0 (`c4ac7aa`) |  |  |  |  |  | GTTxCore 2.0.0: one Show Counts on Headings switch, and Custom Fields counts its rows |
 | 2026-09-18 |  |  |  | 1.7.0 (`409b555`) |  |  |  |  |  | GTTxCore 1.7.0: a tag's Parent Tags and Sub-Tags carry their counts under Show Tag Counts |
 | 2026-09-18 |  |  |  | 1.6.0 (`e2349f2`) |  |  |  |  |  | GTTxCore 1.6.0: Show Performer Counts puts the count after the word Performers above every performer list |
