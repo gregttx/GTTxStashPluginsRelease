@@ -281,6 +281,55 @@ re-sort**; re-sorting is what **Rescan** is for. **Undo** reaches every set writ
 dialog has been open, in reverse order. On the set already listed the button is unavailable, with
 the reason on it.
 
+### Naming the partials of a set
+
+**Settings → Tasks → Rename Variants...** names every partial-duration scene after its set. The
+rule is one line: `<base name><postfix>`, and where a set has more than one partial, `<base
+name><postfix><index>`. The postfix is a setting in the **Variants Title...** dialog, ` - Promo ` by default with both its separators
+included and nothing added around it, so a cut of "Song" is "Song - Promo" — a trailing space is
+dropped when no index follows — and two cuts are "Song - Promo 1" and "Song - Promo 2"; turn on
+**Index a Set's Only Partial** and the single cut is "Song - Promo 1" too. A postfix
+of ` - cut #` with a first index of `00` gives "Song - cut #00", and an empty postfix gives "Song1"
+and "Song2" — or, with the first index empty too, "Song" for every partial. Full-duration scenes
+are never renamed: the base is read from them.
+
+The base name is what the set's titles share once the plugin's own postfix is taken off — so a
+full-duration "Song - Remastered" beside "Song - Promo 2" gives "Song", and a partial titled any
+old way does not get a vote. Where the titles share nothing, the base is the full-duration scene's
+title, if the set has exactly one; a set with neither is listed with a warning and nothing
+proposed. Either way a base you have written into the **Variant Base Name** custom field on any
+scene of the set wins over the titles, which is how a set the rule reads wrong is settled once. A
+scene carrying anything in the **Variant No-Rename** custom field is left alone, and so is one
+carrying the tag named in **Exclude Scenes Carrying This Tag From Renaming**, or any tag filed
+under it. When ᝯㄝₓ Custom Fields Bulk Editor is installed, both fields are described in its store.
+
+Indexes count from the **First Partial Index** setting, whose spelling is the rule: `1` counts 1,
+2, 3; `01` pads to two digits; `A` counts A to Z and then AA; `AA` runs to ZZ and then AAA. Empty
+it, and no index is ever added: every partial wears the postfix alone, however many there are. They
+are handed out longest scene first — the order the Variants tab lists them in — with the bigger
+file breaking a tie, and a partial whose title already carries an index in the expected shape keeps
+it, so a run never renumbers a set you numbered by hand. Turn on **Renumber by Duration** and the
+index a partial is expected to carry is the one its duration gives it, everywhere the rule is
+applied: a set numbered the other way round is title drift in the review and on the tab, and this
+task, Synchronize Variants, Synchronize Set and the offer after a save all propose the swap. The
+box above this task's listing starts from that setting and overrides it for the dialog only,
+re-planning at once. A set you want left as it is numbered is marked, per scene, in the no-rename
+field or with the no-rename tag.
+
+Every proposed title is a checkbox line, none ticked - **Select All** and **Unselect All** at
+the footer's right tick and untick every line still open - showing what changes between the old title
+and the new - red for what goes, green for what arrives, a long shared start elided so the end is
+what you see; the hover shows both titles whole and says where the base came from. Nothing is written until you press **Proceed**, and **Undo** puts
+every written title back while the dialog stays open. A partial named after its set is not drift:
+the [review](#finding-the-sets-worth-synchronizing) and the tab's own score count a title only
+where it is not the expected one. With ᝯㄝₓ Entity Name Maintainer on the page, every title
+written - here, by a Synchronize dialog or by the offer after a save - is handed to it in one
+batch once the writes are done, and it offers to update mentions of the old titles across the
+library: one dialog per renamed scene that is mentioned anywhere, each opening as the one before it
+closes, none for a title nothing mentions, and the batch's own titles never offered as mentions of
+each other, so swapping two indexes offers nothing back. Undo hands the put-back over the same way.
+The log says how many it took.
+
 ### Synchronizing a variant set
 
 Variants of one work drift apart: a date corrected on one, a performer added to another, tags that
@@ -395,9 +444,19 @@ here starts ticked** — each line is the edit you just made by hand, which is s
 intent than a long-standing difference — except title lines, which start unticked even when opted
 in: a title is the one value a variant most deliberately owns. The offer is on by default and
 switchable off (**Offer to Propagate Edits to Variants**), and title changes are only listed when a
-second setting opts them in (**Offer Title Changes Too**, off by default; while it is off, a
-dialog raised by a save that changed the title says so in its listing). The write button reads
-**Proceed all** while every line is ticked and **Proceed selected** once any line is not.
+second setting opts them in (**Rename Variants After a Title Change**, off by default; while it is
+off, a dialog raised by a save that changed the title says so in its listing). The write button
+reads **Proceed all** while every line is ticked and **Proceed selected** once any line is not.
+
+Title lines follow the [naming rule](#naming-the-partials-of-a-set) wherever the set has a base.
+Rename the full-duration "Song" to "Tune" and each partial is offered its own title under the new
+base — "Song - Promo 1" becomes "Tune - Promo 1", indexes counted afresh — while another
+full-duration variant is offered "Tune" verbatim, and the listing says which base the partials
+were named after. The scene you just renamed is the base, so partials still wearing the old one
+cannot vote it back; a base pinned in the **Variant Base Name** field still wins, and the listing
+then says the partials keep their titles because of it. Renaming a partial pushes its title onto
+no sibling. The same rule applies to the title lines of **Synchronize Variants** and of the review
+dialog's Synchronize Set.
 
 ### Taking a stash-id off a scene
 
@@ -432,23 +491,38 @@ written by the box itself. An added id nobody else carries is not a set and rais
 
 ## Settings
 
-All under **Settings → Plugins → ᝯㄝₓ Scene Variants**, all optional:
+All under **Settings → Plugins → ᝯㄝₓ Scene Variants**, all optional. The eight about how a
+partial-duration scene is titled are in one dialog, opened from the **Variants Title...** row at
+the end of the group, so the page itself keeps to the tags and the switches the tab runs on:
 
 | Setting | Default | What it does |
 |---|---|---|
 | Full-duration Tag | empty | The name of the tag you put on a scene that is the whole work. |
 | Partial-duration Tag | empty | The name of the tag you put on a cut of one. |
 | Variant Stash-ID Custom Field | `ᱜ╦╦🞮_Variant_Stash_ID` | The custom field the [migration task](#migrating-a-partial-duration-scenes-stash-id) writes into. A **ⓘ** beside the value carries a tooltip with the field's description, how many scenes carry it and the first ten ([placement](../GTTxCore/README.md#links-cards-and-tooltips)). |
-| Variant Flag Tag | `ᱜ╦╦🞮⸎✱MultiVariants✅∙` | The tag the [Flag Variants task](#flagging-the-scenes-that-have-variants) keeps on every scene that has at least one other variant; the task's Proceed creates it if it does not exist yet. |
+| Variant Flag Tag | `ᱜ╦╦🞮⸎✱MultiVariants✅∙` | The tag the [Flag Variants task](#flagging-the-scenes-that-have-variants) keeps on every scene that has at least one other variant; the task's Proceed creates it if it does not exist yet — or renames it, where the plugin's own tag is found under an earlier default name or by its alias `GTTx Multiple Variants`. |
 | Log to the Browser Console | off | Print each variant lookup to the console under `[svr]`: the scene, how many variants were found and what they were matched on. A failed query is reported whatever this says. |
 | Offer to Propagate Edits to Variants | on | Open the [propagate dialog](#propagating-an-edit-when-you-save) when a save changed something the variants do not have. |
-| Offer Title Changes Too | off | Also list the title in the [propagate dialog](#propagating-an-edit-when-you-save); the manual button always lists titles. |
 | Skip Tags the Hierarchy Makes Redundant | on | Leave out a tag another tag on the same scene already implies, as [ᝯㄝₓ Normalize Parent Tags](#relationship-to-the-other-plugins-in-this-repo) decides — see [the rules](#synchronizing-a-variant-set). |
 | Compare Cover Images | off | Also compare the variants' cover images and offer this scene's where they differ — see [the rules](#synchronizing-a-variant-set) and [the set listing](#finding-the-sets-worth-synchronizing). |
 
-The two defaults with a value are written into their boxes the first time the plugin loads, so the
-page shows the name the plugin is actually using; clearing one goes back to that same default, and
-a box you have cleared stays cleared.
+In the **Variants Title...** dialog - every line explains itself on hover, and nothing is written
+until you press **Save**, which writes them all at once and puts them in force at once:
+
+| Setting | Default | What it does |
+|---|---|---|
+| Rename Variants After a Title Change | off | Also list the title in the [propagate dialog](#propagating-an-edit-when-you-save), each partial named under the new base; the manual button always lists titles. |
+| Partial-duration Title Postfix | ` - Promo ` | What [Rename Variants](#naming-the-partials-of-a-set) puts after the base name, separators included; the index follows it directly. |
+| First Partial Index | `1` | The first index where a set has several partials, and by its spelling how the rest count: `01`, `A`, `AA`. Empty means no index at all. |
+| Index a Set's Only Partial | off | On, a set with a single partial gets the first index too instead of the postfix alone. |
+| Renumber by Duration | off | On, every partial is expected to carry the index its duration gives it, longest first, so a set numbered the other way round is drift and each dialog offers the swap. Off, an index a title already carries in the expected shape is kept. The Rename Variants box starts from this and overrides it for that dialog. |
+| Variant Base Name Custom Field | `ᱜ╦╦🞮_Variant_Base_Name` | Set on any scene of a set, its base name — read before the titles, the full-duration scene's value first, never written and never checked against the titles. The dialog line says the whole rule. |
+| Variant No-Rename Custom Field | `ᱜ╦╦🞮_Do_Not_Auto_Rename` | Set to anything on a scene, keeps Rename Variants from proposing a title for it. |
+| Exclude Scenes Carrying This Tag From Renaming | empty | A tag name: a scene carrying it, or a tag filed under it, is left out of Rename Variants. |
+
+The defaults with a value are written into their boxes the first time the plugin loads, so the
+page and the dialog show the name the plugin is actually using; clearing one goes back to that
+same default, and a box you have cleared stays cleared.
 
 Tag names are typed rather than picked, and compared without regard to case or surrounding spaces.
 A name finds the tag by any of its **aliases** as well as by its name, and a scene tagged with any
@@ -475,13 +549,16 @@ many there are. The plugin uses all of them; the link goes to the first.
   Tags the Hierarchy Makes Redundant** is on, so its hierarchy and its own tag exclusions are what
   answer, and a tag you have told that plugin to leave alone is never dropped here either. With it
   absent, disabled or older, every listing says so instead of filtering silently.
-- **ᝯㄝₓ Entity Name Maintainer** and this plugin never call each other. Both wrap the page's
-  `fetch`, both intercept a scene save and hold it for one read before forwarding it, and a save
-  passes through both exactly once. What keeps them apart is the lease: every write this plugin
-  makes is made under one, and the save watch samples the lease before letting a write through, so
-  a bulk edit by another plugin never raises this plugin's dialog, and this plugin's writes never
-  read to that plugin as a user's own edit. The same lease is what makes a library-wide rewrite
-  unable to raise one dialog per scene.
+- **ᝯㄝₓ Entity Name Maintainer** and this plugin both wrap the page's `fetch`, both intercept a
+  scene save and hold it for one read before forwarding it, and a save passes through both exactly
+  once. What keeps them apart is the lease: every write this plugin makes is made under one, and
+  the save watch samples the lease before letting a write through, so a bulk edit by another
+  plugin never raises this plugin's dialog, and this plugin's writes never read to that plugin as
+  a user's own edit. The same lease is what makes a library-wide rewrite unable to raise one dialog
+  per scene - and what would hide the titles this plugin writes from it, so those are handed over
+  by name instead, after the writes: each renamed scene is offered as if you had renamed it
+  yourself. That plugin from before it took renames this way is named in the log; with it absent,
+  nothing is said.
 - **ᝯㄝₓ Custom Fields Bulk Editor**, where it is present, is handed a description of the variant
   stash-id field for its description store at load; the console says whether it was filed or is
   waiting for an Apply in that plugin's **Manage Custom Field Descriptions...** dialog.

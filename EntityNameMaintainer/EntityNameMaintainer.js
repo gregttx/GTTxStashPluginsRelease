@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.1.3';
+  var PLUGIN_VERSION = '2.3.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -296,6 +296,37 @@
   // an entity's action row - the rename itself is the trigger - so it registers no
   // `order` priority either.
   coop().respecters[PLUGIN_ID] = true;
+
+  // A sibling that renames entities under its own lease - which stands this plugin
+  // down, deliberately - hands the renames over here instead, once its writes are done.
+  // A question, not a setting: what was renamed, from what, to what - one rename
+  // (`id`, `from`, `to`) or a batch (`renames: [{ id, from, to }]`) of one type. The
+  // answer is how many were taken up; those are offered one after another, and every
+  // scan leaves out the name field of every entity in the batch: two partials whose
+  // indexes were swapped each wear the other's old name on purpose, and a dialog that
+  // offered to swap them back would be undoing the rename it was handed.
+  coop().api[PLUGIN_ID] = { version: PLUGIN_VERSION, renamed: apiRenamed };
+
+  function apiRenamed(opts) {
+    var spec = null;
+    for (var i = 0; opts && i < TYPE_ORDER.length; i++) {
+      if (ENTITIES[TYPE_ORDER[i]].label.toLowerCase() === String(opts.type)) spec = ENTITIES[TYPE_ORDER[i]];
+    }
+    if (!spec) return 0;
+    var list = Object.prototype.toString.call(opts.renames) === '[object Array]' ? opts.renames : [opts];
+    var batch = {}, taken = [];
+    list.forEach(function (r) {
+      if (!r || r.id == null || typeof r.from !== 'string' || typeof r.to !== 'string' || r.from === r.to) return;
+      batch[String(r.id)] = true;
+      taken.push(r);
+    });
+    taken.forEach(function (r) {
+      trace(spec.label + ' ' + r.id + ' renamed "' + r.from + '" to "' + r.to + '" by ' +
+        (opts.owner || 'another plugin') + ', handed over.');
+      onRename(spec, String(r.id), r.from, r.to, null, { input: null, stale: null, handed: true, batch: batch });
+    });
+    return taken.length;
+  }
 
   // Off unless `__GTTx__.StashPluginCoop.debugButtons = true`, typed into the browser
   // console: no setting, no reload, and read at call time so it takes effect on the next
@@ -822,7 +853,10 @@
     // settled. Everything *else* on it is still fair game - a performer's details can
     // name them.
     var own = self && self.typeKey === spec.key && self.id === String(ent.id) ? self : null;
-    var ownName = own ? own.nameField : null;
+    // A sibling renamed in the same handed-over batch wears its new name on purpose too.
+    var inBatch = self && self.typeKey === spec.key && self.pending && self.pending.batch &&
+      self.pending.batch[String(ent.id)];
+    var ownName = own || inBatch ? self.nameField : null;
     // The renamed entity is read as the save left it - the save's input over what the
     // scan read - and a field the save changed is the user's own edit, not a mention
     // to fix: an alias set to the old name when name and alias are swapped is the case
@@ -911,9 +945,19 @@
   // ── The dialog ────────────────────────────────────────────────────────────
 
   var _active = null;
+  // Renames that arrived while a dialog was open, offered one after another as each
+  // closes: a sibling handing over the three titles it just wrote must not have two of
+  // them dropped for the one that got there first. Decided here, not in `onRename`:
+  // the settings load between the two is asynchronous, so two renames in one tick
+  // both find no dialog open there.
+  var _queue = [];
 
   function openRun(spec, id, oldName, newName, settings, pending) {
-    if (_active) { _active.focus(); return; }
+    if (_active) {
+      trace(spec.label + ' ' + id + ': a dialog is already open; queued behind it.');
+      _queue.push([spec, id, oldName, newName, settings, pending]);
+      return;
+    }
     _active = new Run(spec, id, oldName, newName, settings, pending);
     _active.begin();
   }
@@ -1075,6 +1119,14 @@
 
     wireEscape(this);
     document.body.appendChild(this.backdrop);
+    // A handed-over rename is shown once its scan has found something to show: one
+    // that mentions nothing closes unseen, and a sibling handing three over does not
+    // flash three dialogs for the one that matters.
+    if (this.handed()) this.show(this.backdrop, false);
+  };
+
+  Run.prototype.handed = function () {
+    return !!(this.origin.pending && this.origin.pending.handed);
   };
 
   Run.prototype.focus = function () {
@@ -1243,12 +1295,20 @@
       self.buildFilters();
       self.renderHits();
       self.summarise();
+      if (self.handed() && !self.hits.length) {
+        trace(self.spec.label + ' ' + self.id + ': nothing mentions "' + self.oldName +
+          '", so the handed-over rename opens no dialog.');
+        self.close();
+        return;
+      }
+      self.show(self.backdrop, true);
     }, function (e) {
       self.msg('ERROR', 'The scan failed: ' + (e && e.message ? e.message : String(e)));
       self.setState('listing');
       self.buildFilters();
       self.renderHits();
       self.summarise();
+      self.show(self.backdrop, true);
     });
   };
 
@@ -2086,6 +2146,8 @@
       this.backdrop.parentNode.removeChild(this.backdrop);
     }
     _active = null;
+    var next = _queue.shift();
+    if (next) openRun.apply(null, next);
   };
 
   // ── Noticing a rename ─────────────────────────────────────────────────────
@@ -2256,11 +2318,6 @@
   //     bulk run, so the dialog silently never opened; and whether the sibling reacts at
   //     all depends on the entity, which is why it read as a property of the tag.
   function onRename(spec, id, from, to, held, pending) {
-    if (_active) {
-      trace(spec.label + ' ' + id + ' renamed "' + from + '" to "' + to +
-        '", but a dialog is already open; only one at a time.');
-      return;
-    }
     if (held) {
       trace(spec.label + ' ' + id + ' was renamed while ' + held.owner +
         ' already held a lease (' + held.label + '); standing down.');
@@ -2628,6 +2685,7 @@
       _stats.readable + '  ·  GraphQL: ' + _stats.graphql + '  ·  renames matched: ' +
       _stats.matched);
     lines.push('dialog open: ' + (_active ? 'yes' : 'no'));
+    lines.push('renames waiting for the open dialog to close: ' + _queue.length);
     lines.push('leases held now: ' + (c.leases.map(function (l) {
       return l.owner + ' (' + l.label + ')';
     }).join(', ') || 'none'));

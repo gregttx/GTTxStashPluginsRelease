@@ -8,6 +8,22 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.17.2 (`7829b08`) | 2026-09-21 | SceneVariants 1.17.2: the Variants Title row folds with the group |
+| 1.17.1 (`7a297f5`) | 2026-09-21 | SceneVariants 1.17.1: Flag Variants renames its own tag instead of failing on the alias |
+| 1.17.0 (`81a6c8c`) | 2026-09-21 | SceneVariants 1.17.0: the eight title settings are one Variants Title dialog |
+| 1.16.1 (`9c2319c`) | 2026-09-21 | EntityNameMaintainer 2.3.0, SceneVariants 1.16.1: renamed titles go over as one batch, and a swap offers nothing back |
+| 1.16.0 (`f911e67`) | 2026-09-20 | SceneVariants 1.16.0: Select All and Unselect All in the Rename Variants dialog |
+| 1.15.0 (`5a3dffa`) | 2026-09-20 | SceneVariants 1.15.0: Renumber by Duration is a setting the whole naming rule reads, the dialog box its override |
+| 1.14.2 (`033052a`) | 2026-09-20 | SceneVariants 1.14.2: the rename line shows what changes in a title, not two cut copies of it |
+| 1.14.1 (`7fe2a98`) | 2026-09-20 | SceneVariants 1.14.1: the renumber box explains both states on its whole label |
+| 1.14.0 (`ce6fd55`) | 2026-09-20 | SceneVariants 1.14.0, EntityNameMaintainer 2.2.0: titles Rename Variants writes reach Entity Name Maintainer |
+| 1.13.0 (`a10e0ef`) | 2026-09-20 | SceneVariants 1.13.0: title propagation follows the naming rule, as Rename Variants After a Title Change |
+| 1.12.2 (`89fefa6`) | 2026-09-20 | SceneVariants 1.12.2: the setting reads Offer Title Synchronization |
+| 1.12.1 (`8d7a0e5`) | 2026-09-20 | SceneVariants 1.12.1: the tab's rows read titles by the naming rule, and Offer Title Changes Synchronization |
+| 1.12.0 (`1fe7923`) | 2026-09-20 | SceneVariants 1.12.0: a switch to index a set's only partial |
+| 1.11.1 (`9691e52`) | 2026-09-20 | SceneVariants 1.11.1: an empty postfix means no postfix |
+| 1.11.0 (`f894fe4`) | 2026-09-20 | SceneVariants 1.11.0: the rename settings as asked, a no-rename tag, and Offer Title Changes beside the title settings |
+| 1.10.0 (`7e917c6`) | 2026-09-20 | SceneVariants 1.10.0: Rename Variants names every partial after its set |
 | 1.9.6 (`549fc1e`) | 2026-09-20 | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |
 | 1.9.5 (`ae8cf25`) | 2026-09-19 | Core 2.2.0, PropagateTagsAndPerformers 5.1.3, SceneVariants 1.9.5: a save settles before the propagate offer |
 | 1.9.4 (`e43382a`) | 2026-09-18 | SceneVariants 1.9.4: the review listing keeps six lines however the log grows |

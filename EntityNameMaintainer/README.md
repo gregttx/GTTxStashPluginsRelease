@@ -160,6 +160,19 @@ reacts to that same save, such as ᝯㄝₓ Normalize Parent Tags pruning the ta
 not a bulk run and does not suppress the dialog. It takes a lease of its own while it writes, so
 those plugins stand down in turn.
 
+**A sibling that renames things under its lease can hand the renames over instead.** ᝯㄝₓ Scene
+Variants does, for every title it writes - from its Rename Variants task, a Synchronize dialog or
+the propagate offer after a save: once its writes are done, the renamed scenes are handed over in
+one batch, and each is offered here as if you had renamed it yourself; its Undo hands the put-back
+over the same way. Two differences from your own rename. A handed-over rename that nothing mentions
+opens no dialog at all - the trace in `status()` says so - and the titles of the batch are not
+mentions of each other, so two partials whose indexes were swapped are not offered to swap back.
+Several that do mention something open one after another, each as the one before it closes; the
+count still waiting is on the `status()` line. The call is `coop().api.EntityNameMaintainer
+.renamed({ type, owner, renames: [{ id, from, to }] })` - `type` is the entity's label in lower
+case, `scene` say; a single `{ type, owner, id, from, to }` works too - and it answers how many it
+took up.
+
 ## Notes and limitations
 
 **Why the scan reads everything.**

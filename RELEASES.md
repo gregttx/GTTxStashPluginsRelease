@@ -10,6 +10,22 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-21 |  |  |  |  |  |  |  | 1.17.2 (`7829b08`) |  | SceneVariants 1.17.2: the Variants Title row folds with the group |
+| 2026-09-21 |  |  |  |  |  |  |  | 1.17.1 (`7a297f5`) |  | SceneVariants 1.17.1: Flag Variants renames its own tag instead of failing on the alias |
+| 2026-09-21 |  |  |  |  |  |  |  | 1.17.0 (`81a6c8c`) |  | SceneVariants 1.17.0: the eight title settings are one Variants Title dialog |
+| 2026-09-21 |  | 2.3.0 (`9c2319c`) |  |  |  |  |  | 1.16.1 (`9c2319c`) |  | EntityNameMaintainer 2.3.0, SceneVariants 1.16.1: renamed titles go over as one batch, and a swap offers nothing back |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.16.0 (`f911e67`) |  | SceneVariants 1.16.0: Select All and Unselect All in the Rename Variants dialog |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.15.0 (`5a3dffa`) |  | SceneVariants 1.15.0: Renumber by Duration is a setting the whole naming rule reads, the dialog box its override |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.14.2 (`033052a`) |  | SceneVariants 1.14.2: the rename line shows what changes in a title, not two cut copies of it |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.14.1 (`7fe2a98`) |  | SceneVariants 1.14.1: the renumber box explains both states on its whole label |
+| 2026-09-20 |  | 2.2.0 (`ce6fd55`) |  |  |  |  |  | 1.14.0 (`ce6fd55`) |  | SceneVariants 1.14.0, EntityNameMaintainer 2.2.0: titles Rename Variants writes reach Entity Name Maintainer |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.13.0 (`a10e0ef`) |  | SceneVariants 1.13.0: title propagation follows the naming rule, as Rename Variants After a Title Change |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.12.2 (`89fefa6`) |  | SceneVariants 1.12.2: the setting reads Offer Title Synchronization |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.12.1 (`8d7a0e5`) |  | SceneVariants 1.12.1: the tab's rows read titles by the naming rule, and Offer Title Changes Synchronization |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.12.0 (`1fe7923`) |  | SceneVariants 1.12.0: a switch to index a set's only partial |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.11.1 (`9691e52`) |  | SceneVariants 1.11.1: an empty postfix means no postfix |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.11.0 (`f894fe4`) |  | SceneVariants 1.11.0: the rename settings as asked, a no-rename tag, and Offer Title Changes beside the title settings |
+| 2026-09-20 |  |  |  |  |  |  |  | 1.10.0 (`7e917c6`) |  | SceneVariants 1.10.0: Rename Variants names every partial after its set |
 | 2026-09-20 |  | 2.1.3 (`b44e245`) |  |  |  |  |  |  |  | EntityNameMaintainer 2.1.3: the renamed entity is read as the save left it |
 | 2026-09-20 |  |  |  |  |  |  | 5.2.2 (`e9a80b2`) |  |  | PropagateTagsAndPerformers 5.2.2: a bulk button with nothing to do is unavailable |
 | 2026-09-20 | 3.1.4 (`446a817`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.1.4: Apply is unavailable over an empty scope |

@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '1.9.6';
+  var PLUGIN_VERSION = '1.17.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -153,9 +153,17 @@
     a4VariantFlagTag: '',
     b1LogToConsole: false,
     c1PropagateOnSave: false,
-    c2PropagateTitleOnSave: false,
     c3SkipRedundantTags: false,
     c4CheckCoverMismatch: false,
+    // `c5` was `c2` before it moved beside the title settings; the old key is read where the new one is unanswered.
+    c5PropagateTitleOnSave: false,
+    e1PartialPostfix: '',
+    e2FirstIndex: '',
+    e3BaseNameField: '',
+    e4NoRenameField: '',
+    e5NoRenameTag: '',
+    e2bIndexLonePartial: false,
+    e2cRenumberByDuration: false,
     // The set-review weights. Dialog-only - they are edited in the review dialog's own
     // strip, and a `.yml` row would be a second editor for one value. Absent means
     // "not remembered", which is why they are read as numbers-or-null rather than
@@ -206,6 +214,32 @@
   // is machine-kept and not a source of truth - it says what the last run of the task
   // found, nothing fresher.
   var FLAG_DEFAULT = 'ᱜ╦╦🞮⸎✱MultiVariants✅∙';
+
+  // Rename Variants: what a partial-duration scene is called after its set. The postfix
+  // carries its own separator; the first index's spelling is the counting rule (see
+  // `indexAlphabet`); the two fields are a remembered base name for a set and a mark
+  // that keeps a scene out of the renaming.
+  // The postfix ends in the space the index follows: nothing is put between them, so
+  // " - cut #" with a first index of "00" reads " - cut #00". An empty first index means
+  // no index at all - the postfix alone, however many partials a set has; a set's only
+  // partial wears the postfix alone too unless `e2bIndexLonePartial` gives it the first; an empty
+  // postfix means none - the index straight after the base, or the base alone. Both
+  // are seeded, so the boxes show them, and an emptied box is an answer.
+  var POSTFIX_DEFAULT = ' - Promo ';
+  var FIRST_INDEX_DEFAULT = '1';
+  var BASE_FIELD_DEFAULT = 'ᱜ╦╦🞮_Variant_Base_Name';
+  var SKIP_FIELD_DEFAULT = 'ᱜ╦╦🞮_Do_Not_Auto_Rename';
+  function naming(s) {
+    return {
+      postfix: s.e1PartialPostfix,
+      first: trim(s.e2FirstIndex),
+      baseField: trim(s.e3BaseNameField) || BASE_FIELD_DEFAULT,
+      skipField: trim(s.e4NoRenameField) || SKIP_FIELD_DEFAULT,
+      skipTag: trim(s.e5NoRenameTag),
+      loneIndex: !!s.e2bIndexLonePartial,
+      renumber: !!s.e2cRenumberByDuration,
+    };
+  }
   // The names this shipped under before, only ever written by the seed - treated as
   // unanswered so a rename reaches a box nobody chose deliberately, the same trade
   // CustomFieldsBulkEditor's legacy hide-field name makes.
@@ -401,6 +435,9 @@
   function loadSettings() {
     return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      if (raw.c5PropagateTitleOnSave == null && raw.c2PropagateTitleOnSave != null) {
+        raw.c5PropagateTitleOnSave = raw.c2PropagateTitleOnSave;
+      }
       var s = {};
       for (var k in DEFAULTS) {
         if (!hasOwn(DEFAULTS, k)) continue;
@@ -453,6 +490,10 @@
     a4VariantFlagTag: FLAG_DEFAULT,
     c1PropagateOnSave: true,
     c3SkipRedundantTags: true,
+    e1PartialPostfix: POSTFIX_DEFAULT,
+    e2FirstIndex: FIRST_INDEX_DEFAULT,
+    e3BaseNameField: BASE_FIELD_DEFAULT,
+    e4NoRenameField: SKIP_FIELD_DEFAULT,
   };
 
   function seedFieldDefault(raw, s) {
@@ -593,7 +634,9 @@
     var fl = tagsMatchingName(tags, s.a1FullLengthTag),
         pl = tagsMatchingName(tags, s.a2PartialLengthTag);
     return { byId: byId, flRoots: fl, plRoots: pl,
-      fl: withDescendants(fl), pl: withDescendants(pl) };
+      fl: withDescendants(fl), pl: withDescendants(pl),
+      // A scene wearing this tag, or a descendant of it, is left out of Rename Variants.
+      noRename: withDescendants(tagsMatchingName(tags, s.e5NoRenameTag)) };
   }
 
   // The tag ids never pushed and never scored: both dimension sets, descendants
@@ -668,7 +711,7 @@
   // drifted would show a delta against fields only half the rows carry.
   var SCENE_FIELDS =
     'id title tags { id name } ' +
-    'paths { screenshot preview } files { duration width height } ' +
+    'paths { screenshot preview } files { duration width height size } ' +
     'code details director date rating100 organized urls ' +
     'studio { id name } performers { id name } groups { group { id name } scene_index }';
 
@@ -789,8 +832,9 @@
           var self = scenes.filter(function (o) { return String(o.id) === String(scene.id); })[0];
           logToConsole('scene ' + scene.id + ': ' + plural(others.length, 'variant') +
             ' from ' + matchedOn(ids, own));
+          var nm = naming(s);
           return {
-            rows: ordered(others, self, m),
+            rows: ordered(others, self, m, self ? expectedMap([self].concat(others), m, nm) : null),
             // The viewed scene as the query returned it - the delta's other side, and
             // what the synchronize task pushes from: the same fields, selected the same
             // way, for both readers.
@@ -806,6 +850,7 @@
             // task's own weights and its own tag exclusions, read here so the number
             // on the tab is the number the listing would give this set.
             skip: skipTagIds(both[1], s, m),
+            matchers: m, naming: nm,
             weights: weightsFrom(s),
             remembered: anyRemembered(s),
             coverCheck: !!s.c4CheckCoverMismatch,
@@ -935,9 +980,20 @@
   // Sections for the hover box, counts for the row's badges - one computation, so the
   // badge and the box it opens can never disagree about a number. Null where there is
   // nothing to compare against, which is a different fact from "no differences".
-  function deltaOf(self, other) {
+  // `expected`, the set's titles under the naming rule where it has any: a title is then
+  // a difference only where a side that has an expected title is not wearing it - a
+  // partial named after its set does not differ from the scene it is named after, and
+  // the review's title count says the same.
+  function deltaOf(self, other, expected) {
     if (!self || String(self.id) === String(other.id)) return null;
     var d = tagDelta(self, other), out = [];
+    var titleDiffers = function () {
+      var ruled = expected && (hasOwn(expected, String(self.id)) || hasOwn(expected, String(other.id)));
+      if (!ruled) return attrValue(self, ATTRS[0]) !== attrValue(other, ATTRS[0]);
+      return [self, other].some(function (sc) {
+        return hasOwn(expected, String(sc.id)) && (sc.title || '') !== expected[String(sc.id)];
+      });
+    };
     if (d.extra.length) {
       out.push({ head: 'Extra ' + plural(d.extra.length, 'tag') + ':',
         body: d.extra.join(', '), kind: 'extra' });
@@ -947,7 +1003,7 @@
         body: d.missing.join(', '), kind: 'missing' });
     }
     var differ = ATTRS.filter(function (a) {
-      return attrValue(self, a) !== attrValue(other, a);
+      return a.key === 'title' ? titleDiffers() : attrValue(self, a) !== attrValue(other, a);
     }).map(function (a) { return a.label; });
     if (differ.length) {
       out.push({ head: 'Differing attributes:', body: differ.join(', '), kind: 'attrs' });
@@ -987,9 +1043,9 @@
   // than one candidate at the top - which the user says is rare.
   var ROLE_RANK = { fl: 0, none: 1, bad: 1, pl: 2 };
 
-  function ordered(variants, self, m) {
+  function ordered(variants, self, m, expected) {
     return variants.map(function (scene) {
-      return { scene: scene, cls: classify(scene, m), delta: deltaOf(self, scene) };
+      return { scene: scene, cls: classify(scene, m), delta: deltaOf(self, scene, expected) };
     }).sort(function (a, b) {
       var ra = ROLE_RANK[a.cls.role], rb = ROLE_RANK[b.cls.role];
       if (ra !== rb) return ra - rb;
@@ -1341,14 +1397,27 @@
     // Jobs with a checkbox lock while anything is in flight - the selection is read at
     // press time, so a live box mid-write would steer nothing - and stay settled once
     // written, until an Undo takes them back out of `changes`.
+    var open = 0, selected = 0;
     this.jobs.forEach(function (j) {
       var lock = busy || self.changes.indexOf(j) !== -1;
       if (j.box) j.box.disabled = lock;
+      if (j.box && !lock) { open++; if (j.box.checked) selected++; }
       // The individual item boxes steer the write exactly like the line's own box, so
       // they lock with it. The expander stays live: opening a list changes only what
       // the screen shows.
       if (j.items) j.items.forEach(function (it) { if (it.box) it.box.disabled = lock; });
     });
+    // The same pair the [GROUP?] candidates get, over the lines of a task that lists
+    // one group and starts every line unticked; held back where pressing one would
+    // change nothing.
+    if (this.task.selectAll && !this.candidates.length) {
+      this.show(this.selAllBtn, open > 0);
+      this.show(this.unselAllBtn, open > 0);
+      this.selAllBtn.title = 'Tick every line still open.';
+      this.unselAllBtn.title = 'Untick every line still open.';
+      this.selAllBtn.disabled = busy || selected === open;
+      this.unselAllBtn.disabled = busy || !selected;
+    }
     // Undo stands beside Proceed rather than replacing it: a rescan leaves a fresh
     // plan and a written pass in the same dialog, and both need a button.
     this.show(this.undoBtn, this.changes.length > 0);
@@ -1619,7 +1688,13 @@
         });
       }
       self.rescoreSet(set);
+      var nmg = self.matchers ? namingOf(set.scenes, self.matchers, self.naming, self.source.id)
+        : { base: { base: '', from: null }, expected: null };
+      self.expected = nmg.expected;
+      self.base = nmg.base;
+      self.ruledTitles = 0;
       others.forEach(function (sc) { planSyncScene(self, self.source, sc, self.skip); });
+      titleRuleNotes(self);
       if (!self.jobs.length) {
         self.msg('INFO', 'Nothing to synchronize: this set already agrees on every ' +
           'attribute this dialog pushes.');
@@ -1643,7 +1718,8 @@
   // it changes when the user asks for that - a weight, or a rescan.
   Run.prototype.rescoreSet = function (set) {
     if (!set || !set.scoreEl) return;
-    set.delta = setDelta(set.scenes, this.skip, this.coverBy);
+    set.delta = setDelta(set.scenes, this.skip, this.coverBy,
+      this.matchers ? expectedMap(set.scenes, this.matchers, this.naming) : null);
     set.score = scoreOf(set.delta, this.weights);
     set.scoreEl.textContent = ' ' + set.score + ' ';
     set.scoreEl.className = 'svr-score ' + scoreClass(set.score, this.weights);
@@ -1936,7 +2012,8 @@
   // and one clean press is the way back.
   // A box already settled by a write stays as it is, like the hand leaves it.
   Run.prototype.tickCandidates = function (on) {
-    this.candidates.forEach(function (c) { if (!c.box.disabled) c.box.checked = on; });
+    var boxes = this.candidates.length ? this.candidates : this.jobs;
+    boxes.forEach(function (c) { if (c.box && !c.box.disabled) c.box.checked = on; });
     this.syncFooter();
   };
 
@@ -2312,6 +2389,7 @@
   Run.prototype.writeThen = function (before, jobs, build, verb, leaseLabel, say) {
     var self = this;
     var lease = acquireLease(leaseLabel);
+    self.renamed = [];
     function settle(err) {
       lease.release();
       self.setState('listing');
@@ -2320,6 +2398,7 @@
         self.msg('ERROR', 'Nothing was written: ' +
           (err && err.message ? err.message : String(err)));
       } else say();
+      handRenames(self);
     }
     Promise.resolve().then(function () { return before ? before() : null; })
       .then(function () { return self.writeAll(jobs, build, verb, lease); })
@@ -2386,10 +2465,16 @@
         }).then(function () {
           self.written++;
           self.dirty = true;
-          if (verb === self.task.verb) self.changes.push(job);
+          var forward = verb === self.task.verb;
+          if (forward) self.changes.push(job);
           else {
             var ix = self.changes.indexOf(job);
             if (ix >= 0) self.changes.splice(ix, 1);
+          }
+          // A title written is a rename, and so is one put back - see `handRenames`.
+          if (job.kind === 'set' && job.input === 'title') {
+            var was = job.had == null ? '' : String(job.had), now = job.value == null ? '' : String(job.value);
+            (self.renamed = self.renamed || []).push({ id: job.id, from: forward ? was : now, to: forward ? now : was });
           }
           self.msg('INFO', job.title + ' [' + job.id + ']: ' + verb + '.');
         }, function (e) {
@@ -2542,7 +2627,17 @@
       // Exact name or alias, never descendants: the flag is one machine-kept tag, and a
       // scene wearing a child of it is not wearing it.
       var hits = tagsMatchingName(both[1], name);
-      run.flagTagId = hits.length ? String(hits[0].id) : null;
+      // None under the configured name: the tag may be wearing a default this shipped
+      // with before, or be known only by the alias this plugin gives it - either way it
+      // is this plugin's own tag, and a twin could not carry that alias. Proceed renames
+      // it rather than creating one. Live: the default's respelling reached the setting
+      // and not the tag, and every Proceed failed on the alias.
+      var legacy = null;
+      if (!hits.length) LEGACY_FLAG_DEFAULTS.concat([FLAG_TAG_ALIAS]).forEach(function (old) {
+        if (!legacy) legacy = tagsMatchingName(both[1], old)[0] || null;
+      });
+      run.flagTagId = hits.length ? String(hits[0].id) : legacy ? String(legacy.id) : null;
+      run.flagRename = legacy ? legacy.name : null;
       run.flagTagName = name;
       if (hits.length > 1) {
         run.msg('WARN', plural(hits.length, 'tag') + ' answer to "' + name + '"; using "' +
@@ -2550,6 +2645,10 @@
       }
       if (!run.flagTagId) {
         run.msg('INFO', 'No tag named "' + name + '" exists yet; Proceed will create it.');
+      } else if (run.flagRename) {
+        run.msg('INFO', 'No tag named "' + name + '" exists yet, but "' + run.flagRename + '" [' +
+          run.flagTagId + '] is this plugin\'s flag tag under an earlier name; Proceed will ' +
+          'rename it, and every scene wearing it keeps it.');
       }
       run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
         '" line with another scene, to put "' + name + '" on exactly those.');
@@ -2668,7 +2767,21 @@
   // The tag is created on Proceed, never by the scan - a scan is a read - and a failure
   // here rejects the whole write, leaving a listing nobody has acted on.
   function flagPrepare(run) {
-    if (run.flagTagId) return null;
+    if (run.flagTagId && !run.flagRename) return null;
+    if (run.flagRename) {
+      return gqlRequest('mutation SVRRenameTag($input: TagUpdateInput!) ' +
+        '{ tagUpdate(input: $input) { id } }', { input: { id: run.flagTagId, name: run.flagTagName } })
+        .then(function (data) {
+          if (!data || !data.tagUpdate) {
+            throw new Error('the tag "' + run.flagRename + '" could not be renamed to "' +
+              run.flagTagName + '"');
+          }
+          run.msg('INFO', 'Renamed the tag "' + run.flagRename + '" [' + run.flagTagId + '] to "' +
+            run.flagTagName + '". Undo leaves the name.');
+          run.flagRename = null;
+          _tagsAt = 0;   // the cached tree still says the old name
+        });
+    }
     return gqlRequest('mutation SVRCreateTag($input: TagCreateInput!) ' +
       '{ tagCreate(input: $input) { id } }', { input: flagTagCreateInput(run.flagTagName) })
       .then(function (data) {
@@ -3199,7 +3312,16 @@
       if (a.key === 'title' && run.titleOff) return;
       var sv = a.show ? a.show(source) : source[a.key];
       var tv = a.show ? a.show(target) : target[a.key];
+      var val = a.raw ? a.raw(source) : (source[a.key] == null ? null : source[a.key]);
+      // A title goes by the naming rule where the set has one: a partial-duration
+      // variant is offered its expected title under the base, never this scene's title
+      // verbatim, and a partial's own title is never pushed onto a full-duration one.
+      if (a.key === 'title' && run.expected) {
+        if (hasOwn(run.expected, String(target.id))) sv = val = run.expected[String(target.id)];
+        else if (hasOwn(run.expected, String(source.id))) return;
+      }
       if (String(sv == null ? '' : sv) === String(tv == null ? '' : tv)) return;
+      if (a.key === 'title' && run.expected && hasOwn(run.expected, String(target.id))) run.ruledTitles = (run.ruledTitles || 0) + 1;
       var ops = valueDiffOps(tv, sv);
       // Unticked, every one of them: an add only ever adds, while a replace
       // overwrites the variant's own value, so a replace is opted into rather than
@@ -3207,7 +3329,7 @@
       run.tickLine({
         id: String(target.id), title: title, kind: 'set', input: a.input,
         group: a.label,
-        value: a.raw ? a.raw(source) : (source[a.key] == null ? null : source[a.key]),
+        value: val,
         had: a.raw ? a.raw(target) : (target[a.key] == null ? null : target[a.key]),
       }, 'svr-op-set', '[SYNC]    ',
       // The save dialog preselects its replaces: they are the edit the user just made
@@ -3378,7 +3500,7 @@
     var scene = run.scope || {};
     return Promise.all([settingsReady(), tagTree()]).then(function (both) {
       var s = both[0], m = matchers(both[1], s);
-      if (run.auto && !s.c2PropagateTitleOnSave) run.titleOff = true;
+      if (run.auto && !s.c5PropagateTitleOnSave) run.titleOff = true;
       run.settings = s;
       var skip = skipTagIds(both[1], s, m);
       // Re-queried rather than taken off the pane: the pane's answer is as old as the
@@ -3399,7 +3521,11 @@
             'variants, so there is nothing to push from.');
           return 'Nothing to synchronize.';
         }
-        return gatherCovers(run, s, found.self, found.rows.map(function (r) { return r.scene; }))
+        var others = found.rows.map(function (r) { return r.scene; });
+        var nmg = namingOf([found.self].concat(others), m, naming(s), found.self.id);
+        run.expected = nmg.expected;
+        run.base = nmg.base;
+        return gatherCovers(run, s, found.self, others)
           .then(function (covers) {
             run.covers = covers;
             found.rows.forEach(function (row) {
@@ -3411,9 +3537,25 @@
     });
   }
 
+  // What the naming rule did to the title lines, said in the listing: the base the
+  // partials were named after, or the pinned base that kept them as they are.
+  function titleRuleNotes(run) {
+    if (run.titleOff || !run.base || !run.base.base) return;
+    if (run.ruledTitles) {
+      run.msg('INFO', plural(run.ruledTitles, 'partial-duration title follows', 'partial-duration titles follow') +
+        ' the naming rule under the base "' + run.base.base + '"' +
+        (run.base.from === 'field' ? ', pinned by the base-name field' : '') +
+        ', not this scene\u2019s title verbatim.');
+    } else if (run.base.from === 'field' && run.only && run.only.title) {
+      run.msg('INFO', 'The base name of this set is pinned to "' + run.base.base +
+        '" by the base-name field, so its partial-duration scenes keep their titles.');
+    }
+  }
+
   // The tail of a sync listing, shared by the run that reaches it through `syncBegin`
   // and the one the review dialog's Synchronize Set builds.
   function finishSyncPlan(run, s) {
+    titleRuleNotes(run);
     var unticked = 0;
     run.jobs.forEach(function (j) { if (j.box && !j.box.checked) unticked++; });
     if (unticked && run.auto) {
@@ -3431,7 +3573,7 @@
     // save made that this dialog is deliberately not offering.
     if (run.titleOff && run.only && run.only.title) {
       run.msg('INFO', 'The title changed too, but title lines are not offered here: ' +
-        'the "Offer Title Changes Too" setting is off.');
+        'the "Rename Variants After a Title Change" setting is off.');
     }
     if (!run.jobs.length) {
       if (run.auto) { run.close(); return null; }
@@ -4042,6 +4184,51 @@
     return api && typeof api.prepare === 'function' ? api : null;
   }
 
+  // ── Handing a renamed title to Entity Name Maintainer ─────────────────────
+  //
+  // Every title this plugin writes is a rename that sibling would offer to carry into
+  // the library's text - except that it stands down for the lease the writes go out
+  // under, and rightly: a bulk run must not raise a dialog per scene. So the titles
+  // are handed to it by name instead, once the lease is given back, and it offers
+  // them one after another. A sibling too old to take them is named in the log; no
+  // sibling at all is silence, since there is nobody to send the reader to.
+  var ENM_ID = 'EntityNameMaintainer';
+  var ENM_NAME = 'ᝯㄝₓ Entity Name Maintainer';
+  var ENM_API_MIN = '2.2.0';   // the release that publishes `renamed`, for the log line
+
+  function enmApi() {
+    var api = coop().api && coop().api[ENM_ID];
+    return api && typeof api.renamed === 'function' ? api : null;
+  }
+
+  function handRenames(run) {
+    var list = run.renamed || [];
+    run.renamed = [];
+    if (!list.length) return;
+    var api = enmApi();
+    if (!api) {
+      if (coop().respecters[ENM_ID]) {
+        run.msg('INFO', plural(list.length, 'renamed title was', 'renamed titles were') +
+          ' not handed to ' + ENM_NAME + ': the one on this page is older than ' + ENM_API_MIN + '.');
+      }
+      return;
+    }
+    // One call for the lot, so the sibling knows the batch: two partials whose indexes
+    // were swapped must not be offered as mentions of each other's old title. A sibling
+    // from before the batch shape answers with no count, and is handed them one by one.
+    var taken = api.renamed({ type: 'scene', owner: PLUGIN_SHORT_NAME, renames: list });
+    if (typeof taken !== 'number') {
+      taken = list.filter(function (r) {
+        return api.renamed({ type: 'scene', id: r.id, from: r.from, to: r.to,
+          owner: PLUGIN_SHORT_NAME }) === true;
+      }).length;
+    }
+    if (!taken) return;
+    run.msg('INFO', plural(taken, 'renamed title was', 'renamed titles were') + ' handed to ' +
+      ENM_NAME + ', which offers to update mentions of the old ' +
+      (taken === 1 ? 'title' : 'titles') + ' - a dialog per title mentioned anywhere, one after another.');
+  }
+
   // A bound pruner, or null. Resolved once per run and read synchronously from the
   // planner, which is the whole reason the sibling's `plan` is not a promise.
   function nptPruner(s) {
@@ -4104,6 +4291,597 @@
   // picked and Synchronize Set is pressed, at which point the same `planSyncScene`
   // that both other doors use lists the changes below, with the same boxes, the same
   // All bar, the same Proceed and the same Undo.
+
+  // With a naming rule and a base, a title counts against a set only where it is not
+  // the expected one - a partial named after its set is not drift, and a full-duration
+  // scene's title is what the base is read from. Without a base, the plurality count.
+  function setDelta(scenes, skip, coverBy, expectedBy) {
+    var out = setDeltaRaw(scenes, skip, coverBy);
+    if (expectedBy) {
+      out.title = scenes.filter(function (sc) {
+        return hasOwn(expectedBy, String(sc.id)) && (sc.title || '') !== expectedBy[String(sc.id)];
+      }).length;
+    }
+    return out;
+  }
+
+  // ── Rename Variants: naming a partial after its set ────────────────────────
+  //
+  // A partial-duration scene is expected to be called "<base><postfix>", or with an
+  // index after the postfix where the set has more than one partial. The base is
+  // what the set's titles share once the plugin's own postfix is taken off, a
+  // remembered base on any member first; the full-duration members are never renamed,
+  // since the base is read from them. Everything here is pure: the task and the
+  // review's title count both call it.
+
+  // ── The index counter ─────────────────────────────────────────────────────
+  //
+  // The first index is a string, and its spelling is the whole rule: "1" counts 1, 2,
+  // 3; "01" counts 01, 02 ... 99, 100; "A" counts A ... Z, AA, AB; "AA" starts at AA
+  // and runs to ZZ, then AAA. Digits count in base ten, letters in the bijective base
+  // twenty-six a spreadsheet names its columns in, padded to the first index's length
+  // and growing past it rather than stopping. Anything else counts as "1".
+  function indexAlphabet(first) {
+    if (!first) return null;   // no index at all
+    if (/^[0-9]+$/.test(first)) return { kind: 'digits', width: first.length };
+    if (/^[A-Z]+$/.test(first)) return { kind: 'upper', width: first.length };
+    if (/^[a-z]+$/.test(first)) return { kind: 'lower', width: first.length };
+    return { kind: 'digits', width: 1 };
+  }
+  function indexValue(str, alpha) {
+    if (alpha.kind === 'digits') return parseInt(str, 10);
+    var n = 0, s = str.toUpperCase();
+    for (var i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+    return n;
+  }
+  function indexString(n, alpha) {
+    if (alpha.kind === 'digits') {
+      var d = String(n);
+      while (d.length < alpha.width) d = '0' + d;
+      return d;
+    }
+    var out = '';
+    while (n > 0) {
+      var r = (n - 1) % 26;
+      out = String.fromCharCode(65 + r) + out;
+      n = Math.floor((n - 1) / 26);
+    }
+    while (out.length < alpha.width) out = 'A' + out;
+    return alpha.kind === 'lower' ? out.toLowerCase() : out;
+  }
+  // The pattern one index of this alphabet wears, for reading an index off a title.
+  function indexPattern(alpha) {
+    return alpha.kind === 'digits' ? '[0-9]+' : alpha.kind === 'upper' ? '[A-Z]+' : '[a-z]+';
+  }
+
+  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+
+  // ── The base name ─────────────────────────────────────────────────────────
+  //
+  // Titles with this plugin's own postfix taken off, then the longest prefix they
+  // share, cut back to a word boundary in every longer title and stripped of trailing
+  // separators. "Song - Remastered" and "Song - Promo 2" give "Song"; "Songbird" and
+  // "Song" give nothing, since the shared letters end inside a word.
+  // What a partial wears when it has no index: the postfix without its trailing space.
+  function bareTitle(base, postfix) { return (base + postfix).replace(/\s+$/, ''); }
+  function stripPostfix(title, postfix, alpha) {
+    // With no postfix there is nothing to tell an index from a number in the name, so
+    // every title votes whole: "Episode 12" must not vote "Episode".
+    if (!postfix) return title;
+    var re = new RegExp('(' + escapeRe(postfix) + (alpha ? indexPattern(alpha) : '') + '|' +
+      escapeRe(bareTitle('', postfix)) + ')$');
+    return title.replace(re, '');
+  }
+  function commonPrefix(titles) {
+    if (!titles.length) return '';
+    var p = titles[0];
+    titles.forEach(function (t) {
+      var i = 0;
+      while (i < p.length && i < t.length && p.charAt(i) === t.charAt(i)) i++;
+      p = p.slice(0, i);
+    });
+    var insideWord = function () {
+      return titles.some(function (t) { return t.length > p.length && /[0-9A-Za-zÀ-￿]/.test(t.charAt(p.length)); });
+    };
+    while (p.length && insideWord()) p = p.slice(0, -1);
+    return p.replace(/[\s\-–—_:|,.;(\[]+$/, '');
+  }
+
+  // `members`: [{ id, title, role ('fl'|'pl'|other), duration, size, custom_fields }].
+  // `naming`: { postfix, first, baseField, skipField }.
+  // Returns { base, from: 'field'|'prefix'|'full'|null }. `leadId`, for a sync planned
+  // from one scene: that scene alone votes where it is full-duration, else the
+  // full-duration members do - the save that just renamed a scene is the base now, and
+  // the partials still wearing the old one would vote the new one down to nothing.
+  function baseOf(members, naming, leadId) {
+    var alpha = indexAlphabet(naming.first);
+    var pinned = null;
+    // A remembered base on any member wins, the full-duration member's first.
+    members.slice().sort(function (a, b) { return (a.role === 'fl' ? 0 : 1) - (b.role === 'fl' ? 0 : 1); })
+      .forEach(function (m) {
+        var v = m.custom_fields && m.custom_fields[naming.baseField];
+        if (pinned === null && typeof v === 'string' && v.replace(/^\s+|\s+$/g, '')) pinned = v.replace(/^\s+|\s+$/g, '');
+      });
+    if (pinned !== null) return { base: pinned, from: 'field' };
+    var titled = members.filter(function (m) { return typeof m.title === 'string' && m.title; });
+    // Who votes on the prefix: the full-duration members, and the partials already
+    // named in the expected shape. A partial titled any old way is what the rename is
+    // for, and it must not be allowed to vote the shared prefix down to nothing. With
+    // no such member, every titled member votes.
+    var lead = leadId != null ? titled.filter(function (m) { return m.id === String(leadId); })[0] : null;
+    var voters = lead && lead.role === 'fl' ? [lead] : titled.filter(function (m) {
+      return m.role === 'fl' || (!lead && stripPostfix(m.title, naming.postfix, alpha) !== m.title);
+    });
+    if (!voters.length) voters = titled;
+    var prefix = commonPrefix(voters.map(function (m) { return stripPostfix(m.title, naming.postfix, alpha); }));
+    if (prefix && voters.length > 1) return { base: prefix, from: 'prefix' };
+    if (prefix && voters[0].role === 'fl') return { base: prefix, from: 'full' };
+    if (prefix) return { base: prefix, from: 'prefix' };
+    return { base: '', from: null };
+  }
+
+  // Partials in the order the tab shows them - longest first, then the bigger file,
+  // then the lower id - which is the order their indexes count in.
+  function partialOrder(a, b) {
+    return (b.duration || 0) - (a.duration || 0) || (b.size || 0) - (a.size || 0) ||
+      (parseInt(a.id, 10) || 0) - (parseInt(b.id, 10) || 0);
+  }
+
+  // The expected title of every partial-duration member, against the base. One partial
+  // wears the postfix alone, or the first index where the setting says so; several wear
+  // it with an index. An index a title already
+  // carries in the expected shape is kept unless `renumber`, so a run does not renumber
+  // a set that was numbered by hand; the rest take the next free index in order.
+  // Full-duration members are never renamed: their titles are what the base is read from.
+  // Returns [{ member, expected, kept, skipped }] for every partial, expected === title
+  // where nothing would change.
+  function expectedTitles(members, naming, base, renumber) {
+    var alpha = indexAlphabet(naming.first);
+    var partials = members.filter(function (m) { return m.role === 'pl'; }).sort(partialOrder);
+    var out = partials.map(function (m) {
+      var skip = m.custom_fields && m.custom_fields[naming.skipField];
+      return { member: m, expected: m.title, kept: false, skipped: !!skip || !!m.excluded };
+    });
+    var live = out.filter(function (o) { return !o.skipped; });
+    if (!base) return out;
+    if (!alpha || (live.length === 1 && !naming.loneIndex)) {
+      live.forEach(function (o) { o.expected = bareTitle(base, naming.postfix); });
+      return out;
+    }
+    var shape = new RegExp('^' + escapeRe(base + naming.postfix) + '(' + indexPattern(alpha) + ')$');
+    var taken = {};
+    if (!renumber) {
+      live.forEach(function (o) {
+        var m = shape.exec(o.member.title || '');
+        if (!m || taken[indexValue(m[1], alpha)]) return;
+        taken[indexValue(m[1], alpha)] = true;
+        o.kept = true;
+      });
+    }
+    var n = indexValue(naming.first, alpha);
+    live.forEach(function (o) {
+      if (o.kept) return;
+      while (taken[n]) n++;
+      taken[n] = true;
+      o.expected = base + naming.postfix + indexString(n, alpha);
+    });
+    return out;
+  }
+
+
+  // One member per scene, in the shape the naming functions read.
+  function memberOf(sc, m) {
+    var f = bestFile(sc) || {};
+    return { id: String(sc.id), title: sc.title || '', role: classify(sc, m).role,
+      duration: f.duration || 0, size: f.size || 0, custom_fields: sc.custom_fields || {},
+      excluded: (sc.tags || []).some(function (t) { return !!m.noRename[String(t.id)]; }),
+      scene: sc };
+  }
+
+  // { base, expected }: the set's base as `baseOf` read it, and { id: expected title }
+  // over its partials, or null where the set has no base or no partial to rule on -
+  // the tags unset, or a set of full-duration scenes - and the title is scored the way
+  // it always was. `expectedMap` is what the review scores a title against.
+  function namingOf(scenes, m, nm, leadId) {
+    var members = scenes.map(function (sc) { return memberOf(sc, m); });
+    var b = baseOf(members, nm, leadId);
+    if (!b.base) return { base: b, expected: null };
+    var out = {}, any = false;
+    expectedTitles(members, nm, b.base, nm.renumber).forEach(function (p) {
+      if (p.skipped) return;
+      out[p.member.id] = p.expected;
+      any = true;
+    });
+    return { base: b, expected: any ? out : null };
+  }
+  function expectedMap(scenes, m, nm) { return namingOf(scenes, m, nm).expected; }
+
+  // ── The title rules, in one dialog ────────────────────────────────────────
+  //
+  // Eight settings about one thing - how a partial-duration scene is titled - had
+  // eight rows on Stash's settings page, beside the tags and the switches the tab
+  // itself runs on, and the page read as a wall. They are one dialog now, opened from
+  // one row of the group: stored under the same keys, so nothing already set moves,
+  // and written whole the way every settings write here is.
+  var TITLE_TASK_NAME = 'Variants Title...';
+
+  var TITLE_FIELDS = [
+    { key: 'c5PropagateTitleOnSave', bool: true, label: 'Rename Variants After a Title Change',
+      tip: 'Also list the title in the propagate dialog when a save changed it, each ' +
+        'partial named under the new base.\n\nOff by default: a title is the one value a ' +
+        'variant most deliberately owns, so pushing it is opted into twice - here and then ' +
+        'per line in the dialog, where title lines start unticked like every other replace. ' +
+        'While this is off, a dialog raised by a save that changed the title says so in its ' +
+        'listing rather than silently dropping the change. Only the save-triggered dialog ' +
+        'reads this: the Synchronize Variants button on the tab always lists titles, unticked.' },
+    { key: 'e1PartialPostfix', label: 'Partial-duration Title Postfix',
+      tip: 'What goes after the set\'s base name to title a partial-duration scene, ' +
+        'separators included: nothing is added between the base and the postfix, or between ' +
+        'the postfix and the index.\n\nDefault " - Promo ", so a cut of \'Song\' is \'Song - ' +
+        'Promo\' - a trailing space is dropped when no index follows - and two cuts are ' +
+        '\'Song - Promo 1\' and \'Song - Promo 2\'. \' - cut #\' with a first index of \'00\' ' +
+        'gives \'Song - cut #00\'. Empty means no postfix: \'Song1\' and \'Song2\', or \'Song\' ' +
+        'alone with no first index either.' },
+    { key: 'e2FirstIndex', label: 'First Partial Index',
+      tip: 'The index the first partial of a set gets when a set has more than one - or ' +
+        'always, with the switch below - and how the rest are counted: its spelling is the ' +
+        'rule.\n\n"1" counts 1, 2, 3; "01" counts 01, 02 and on past 99; "A" counts A to Z ' +
+        'then AA; "AA" runs to ZZ then AAA. It follows the postfix with nothing between them. ' +
+        'Indexes are handed out longest scene first, and an index a title already carries in ' +
+        'the expected shape is kept. Empty means no index at all: every partial wears the ' +
+        'postfix alone.' },
+    { key: 'e2bIndexLonePartial', bool: true, label: 'Index a Set\'s Only Partial',
+      tip: 'On, a set with a single partial-duration scene gets the first index too: ' +
+        '\'Song - Promo 1\'. Off, it wears the postfix alone: \'Song - Promo\'.\n\nNothing ' +
+        'changes without a first index.' },
+    { key: 'e2cRenumberByDuration', bool: true, label: 'Renumber by Duration',
+      tip: 'On, every partial of a set is expected to carry the index its duration gives ' +
+        'it, longest first, so a set numbered the other way round is title drift and each ' +
+        'dialog offers the swap.\n\nOff, a partial already carrying an index in the expected ' +
+        'shape keeps it wherever it falls, and only unnumbered partials take the next free ' +
+        'one. The box in the Rename Variants dialog starts from this and overrides it for ' +
+        'that dialog only. A scene marked in the no-rename field or wearing the no-rename ' +
+        'tag keeps its title either way.' },
+    { key: 'e3BaseNameField', label: 'Variant Base Name Custom Field',
+      tip: 'The custom field whose value names a variant set: whatever is written in it on ' +
+        'any scene of the set is the base every partial is titled from, before the postfix ' +
+        'and the index. Empty means the default name, ' + BASE_FIELD_DEFAULT + '.\n\n' +
+        'Read off every scene of the set, the full-duration one first: where several ' +
+        'carry a value, the full-duration scene\'s wins, then the first partial found. A ' +
+        'value on a partial alone still names the set. Spaces around it are dropped, and a ' +
+        'blank value counts as not set.\n\nWhere a value is found the titles are not read ' +
+        'at all - no shared prefix, no falling back to the full-duration title. Where none ' +
+        'is, the base is what the set\'s titles share once the postfix is taken off, or the ' +
+        'full-duration scene\'s title when they share nothing. Either way the base names ' +
+        'the partials only: a full-duration scene is never renamed, so the field on it ' +
+        'changes nothing but its partials\' titles.\n\nRead everywhere the rule applies - ' +
+        'Rename Variants, Synchronize Variants and Synchronize Set, the offer after a save, ' +
+        'and the title drift the review and the tab count. Never written by this plugin, ' +
+        'and never checked against the titles: a value left on a partial from a set it ' +
+        'used to belong to names the whole set. A scene marked in the no-rename field or ' +
+        'wearing the no-rename tag keeps its title whatever the base is.' },
+    { key: 'e4NoRenameField', label: 'Variant No-Rename Custom Field',
+      tip: 'A custom field that, set to anything on a scene, keeps every title rule from ' +
+        'proposing a title for it. Empty means the default name, ' + SKIP_FIELD_DEFAULT +
+        '.\n\nFor the partial that falls outside the rule. The scene is still counted as ' +
+        'a member of its set - its title is simply never the one the set would give it, ' +
+        'and never counted as drift.' },
+    { key: 'e5NoRenameTag', label: 'Exclude Scenes Carrying This Tag From Renaming',
+      tip: 'The name of a tag: a scene carrying it, or any tag filed under it, is left ' +
+        'alone by every title rule, the same way the no-rename field leaves one alone.\n\n' +
+        'Matched by name or alias, without regard to case, like the tags on the settings ' +
+        'page. Empty excludes nothing.' },
+  ];
+
+  var _title = null;
+
+  function TitleDialog() {
+    this.boxes = {};
+    this.stored = null;
+    this.saving = false;
+  }
+
+  TitleDialog.prototype.build = function () {
+    injectStyle();
+    var self = this;
+    this.backdrop = el('div', 'svr-backdrop');
+    this.modal = el('div', 'svr-modal svr-narrow');
+    this.backdrop.appendChild(this.modal);
+    var head = el('div', 'svr-head');
+    head.appendChild(el('div', 'svr-title', PLUGIN_SHORT_NAME + ' - ' + TITLE_TASK_NAME));
+    head.appendChild(el('div', 'svr-legend', 'How a partial-duration scene is titled after ' +
+      'its set, everywhere the rule is applied: Rename Variants, the Synchronize dialogs, ' +
+      'the offer after a save, and the title drift the review and the tab count. Hover a ' +
+      'line for what it does. Nothing is written until you press Save.'));
+    this.noteEl = el('div', 'svr-note', 'Reading the current settings…');
+    head.appendChild(this.noteEl);
+    this.modal.appendChild(head);
+    this.body = el('div', 'svr-form');
+    TITLE_FIELDS.forEach(function (f) {
+      var row = el('label', 'svr-field');
+      row.title = f.tip;
+      var box = el('input', 'svr-field-box');
+      box.type = f.bool ? 'checkbox' : 'text';
+      box.disabled = true;
+      box.addEventListener(f.bool ? 'click' : 'input', function () { self.refreshSave(); });
+      var cap = el('span', 'svr-field-label', f.label);
+      // The switch sits before its caption, as Stash's own do; a text box sits under it.
+      if (f.bool) { row.appendChild(box); row.appendChild(cap); }
+      else { row.appendChild(cap); row.appendChild(box); }
+      row.appendChild(el('span', 'svr-field-note', oneLine(f.tip.split('\n\n')[0])));
+      self.boxes[f.key] = box;
+      self.body.appendChild(row);
+    });
+    this.modal.appendChild(this.body);
+    var foot = el('div', 'svr-foot');
+    this.saveBtn = button('Save', 'svr-save');
+    this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.saveBtn.disabled = true;
+    this.saveBtn.title = 'Nothing has changed.';
+    this.closeBtn = button('Cancel', 'svr-cancel');
+    this.saveBtn.addEventListener('click', function () { self.save(); });
+    this.closeBtn.addEventListener('click', function () { self.close(); });
+    foot.appendChild(this.saveBtn);
+    foot.appendChild(this.closeBtn);
+    this.modal.appendChild(foot);
+    wireEscape(this);
+    document.body.appendChild(this.backdrop);
+    loadSettings().then(function (s) {
+      if (_title !== self) return;
+      self.stored = s;
+      TITLE_FIELDS.forEach(function (f) {
+        if (f.bool) self.boxes[f.key].checked = !!s[f.key];
+        else self.boxes[f.key].value = s[f.key] == null ? '' : String(s[f.key]);
+        self.boxes[f.key].disabled = false;
+      });
+      self.noteEl.textContent = '';
+      self.refreshSave();
+    }, function (e) {
+      if (_title !== self) return;
+      self.noteEl.textContent = 'The current settings could not be read (' +
+        (e && e.message ? e.message : e) + '). Saving from here would replace them with ' +
+        'whatever the boxes hold, so Save stays disabled - close this and try again.';
+    });
+  };
+
+  TitleDialog.prototype.values = function () {
+    var out = {}, self = this;
+    TITLE_FIELDS.forEach(function (f) {
+      out[f.key] = f.bool ? !!self.boxes[f.key].checked : self.boxes[f.key].value;
+    });
+    return out;
+  };
+
+  TitleDialog.prototype.refreshSave = function () {
+    var changed = false, v = this.values(), s = this.stored;
+    if (s) TITLE_FIELDS.forEach(function (f) { if (v[f.key] !== s[f.key]) changed = true; });
+    this.saveBtn.disabled = this.saving || !s || !changed;
+    this.saveBtn.title = !s ? 'Still reading the current settings.'
+      : !changed ? 'Nothing has changed.' : 'Write these settings.';
+  };
+
+  // The whole stored map goes back, per the rule `configurePlugin` forces. The cache
+  // takes the new values at once: the next dialog that names a partial reads them
+  // through `settingsReady`, which would otherwise serve the old ones for ten seconds.
+  TitleDialog.prototype.save = function () {
+    if (this.saving || this.saveBtn.disabled) return;
+    var self = this, v = this.values();
+    this.saving = true;
+    this.refreshSave();
+    this.noteEl.textContent = 'Saving…';
+    gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      var input = {}, k;
+      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+      for (k in v) if (hasOwn(v, k)) input[k] = v[k];
+      return gqlRequest('mutation SVRSaveTitleSettings($id: ID!, $input: Map!) ' +
+        '{ configurePlugin(plugin_id: $id, input: $input) }', { id: PLUGIN_ID, input: input });
+    }).then(function () {
+      if (_settings) for (var k in v) if (hasOwn(v, k)) _settings[k] = v[k];
+      if (_title === self) self.close();
+    }, function (e) {
+      self.saving = false;
+      if (_title !== self) return;
+      self.refreshSave();
+      self.noteEl.textContent = 'The settings could not be saved: ' +
+        (e && e.message ? e.message : e);
+    });
+  };
+
+  TitleDialog.prototype.focus = Run.prototype.focus;
+
+  TitleDialog.prototype.close = function () {
+    unwireEscape(this);
+    if (this.backdrop && this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
+    if (_title === this) _title = null;
+  };
+
+  function openTitleDialog() {
+    if (_title) { _title.focus(); return; }
+    _title = new TitleDialog();
+    _title.build();
+  }
+
+  // The dialog's row on Settings → Plugins, in the shape of Stash's own rows so it reads
+  // as one setting among them: a heading, a line, and the button where Edit would be.
+  //
+  // Beside the last of Stash's own rows, never on the group itself: on a Stash whose
+  // plugin groups fold (develop's collapsible list), the rows sit in a <Collapse> under
+  // the header, and a row appended to the group stayed on screen with the group folded.
+  // Live, on a preview of 0.32. The group is the fallback where no row can be found.
+  var TITLE_ROW_ID = 'svr-title-row';
+
+  function ensureTitleRow(group) {
+    if (document.getElementById(TITLE_ROW_ID)) return;
+    var host = null;
+    for (var key in DEFAULTS) {
+      if (!hasOwn(DEFAULTS, key)) continue;
+      var r = settingRow(key);
+      if (r && r.parentNode) host = r.parentNode;
+    }
+    var row = el('div', 'setting svr-title-row');
+    row.id = TITLE_ROW_ID;
+    var left = el('div');
+    left.appendChild(el('h3', null, 'Variants Title'));
+    left.appendChild(el('div', 'sub-heading', 'How a partial-duration scene is titled after ' +
+      'its set: the postfix, the index, the base-name and no-rename marks, and whether a ' +
+      'title change after a save is offered to the variants. Eight settings, in a dialog.'));
+    row.appendChild(left);
+    var right = el('div');
+    var btn = button(TITLE_TASK_NAME, 'svr-title-btn');
+    btn.className = btn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    btn.title = 'Open the title rules. Nothing is written until you press Save there.';
+    btn.addEventListener('click', function (e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      openTitleDialog();
+    });
+    right.appendChild(btn);
+    row.appendChild(right);
+    (host || group).appendChild(row);
+  }
+
+  var RENAME_TASK_NAME = 'Rename Variants...';
+
+  function renameBegin(run) {
+    return Promise.all([settingsReady(), tagTree()]).then(function (both) {
+      var s = both[0], m = matchers(both[1], s), field = fieldName(s), nm = naming(s);
+      run.settings = s;
+      // The box starts from the setting and is this run's override of it.
+      if (run.renumber == null) run.renumber = nm.renumber;
+      run.buildRenameBar();
+      // The renumber box re-lists what the last scan found rather than reading the
+      // library again: the sets have not changed, only how their indexes are handed out.
+      if (run.replanOnly && run.scannedSets) {
+        run.replanOnly = false;
+        return planRenames(run, m, nm);
+      }
+      run.msg('INFO', 'Looking for every variant set, to name each partial-duration scene ' +
+        'after its set: "<base>' + bareTitle('', nm.postfix) + '"' + (nm.first
+          ? ', with an index counted from "' + nm.first + '"' + (nm.loneIndex ? '.' : ' where a set has more than one.')
+          : ', with no index.'));
+      var seen = {}, scenes = [];
+      run.afterPage = function (got) { run.setCount = variantSetsOf(got, field).length; };
+      return flagScanPass(run, REVIEW_BY_STASHID_QUERY, {}, seen, scenes)
+        .then(function () {
+          return run.stopped ? null
+            : flagScanPass(run, REVIEW_BY_FIELD_QUERY, { field: field }, seen, scenes);
+        })
+        .then(function () {
+          if (run.stopped) return null;
+          run.scannedSets = variantSetsOf(scenes, field);
+          run.setCount = run.scannedSets.length;
+          return planRenames(run, m, nm);
+        });
+    });
+  }
+
+  var FROM_TEXT = { field: 'the "%s" field', prefix: 'what the set\'s titles share',
+    full: 'the full-duration scene\'s title, since the titles share nothing' };
+
+  function planRenames(run, m, nm) {
+    if (!run.scannedSets.length) {
+      run.msg('INFO', 'No scene in the library shares a stash-id or a "' + fieldName(run.settings) +
+        '" line with another, so there is no variant set to name.');
+      return null;
+    }
+    var changes = 0, skipped = 0, unbased = 0;
+    run.scannedSets.forEach(function (set) {
+      var members = set.scenes.map(function (sc) { return memberOf(sc, m); });
+      var b = baseOf(members, nm);
+      var names = members.map(function (x) { return (x.title || '(untitled)') + ' [' + x.id + ']'; }).join(', ');
+      if (!b.base) {
+        unbased++;
+        run.msg('WARN', 'Set of ' + plural(members.length, 'scene') + ' (' + names + '): the titles ' +
+          'share nothing and no single full-duration scene names it, so nothing is proposed. ' +
+          'Put the base name in "' + nm.baseField + '" on one of them to name this set.');
+        return;
+      }
+      var from = FROM_TEXT[b.from].replace('%s', nm.baseField);
+      expectedTitles(members, nm, b.base, !!run.renumber).forEach(function (p) {
+        if (p.skipped) { skipped++; return; }
+        if (p.expected === p.member.title) return;
+        changes++;
+        var ops = valueDiffOps(p.member.title, p.expected);
+        run.tickLine({ id: p.member.id, title: p.member.title || '(untitled)', kind: 'set',
+          input: 'title', group: 'Title', value: p.expected, had: p.member.title || '' },
+        'svr-op-set', '[RENAME]  ',
+        // The same word diff a sync line wears: two long titles differing in their last
+        // character were shown cut at the sixtieth, identical on screen. Both whole
+        // titles are in the hover text below.
+        [['  Title: ', null]].concat(ops ? valueDiffParts(ops)
+          : [[syncValShow(p.member.title || ''), 'svr-del'], [' \u2192 ', 'svr-mod'],
+            [syncValShow(p.expected), 'svr-add']]),
+        false,
+        'Rename "' + (p.member.title || '') + '" to "' + p.expected + '". The base "' + b.base +
+          '" is ' + from + (b.from === 'full' ? '; the line starts unticked either way' : '') + '.');
+      });
+    });
+    if (skipped) {
+      run.msg('INFO', plural(skipped, 'partial-duration scene') + ' left alone: marked with "' +
+        nm.skipField + '"' + (nm.skipTag ? ' or tagged "' + nm.skipTag + '"' : '') + '.');
+    }
+    if (unbased) run.msg('INFO', plural(unbased, 'set') + ' without a base name, listed above.');
+    run.msg('INFO', changes
+      ? plural(changes, 'rename') + ' proposed, none ticked: tick the ones to write, then press Proceed.'
+      : 'Every partial-duration scene in a set is already named after it.');
+    return null;
+  }
+
+  // The one option the listing has: hand the indexes out again in the tab's order
+  // - longest first - instead of keeping the index a title already carries.
+  Run.prototype.buildRenameBar = function () {
+    var self = this;
+    this.weightBar.className = 'svr-allbar';
+    this.weightBar.textContent = '';
+    var wrap = el('label', 'svr-renumber');
+    var box = el('input', 'svr-renumber-box');
+    box.type = 'checkbox';
+    box.checked = !!this.renumber;
+    // On the label, so the caption explains itself as well as the box.
+    wrap.title = 'On: every partial in a set is numbered afresh in order of duration, longest ' +
+      'first, whatever index its title carries now. Off: a partial already numbered in the ' +
+      'expected shape keeps its index, and only the rest take the next free ones, in that ' +
+      'same order. Either way the listing re-plans at once, without reading the library again. ' +
+      'It starts as the "Renumber by Duration" setting says and overrides it for this dialog only.';
+    box.addEventListener('click', function () {
+      if (self.state !== 'listing') { box.checked = !!self.renumber; return; }
+      self.renumber = box.checked;
+      self.replanOnly = true;
+      self.rescan();
+    });
+    wrap.appendChild(box);
+    wrap.appendChild(el('span', null, ' Renumber by duration, longest first'));
+    this.weightBar.appendChild(wrap);
+    this.show(this.weightBar, true);
+  };
+
+  var RENAME_TASK = {
+    title: 'Rename Variants',
+    legend: 'Every partial-duration scene in a variant set, named after its set: the ' +
+      'base name the set\'s titles share, then the postfix from your settings, then an ' +
+      'index where the set has more than one partial - counted longest first, and kept ' +
+      'where a title already carries one. Full-duration scenes are never renamed: the ' +
+      'base is read from them. A base remembered in the base-name field wins over the ' +
+      'titles, and a scene marked in the no-rename field or wearing the no-rename tag is ' +
+      'left alone. Nothing starts ' +
+      'ticked and nothing is written until you press Proceed; Undo puts every written ' +
+      'title back while the dialog stays open.',
+    nothing: 'Nothing is ticked.',
+    scanNoun: 'scene',
+    planNoun: 'proposed',
+    planUnit: 'rename',
+    leaseLabel: 'Variant renaming',
+    undoTip: 'Put back every title this dialog wrote. Only what it wrote, and only while ' +
+      'it stays open.',
+    verb: 'renamed',
+    selectAll: true,
+    begin: renameBegin,
+    writeInput: SYNC_TASK.writeInput,
+    undoInput: SYNC_TASK.undoInput,
+  };
 
   var REVIEW_TASK_NAME = 'Review Variant Sets...';
 
@@ -4263,7 +5041,7 @@
   // The dimension and flag tags are left out: a full-duration scene and its partial cut
   // differ by them *by definition*, and counting that would give every set in the
   // library the same baseline score and rank nothing.
-  function setDelta(scenes, skip, coverBy) {
+  function setDeltaRaw(scenes, skip, coverBy) {
     var out = { title: 0, attr: 0, tag: 0, performer: 0, group: 0, cover: 0, n: scenes.length };
     var n = scenes.length;
     // The same shape as an attribute: the members that disagree with the set's most
@@ -4437,6 +5215,8 @@
       var s = both[0], m = matchers(both[1], s);
       var field = fieldName(s);
       run.settings = s;
+      run.matchers = m;
+      run.naming = naming(s);
       run.weights = weightsFrom(s);
       run.remember = anyRemembered(s);
       run.skip = skipTagIds(both[1], s, m);
@@ -4471,7 +5251,7 @@
               return ((bestFile(b) || {}).duration || 0) - ((bestFile(a) || {}).duration || 0);
             });
               return { key: set.key, scenes: members,
-                delta: setDelta(members, run.skip, run.coverBy) };
+                delta: setDelta(members, run.skip, run.coverBy, expectedMap(members, m, run.naming)) };
             });
             run.setCount = run.sets.length;
           if (!raw.length) {
@@ -4529,7 +5309,7 @@
   function ownTaskName(btn) {
     var label = trim(btn.textContent);
     if (label !== TASK_NAME && label !== FLAG_TASK_NAME &&
-      label !== REVIEW_TASK_NAME) return null;
+      label !== REVIEW_TASK_NAME && label !== RENAME_TASK_NAME) return null;
     var node = btn;
     var fallback = null;
     for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
@@ -4723,6 +5503,18 @@
     // Two steps of the strip's own gap, so Remember reads as the thing beside the
     // numbers rather than the last of them.
     '.svr-remember{margin-left:2rem;}' +
+    // The title-rules dialog: a narrow modal of labelled boxes, one per setting, each
+    // with its first sentence under it and the rest on hover. The row it opens from
+    // borrows Stash's own `.setting` classes, so it is laid out as the rows above it.
+    '.svr-modal.svr-narrow{width:min(58rem,94vw);}' +
+    '.svr-form{padding:.5rem 1rem;overflow:auto;}' +
+    '.svr-field{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;' +
+    'margin:.6rem 0;color:#d6dee4;font-size:.9rem;cursor:pointer;}' +
+    '.svr-field-label{font-weight:600;}' +
+    '.svr-field-box[type=text]{flex:1 1 14rem;background:#30404d;color:#f5f8fa;' +
+    'border:1px solid #425a6b;border-radius:3px;padding:.15rem .4rem;}' +
+    '.svr-field-box[type=checkbox]{accent-color:#ffc107;margin:0;}' +
+    '.svr-field-note{flex:1 0 100%;color:#7d8f9c;font-size:.8rem;}' +
     '.svr-all-label{color:#7d8f9c;}' +
     '.svr-item-box{margin-right:.4rem;vertical-align:middle;}' +
     // The partner count inside a [FLAG] line: blue where there is exactly one other
@@ -5373,7 +6165,8 @@
       // lands with the pictures, after the rows, like the badge.
       if (found.self && found.rows.length) {
         var members = [found.self].concat(found.rows.map(function (r) { return r.scene; }));
-        var delta = setDelta(members, found.skip || {}, coverBy);
+        var delta = setDelta(members, found.skip || {}, coverBy,
+          found.matchers ? expectedMap(members, found.matchers, found.naming) : null);
         var score = scoreOf(delta, found.weights);
         // The tooltip hangs on the whole phrase, not the digit: a one-character hover
         // target is hard to hit, and the words are part of the thing being explained.
@@ -5523,7 +6316,8 @@
     if (!node) return false;
     if (node.tagName === 'BUTTON' &&
       (trim(node.textContent) === TASK_NAME || trim(node.textContent) === FLAG_TASK_NAME ||
-        trim(node.textContent) === REVIEW_TASK_NAME)) return true;
+        trim(node.textContent) === REVIEW_TASK_NAME ||
+        trim(node.textContent) === RENAME_TASK_NAME)) return true;
     var kids = node.childNodes || [];
     for (var i = 0; i < kids.length; i++) {
       if (hasOwnTaskButton(kids[i])) return true;
@@ -5768,6 +6562,7 @@
     collapseDescription(group);   // after the split: it counts the .svr-p divs
     tipSettings();
     ensureStaleNotice(group);     // before the early return: the link outlives it
+    ensureTitleRow(group);
     if (document.getElementById(README_LINK_ID)) return;
     var link = el('a', 'svr-readme', 'SceneVariants/README.md');
     link.id = README_LINK_ID;
@@ -5782,7 +6577,7 @@
 
 
   var TAG_LINK_MARK = '🔗';      // link symbol
-  var TAG_LINK_KEYS = ['a1FullLengthTag', 'a2PartialLengthTag', 'a4VariantFlagTag'];
+  var TAG_LINK_KEYS = ['a1FullLengthTag', 'a2PartialLengthTag', 'a4VariantFlagTag', 'e5NoRenameTag'];
 
   function tagLinkId(key) { return 'svr-taglink-' + key; }
 
@@ -5917,7 +6712,8 @@
       if (event.preventDefault) event.preventDefault();
       if (event.stopPropagation) event.stopPropagation();
       startRun(name === FLAG_TASK_NAME ? FLAG_TASK
-        : name === REVIEW_TASK_NAME ? REVIEW_TASK : MIGRATE_TASK);
+        : name === REVIEW_TASK_NAME ? REVIEW_TASK
+        : name === RENAME_TASK_NAME ? RENAME_TASK : MIGRATE_TASK);
     }, true);
   }
 
@@ -5932,19 +6728,33 @@
     'full-duration scene carries it as well as one. The Variants tab matches on this ' +
     'field and on stash-ids together, so a scene is found by either.';
 
-  function describeVariantField() {
+  var BASE_FIELD_DESCRIPTION = 'The base name of the variant set this scene belongs to: ' +
+    'what Rename Variants titles the set\u2019s partial-duration scenes after, before the ' +
+    'postfix and the index.\n\n' +
+    'Read by ' + PLUGIN_NAME + ', never written by it. Set it on any scene of a set whose ' +
+    'titles share the wrong thing, or nothing at all; it wins over the titles.';
+  var SKIP_FIELD_DESCRIPTION = 'Set to anything, keeps Rename Variants from proposing a ' +
+    'title for this scene.\n\n' +
+    'Read by ' + PLUGIN_NAME + ', never written by it. For the partial-duration scene that ' +
+    'falls outside the naming rule.';
+
+  function describeVariantFields() {
     var api = coop().api && coop().api.CustomFieldsBulkEditor;
     if (!api || typeof api.describeField !== 'function') return;
-    api.describeField(fieldName(), FIELD_DESCRIPTION).then(function (outcome) {
-      if (outcome === 'added') {
-        svr('[svr] described the custom field "' + fieldName() + '" in ' +
-          'CustomFieldsBulkEditor\u2019s description store.');
-      } else if (outcome === 'queued') {
-        svr('[svr] a description for "' + fieldName() + '" is waiting for ' +
-          'CustomFieldsBulkEditor\u2019s description store - open "Manage Custom Field ' +
-          'Descriptions..." and press Apply to file it.');
-      }
-    }, function () { /* a sentence is not worth an error */ });
+    var nm = naming(settings());
+    [[fieldName(), FIELD_DESCRIPTION], [nm.baseField, BASE_FIELD_DESCRIPTION],
+      [nm.skipField, SKIP_FIELD_DESCRIPTION]].forEach(function (pair) {
+      api.describeField(pair[0], pair[1]).then(function (outcome) {
+        if (outcome === 'added') {
+          svr('[svr] described the custom field "' + pair[0] + '" in ' +
+            'CustomFieldsBulkEditor\u2019s description store.');
+        } else if (outcome === 'queued') {
+          svr('[svr] a description for "' + pair[0] + '" is waiting for ' +
+            'CustomFieldsBulkEditor\u2019s description store - open "Manage Custom Field ' +
+            'Descriptions..." and press Apply to file it.');
+        }
+      }, function () { /* a sentence is not worth an error */ });
+    });
   }
   // ── Wiring ────────────────────────────────────────────────────────────────
   //
@@ -5980,6 +6790,6 @@
   // Warms the settings cache so the first pane knows the two tag names, and documents
   // the custom field once the configured name is known - the sibling may not have loaded
   // yet at script bottom, and `describeField` is read off the shared object at call time.
-  settingsReady().then(describeVariantField, function () {});
+  settingsReady().then(describeVariantFields, function () {});
   tick();
 }());
