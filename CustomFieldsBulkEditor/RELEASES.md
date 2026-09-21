@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.3.0 (`3c7e906`) | 2026-09-21 | CustomFieldsBulkEditor 3.3.0: locked fields are marked in the descriptions dialog |
+| 3.2.3 (`1db94bb`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.3: Undo never removes a locked field |
+| 3.2.2 (`8e0a443`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.2: a locked field can still be added where missing |
+| 3.2.1 (`87c9ce1`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.1: a locked field's description is locked too |
+| 3.2.0 (`8315bdd`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.0, FindEntitiesByTextContent 3.2.0: locked custom fields |
 | 3.1.4 (`446a817`) | 2026-09-20 | CustomFieldsBulkEditor 3.1.4: Apply is unavailable over an empty scope |
 | 3.1.3 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 3.1.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |

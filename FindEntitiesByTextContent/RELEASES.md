@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.2.1 (`11cbd46`) | 2026-09-21 | FindEntitiesByTextContent 3.2.1: asks the locks through Core's fieldLocks() |
+| 3.2.0 (`8315bdd`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.0, FindEntitiesByTextContent 3.2.0: locked custom fields |
 | 3.1.3 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 3.1.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 3.1.1 (`f1fb23f`) | 2026-08-29 | Measure two drag limits, gate one row, name one issue |

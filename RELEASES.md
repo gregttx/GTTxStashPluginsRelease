@@ -6,425 +6,440 @@ One row per commit that shipped a version, newest first; a blank cell means that
 not move in that commit. A version links to its commit, or carries the short id where the
 commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEASES.md`.
 
-**CFBE** [CustomFieldsBulkEditor](CustomFieldsBulkEditor/RELEASES.md) · **ENM** [EntityNameMaintainer](EntityNameMaintainer/RELEASES.md) · **FRETC** [FindEntitiesByTextContent](FindEntitiesByTextContent/RELEASES.md) · **GTTxCore** [GTTxCore](GTTxCore/RELEASES.md) · **MPTTS** [MergePerformerTagsToScenes](MergePerformerTagsToScenes/RELEASES.md) · **NPT** [NormalizeParentTags](NormalizeParentTags/RELEASES.md) · **PTP2RE** [PropagateTagsAndPerformers](PropagateTagsAndPerformers/RELEASES.md) · **SVR** [SceneVariants](SceneVariants/RELEASES.md) · **TBC** [TagBundleClipboard](TagBundleClipboard/RELEASES.md)
+**CFBE** [CustomFieldsBulkEditor](CustomFieldsBulkEditor/RELEASES.md) · **ENM** [EntityNameMaintainer](EntityNameMaintainer/RELEASES.md) · **FRETC** [FindEntitiesByTextContent](FindEntitiesByTextContent/RELEASES.md) · **GTTxCore** [GTTxCore](GTTxCore/RELEASES.md) · **MPTTS** [MergePerformerTagsToScenes](MergePerformerTagsToScenes/RELEASES.md) · **NPT** [NormalizeParentTags](NormalizeParentTags/RELEASES.md) · **PTP2RE** [PropagateTagsAndPerformers](PropagateTagsAndPerformers/RELEASES.md) · **SFM** [SceneFilenameManager](SceneFilenameManager/RELEASES.md) · **SVR** [SceneVariants](SceneVariants/RELEASES.md) · **TBC** [TagBundleClipboard](TagBundleClipboard/RELEASES.md)
 
-| Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SVR | TBC | Change |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 2026-09-21 |  |  |  |  |  |  |  | 1.17.2 (`7829b08`) |  | SceneVariants 1.17.2: the Variants Title row folds with the group |
-| 2026-09-21 |  |  |  |  |  |  |  | 1.17.1 (`7a297f5`) |  | SceneVariants 1.17.1: Flag Variants renames its own tag instead of failing on the alias |
-| 2026-09-21 |  |  |  |  |  |  |  | 1.17.0 (`81a6c8c`) |  | SceneVariants 1.17.0: the eight title settings are one Variants Title dialog |
-| 2026-09-21 |  | 2.3.0 (`9c2319c`) |  |  |  |  |  | 1.16.1 (`9c2319c`) |  | EntityNameMaintainer 2.3.0, SceneVariants 1.16.1: renamed titles go over as one batch, and a swap offers nothing back |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.16.0 (`f911e67`) |  | SceneVariants 1.16.0: Select All and Unselect All in the Rename Variants dialog |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.15.0 (`5a3dffa`) |  | SceneVariants 1.15.0: Renumber by Duration is a setting the whole naming rule reads, the dialog box its override |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.14.2 (`033052a`) |  | SceneVariants 1.14.2: the rename line shows what changes in a title, not two cut copies of it |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.14.1 (`7fe2a98`) |  | SceneVariants 1.14.1: the renumber box explains both states on its whole label |
-| 2026-09-20 |  | 2.2.0 (`ce6fd55`) |  |  |  |  |  | 1.14.0 (`ce6fd55`) |  | SceneVariants 1.14.0, EntityNameMaintainer 2.2.0: titles Rename Variants writes reach Entity Name Maintainer |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.13.0 (`a10e0ef`) |  | SceneVariants 1.13.0: title propagation follows the naming rule, as Rename Variants After a Title Change |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.12.2 (`89fefa6`) |  | SceneVariants 1.12.2: the setting reads Offer Title Synchronization |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.12.1 (`8d7a0e5`) |  | SceneVariants 1.12.1: the tab's rows read titles by the naming rule, and Offer Title Changes Synchronization |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.12.0 (`1fe7923`) |  | SceneVariants 1.12.0: a switch to index a set's only partial |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.11.1 (`9691e52`) |  | SceneVariants 1.11.1: an empty postfix means no postfix |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.11.0 (`f894fe4`) |  | SceneVariants 1.11.0: the rename settings as asked, a no-rename tag, and Offer Title Changes beside the title settings |
-| 2026-09-20 |  |  |  |  |  |  |  | 1.10.0 (`7e917c6`) |  | SceneVariants 1.10.0: Rename Variants names every partial after its set |
-| 2026-09-20 |  | 2.1.3 (`b44e245`) |  |  |  |  |  |  |  | EntityNameMaintainer 2.1.3: the renamed entity is read as the save left it |
-| 2026-09-20 |  |  |  |  |  |  | 5.2.2 (`e9a80b2`) |  |  | PropagateTagsAndPerformers 5.2.2: a bulk button with nothing to do is unavailable |
-| 2026-09-20 | 3.1.4 (`446a817`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.1.4: Apply is unavailable over an empty scope |
-| 2026-09-20 |  |  |  |  |  |  | 5.2.1 (`9da8af3`) |  |  | PropagateTagsAndPerformers 5.2.1: OK is unavailable while nothing is ticked |
-| 2026-09-20 |  |  |  | 2.3.0 (`549fc1e`) |  |  | 5.2.0 (`549fc1e`) | 1.9.6 (`549fc1e`) |  | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |
-| 2026-09-20 |  |  |  |  |  |  | 5.1.4 (`ab2d37e`) |  |  | PropagateTagsAndPerformers 5.1.4: the depropagate offer holds the save on the settling registry |
-| 2026-09-19 |  |  |  | 2.2.0 (`ae8cf25`) |  |  | 5.1.3 (`ae8cf25`) | 1.9.5 (`ae8cf25`) |  | Core 2.2.0, PropagateTagsAndPerformers 5.1.3, SceneVariants 1.9.5: a save settles before the propagate offer |
-| 2026-09-19 |  |  |  |  |  |  | 5.1.2 (`85d5d63`) |  |  | PropagateTagsAndPerformers 5.1.2: "was likely from", and the pick dialog a size of its own |
-| 2026-09-19 |  |  |  |  |  |  | 5.1.1 (`5e48ecd`) |  |  | PropagateTagsAndPerformers 5.1.1: the row and dialog are "Automatic Propagation and Depropagate Assist" |
-| 2026-09-19 |  |  |  |  |  |  | 5.1.0 (`b3fa23c`) |  |  | PropagateTagsAndPerformers 5.1.0: a reaction asks unless Silent is on, and the Depropagate assist |
-| 2026-09-19 |  |  |  |  |  |  | 5.0.3 (`2e24a13`) |  |  | PropagateTagsAndPerformers 5.0.3: the rows in a box indented under their head |
-| 2026-09-19 |  |  |  |  |  |  | 5.0.2 (`d90be80`) |  |  | PropagateTagsAndPerformers 5.0.2: captions wrap, toggles at the right edge, bigger box heads |
-| 2026-09-19 |  |  |  |  |  |  | 5.0.1 (`1a151ec`) |  |  | PropagateTagsAndPerformers 5.0.1: the buttons dialog grouped by page, the automatic modes in a dialog |
-| 2026-09-19 |  |  |  |  |  |  | 5.0.0 (`c3656cd`) |  |  | PropagateTagsAndPerformers 5.0.0: Manual Buttons Settings, a switch per button |
-| 2026-09-18 |  |  |  |  |  |  |  | 1.9.4 (`e43382a`) |  | SceneVariants 1.9.4: the review listing keeps six lines however the log grows |
-| 2026-09-18 |  |  |  |  |  |  |  | 1.9.3 (`4469263`) |  | SceneVariants 1.9.3: Proceed settles once every migrated scene is written |
-| 2026-09-18 | 3.1.3 (`c1422c6`) | 2.1.2 (`c1422c6`) | 3.1.3 (`c1422c6`) | 2.1.0 (`c1422c6`) | 4.1.3 (`c1422c6`) | 5.5.4 (`c1422c6`) | 4.4.3 (`c1422c6`) | 1.9.2 (`c1422c6`) | 2.2.4 (`c1422c6`) | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
-| 2026-09-18 |  |  |  | 2.0.0 (`c4ac7aa`) |  |  |  |  |  | GTTxCore 2.0.0: one Show Counts on Headings switch, and Custom Fields counts its rows |
-| 2026-09-18 |  |  |  | 1.7.0 (`409b555`) |  |  |  |  |  | GTTxCore 1.7.0: a tag's Parent Tags and Sub-Tags carry their counts under Show Tag Counts |
-| 2026-09-18 |  |  |  | 1.6.0 (`e2349f2`) |  |  |  |  |  | GTTxCore 1.6.0: Show Performer Counts puts the count after the word Performers above every performer list |
-| 2026-09-18 |  |  |  | 1.5.1 (`fcbda92`) |  |  |  |  |  | GTTxCore 1.5.1: a tag badge is known by data-sort-name, not by a link into /tags/ |
-| 2026-09-18 |  |  |  | 1.5.0 (`6e16e9a`) |  |  |  |  |  | GTTxCore 1.5.0: Show Tag Counts puts the count after the word Tags above every tag list |
-| 2026-09-18 |  |  |  |  |  | 5.5.3 (`56e09fa`) |  |  |  | NormalizeParentTags 5.5.3: the button holds its size through the flash |
-| 2026-09-18 |  |  |  |  |  | 5.5.2 (`6a9f3c9`) |  |  |  | NormalizeParentTags 5.5.2: Prune Tags and Roll Up Tags are disabled, never removed, when there is nothing to do |
-| 2026-09-18 |  |  |  |  |  |  |  | 1.9.1 (`15ad7c6`) |  | SceneVariants 1.9.1: the drift score is green at 1 as well as 0 |
-| 2026-09-18 |  |  |  |  |  |  |  | 1.9.0 (`113c143`) |  | SceneVariants 1.9.0: the drift score is per variant, and Partial-length reads Partial-duration |
-| 2026-09-18 |  |  |  |  |  |  |  | 1.8.4 (`907b83f`) |  | SceneVariants 1.8.4: the dimension's value reads Full-duration, not Full-length |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.8.3 (`a8d8936`) |  | SceneVariants 1.8.3: the review dialog calls its number the drift score too |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.8.2 (`24a4509`) |  | SceneVariants 1.8.2: the drift score's tooltip hangs on the whole phrase |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.8.1 (`2546239`) |  | SceneVariants 1.8.1: the drift score's tooltip lists the weights in force and where to change them |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.8.0 (`651eb9f`) |  | SceneVariants 1.8.0: the Variants tab shows its set's drift score at the review task's weights |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.7.3 (`71659f2`) |  | SceneVariants 1.7.3: Flag Variants sits second in Settings - Tasks, Review Variant Sets last |
-| 2026-09-17 | 3.1.2 (`46f966b`) | 2.1.1 (`46f966b`) | 3.1.2 (`46f966b`) |  | 4.1.2 (`46f966b`) | 5.5.1 (`46f966b`) | 4.4.2 (`46f966b`) | 1.7.2 (`46f966b`) | 2.2.3 (`46f966b`) | Close is green in every dialog once nothing is left to write |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.7.1 (`3e227e0`) |  | SceneVariants 1.7.1: Select All and Unselect All are held back when they would change nothing |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.7.0 (`eb49bf5`) |  | SceneVariants 1.7.0: Select All and Unselect All for the [GROUP?] candidates |
-| 2026-09-17 |  |  |  |  |  |  |  | 1.6.3 (`50a13f5`) |  | SceneVariants 1.6.3: the flag listing names untitled scenes by file, and the footer captions its pairs |
-| 2026-09-16 |  |  |  |  |  | 5.5.0 (`0ce2a33`) |  |  |  | NormalizeParentTags 5.5.0: Set All Prune, Roll Up and Off under the selectors |
-| 2026-09-16 |  |  |  |  |  |  |  | 1.6.2 (`09b6b26`) |  | SceneVariants 1.6.2: the pane button reads Synchronize Variant... for one variant |
-| 2026-09-16 |  |  |  | 1.4.0 (`ba19cc3`) |  | 5.4.0 (`ba19cc3`) |  |  | 2.2.2 (`ba19cc3`) | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |
-| 2026-09-16 |  |  |  |  |  |  |  |  | 2.2.1 (`a42a79a`) | TagBundleClipboard 2.2.1: ⮺ Tags is removed, not disabled, on a tagless entity |
-| 2026-09-16 |  |  |  |  |  |  |  |  | 2.2.0 (`dbff7e7`) | TagBundleClipboard 2.2.0: ⮺ Tags is disabled while the entity carries no tag |
-| 2026-09-16 |  |  |  |  |  |  |  | 1.6.1 (`4430fff`) |  | SceneVariants 1.6.1: the pane re-reads when the scene's stash-ids change under it |
-| 2026-09-16 |  |  |  |  |  |  |  | 1.6.0 (`1ebf30f`) |  | SceneVariants 1.6.0: a save that adds a shared stash-id says which set it joined |
-| 2026-09-16 |  |  |  |  |  |  |  | 1.5.2 (`ac018e9`) |  | SceneVariants 1.5.2: each dropped stash-id is probed as its own set |
-| 2026-09-16 |  |  |  |  |  |  |  | 1.5.1 (`97d65cd`) |  | SceneVariants 1.5.1: the lone survivor is checked exactly |
-| 2026-09-16 |  |  |  |  |  |  |  | 1.5.0 (`879edf7`) |  | SceneVariants 1.5.0: deleting a stash-id asks before the plugin's marks come off with it |
-| 2026-09-14 |  |  |  |  |  |  | 4.4.1 (`ed8e8b9`) |  |  | PropagateTagsAndPerformers 4.4.1: the child-tag exclusion setting reads "child tags" |
-| 2026-09-14 |  |  |  |  |  |  |  | 1.4.4 (`b0ec483`) |  | SceneVariants 1.4.4: the flag tag's default is spelled with ✅ |
-| 2026-09-14 |  |  |  |  |  |  | 4.4.0 (`05d543e`) |  |  | PropagateTagsAndPerformers 4.4.0: a tag and everything under it can be kept out |
-| 2026-09-14 |  |  |  | 1.3.0 (`9e53be6`) |  | 5.3.2 (`9e53be6`) | 4.3.0 (`9e53be6`) |  |  | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |
-| 2026-09-10 |  |  |  |  |  |  | 4.2.1 (`6187590`) |  |  | PropagateTagsAndPerformers 4.2.1: a write evicts the list query too, so a page listing what it wrote refetches |
-| 2026-09-02 |  |  |  |  |  |  |  | 1.4.3 (`856c59c`) |  | SceneVariants 1.4.3: the pane's Synchronize button is unavailable while a dialog is open |
-| 2026-09-02 |  |  |  | 1.2.1 (`4fcd6bb`) | 4.1.1 (`4fcd6bb`) | 5.3.1 (`4fcd6bb`) |  | 1.4.2 (`4fcd6bb`) |  | Review fixes 2026-09-02: the All row is drawn once, and sixty more |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.4.1 (`19eded8`) |  | SceneVariants 1.4.1: the review divider is a full-width drag bar, not a corner grip |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.4.0 (`943b9da`) |  | SceneVariants 1.4.0: the field's own display links each stash-box line, and the migrate scan flags pseudo-plus-real drift |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.3.1 (`8d12dd8`) |  | SceneVariants 1.3.1: a save re-reads the pane, and the review score explains itself on hover |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.3.0 (`cade576`) |  | SceneVariants 1.3.0: each stash-box entry under the summary is a link to the work's page there |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.2.1 (`e4806d9`) |  | SceneVariants 1.2.1: the set table's headers carry the file facts, and the box fits the table |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.2.0 (`ac683d5`) |  | SceneVariants 1.2.0: a set line hovers to a table of marks saying how the set is split |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.1.0 (`9e49c30`) |  | SceneVariants 1.1.0: the title is scored on its own weight, and the strip is reordered |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.0.1 (`09db634`) |  | SceneVariants 1.0.1: each Synchronize Set re-reads its own set, and restates its score without re-sorting |
-| 2026-09-01 |  |  |  |  |  |  |  | 1.0.0 (`934cc1d`) |  | SceneVariants 1.0.0 |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.43.0 (`1a2630c`) |  | SceneVariants 0.43.0: the score wears four colour bands derived from the weights, and the ENM save chain is pinned |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.42.1 (`7b3a025`) |  | SceneVariants 0.42.1: the set listing is hidden until a task fills it |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.42.0 (`25b827d`) |  | SceneVariants 0.42.0: the variants list badges a cover that is a different picture |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.41.0 (`b245e9b`) |  | SceneVariants 0.41.0: Proceed and Undo are two buttons, and a cover line hovers to both pictures |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.40.1 (`2be92e5`) |  | SceneVariants 0.40.1: the review listing says which of the three cover states a run was in |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.40.0 (`477611a`) |  | SceneVariants 0.40.0: blue is a changed value's unchanged text, short values diff too, and the tooltip is a coloured box |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.39.0 (`dabdeae`) |  | SceneVariants 0.39.0: the set listing counts cover mismatches, so a rescanned variant is findable |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.38.0 (`6db851e`) |  | SceneVariants 0.38.0: the tooltip is the diff too, and the set count runs during the scan |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.37.0 (`7b7b012`) |  | SceneVariants 0.37.0: a long value is shown once as a word diff, not twice and cut |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.36.0 (`f2f55d6`) |  | SceneVariants 0.36.0: the change is coloured, not the line - red lost, green gained, blue replaced |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.35.0 (`bbfc82a`) |  | SceneVariants 0.35.0: the cover comparison is opt-in, and a cover set in the edit form offers to propagate |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.34.0 (`71e0b80`) |  | SceneVariants 0.34.0: the cover propagates too, compared and undone by its bytes |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.33.0 (`d111eae`) |  | SceneVariants 0.33.0: a tag the hierarchy makes redundant is not pushed to the variants |
-| 2026-09-01 |  |  |  |  |  |  |  | 0.32.0 (`7b0da0b`) |  | SceneVariants 0.32.0: what the listing abbreviates carries the whole string on hover |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.31.1 (`0fdc9ee`) |  | SceneVariants 0.31.1: Synchronize Set disarms on the set it has already listed |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.31.0 (`3f50b9d`) |  | SceneVariants 0.31.0: the set listing is draggable, and the counter line says how many sets |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.30.0 (`53d354e`) |  | SceneVariants 0.30.0: Rescan, in every dialog - the log and the undo survive the pass |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.29.0 (`fb57a28`) |  | SceneVariants 0.29.0: Review Variant Sets - every set in the library, scored by drift, worst first |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.28.0 (`fb282f8`) |  | SceneVariants 0.28.0: groups propagate, joined at the source's own scene_index |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.27.0 (`1d6a501`) |  | SceneVariants 0.27.0: the save dialog preselects everything it lists except titles |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.26.0 (`95c9e38`) |  | SceneVariants 0.26.0: the save dialog offers the removals the save made - a replaced URL follows whole |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.25.0 (`3544f92`) |  | SceneVariants 0.25.0: saving a scene offers to propagate the changed attributes to its variants |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.24.0 (`87059e6`) |  | SceneVariants 0.24.0: the variants list re-reads when a run that wrote is closed |
-| 2026-08-31 |  |  |  | 1.2.0 (`658a9d9`) |  |  |  | 0.23.0 (`658a9d9`) |  | GTTxCore 1.2.0 + SceneVariants 0.23.0: rating banner and organized mark on hover cards and variant covers |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.22.0 (`cae09bb`) |  | SceneVariants 0.22.0: only the adds are preselected, with an All box per attribute |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.21.1 (`912364f`) |  | SceneVariants 0.21.1: the picker arrow is a size up from the log |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.21.0 (`2515e98`) |  | SceneVariants 0.21.0: pick individual tags and performers inside a synchronize line |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.20.0 (`6196fb0`) |  | SceneVariants 0.20.0: a Synchronize Variants dialog pushes this scene's values to its variants |
-| 2026-08-31 |  |  |  |  |  |  |  | 0.19.0 (`07f1e77`) |  | SceneVariants 0.19.0: group hand-flagged scenes into a variant set with a pseudo stash-id |
-| 2026-08-30 |  |  |  |  |  |  |  | 0.18.1 (`53610e8`) |  | SceneVariants 0.18.1: the set count is a summary, and the badges wrap as one |
-| 2026-08-30 |  |  |  |  |  |  |  | 0.18.0 (`d181c55`) |  | SceneVariants 0.18.0: furnished flag tag, set counter, delta badges |
-| 2026-08-30 |  |  |  |  |  |  |  | 0.17.0 (`52b3c74`) |  | SceneVariants 0.17.0: Flag Variants task, and the hover delta becomes a styled box |
-| 2026-08-30 |  |  |  |  |  |  |  | 0.16.1 (`8148865`) |  | SceneVariants 0.16.1: field lookup matches individual lines, not the whole value |
-| 2026-08-29 |  |  |  | 1.1.4 (`94163aa`) |  |  |  |  |  | It should become a no-op |
-| 2026-08-29 |  |  |  | 1.1.3 (`ed3db08`) |  |  |  |  |  | Say what the no-op is, rather than naming a width |
-| 2026-08-29 |  |  |  | 1.1.2 (`33cbd02`) |  |  |  |  |  | When, not if |
-| 2026-08-29 | 3.1.1 (`f1fb23f`) |  | 3.1.1 (`f1fb23f`) | 1.1.1 (`f1fb23f`) |  |  |  |  |  | Measure two drag limits, gate one row, name one issue |
-| 2026-08-29 | 3.1.0 (`f065c69`) | 2.1.0 (`f065c69`) | 3.1.0 (`f065c69`) | 1.1.0 (`f065c69`) | 4.1.0 (`f065c69`) | 5.3.0 (`f065c69`) | 4.2.0 (`f065c69`) | 0.16.0 (`f065c69`) | 2.1.0 (`f065c69`) | One setting decides where every link opens, and three fixes beside it |
-| 2026-08-29 | 3.0.1 (`694d485`) | 2.0.1 (`694d485`) | 3.0.1 (`694d485`) | 1.0.1 (`694d485`) | 4.0.3 (`694d485`) | 5.2.2 (`694d485`) | 4.1.3 (`694d485`) | 0.15.1 (`694d485`) | 2.0.2 (`694d485`) | All nine plugins: the README link points at the public mirror |
-| 2026-08-29 |  |  |  | 1.0.0 (`1bfccf2`) |  |  |  |  |  | GTTxCore 1.0.0: verified against Stash 0.31.0 |
-| 2026-08-29 |  |  |  | 0.0.8 (`9b2161b`) |  |  |  |  |  | GTTxCore 0.0.8: right-click Paste in a Tags or Performers box |
-| 2026-08-29 |  |  |  | 0.0.7 (`3a7e6b6`) |  |  |  |  |  | GTTxCore 0.0.7: the Dev Mods dialog takes the sibling's narrow width |
-| 2026-08-28 |  |  |  | 0.0.6 (`e08e523`) | 4.0.2 (`e08e523`) | 5.2.1 (`e08e523`) | 4.1.2 (`e08e523`) |  | 2.0.1 (`e08e523`) | pickControl: one rule for which Stash select a staged change goes into |
-| 2026-08-28 |  |  |  |  |  | 5.2.0 (`e88a6d7`) |  |  |  | NPT: the scene buttons stage into the tag box instead of opening a dialog |
-| 2026-08-28 |  |  |  | 0.0.5 (`f21c4e3`) | 4.0.1 (`f21c4e3`) | 5.1.0 (`f21c4e3`) | 4.1.1 (`f21c4e3`) |  |  | NPT: Prune and Roll Up on a scene, when they would do something |
-| 2026-08-28 |  |  |  | 0.0.4 (`20e11ac`) |  |  | 4.1.0 (`20e11ac`) |  |  | A dropped `+` had taken six rules off Core's stylesheet; and System view |
-| 2026-08-28 | 3.0.0 (`28ce7c2`) | 2.0.0 (`28ce7c2`) | 3.0.0 (`28ce7c2`) | 0.0.3 (`28ce7c2`) | 4.0.0 (`28ce7c2`) | 5.0.0 (`28ce7c2`) | 4.0.0 (`28ce7c2`) | 0.15.0 (`28ce7c2`) | 2.0.0 (`28ce7c2`) | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
-| 2026-08-27 | 2.19.0 (`cbb8266`) | 1.6.0 (`cbb8266`) | 2.5.0 (`cbb8266`) |  | 3.16.0 (`cbb8266`) | 4.14.0 (`cbb8266`) | 3.24.0 (`cbb8266`) | 0.14.0 (`cbb8266`) | 1.3.0 (`cbb8266`) | Review fixes: ENM searches list fields again, and fifteen more |
-| 2026-08-27 |  |  |  |  | 3.15.2 (`ae50891`) |  |  |  |  | MPTTS: the recap's tags are links |
-| 2026-08-27 | 2.18.1 (`89ce82b`) | 1.5.1 (`89ce82b`) | 2.4.1 (`89ce82b`) |  | 3.15.1 (`89ce82b`) | 4.13.1 (`89ce82b`) | 3.23.1 (`89ce82b`) | 0.13.1 (`89ce82b`) |  | Country names come from Stash's own table, not the browser's |
-| 2026-08-27 | 2.18.0 (`a668b69`) | 1.5.0 (`a668b69`) | 2.4.0 (`a668b69`) |  | 3.15.0 (`a668b69`) | 4.13.0 (`a668b69`) | 3.23.0 (`a668b69`) | 0.13.0 (`a668b69`) | 1.2.1 (`a668b69`) | The tooltip box outlives its dialog, and eight smaller asks |
-| 2026-08-27 | 2.17.0 (`d4a6e40`) | 1.4.0 (`d4a6e40`) | 2.3.0 (`d4a6e40`) |  | 3.14.0 (`d4a6e40`) | 4.12.0 (`d4a6e40`) | 3.22.0 (`d4a6e40`) |  |  | Entity cards on every listed name, and three smaller asks |
-| 2026-08-27 | 2.16.0 (`105c196`) |  |  |  | 3.13.0 (`105c196`) | 4.11.0 (`105c196`) | 3.21.0 (`105c196`) | 0.12.0 (`105c196`) | 1.2.0 (`105c196`) | Tag tooltips carry the tag's picture, in all six plugins that draw one |
-| 2026-08-27 | 2.15.0 (`03c7cf8`) |  |  |  |  |  |  |  |  | CFBE 2.15.0: the entities carrying nothing are in the list, and the scope select is gone |
-| 2026-08-26 |  |  |  |  |  |  |  | 0.11.0 (`637e350`) |  | SVR 0.11.0: the default is written into the setting |
-| 2026-08-26 | 2.14.2 (`662770e`) |  |  |  | 3.12.2 (`662770e`) | 4.10.2 (`662770e`) | 3.20.2 (`662770e`) | 0.10.2 (`662770e`) |  | The custom-field tooltip is fixed to the viewport, not to an inline span |
-| 2026-08-26 | 2.14.1 (`f116777`) |  |  |  | 3.12.1 (`f116777`) | 4.10.1 (`f116777`) | 3.20.1 (`f116777`) | 0.10.1 (`f116777`) |  | The custom-field tooltip is a box of ours, out of the cursor's way |
-| 2026-08-26 |  |  |  |  | 3.12.0 (`4c9e2ca`) |  |  |  |  | MPTTS 3.12.0: the custom-field mark works here too, and the settings read like the sibling's |
-| 2026-08-26 | 2.14.0 (`bb1c801`) |  |  |  | 3.11.0 (`bb1c801`) | 4.10.0 (`bb1c801`) | 3.20.0 (`bb1c801`) | 0.10.0 (`bb1c801`) |  | A hover-lazy tooltip on every setting that names a custom field |
-| 2026-08-26 |  |  | 2.2.0 (`6ae25c5`) |  |  |  |  |  |  | FRETC 2.2.0: Case-sensitive is remembered |
-| 2026-08-26 | 2.13.0 (`3cc17ea`) |  | 2.1.0 (`3cc17ea`) |  | 3.10.0 (`3cc17ea`) |  | 3.19.0 (`3cc17ea`) | 0.9.0 (`3cc17ea`) |  | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
-| 2026-08-26 | 2.12.3 (`f99e2f9`) |  | 2.0.1 (`f99e2f9`) |  | 3.9.1 (`f99e2f9`) |  | 3.18.1 (`f99e2f9`) | 0.8.1 (`f99e2f9`) |  | FRETC 2.0.1, and a wider gap before every tag link |
-| 2026-08-26 |  |  | 2.0.0 (`e36c99a`) |  |  |  |  |  |  | FETC 2.0.0: Find & Replace |
-| 2026-08-26 | 2.12.2 (`f84a2cb`) |  |  |  |  |  |  |  |  | CFBE 2.12.2: a rescan restates the listing instead of adding a second one |
-| 2026-08-26 | 2.12.1 (`85ada93`) |  |  |  | 3.9.0 (`85ada93`) |  | 3.18.0 (`85ada93`) | 0.8.0 (`85ada93`) |  | A tag named in a setting is a link to it, in four plugins |
-| 2026-08-25 |  |  |  |  |  |  | 3.17.0 (`c37c8fa`) |  |  | PTP2RE 3.17.0: skip tags NormalizeParentTags would prune straight back off |
-| 2026-08-25 |  |  |  |  |  | 4.9.0 (`3982cfa`) |  |  |  | NPT 4.9.0: every name on a change line is a link |
-| 2026-08-25 |  |  |  |  |  |  | 3.16.0 (`9bce32d`) |  |  | PTP2RE 3.16.0: the entity an addition came from is a link too |
-| 2026-08-25 |  |  |  |  |  |  | 3.15.1 (`33e96dd`) |  |  | PTP2RE 3.15.1: a marker's tags reach its scene when the marker is created, not only when it is edited |
-| 2026-08-25 |  |  |  |  |  | 4.8.4 (`78fe775`) | 3.15.0 (`78fe775`) |  |  | NPT 4.8.4 / PTP2RE 3.15.0: Stop can end a scan, and a plan that has stopped describing the run says so |
-| 2026-08-22 |  |  |  |  |  |  |  | 0.7.1 (`bde283f`) |  | SceneVariants 0.7.1: Close ends a scan, Stop is for the write it cannot end |
-| 2026-08-22 |  |  |  |  |  |  |  | 0.7.0 (`8b684f1`) |  | SceneVariants 0.7.0: the migration dialog can be stopped, scan included |
-| 2026-08-22 |  | 1.3.0 (`7b3793e`) | 1.2.0 (`7b3793e`) |  |  |  |  |  |  | FETC 1.2.0 / ENM 1.3.0: lock the controls that steer a run for as long as it runs |
-| 2026-08-22 |  |  |  |  |  | 4.8.3 (`1725c41`) | 3.14.3 (`1725c41`) |  |  | NPT 4.8.3 / PTP2RE 3.14.3: a control that changes what a run is doing is locked while it scans, not only while it writes |
-| 2026-08-22 |  |  |  |  |  | 4.8.2 (`033b1eb`) | 3.14.2 (`033b1eb`) |  |  | NPT 4.8.2 / PTP2RE 3.14.2: Escape cannot abandon a settings save in flight |
-| 2026-08-22 | 2.11.1 (`dc3f0b5`) | 1.2.1 (`dc3f0b5`) | 1.1.1 (`dc3f0b5`) |  | 3.8.1 (`dc3f0b5`) | 4.8.1 (`dc3f0b5`) | 3.14.1 (`dc3f0b5`) | 0.6.1 (`dc3f0b5`) | 1.1.1 (`dc3f0b5`) | Anchor the Reload UI button on markup every released Stash has, not only develop's |
-| 2026-08-22 | 2.11.0 (`6712889`) | 1.2.0 (`6712889`) | 1.1.0 (`6712889`) |  | 3.8.0 (`6712889`) | 4.8.0 (`6712889`) | 3.14.0 (`6712889`) | 0.6.0 (`6712889`) | 1.1.0 (`6712889`) | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
-| 2026-08-22 |  | 1.1.0 (`8507b96`) |  |  |  |  |  |  |  | EntityNameMaintainer 1.1.0: Close is green when it will close rather than ask |
-| 2026-08-22 |  |  |  |  |  | 4.7.1 (`34981ce`) | 3.13.2 (`34981ce`) |  |  | NPT 4.7.1 / PTP2RE 3.13.2: the settings dialogs' Save waits for a change |
-| 2026-08-22 |  |  |  |  |  |  |  | 0.5.0 (`011ff95`) |  | SceneVariants 0.5.0: a partial-length scene's stash-id moves into a custom field, and the tab matches on both |
-| 2026-08-22 |  |  |  |  |  |  |  |  | 1.0.0 (`3e4458b`) | TagBundleClipboard 1.0.0: the major digit, on live use |
-| 2026-08-22 |  | 1.0.2 (`6fd97e2`) |  |  |  |  |  |  |  | EntityNameMaintainer 1.0.2: the entity says whether a cancelled rename landed, not the response |
-| 2026-08-22 |  | 1.0.1 (`a5353a8`) | 1.0.0 (`a5353a8`) |  |  |  |  |  |  | EntityNameMaintainer 1.0.1 / FindEntitiesByTextContent 1.0.0: a cancelled rename reloads the page it changed |
-| 2026-08-22 |  | 1.0.0 (`1094a8c`) |  |  |  |  |  |  |  | EntityNameMaintainer 1.0.0: Cancel takes back the rename itself, while it is the only write |
-| 2026-08-22 |  | 0.1.2 (`23eaeb6`) |  |  |  |  |  |  | 0.7.3 (`23eaeb6`) | EntityNameMaintainer 0.1.2 / TagBundleClipboard 0.7.3: a scoped dialog head names the entity, not just its id |
-| 2026-08-22 |  | 0.1.1 (`ba4a138`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.1.1: the skipped store tag no longer reads as something missed |
-| 2026-08-22 | 2.10.0 (`cccd6be`) | 0.1.0 (`cccd6be`) |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.10.0 / EntityNameMaintainer 0.1.0: descriptions are read and written through coop().api |
-| 2026-08-22 | 2.9.0 (`0b9205b`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.9.0: the description tooltip appears where Stash shows the field name |
-| 2026-08-22 | 2.8.4 (`bb28ff4`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.4: the detail tick stops throwing on every page |
-| 2026-08-22 | 2.8.3 (`c8d90e7`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.3: Undo of an applied rename takes the list back, not only the library |
-| 2026-08-22 | 2.8.2 (`2484566`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.2: Apply is quiet until there is something a user would call a change |
-| 2026-08-22 | 2.8.1 (`3d8adb6`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.1: Apply goes back to disabled once a rename has been written |
-| 2026-08-22 | 2.8.0 (`06f51e6`) |  | 0.0.9 (`06f51e6`) |  |  |  | 3.13.1 (`06f51e6`) |  |  | PropagateTagsAndPerformers 3.13.1 / CustomFieldsBulkEditor 2.8.0 / FindEntitiesByTextContent 0.0.9: an empty box is empty again, Undo Rename, and the search box keeps its own history |
-| 2026-08-22 | 2.7.0 (`16a1bcf`) |  |  |  |  |  | 3.13.0 (`16a1bcf`) |  |  | CustomFieldsBulkEditor 2.7.0 / PropagateTagsAndPerformers 3.13.0: the descriptions reach the entity page, and the exclusion field has a default that documents itself |
-| 2026-08-22 | 2.6.0 (`e3597ce`) |  |  |  |  | 4.7.0 (`e3597ce`) |  |  |  | CustomFieldsBulkEditor 2.6.0 / NormalizeParentTags 4.7.0: three more boxes remember, and the descriptions pane reads Name then Description |
-| 2026-08-21 |  | 0.0.10 (`d1e1e4a`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.10: a Proceed pressed mid-countdown disarms Close |
-| 2026-08-21 | 2.5.1 (`f39a7a2`) | 0.0.9 (`f39a7a2`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.9 / CustomFieldsBulkEditor 2.5.1: five seconds to answer Close, and the red marks one mode |
-| 2026-08-21 | 2.5.0 (`ee5372e`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.5.0: the filter boxes remember, and a lost Rename is marked rather than switched |
-| 2026-08-21 |  | 0.0.8 (`0e3fa64`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.8: the head wears the whole name, and Close stops asking once Proceed has run |
-| 2026-08-21 | 2.4.0 (`c612d93`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.4.0: the field's name in the descriptions dialog is a box, and changing it renames the field |
-| 2026-08-21 | 2.3.0 (`5e37588`) | 0.0.7 (`5e37588`) | 0.0.8 (`5e37588`) |  |  |  | 3.12.0 (`5e37588`) |  |  | EntityNameMaintainer 0.0.7 / FindEntitiesByTextContent 0.0.8 / CustomFieldsBulkEditor 2.3.0 / PropagateTagsAndPerformers 3.12.0: a control says what pressing it costs |
-| 2026-08-21 |  | 0.0.6 (`a0b463d`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.6: the hit list reads in the order things happened |
-| 2026-08-21 |  | 0.0.5 (`098d782`) | 0.0.7 (`098d782`) |  |  |  |  |  |  | EntityNameMaintainer 0.0.5 / FindEntitiesByTextContent 0.0.7: the counters say where the scan is, not only how far |
-| 2026-08-21 |  |  | 0.0.6 (`edab204`) |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.6: search works again - childNodes is not an Array |
-| 2026-08-21 |  |  | 0.0.5 (`7056bd7`) |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.5: the same attribute filter row EntityNameMaintainer has |
-| 2026-08-21 |  | 0.0.4 (`79a0941`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.4: it asks the server whether the rename landed, not the response |
-| 2026-08-21 |  | 0.0.3 (`16ee35d`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.3: it can be asked what it did, and Reload plugins takes effect |
-| 2026-08-21 |  | 0.0.2 (`76fc8c9`) | 0.0.4 (`76fc8c9`) |  |  |  |  |  |  | EntityNameMaintainer 0.0.2 / FindEntitiesByTextContent 0.0.4: the rename hook fires whether or not a sibling reacted, and All On/All Off go dead with nothing to act on |
-| 2026-08-21 |  |  | 0.0.3 (`c22f6dd`) |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.3: Refresh means something, the counters count toward something, and the log reads in order |
-| 2026-08-21 |  |  | 0.0.2 (`b6f06bb`) |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.2: its settings group is found again, and it has no settings |
-| 2026-08-21 |  |  | 0.0.1 (`d8440f7`) |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.1: one box that asks which entities mention this text |
-| 2026-08-21 |  | 0.0.1 (`82878d1`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.1: a rename offers to fix every text that named the old name |
-| 2026-08-21 |  |  |  |  |  |  |  | 0.4.0 (`147f0d7`) |  | SceneVariants 0.4.0: a row's hover text says how that variant differs |
-| 2026-08-21 |  |  |  |  |  |  |  | 0.3.0 (`330502e`) |  | SceneVariants 0.3.0: aliases and descendants classify a variant, and the cover comes back |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.2.3 (`c061a84`) |  | SceneVariants 0.2.3: the Variants tab is amber |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.2.2 (`d2d3cd2`) |  | SceneVariants 0.2.2: the tab goes before Edit, the value leads its own line |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.2.1 (`34e613c`) |  | SceneVariants 0.2.1: partial-length is amber, and sized with the metadata |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.2.0 (`c0dd2a6`) |  | SceneVariants 0.2.0: covers and previews, and one word for one idea |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.1.2 (`b4cec90`) |  | SceneVariants 0.1.2: prove the patch shape against the real React |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.1.1 (`f997b2d`) |  | SceneVariants 0.1.1: the after-patch reads its result off the end |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.1.0 (`6f8240f`) |  | SceneVariants 0.1.0: a real Siblings tab on the scene page |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.0.2 (`1349356`) |  | SceneVariants 0.0.2: the sibling query asks with EQUALS |
-| 2026-08-20 |  |  |  |  |  |  |  | 0.0.1 (`5a37e41`) |  | SceneVariants 0.0.1: L0 of the scene-variants plan, as a Siblings panel |
-| 2026-08-20 |  |  |  |  | 3.7.0 (`e8c5914`) |  |  |  |  | MPTTS 3.7.0: the superseded notice reads PTP2RE's settings too |
-| 2026-08-20 |  |  |  |  | 3.6.2 (`15dc942`) |  |  |  |  | MPTTS 3.6.2: the superseded notice sits in the heading, after the name |
-| 2026-08-20 |  |  |  |  | 3.6.1 (`7d1ad93`) |  |  |  |  | MPTTS 3.6.1: the superseded notice moves to the heading line |
-| 2026-08-20 |  |  |  |  | 3.6.0 (`926a2a4`) |  |  |  |  | MPTTS 3.6.0: say on the settings page when PTP2RE has taken over |
-| 2026-08-20 | 2.2.2 (`9a4f14a`) |  |  |  | 3.5.3 (`9a4f14a`) | 4.6.6 (`9a4f14a`) | 3.11.2 (`9a4f14a`) |  | 0.7.2 (`9a4f14a`) | One grammatical load banner, in all five |
-| 2026-08-19 | 2.2.1 (`fb346a7`) |  |  |  | 3.5.2 (`fb346a7`) | 4.6.5 (`fb346a7`) | 3.11.1 (`fb346a7`) |  | 0.7.1 (`fb346a7`) | Release history out of all five plugin sources |
-| 2026-08-19 |  |  |  |  | 3.5.1 (`256fe0f`) | 4.6.4 (`256fe0f`) |  |  |  | No version history in a README or in shipped source |
-| 2026-08-19 | 2.2.0 (`c50338b`) |  |  |  | 3.5.0 (`c50338b`) | 4.6.3 (`c50338b`) | 3.11.0 (`c50338b`) |  | 0.7.0 (`c50338b`) | Repo review 2026-08-19: all 27 findings fixed |
-| 2026-08-19 |  |  |  |  |  |  | 3.10.0 (`b523556`) |  |  | PTP2RE 3.10.0: the paths dialog draws the paths, and you can rearrange them |
-| 2026-08-19 |  |  |  |  |  |  | 3.6.2 (`05be8bd`) |  |  | PTP2RE 3.6.2: the progress counters say what their number is |
-| 2026-08-19 |  |  |  |  |  |  | 3.6.1 (`12fce4a`) |  |  | PTP2RE 3.6.1: Performers -> Groups above Performers -> Scenes |
-| 2026-08-19 |  |  |  |  |  |  | 3.6.0 (`2085f8d`) |  |  | PTP2RE 3.6.0: the layout revised, and a null in a column is a blank row |
-| 2026-08-19 |  |  |  |  |  |  | 3.5.0 (`6bb9093`) |  |  | PTP2RE 3.5.0: the layout is the user's, and a path already happening says so |
-| 2026-08-19 |  |  |  |  |  |  | 3.4.0 (`5160f26`) |  |  | PTP2RE 3.4.0: the bulk buttons move into the footer, and everything says what it does |
-| 2026-08-19 |  |  |  |  |  |  | 3.3.0 (`595075a`) |  |  | PTP2RE 3.3.0: the two moded paths get their own column, and three bulk buttons |
-| 2026-08-19 |  |  |  |  |  |  | 3.2.0 (`0943e39`) |  |  | PTP2RE 3.2.0: each path's control is a button carrying its own state |
-| 2026-08-19 |  |  |  |  |  | 4.6.2 (`bcf7d0e`) | 3.1.2 (`bcf7d0e`) |  |  | NPT 4.6.2 / PTP2RE 3.1.2: configurePlugin replaces, so send the whole map |
-| 2026-08-19 |  |  |  |  |  |  | 3.1.1 (`992c0b7`) |  |  | PTP2RE 3.1.1: the settings row stops deleting a value it could not read |
-| 2026-08-19 |  |  |  |  |  |  | 3.1.0 (`e6c5c43`) |  |  | PTP2RE 3.1.0: adopt MPTTS's four exclusion filters where we have none |
-| 2026-08-19 |  |  |  |  |  | 4.6.1 (`01e394c`) | 3.0.2 (`01e394c`) |  |  | NPT 4.6.1 / PTP2RE 3.0.2: a self-append fixed, and the row listing in columns |
-| 2026-08-19 |  |  |  |  |  |  | 3.0.1 (`96daa34`) |  |  | PTP2RE 3.0.1: the path dialog gets two columns and loses a false heading |
-| 2026-08-19 |  |  |  |  |  |  | 3.0.0 (`706b0c5`) |  |  | PTP2RE 3.0.0: fifteen path switches become one string and a dialog |
-| 2026-08-19 |  |  |  |  |  | 4.6.0 (`b30adb3`) |  |  |  | NPT 4.6.0: the value is the armed mark, so the bar goes |
-| 2026-08-18 |  |  |  |  |  | 4.5.0 (`8dfab91`) |  |  |  | NPT 4.5.0: the setting row is taken over, not hidden |
-| 2026-08-18 |  |  |  |  |  | 4.4.0 (`86a1f2d`) |  |  |  | NPT 4.4.0: the settings page shows the dialog, not the setting string |
-| 2026-08-18 |  |  |  |  | 3.4.0 (`e06ff06`) | 4.3.0 (`e06ff06`) | 2.4.0 (`e06ff06`) |  |  | NPT 4.3.0 / MPTTS 3.4.0 / PTP2RE 2.4.0: amber reaches inside the dialogs |
-| 2026-08-18 |  |  |  |  |  | 4.2.2 (`febb075`) |  |  |  | NPT 4.2.2: the slow-pass warning belongs to the dialog that runs one |
-| 2026-08-18 |  |  |  |  |  | 4.2.1 (`1bff4ac`) |  |  |  | NPT 4.2.1: the labels are right-aligned against the aligned selects |
-| 2026-08-18 |  |  |  |  |  | 4.2.0 (`7c0e6f6`) |  |  |  | NPT 4.2.0: the Images selector says a whole-library pass is slow |
-| 2026-08-18 |  |  |  |  |  | 4.1.1 (`52ef597`) |  |  |  | NPT 4.1.1: a mode selector sits beside its own label |
-| 2026-08-18 |  |  |  |  |  | 4.1.0 (`11d356a`) |  |  |  | NPT 4.1.0: an amber bar says a type is armed |
-| 2026-08-18 |  |  |  |  |  | 4.0.3 (`d04bd23`) |  |  |  | NPT 4.0.3: the auto-mode setting description shows a shape, not a value |
-| 2026-08-18 |  |  |  |  |  | 4.0.2 (`b6298e0`) |  |  |  | NPT 4.0.2: the auto-mode field's border is not ours to colour |
-| 2026-08-18 |  |  |  |  | 3.3.1 (`8a004da`) | 4.0.1 (`8a004da`) | 2.3.1 (`8a004da`) |  |  | NPT 4.0.1 / MPTTS 3.3.1 / PTP2RE 2.3.1: the stale banner survives a setting rename |
-| 2026-08-18 |  |  |  |  | 3.3.0 (`cdacce0`) | 4.0.0 (`cdacce0`) | 2.3.0 (`cdacce0`) |  |  | NPT 4.0.0: one mode per entity type, and one task that does both |
-| 2026-08-18 |  |  |  |  |  |  |  |  | 0.6.1 (`04e2a8a`) | TagBundleClipboard 0.6.1: one word per mode mark |
-| 2026-08-18 |  |  |  |  |  |  |  |  | 0.6.0 (`d0bece8`) | TagBundleClipboard 0.6.0: re-bind the planner when the tab comes back |
-| 2026-08-18 |  |  |  |  |  | 3.2.0 (`8215c44`) |  |  | 0.5.0 (`8215c44`) | NPT 3.2.0 / TBC 0.5.0: one plugin computes the other's operation |
-| 2026-08-18 |  |  |  |  |  |  |  |  | 0.4.0 (`d10b349`) | TagBundleClipboard 0.4.0: warn when NPT will rewrite the save |
-| 2026-08-18 |  |  |  |  |  |  |  |  | 0.3.0 (`1480527`) | TagBundleClipboard 0.3.0: named titles, amber where it acts, sibling drift |
-| 2026-08-18 |  |  |  |  |  |  |  |  | 0.2.0 (`ff8b899`) | TagBundleClipboard 0.2.0: dots back, columns fixed, modes gated on NPT |
-| 2026-08-18 |  |  |  |  | 3.2.0 (`034b60a`) |  | 2.2.0 (`034b60a`) |  | 0.1.0 (`034b60a`) | TagBundleClipboard 0.1.0: prune/roll-up, tag hovers, columns, Undo |
-| 2026-08-17 |  |  |  |  |  |  |  |  | 0.0.1 (`b529b9e`) | TagBundleClipboard 0.0.1: a tag clipboard between any two entities |
-| 2026-08-17 | 2.1.0 (`21c9c2a`) |  |  |  | 3.1.0 (`21c9c2a`) | 3.1.0 (`21c9c2a`) | 2.1.0 (`21c9c2a`) |  |  | All four: a busy cursor under the last log line |
-| 2026-08-16 | 2.0.3 (`8c6ab97`) |  |  |  |  |  |  |  |  | CFBE 2.0.3: Prune clears the rows, and greys itself out |
-| 2026-08-16 | 2.0.1 (`8c8cd24`) |  |  |  |  |  |  |  |  | CFBE 2.0.1: the marker field takes the prefix |
-| 2026-08-16 | 2.0.0 (`ae1f4a8`) |  |  |  | 3.0.0 (`ae1f4a8`) | 3.0.0 (`ae1f4a8`) | 2.0.0 (`ae1f4a8`) |  |  | All four: the ᝯㄝₓ prefix reaches the scripts |
-| 2026-08-16 | 1.3.1 (`fb5105f`) |  |  |  |  |  | 1.4.2 (`fb5105f`) |  |  | CFBE 1.3.1, PTP2RE 1.4.2: the last of the version references |
-| 2026-08-16 |  |  |  |  | 2.4.1 (`b265818`) | 2.6.1 (`b265818`) | 1.4.1 (`b265818`) |  |  | READMEs describe the plugin, not its history |
-| 2026-08-16 | 1.3.0 (`eb0e690`) |  |  |  | 2.4.0 (`eb0e690`) | 2.6.0 (`eb0e690`) | 1.4.0 (`eb0e690`) |  |  | The stale-script warning in the dialogs, and a README trim |
-| 2026-08-16 | 1.2.0 (`361d826`) |  |  |  | 2.3.0 (`361d826`) | 2.5.0 (`361d826`) | 1.3.0 (`361d826`) |  |  | All four: a stale script says so on the settings page |
-| 2026-08-16 | 1.1.1 (`01d2575`) |  |  |  |  |  |  |  |  | CFBE 1.1.1: the store-tag row counts its carrier |
-| 2026-08-16 |  |  |  |  | 2.2.3 (`a81564c`) |  |  |  |  | MPTTS 2.2.3: the spacing paragraph in the present tense |
-| 2026-08-16 |  |  |  |  | 2.2.2 (`20403e2`) |  | 1.2.2 (`20403e2`) |  |  | MPTTS 2.2.2, PTP2RE 1.2.2: two leftovers from the README pass |
-| 2026-08-16 | 1.1.0 (`12866ec`) |  |  |  | 2.2.1 (`12866ec`) | 2.4.0 (`12866ec`) | 1.2.1 (`12866ec`) |  |  | CFBE 1.1.0, NPT 2.4.0, MPTTS 2.2.1, PTP2RE 1.2.1 |
-| 2026-08-16 | 1.0.0 (`3d59ab5`) |  |  |  |  |  |  |  |  | CFBE 1.0.0: the hide field is nobody's loose end |
-| 2026-08-16 | 0.12.1 (`49a5f5d`) |  |  |  |  |  |  |  |  | CFBE 0.12.1: a name pill's tooltip says it is the name |
-| 2026-08-16 | 0.12.0 (`4473b63`) |  |  |  |  |  |  |  |  | CFBE 0.12.0: omits, a filter for the entity, and what Overwrite leaves alone |
-| 2026-08-16 | 0.11.0 (`5e68072`) |  |  |  |  |  |  |  |  | CFBE 0.11.0: the descriptions dialog divides its own room |
-| 2026-08-16 | 0.10.0 (`c86c1c7`) |  |  |  |  |  |  |  |  | CFBE 0.10.0: Rename, a scope that follows the filters, and dialogs that hold still |
-| 2026-08-16 | 0.9.0 (`dd01574`) |  |  |  |  |  |  |  |  | CFBE 0.9.0: filter the listing by whether a value is true |
-| 2026-08-16 | 0.8.1 (`8983894`) |  |  |  |  |  |  |  |  | CFBE 0.8.1: the descriptions dialog keeps typing, and the settings arrive filled in |
-| 2026-08-15 | 0.8.0 (`112528d`) |  |  |  |  |  |  |  |  | CFBE 0.8.0: every custom field can say what it is for |
-| 2026-08-14 | 0.7.3 (`1d1c414`) |  |  |  |  |  |  |  |  | CFBE 0.7.3: the dropdowns get Stash's stacked marker |
-| 2026-08-14 | 0.7.2 (`a601928`) |  |  |  |  |  |  |  |  | CFBE 0.7.2: the log follows itself again |
-| 2026-08-14 | 0.7.1 (`4999d8b`) |  |  |  | 2.2.0 (`4999d8b`) | 2.3.0 (`4999d8b`) | 1.2.0 (`4999d8b`) |  |  | The log stays until you close the dialog, and the footers agree |
-| 2026-08-14 | 0.7.0 (`823b766`) |  |  |  | 2.1.4 (`823b766`) | 2.2.4 (`823b766`) | 1.1.4 (`823b766`) |  |  | Wider still, and CFBE gets a setting |
-| 2026-08-13 | 0.6.0 (`2b41b16`) |  |  |  | 2.1.3 (`2b41b16`) | 2.2.3 (`2b41b16`) | 1.1.3 (`2b41b16`) |  |  | Wider dialogs, and CFBE stops skipping quietly |
-| 2026-08-13 | 0.5.0 (`bf1f7b8`) |  |  |  |  |  |  |  |  | CFBE 0.5.0: one log, and it keeps what it said |
-| 2026-08-13 | 0.4.5 (`91b664b`) |  |  |  | 2.1.2 (`91b664b`) | 2.2.2 (`91b664b`) | 1.1.2 (`91b664b`) |  |  | Two words the plugins no longer say: "Stash id", and "(s)" |
-| 2026-08-13 | 0.4.4 (`25b7597`) |  |  |  |  |  |  |  |  | CFBE 0.4.4: the legend's ␀ is drawn by the list's own rule |
-| 2026-08-13 | 0.4.3 (`d182176`) |  |  |  | 2.1.1 (`d182176`) | 2.2.1 (`d182176`) | 1.1.1 (`d182176`) |  |  | Four dialog heads, one sentence |
-| 2026-08-13 | 0.4.0 (`538cbbc`) |  |  |  |  |  |  |  |  | CFBE 0.4.0: five things a whole library made the dialog want |
-| 2026-08-13 | 0.3.2 (`8ba02e7`) |  |  |  |  |  |  |  |  | CFBE 0.3.2: the settings decoration was landing on the Tasks panel |
-| 2026-08-13 | 0.3.1 (`2567a45`) |  |  |  |  |  |  |  |  | CFBE 0.3.1: the whole-library read is paged, so the counter moves |
-| 2026-08-13 | 0.3.0 (`5407b5a`) |  |  |  |  |  |  |  |  | CFBE 0.3.0: a task that opens the same dialog on the whole library |
-| 2026-08-13 | 0.2.5 (`c46b4a4`) |  |  |  |  |  |  |  |  | CFBE 0.2.5: an unescaped quote in the yml stopped the plugin loading |
-| 2026-08-13 | 0.2.4 (`68b1d17`) |  |  |  |  |  |  |  |  | CFBE 0.2.4: "is empty" is a mode beside the box, not a word in it |
-| 2026-08-13 | 0.2.3 (`324a7b3`) |  |  |  |  |  |  |  |  | CFBE 0.2.3: the listing is pills, and ␀ took three rounds |
-| 2026-08-13 | 0.1.2 (`eca51be`) |  |  |  |  |  |  |  |  | CFBE 0.1.2: a tag's parent link was eating its own selection |
-| 2026-08-12 | 0.1.1 (`44c902e`) |  |  |  |  | 2.2.0 (`44c902e`) |  |  |  | NPT 2.2.0 drops the graph exports; CFBE 0.1.1 finds the lists whose URL lies |
-| 2026-08-12 | 0.1.0 (`4c11384`) |  |  |  | 2.1.0 (`4c11384`) | 2.1.0 (`4c11384`) | 1.1.0 (`4c11384`) |  |  | Escape closes every dialog, and CFBE 0.1.0 gets the settings-page description |
-| 2026-08-12 | 0.0.1 (`20bc7c3`) |  |  |  | 2.0.1 (`20bc7c3`) | 2.0.1 (`20bc7c3`) | 1.0.1 (`20bc7c3`) |  |  | CustomFieldsBulkEditor 0.0.1: bulk custom fields, off the list view's "..." menu |
-| 2026-08-11 |  |  |  |  | 2.0.0 (`47d06a6`) | 2.0.0 (`47d06a6`) | 1.0.0 (`47d06a6`) |  |  | GTTx: NPT 2.0.0, MPT2S 2.0.0, PTP2RE 1.0.0 — one prefix, and a name in every dialog head |
-| 2026-08-11 |  |  |  |  | 1.17.0 (`2aebce9`) | 1.8.0 (`2aebce9`) | 0.17.0 (`2aebce9`) |  |  | Amber for "a plugin wrote this": NPT 1.8.0, MPT2S 1.17.0, PTP2RE 0.17.0 |
-| 2026-08-11 |  |  |  |  | 1.16.3 (`2b1332c`) |  | 0.16.0 (`2b1332c`) |  |  | PropagateTagsAndPerformers 0.16.0, MergePerformerTagsToScenes 1.16.3: parity was a claim nobody had checked |
-| 2026-08-11 |  |  |  |  |  |  | 0.15.0 (`22aa4bb`) |  |  | PropagateTagsAndPerformers 0.15.0: source buttons on their targets' tab, and say where the tags come from |
-| 2026-08-11 |  |  |  |  |  |  | 0.14.0 (`6c5ed24`) |  |  | PropagateTagsAndPerformers 0.14.0: a second anchor, for the pages with no action row |
-| 2026-08-11 |  |  |  |  |  |  | 0.13.3 (`c76a624`) |  |  | PropagateTagsAndPerformers 0.13.3: four pages have no source-button anchor, not one |
-| 2026-08-11 |  |  |  |  | 1.16.2 (`eff36ee`) |  | 0.13.2 (`eff36ee`) |  |  | PropagateTagsAndPerformers 0.13.2, MergePerformerTagsToScenes 1.16.2: a diagnostic that only speaks on a cache miss is silent when it is wanted |
-| 2026-08-11 |  |  |  |  | 1.16.1 (`b0f2d47`) |  | 0.13.1 (`b0f2d47`) |  |  | PropagateTagsAndPerformers 0.13.1, MergePerformerTagsToScenes 1.16.1: a switch to ask a button why it is hidden |
-| 2026-08-11 |  |  |  |  | 1.16.0 (`c95d1a4`) |  | 0.13.0 (`c95d1a4`) |  |  | PropagateTagsAndPerformers 0.13.0, MergePerformerTagsToScenes 1.16.0: hide a button that would add nothing |
-| 2026-08-11 |  |  |  |  |  |  | 0.12.14 (`27806fa`) |  |  | PropagateTagsAndPerformers 0.12.14: measure before you fix, not after |
-| 2026-08-10 |  |  |  |  |  | 1.7.8 (`a2097ec`) | 0.12.10 (`a2097ec`) |  |  | PropagateTagsAndPerformers 0.12.10, NormalizeParentTags 1.7.8: say where the buttons are |
-| 2026-08-10 |  |  |  |  | 1.15.9 (`dee5079`) | 1.7.7 (`dee5079`) | 0.12.9 (`dee5079`) |  |  | PropagateTagsAndPerformers 0.12.9, MergePerformerTagsToScenes 1.15.9, NormalizeParentTags 1.7.7: say it once |
-| 2026-08-10 |  |  |  |  | 1.15.8 (`1ff1eb3`) |  | 0.12.8 (`1ff1eb3`) |  |  | PropagateTagsAndPerformers 0.12.8, MergePerformerTagsToScenes 1.15.8: walk past what you cannot read |
-| 2026-08-10 |  |  |  |  | 1.15.7 (`37293e3`) |  | 0.12.7 (`37293e3`) |  |  | PropagateTagsAndPerformers 0.12.7, MergePerformerTagsToScenes 1.15.7: a margin is true whenever you ask |
-| 2026-08-10 |  |  |  |  | 1.15.6 (`780a7d7`) |  | 0.12.6 (`780a7d7`) |  |  | PropagateTagsAndPerformers 0.12.6, MergePerformerTagsToScenes 1.15.6: measure the gap, don't derive it |
-| 2026-08-10 |  |  |  |  | 1.15.5 (`36b142d`) |  | 0.12.5 (`36b142d`) |  |  | PropagateTagsAndPerformers 0.12.5, MergePerformerTagsToScenes 1.15.5: fill the gap the neighbour leaves |
-| 2026-08-10 |  |  |  |  | 1.15.4 (`e7fd0d8`) |  | 0.12.4 (`e7fd0d8`) |  |  | PropagateTagsAndPerformers 0.12.4, MergePerformerTagsToScenes 1.15.4: let the measured margins win the cascade |
-| 2026-08-10 |  |  |  |  | 1.15.3 (`535cd0b`) |  | 0.12.3 (`535cd0b`) |  |  | PropagateTagsAndPerformers 0.12.3, MergePerformerTagsToScenes 1.15.3: measure the row's spacing instead of choosing it |
-| 2026-08-10 |  |  |  |  | 1.15.2 (`370d5fc`) |  | 0.12.2 (`370d5fc`) |  |  | PropagateTagsAndPerformers 0.12.2, MergePerformerTagsToScenes 1.15.2: source button blink loop, and mx-2 on the scene button |
-| 2026-08-10 |  |  |  |  | 1.15.1 (`e99ee5b`) |  | 0.12.1 (`e99ee5b`) |  |  | PropagateTagsAndPerformers 0.12.1, MergePerformerTagsToScenes 1.15.1: find Delete by text, not only by class |
-| 2026-08-10 |  |  |  |  | 1.15.0 (`bdf2ab2`) |  | 0.12.0 (`bdf2ab2`) |  |  | PropagateTagsAndPerformers 0.12.0, MergePerformerTagsToScenes 1.15.0: important-action anchor |
-| 2026-08-08 |  |  |  |  | 1.14.0 (`a026fd3`) |  | 0.11.0 (`a026fd3`) |  |  | PropagateTagsAndPerformers 0.11.0, MergePerformerTagsToScenes 1.14.0: anchor manual buttons on Delete, not Save |
-| 2026-08-08 |  |  |  |  | 1.13.0 (`d2a9dfe`) |  | 0.10.0 (`d2a9dfe`) |  |  | PropagateTagsAndPerformers 0.9.0-0.10.0, MergePerformerTagsToScenes 1.13.0: button fixes and deterministic cross-plugin ordering |
-| 2026-08-07 |  |  |  |  |  |  | 0.8.3 (`399082d`) |  |  | PropagateTagsAndPerformers 0.8.3: fix button height, stop duplicating MPTTS's button |
-| 2026-08-07 |  |  |  |  |  |  | 0.8.2 (`6f183c5`) |  |  | PropagateTagsAndPerformers 0.8.2: fix manual buttons on the Group page |
-| 2026-08-07 |  |  |  |  |  |  | 0.8.1 (`af185f4`) |  |  | PropagateTagsAndPerformers 0.8.1: fix manual buttons never appearing |
-| 2026-08-07 |  |  |  |  |  |  | 0.8.0 (`5eccbfb`) |  |  | PropagateTagsAndPerformers 0.8.0: manual buttons and staging (step 8) |
-| 2026-08-07 |  |  |  |  | 1.12.0 (`65a3cfc`) | 1.7.6 (`65a3cfc`) | 0.7.0 (`65a3cfc`) |  |  | Cross-plugin cooperation: the declares registry (step 7) |
-| 2026-08-07 |  |  |  |  |  |  | 0.6.0 (`fa58bf2`) |  |  | PropagateTagsAndPerformers 0.6.0: auto mode, source side |
-| 2026-08-06 |  |  |  |  |  |  | 0.5.0 (`80d7eba`) |  |  | PropagateTagsAndPerformers 0.5.0: auto mode, target side |
-| 2026-08-06 |  |  |  |  |  |  | 0.4.0 (`ebc270a`) |  |  | PropagateTagsAndPerformers 0.4.0: a gallery's images |
-| 2026-08-06 |  |  |  |  |  |  | 0.3.1 (`cf4bacc`) |  |  | PropagateTagsAndPerformers 0.3.1: name the source entity in the log |
-| 2026-08-06 |  |  |  |  |  |  | 0.3.0 (`3324483`) |  |  | PropagateTagsAndPerformers 0.3.0: apply and Undo |
-| 2026-08-06 |  |  |  |  |  |  | 0.2.0 (`a47e793`) |  |  | PropagateTagsAndPerformers 0.2.0: the planner |
-| 2026-08-06 |  |  |  |  |  |  | 0.1.0 (`3d44086`) |  |  | PropagateTagsAndPerformers 0.1.0: the shared base |
-| 2026-08-06 |  |  |  |  |  |  | 0.0.1 (`64662f0`) |  |  | PropagateTagsAndPerformers 0.0.1: scaffold |
-| 2026-08-06 |  |  |  |  | 1.11.0 (`f2883d1`) |  |  |  |  | MergePerformerTagsToScenes 1.11.0: summary on the page, detail on hover |
-| 2026-08-06 |  |  |  |  |  | 1.7.5 (`7433b56`) |  |  |  | NormalizeParentTags 1.7.5: summary on the page, detail on hover |
-| 2026-08-05 |  |  |  |  | 1.10.5 (`477fbb5`) | 1.6.5 (`477fbb5`) |  |  |  | Give "Requires Stash 0.31.0 or newer" its own paragraph |
-| 2026-08-05 |  |  |  |  | 1.10.4 (`e2a6d65`) | 1.6.4 (`e2a6d65`) |  |  |  | Rebuild the description's paragraphs as divs, gap about a third of a line |
-| 2026-08-05 |  |  |  |  | 1.10.3 (`dc5c518`) | 1.6.3 (`dc5c518`) |  |  |  | Simplify both descriptions, and make their paragraphs render |
-| 2026-08-05 |  |  |  |  | 1.10.2 (`998b7fd`) | 1.6.2 (`998b7fd`) |  |  |  | Track main in the README links instead of a pinned SHA |
-| 2026-08-05 |  |  |  |  | 1.10.1 (`901f09f`) | 1.6.1 (`901f09f`) |  |  |  | Take the URL out of the descriptions, and pin one that exists |
-| 2026-08-05 |  |  |  |  | 1.10.0 (`e81c380`) | 1.6.0 (`e81c380`) |  |  |  | Inject a labelled README link into each plugin's settings group |
-| 2026-08-05 |  |  |  |  | 1.9.3 (`1e435e8`) | 1.5.4 (`1e435e8`) |  |  |  | Link the README through the manifest url field |
-| 2026-08-05 |  |  |  |  | 1.9.2 (`60db1b2`) | 1.5.3 (`60db1b2`) |  |  |  | Lead both descriptions with a README permalink |
-| 2026-08-05 |  |  |  |  | 1.9.1 (`d6442c7`) | 1.5.2 (`d6442c7`) |  |  |  | Lead with F5, keep the hard refresh as the fallback |
-| 2026-08-05 |  |  |  |  |  | 1.5.1 (`f5b7100`) |  |  |  | Warn in the hierarchy viewer when the script is stale |
-| 2026-08-05 |  |  |  |  | 1.9.0 (`cfdd46e`) | 1.5.0 (`cfdd46e`) |  |  |  | Refuse to write when the running script is not the installed one |
-| 2026-08-05 |  |  |  |  | 1.8.3 (`c196394`) | 1.4.4 (`c196394`) |  |  |  | Print the running script's own version at load |
-| 2026-08-05 |  |  |  |  | 1.8.2 (`bc2b0f6`) | 1.4.3 (`bc2b0f6`) |  |  |  | Settle both dialogs on the darker #202b33 modal |
-| 2026-08-05 |  |  |  |  |  | 1.4.2 (`ffb3859`) |  |  |  | Align the two dialogs' chrome, and pin it |
-| 2026-08-05 |  |  |  |  | 1.8.1 (`ad0306f`) | 1.4.1 (`ad0306f`) |  |  |  | Drop the recap tooltips' underline and help cursor |
-| 2026-08-05 |  |  |  |  |  | 1.4.0 (`30c16f0`) |  |  |  | Hover the run dialog's recap tags for aliases and description |
-| 2026-08-05 |  |  |  |  | 1.8.0 (`ce9fca7`) |  |  |  |  | Hover the merge recap's tags for aliases and description |
-| 2026-08-05 |  |  |  |  |  | 1.3.0 (`4ea7cb3`) |  |  |  | Put the tag's aliases and description in the row tooltip |
-| 2026-08-05 |  |  |  |  | 1.7.6 (`9e3730f`) | 1.2.7 (`9e3730f`) |  |  |  | Say that the number in brackets is a Stash id |
-| 2026-08-05 |  |  |  |  |  | 1.2.6 (`0931d95`) |  |  |  | Undo the detour 1.2.3 and 1.2.4 took |
-| 2026-08-05 |  |  |  |  |  | 1.2.5 (`bfc5da9`) |  |  |  | Drive the notice from the checkboxes, and put it next to them |
-| 2026-08-05 |  |  |  |  |  | 1.2.4 (`18f08b9`) |  |  |  | Keep the notice within a second of the checkbox |
-| 2026-08-05 |  |  |  |  |  | 1.2.3 (`556b566`) |  |  |  | Update the notice when the checkbox is clicked, not when the cache expires |
-| 2026-08-05 |  |  |  |  |  | 1.2.2 (`7bb2bc5`) |  |  |  | Anchor the notice on setting ids, not on a heading |
-| 2026-08-05 |  |  |  |  |  | 1.2.1 (`537c947`) |  |  |  | Fix the both-modes notice never appearing |
-| 2026-08-05 |  |  |  |  |  | 1.2.0 (`890db9c`) |  |  |  | Say on the settings page when both auto modes are on |
-| 2026-08-05 |  |  |  |  |  | 1.1.5 (`d44d4a4`) |  |  |  | Say that Roll Up reads a marker's primary tag too |
-| 2026-08-05 |  |  |  |  |  | 1.1.4 (`f86d799`) |  |  |  | Shorten the Images setting description |
-| 2026-08-05 |  |  |  |  | 1.7.5 (`c5a83a4`) | 1.1.3 (`c5a83a4`) |  |  |  | Nest the merge notes, and move a note that reassures rather than warns |
-| 2026-08-05 |  |  |  |  |  | 1.1.2 (`3b9703c`) |  |  |  | Point the notes list at the backup warning |
-| 2026-08-05 |  |  |  |  | 1.7.4 (`365475f`) |  |  |  |  | Make the merge README's notes list readable |
-| 2026-08-05 |  |  |  |  | 1.7.3 (`846a4f3`) | 1.1.1 (`846a4f3`) |  |  |  | Put the two READMEs in the same order |
-| 2026-08-05 |  |  |  |  | 1.7.2 (`df6dcc3`) |  |  |  |  | Carry over the maturity caveat too |
-| 2026-08-05 |  |  |  |  | 1.7.1 (`7dbcbd9`) |  |  |  |  | Give the merge README the warnings the other one has |
-| 2026-08-05 |  |  |  |  | 1.7.0 (`8799b8b`) |  |  |  |  | Report the sibling's auto modes in the task dialog |
-| 2026-08-05 |  |  |  |  | 1.6.1 (`bf05dea`) |  |  |  |  | Bump MergePerformerTagsToScenes to 1.6.1 |
-| 2026-08-05 |  |  |  |  |  | 1.1.0 (`6ad1da2`) |  |  |  | Keep entities normalized as Stash saves them |
-| 2026-08-03 |  |  |  |  |  | 1.0.0 (`87fc9de`) |  |  |  | Sync NormalizeParentTags manifest version to 1.0.0 |
-| 2026-08-03 |  |  |  |  | 1.6.0 (`6eedb8d`) | 0.12.0 (`6eedb8d`) |  |  |  | Let the task dialogs take their own writes back |
-| 2026-08-03 |  |  |  |  | 1.5.1 (`b50dba6`) | 0.11.2 (`b50dba6`) |  |  |  | Correct the documentation that fell behind the code |
-| 2026-08-03 |  |  |  |  |  | 0.11.1 (`5224fdb`) |  |  |  | Drop the parts of the run dialog that do nothing |
-| 2026-08-03 |  |  |  |  | 1.5.0 (`63ca556`) | 0.11.0 (`63ca556`) |  |  |  | Put both plugins on both sides of the bulk-edit lease |
-| 2026-08-03 |  |  |  |  | 1.4.3 (`75e5fb7`) | 0.10.2 (`75e5fb7`) |  |  |  | Reset a rerun the same way in both plugins |
-| 2026-08-03 |  |  |  |  | 1.4.2 (`d8e33a3`) |  |  |  |  | Point the finished merge task at Rescan |
-| 2026-08-03 |  |  |  |  | 1.4.1 (`7891b5d`) |  |  |  |  | Plan a single scene through sceneMergePlan too |
-| 2026-08-03 |  |  |  |  |  | 0.10.1 (`78c707d`) |  |  |  | Leave the hierarchy controls inert until the tags arrive |
-| 2026-08-03 |  |  |  |  |  | 0.10.0 (`d2da390`) |  |  |  | Drop the Clear log button from the run dialog |
-| 2026-08-03 |  |  |  |  |  | 0.9.0 (`d9b0de5`) |  |  |  | Follow a multi-parent tag to its other parents |
-| 2026-08-03 |  |  |  |  |  | 0.8.1 (`2c23ab8`) |  |  |  | Give the find box a clear icon too |
-| 2026-08-03 |  |  |  |  |  | 0.8.0 (`8d82d7c`) |  |  |  | Jump to a tag instead of reducing the tree to it |
-| 2026-08-03 |  |  |  |  |  | 0.7.2 (`8958615`) |  |  |  | Clear the hierarchy filter from inside the box |
-| 2026-08-03 |  |  |  |  |  | 0.7.1 (`ac86556`) |  |  |  | Find a tag without matching its case |
-| 2026-08-03 |  |  |  |  |  | 0.7.0 (`fdbc0c1`) |  |  |  | Browse the tag hierarchy without running anything |
-| 2026-08-03 |  |  |  |  | 1.4.0 (`8a090c6`) |  |  |  |  | Close each phase with the tags it moved |
-| 2026-08-03 |  |  |  |  | 1.3.0 (`7803545`) |  |  |  |  | Review the whole merge before writing any of it |
-| 2026-08-03 |  |  |  |  | 1.2.0 (`0df0535`) |  |  |  |  | Merge every performer's tags from a library-wide task |
-| 2026-08-03 |  |  |  |  |  | 0.6.1 (`823908f`) |  |  |  | Let a separator take the place of spaces in the name filters |
-| 2026-08-03 |  |  |  |  |  | 0.5.0 (`0bd9e5e`) |  |  |  | Take a list of substrings in the two name filters |
-| 2026-08-03 |  |  |  |  |  | 0.4.1 (`5a3e0f0`) |  |  |  | Count the log lines a rescan actually has |
-| 2026-08-03 |  |  |  |  |  | 0.4.0 (`45dbe71`) |  |  |  | Close each phase with the tags it touched |
-| 2026-08-02 |  |  |  |  |  | 0.3.1 (`af72ade`) |  |  |  | Name untitled galleries and images by their file |
-| 2026-08-02 |  |  |  |  |  | 0.3.0 (`6c4cebf`) |  |  |  | Add a Clear log button to the run dialog |
-| 2026-08-02 |  |  |  |  | 1.1.2 (`461c64e`) | 0.2.0 (`461c64e`) |  |  |  | Say why a tag changed, and put ids outside the quotes |
-| 2026-08-02 |  |  |  |  | 1.1.1 (`6b5bfd1`) | 0.1.2 (`6b5bfd1`) |  |  |  | Order the settings pages by prefixing the manifest keys |
-| 2026-08-02 |  |  |  |  | 1.1.0 (`4517abb`) | 0.1.0 (`4517abb`) |  |  |  | Add NormalizeParentTags 0.1.0, and the bulk-edit lease it needs (MPT2S 1.1.0) |
-| 2026-08-01 |  |  |  |  | 1.0.0 (`6d949c0`) |  |  |  |  | Release 1.0.0 |
-| 2026-08-01 |  |  |  |  | 0.9.5 (`33e8556`) |  |  |  |  | Bump to 0.9.5: carry the logging note into the README intro |
-| 2026-07-31 |  |  |  |  | 0.9.4 (`c11481c`) |  |  |  |  | Bump to 0.9.4: name the browser console in the Plugins page description too |
-| 2026-07-31 |  |  |  |  | 0.9.3 (`04129dc`) |  |  |  |  | Bump to 0.9.3: say plainly that merge logs go to the browser console |
-| 2026-07-31 |  |  |  |  | 0.9.2 (`c258f4b`) |  |  |  |  | Bump to 0.9.2: announce once when merge logging is enabled |
-| 2026-07-31 |  |  |  |  | 0.9.1 (`fcf454c`) |  |  |  |  | Bump to 0.9.1: fix the logMergesToConsole setting description |
-| 2026-07-31 |  |  |  |  | 0.9.0 (`7013642`) |  |  |  |  | Bump to 0.9.0: add optional console logging of tag merges |
-| 2026-07-31 |  |  |  |  | 0.8.9 (`2330fe7`) |  |  |  |  | Bump to 0.8.9: refresh the performer button's eligibility cache on save |
-| 2026-07-31 |  |  |  |  | 0.8.8 (`1658edb`) |  |  |  |  | Bump to 0.8.8: correct the installation refresh step |
-| 2026-07-31 |  |  |  |  | 0.8.7 (`01c7726`) |  |  |  |  | Bump to 0.8.7: hide the performer button when the performer has no tags |
-| 2026-07-31 |  |  |  |  | 0.8.6 (`e695d1a`) |  |  |  |  | Bump to 0.8.6: trim the Review before saving section |
-| 2026-07-31 |  |  |  |  | 0.8.5 (`af695df`) |  |  |  |  | Bump to 0.8.5: document the exclusion-tag lookup cache |
-| 2026-07-31 |  |  |  |  | 0.8.4 (`471eb54`) |  |  |  |  | Bump to 0.8.4: refresh the scene button tooltip on hover |
-| 2026-07-31 |  |  |  |  | 0.8.3 (`4646c78`) |  |  |  |  | Bump to 0.8.3: document the cross-tab staleness limitation |
-| 2026-07-31 |  |  |  |  | 0.8.2 (`863b1f2`) |  |  |  |  | Bump to 0.8.2: iterate over skipped scenes, throttle the settings query |
-| 2026-07-31 |  |  |  |  | 0.8.0 (`91c4add`) |  |  |  |  | Bump to 0.8.0: require Stash 0.31.0, exclude tags on custom field presence alone |
-| 2026-07-31 |  |  |  |  | 0.7.0 (`34bd650`) |  |  |  |  | Bump to 0.7.0: make tag staging the default, replacing stageTagsInEditForm with saveTagsImmediately |
-| 2026-07-31 |  |  |  |  | 0.6.4 (`dc2eaa7`) |  |  |  |  | Bump to 0.6.4: document the performer button's scene scope, retitle the staging flash |
-| 2026-07-31 |  |  |  |  | 0.6.2 (`701a5bd`) |  |  |  |  | Bump to 0.6.2: add Stage Tags In Edit Form mode for "Add Perf Tags" |
-| 2026-07-31 |  |  |  |  | 0.5.5 (`54b18af`) |  |  |  |  | Bump to 0.5.5: fix merge correctness bugs and performer button placement |
-| 2026-07-30 |  |  |  |  | 0.5.2 (`42bcb9c`) |  |  |  |  | Bump to 0.5.2: fix exclusion filter issues found in code review |
-| 2026-07-30 |  |  |  |  | 0.5.1 (`bfc65b7`) |  |  |  |  | Bump to 0.5.1: clarify custom field exclusion behavior in README |
-| 2026-07-30 |  |  |  |  | 0.5.0 (`e565d34`) |  |  |  |  | Bump to 0.5.0: add exclusion filters for organized scenes, tagged scenes, ignored tags, and custom fields |
-| 2026-07-30 |  |  |  |  | 0.4.4 (`896e71b`) |  |  |  |  | Bump to 0.4.4: fix button names in YML setting description |
-| 2026-07-30 |  |  |  |  | 0.4.3 (`73cc990`) |  |  |  |  | Bump to 0.4.3: handle bulk scene and performer updates |
-| 2026-07-30 |  |  |  |  | 0.4.1 (`2b8e248`) |  |  |  |  | Bump to 0.4.1: rename buttons and update docs |
-| 2026-07-30 |  |  |  |  | 0.3.9 (`0832b26`) |  |  |  |  | Bump to 0.3.9: refresh scene list after all performer merge paths |
-| 2026-07-30 |  |  |  |  | 0.3.6 (`4cd8377`) |  |  |  |  | Bump to 0.3.6: fix scene refresh, auto-merge, and tab retention |
-| 2026-07-29 |  |  |  |  | 0.3.0 (`4dd8362`) |  |  |  |  | Add auto-merge settings and bump to 0.3.0 |
-| 2026-07-29 |  |  |  |  | 0.2.0 (`e10da90`) |  |  |  |  | Bump version to 0.2.0 and update descriptions |
-| 2026-07-29 |  |  |  |  | 1.0.0 (`a3e604d`) |  |  |  |  | First commit |
+| Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SFM | SVR | TBC | Change |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-21 | 3.3.0 (`3c7e906`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.3.0: locked fields are marked in the descriptions dialog |
+| 2026-09-21 |  | 2.4.0 (`0a753cc`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 2.4.0: renames never reach a locked custom field |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.19.0 (`4b81402`) |  | SceneVariants 1.19.0: a locked variant field is only ever added |
+| 2026-09-21 |  |  |  |  |  |  |  | 0.1.0 (`ed1a858`) |  |  | SceneFilenameManager 0.1.0: an Archive Undo is refused on a locked field |
+| 2026-09-21 | 3.2.3 (`1db94bb`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.2.3: Undo never removes a locked field |
+| 2026-09-21 |  |  | 3.2.1 (`11cbd46`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 3.2.1: asks the locks through Core's fieldLocks() |
+| 2026-09-21 |  |  |  | 2.4.0 (`0aa020e`) |  |  |  |  |  |  | GTTxCore 2.4.0: fieldLocks() asks CFBE's Locked Custom Fields for every writer |
+| 2026-09-21 | 3.2.2 (`8e0a443`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.2.2: a locked field can still be added where missing |
+| 2026-09-21 | 3.2.1 (`87c9ce1`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.2.1: a locked field's description is locked too |
+| 2026-09-21 |  |  |  |  |  |  |  | 0.0.3 (`268dff3`) |  |  | SceneFilenameManager 0.0.3: writes a hundred scenes per request |
+| 2026-09-21 | 3.2.0 (`8315bdd`) |  | 3.2.0 (`8315bdd`) |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.2.0, FindEntitiesByTextContent 3.2.0: locked custom fields |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.18.1 (`ff04112`) |  | SceneVariants 1.18.1: the Variants tab's drift score matches the review's |
+| 2026-09-21 |  |  |  |  |  |  |  | 0.0.2 (`af5c89e`) |  |  | SceneFilenameManager 0.0.2: the seeded field name shows in the settings box at once |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.18.0 (`06315d2`) |  | SceneVariants 1.18.0: a pinned base name is not title drift, and the review can exclude organized scenes |
+| 2026-09-21 |  |  |  |  |  |  |  | 0.0.1 (`8942b4d`) |  |  | SceneFilenameManager 0.0.1: archive and restore scene filenames |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.17.2 (`7829b08`) |  | SceneVariants 1.17.2: the Variants Title row folds with the group |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.17.1 (`7a297f5`) |  | SceneVariants 1.17.1: Flag Variants renames its own tag instead of failing on the alias |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.17.0 (`81a6c8c`) |  | SceneVariants 1.17.0: the eight title settings are one Variants Title dialog |
+| 2026-09-21 |  | 2.3.0 (`9c2319c`) |  |  |  |  |  |  | 1.16.1 (`9c2319c`) |  | EntityNameMaintainer 2.3.0, SceneVariants 1.16.1: renamed titles go over as one batch, and a swap offers nothing back |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.16.0 (`f911e67`) |  | SceneVariants 1.16.0: Select All and Unselect All in the Rename Variants dialog |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.15.0 (`5a3dffa`) |  | SceneVariants 1.15.0: Renumber by Duration is a setting the whole naming rule reads, the dialog box its override |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.14.2 (`033052a`) |  | SceneVariants 1.14.2: the rename line shows what changes in a title, not two cut copies of it |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.14.1 (`7fe2a98`) |  | SceneVariants 1.14.1: the renumber box explains both states on its whole label |
+| 2026-09-20 |  | 2.2.0 (`ce6fd55`) |  |  |  |  |  |  | 1.14.0 (`ce6fd55`) |  | SceneVariants 1.14.0, EntityNameMaintainer 2.2.0: titles Rename Variants writes reach Entity Name Maintainer |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.13.0 (`a10e0ef`) |  | SceneVariants 1.13.0: title propagation follows the naming rule, as Rename Variants After a Title Change |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.12.2 (`89fefa6`) |  | SceneVariants 1.12.2: the setting reads Offer Title Synchronization |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.12.1 (`8d7a0e5`) |  | SceneVariants 1.12.1: the tab's rows read titles by the naming rule, and Offer Title Changes Synchronization |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.12.0 (`1fe7923`) |  | SceneVariants 1.12.0: a switch to index a set's only partial |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.11.1 (`9691e52`) |  | SceneVariants 1.11.1: an empty postfix means no postfix |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.11.0 (`f894fe4`) |  | SceneVariants 1.11.0: the rename settings as asked, a no-rename tag, and Offer Title Changes beside the title settings |
+| 2026-09-20 |  |  |  |  |  |  |  |  | 1.10.0 (`7e917c6`) |  | SceneVariants 1.10.0: Rename Variants names every partial after its set |
+| 2026-09-20 |  | 2.1.3 (`b44e245`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 2.1.3: the renamed entity is read as the save left it |
+| 2026-09-20 |  |  |  |  |  |  | 5.2.2 (`e9a80b2`) |  |  |  | PropagateTagsAndPerformers 5.2.2: a bulk button with nothing to do is unavailable |
+| 2026-09-20 | 3.1.4 (`446a817`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.1.4: Apply is unavailable over an empty scope |
+| 2026-09-20 |  |  |  |  |  |  | 5.2.1 (`9da8af3`) |  |  |  | PropagateTagsAndPerformers 5.2.1: OK is unavailable while nothing is ticked |
+| 2026-09-20 |  |  |  | 2.3.0 (`549fc1e`) |  |  | 5.2.0 (`549fc1e`) |  | 1.9.6 (`549fc1e`) |  | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |
+| 2026-09-20 |  |  |  |  |  |  | 5.1.4 (`ab2d37e`) |  |  |  | PropagateTagsAndPerformers 5.1.4: the depropagate offer holds the save on the settling registry |
+| 2026-09-19 |  |  |  | 2.2.0 (`ae8cf25`) |  |  | 5.1.3 (`ae8cf25`) |  | 1.9.5 (`ae8cf25`) |  | Core 2.2.0, PropagateTagsAndPerformers 5.1.3, SceneVariants 1.9.5: a save settles before the propagate offer |
+| 2026-09-19 |  |  |  |  |  |  | 5.1.2 (`85d5d63`) |  |  |  | PropagateTagsAndPerformers 5.1.2: "was likely from", and the pick dialog a size of its own |
+| 2026-09-19 |  |  |  |  |  |  | 5.1.1 (`5e48ecd`) |  |  |  | PropagateTagsAndPerformers 5.1.1: the row and dialog are "Automatic Propagation and Depropagate Assist" |
+| 2026-09-19 |  |  |  |  |  |  | 5.1.0 (`b3fa23c`) |  |  |  | PropagateTagsAndPerformers 5.1.0: a reaction asks unless Silent is on, and the Depropagate assist |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.3 (`2e24a13`) |  |  |  | PropagateTagsAndPerformers 5.0.3: the rows in a box indented under their head |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.2 (`d90be80`) |  |  |  | PropagateTagsAndPerformers 5.0.2: captions wrap, toggles at the right edge, bigger box heads |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.1 (`1a151ec`) |  |  |  | PropagateTagsAndPerformers 5.0.1: the buttons dialog grouped by page, the automatic modes in a dialog |
+| 2026-09-19 |  |  |  |  |  |  | 5.0.0 (`c3656cd`) |  |  |  | PropagateTagsAndPerformers 5.0.0: Manual Buttons Settings, a switch per button |
+| 2026-09-18 |  |  |  |  |  |  |  |  | 1.9.4 (`e43382a`) |  | SceneVariants 1.9.4: the review listing keeps six lines however the log grows |
+| 2026-09-18 |  |  |  |  |  |  |  |  | 1.9.3 (`4469263`) |  | SceneVariants 1.9.3: Proceed settles once every migrated scene is written |
+| 2026-09-18 | 3.1.3 (`c1422c6`) | 2.1.2 (`c1422c6`) | 3.1.3 (`c1422c6`) | 2.1.0 (`c1422c6`) | 4.1.3 (`c1422c6`) | 5.5.4 (`c1422c6`) | 4.4.3 (`c1422c6`) |  | 1.9.2 (`c1422c6`) | 2.2.4 (`c1422c6`) | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
+| 2026-09-18 |  |  |  | 2.0.0 (`c4ac7aa`) |  |  |  |  |  |  | GTTxCore 2.0.0: one Show Counts on Headings switch, and Custom Fields counts its rows |
+| 2026-09-18 |  |  |  | 1.7.0 (`409b555`) |  |  |  |  |  |  | GTTxCore 1.7.0: a tag's Parent Tags and Sub-Tags carry their counts under Show Tag Counts |
+| 2026-09-18 |  |  |  | 1.6.0 (`e2349f2`) |  |  |  |  |  |  | GTTxCore 1.6.0: Show Performer Counts puts the count after the word Performers above every performer list |
+| 2026-09-18 |  |  |  | 1.5.1 (`fcbda92`) |  |  |  |  |  |  | GTTxCore 1.5.1: a tag badge is known by data-sort-name, not by a link into /tags/ |
+| 2026-09-18 |  |  |  | 1.5.0 (`6e16e9a`) |  |  |  |  |  |  | GTTxCore 1.5.0: Show Tag Counts puts the count after the word Tags above every tag list |
+| 2026-09-18 |  |  |  |  |  | 5.5.3 (`56e09fa`) |  |  |  |  | NormalizeParentTags 5.5.3: the button holds its size through the flash |
+| 2026-09-18 |  |  |  |  |  | 5.5.2 (`6a9f3c9`) |  |  |  |  | NormalizeParentTags 5.5.2: Prune Tags and Roll Up Tags are disabled, never removed, when there is nothing to do |
+| 2026-09-18 |  |  |  |  |  |  |  |  | 1.9.1 (`15ad7c6`) |  | SceneVariants 1.9.1: the drift score is green at 1 as well as 0 |
+| 2026-09-18 |  |  |  |  |  |  |  |  | 1.9.0 (`113c143`) |  | SceneVariants 1.9.0: the drift score is per variant, and Partial-length reads Partial-duration |
+| 2026-09-18 |  |  |  |  |  |  |  |  | 1.8.4 (`907b83f`) |  | SceneVariants 1.8.4: the dimension's value reads Full-duration, not Full-length |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.8.3 (`a8d8936`) |  | SceneVariants 1.8.3: the review dialog calls its number the drift score too |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.8.2 (`24a4509`) |  | SceneVariants 1.8.2: the drift score's tooltip hangs on the whole phrase |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.8.1 (`2546239`) |  | SceneVariants 1.8.1: the drift score's tooltip lists the weights in force and where to change them |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.8.0 (`651eb9f`) |  | SceneVariants 1.8.0: the Variants tab shows its set's drift score at the review task's weights |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.7.3 (`71659f2`) |  | SceneVariants 1.7.3: Flag Variants sits second in Settings - Tasks, Review Variant Sets last |
+| 2026-09-17 | 3.1.2 (`46f966b`) | 2.1.1 (`46f966b`) | 3.1.2 (`46f966b`) |  | 4.1.2 (`46f966b`) | 5.5.1 (`46f966b`) | 4.4.2 (`46f966b`) |  | 1.7.2 (`46f966b`) | 2.2.3 (`46f966b`) | Close is green in every dialog once nothing is left to write |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.7.1 (`3e227e0`) |  | SceneVariants 1.7.1: Select All and Unselect All are held back when they would change nothing |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.7.0 (`eb49bf5`) |  | SceneVariants 1.7.0: Select All and Unselect All for the [GROUP?] candidates |
+| 2026-09-17 |  |  |  |  |  |  |  |  | 1.6.3 (`50a13f5`) |  | SceneVariants 1.6.3: the flag listing names untitled scenes by file, and the footer captions its pairs |
+| 2026-09-16 |  |  |  |  |  | 5.5.0 (`0ce2a33`) |  |  |  |  | NormalizeParentTags 5.5.0: Set All Prune, Roll Up and Off under the selectors |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 1.6.2 (`09b6b26`) |  | SceneVariants 1.6.2: the pane button reads Synchronize Variant... for one variant |
+| 2026-09-16 |  |  |  | 1.4.0 (`ba19cc3`) |  | 5.4.0 (`ba19cc3`) |  |  |  | 2.2.2 (`ba19cc3`) | NormalizeParentTags 5.4.0: Prune and Roll Up buttons on every entity page |
+| 2026-09-16 |  |  |  |  |  |  |  |  |  | 2.2.1 (`a42a79a`) | TagBundleClipboard 2.2.1: ⮺ Tags is removed, not disabled, on a tagless entity |
+| 2026-09-16 |  |  |  |  |  |  |  |  |  | 2.2.0 (`dbff7e7`) | TagBundleClipboard 2.2.0: ⮺ Tags is disabled while the entity carries no tag |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 1.6.1 (`4430fff`) |  | SceneVariants 1.6.1: the pane re-reads when the scene's stash-ids change under it |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 1.6.0 (`1ebf30f`) |  | SceneVariants 1.6.0: a save that adds a shared stash-id says which set it joined |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 1.5.2 (`ac018e9`) |  | SceneVariants 1.5.2: each dropped stash-id is probed as its own set |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 1.5.1 (`97d65cd`) |  | SceneVariants 1.5.1: the lone survivor is checked exactly |
+| 2026-09-16 |  |  |  |  |  |  |  |  | 1.5.0 (`879edf7`) |  | SceneVariants 1.5.0: deleting a stash-id asks before the plugin's marks come off with it |
+| 2026-09-14 |  |  |  |  |  |  | 4.4.1 (`ed8e8b9`) |  |  |  | PropagateTagsAndPerformers 4.4.1: the child-tag exclusion setting reads "child tags" |
+| 2026-09-14 |  |  |  |  |  |  |  |  | 1.4.4 (`b0ec483`) |  | SceneVariants 1.4.4: the flag tag's default is spelled with ✅ |
+| 2026-09-14 |  |  |  |  |  |  | 4.4.0 (`05d543e`) |  |  |  | PropagateTagsAndPerformers 4.4.0: a tag and everything under it can be kept out |
+| 2026-09-14 |  |  |  | 1.3.0 (`9e53be6`) |  | 5.3.2 (`9e53be6`) | 4.3.0 (`9e53be6`) |  |  |  | PropagateTagsAndPerformers 4.3.0: a name filter for tags, and the entity filters say "target" |
+| 2026-09-10 |  |  |  |  |  |  | 4.2.1 (`6187590`) |  |  |  | PropagateTagsAndPerformers 4.2.1: a write evicts the list query too, so a page listing what it wrote refetches |
+| 2026-09-02 |  |  |  |  |  |  |  |  | 1.4.3 (`856c59c`) |  | SceneVariants 1.4.3: the pane's Synchronize button is unavailable while a dialog is open |
+| 2026-09-02 |  |  |  | 1.2.1 (`4fcd6bb`) | 4.1.1 (`4fcd6bb`) | 5.3.1 (`4fcd6bb`) |  |  | 1.4.2 (`4fcd6bb`) |  | Review fixes 2026-09-02: the All row is drawn once, and sixty more |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.4.1 (`19eded8`) |  | SceneVariants 1.4.1: the review divider is a full-width drag bar, not a corner grip |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.4.0 (`943b9da`) |  | SceneVariants 1.4.0: the field's own display links each stash-box line, and the migrate scan flags pseudo-plus-real drift |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.3.1 (`8d12dd8`) |  | SceneVariants 1.3.1: a save re-reads the pane, and the review score explains itself on hover |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.3.0 (`cade576`) |  | SceneVariants 1.3.0: each stash-box entry under the summary is a link to the work's page there |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.2.1 (`e4806d9`) |  | SceneVariants 1.2.1: the set table's headers carry the file facts, and the box fits the table |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.2.0 (`ac683d5`) |  | SceneVariants 1.2.0: a set line hovers to a table of marks saying how the set is split |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.1.0 (`9e49c30`) |  | SceneVariants 1.1.0: the title is scored on its own weight, and the strip is reordered |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.0.1 (`09db634`) |  | SceneVariants 1.0.1: each Synchronize Set re-reads its own set, and restates its score without re-sorting |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 1.0.0 (`934cc1d`) |  | SceneVariants 1.0.0 |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.43.0 (`1a2630c`) |  | SceneVariants 0.43.0: the score wears four colour bands derived from the weights, and the ENM save chain is pinned |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.42.1 (`7b3a025`) |  | SceneVariants 0.42.1: the set listing is hidden until a task fills it |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.42.0 (`25b827d`) |  | SceneVariants 0.42.0: the variants list badges a cover that is a different picture |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.41.0 (`b245e9b`) |  | SceneVariants 0.41.0: Proceed and Undo are two buttons, and a cover line hovers to both pictures |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.40.1 (`2be92e5`) |  | SceneVariants 0.40.1: the review listing says which of the three cover states a run was in |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.40.0 (`477611a`) |  | SceneVariants 0.40.0: blue is a changed value's unchanged text, short values diff too, and the tooltip is a coloured box |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.39.0 (`dabdeae`) |  | SceneVariants 0.39.0: the set listing counts cover mismatches, so a rescanned variant is findable |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.38.0 (`6db851e`) |  | SceneVariants 0.38.0: the tooltip is the diff too, and the set count runs during the scan |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.37.0 (`7b7b012`) |  | SceneVariants 0.37.0: a long value is shown once as a word diff, not twice and cut |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.36.0 (`f2f55d6`) |  | SceneVariants 0.36.0: the change is coloured, not the line - red lost, green gained, blue replaced |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.35.0 (`bbfc82a`) |  | SceneVariants 0.35.0: the cover comparison is opt-in, and a cover set in the edit form offers to propagate |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.34.0 (`71e0b80`) |  | SceneVariants 0.34.0: the cover propagates too, compared and undone by its bytes |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.33.0 (`d111eae`) |  | SceneVariants 0.33.0: a tag the hierarchy makes redundant is not pushed to the variants |
+| 2026-09-01 |  |  |  |  |  |  |  |  | 0.32.0 (`7b0da0b`) |  | SceneVariants 0.32.0: what the listing abbreviates carries the whole string on hover |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.31.1 (`0fdc9ee`) |  | SceneVariants 0.31.1: Synchronize Set disarms on the set it has already listed |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.31.0 (`3f50b9d`) |  | SceneVariants 0.31.0: the set listing is draggable, and the counter line says how many sets |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.30.0 (`53d354e`) |  | SceneVariants 0.30.0: Rescan, in every dialog - the log and the undo survive the pass |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.29.0 (`fb57a28`) |  | SceneVariants 0.29.0: Review Variant Sets - every set in the library, scored by drift, worst first |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.28.0 (`fb282f8`) |  | SceneVariants 0.28.0: groups propagate, joined at the source's own scene_index |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.27.0 (`1d6a501`) |  | SceneVariants 0.27.0: the save dialog preselects everything it lists except titles |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.26.0 (`95c9e38`) |  | SceneVariants 0.26.0: the save dialog offers the removals the save made - a replaced URL follows whole |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.25.0 (`3544f92`) |  | SceneVariants 0.25.0: saving a scene offers to propagate the changed attributes to its variants |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.24.0 (`87059e6`) |  | SceneVariants 0.24.0: the variants list re-reads when a run that wrote is closed |
+| 2026-08-31 |  |  |  | 1.2.0 (`658a9d9`) |  |  |  |  | 0.23.0 (`658a9d9`) |  | GTTxCore 1.2.0 + SceneVariants 0.23.0: rating banner and organized mark on hover cards and variant covers |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.22.0 (`cae09bb`) |  | SceneVariants 0.22.0: only the adds are preselected, with an All box per attribute |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.21.1 (`912364f`) |  | SceneVariants 0.21.1: the picker arrow is a size up from the log |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.21.0 (`2515e98`) |  | SceneVariants 0.21.0: pick individual tags and performers inside a synchronize line |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.20.0 (`6196fb0`) |  | SceneVariants 0.20.0: a Synchronize Variants dialog pushes this scene's values to its variants |
+| 2026-08-31 |  |  |  |  |  |  |  |  | 0.19.0 (`07f1e77`) |  | SceneVariants 0.19.0: group hand-flagged scenes into a variant set with a pseudo stash-id |
+| 2026-08-30 |  |  |  |  |  |  |  |  | 0.18.1 (`53610e8`) |  | SceneVariants 0.18.1: the set count is a summary, and the badges wrap as one |
+| 2026-08-30 |  |  |  |  |  |  |  |  | 0.18.0 (`d181c55`) |  | SceneVariants 0.18.0: furnished flag tag, set counter, delta badges |
+| 2026-08-30 |  |  |  |  |  |  |  |  | 0.17.0 (`52b3c74`) |  | SceneVariants 0.17.0: Flag Variants task, and the hover delta becomes a styled box |
+| 2026-08-30 |  |  |  |  |  |  |  |  | 0.16.1 (`8148865`) |  | SceneVariants 0.16.1: field lookup matches individual lines, not the whole value |
+| 2026-08-29 |  |  |  | 1.1.4 (`94163aa`) |  |  |  |  |  |  | It should become a no-op |
+| 2026-08-29 |  |  |  | 1.1.3 (`ed3db08`) |  |  |  |  |  |  | Say what the no-op is, rather than naming a width |
+| 2026-08-29 |  |  |  | 1.1.2 (`33cbd02`) |  |  |  |  |  |  | When, not if |
+| 2026-08-29 | 3.1.1 (`f1fb23f`) |  | 3.1.1 (`f1fb23f`) | 1.1.1 (`f1fb23f`) |  |  |  |  |  |  | Measure two drag limits, gate one row, name one issue |
+| 2026-08-29 | 3.1.0 (`f065c69`) | 2.1.0 (`f065c69`) | 3.1.0 (`f065c69`) | 1.1.0 (`f065c69`) | 4.1.0 (`f065c69`) | 5.3.0 (`f065c69`) | 4.2.0 (`f065c69`) |  | 0.16.0 (`f065c69`) | 2.1.0 (`f065c69`) | One setting decides where every link opens, and three fixes beside it |
+| 2026-08-29 | 3.0.1 (`694d485`) | 2.0.1 (`694d485`) | 3.0.1 (`694d485`) | 1.0.1 (`694d485`) | 4.0.3 (`694d485`) | 5.2.2 (`694d485`) | 4.1.3 (`694d485`) |  | 0.15.1 (`694d485`) | 2.0.2 (`694d485`) | All nine plugins: the README link points at the public mirror |
+| 2026-08-29 |  |  |  | 1.0.0 (`1bfccf2`) |  |  |  |  |  |  | GTTxCore 1.0.0: verified against Stash 0.31.0 |
+| 2026-08-29 |  |  |  | 0.0.8 (`9b2161b`) |  |  |  |  |  |  | GTTxCore 0.0.8: right-click Paste in a Tags or Performers box |
+| 2026-08-29 |  |  |  | 0.0.7 (`3a7e6b6`) |  |  |  |  |  |  | GTTxCore 0.0.7: the Dev Mods dialog takes the sibling's narrow width |
+| 2026-08-28 |  |  |  | 0.0.6 (`e08e523`) | 4.0.2 (`e08e523`) | 5.2.1 (`e08e523`) | 4.1.2 (`e08e523`) |  |  | 2.0.1 (`e08e523`) | pickControl: one rule for which Stash select a staged change goes into |
+| 2026-08-28 |  |  |  |  |  | 5.2.0 (`e88a6d7`) |  |  |  |  | NPT: the scene buttons stage into the tag box instead of opening a dialog |
+| 2026-08-28 |  |  |  | 0.0.5 (`f21c4e3`) | 4.0.1 (`f21c4e3`) | 5.1.0 (`f21c4e3`) | 4.1.1 (`f21c4e3`) |  |  |  | NPT: Prune and Roll Up on a scene, when they would do something |
+| 2026-08-28 |  |  |  | 0.0.4 (`20e11ac`) |  |  | 4.1.0 (`20e11ac`) |  |  |  | A dropped `+` had taken six rules off Core's stylesheet; and System view |
+| 2026-08-28 | 3.0.0 (`28ce7c2`) | 2.0.0 (`28ce7c2`) | 3.0.0 (`28ce7c2`) | 0.0.3 (`28ce7c2`) | 4.0.0 (`28ce7c2`) | 5.0.0 (`28ce7c2`) | 4.0.0 (`28ce7c2`) |  | 0.15.0 (`28ce7c2`) | 2.0.0 (`28ce7c2`) | ᝯㄝₓ Core: one copy of the shared half, and the eight bind it |
+| 2026-08-27 | 2.19.0 (`cbb8266`) | 1.6.0 (`cbb8266`) | 2.5.0 (`cbb8266`) |  | 3.16.0 (`cbb8266`) | 4.14.0 (`cbb8266`) | 3.24.0 (`cbb8266`) |  | 0.14.0 (`cbb8266`) | 1.3.0 (`cbb8266`) | Review fixes: ENM searches list fields again, and fifteen more |
+| 2026-08-27 |  |  |  |  | 3.15.2 (`ae50891`) |  |  |  |  |  | MPTTS: the recap's tags are links |
+| 2026-08-27 | 2.18.1 (`89ce82b`) | 1.5.1 (`89ce82b`) | 2.4.1 (`89ce82b`) |  | 3.15.1 (`89ce82b`) | 4.13.1 (`89ce82b`) | 3.23.1 (`89ce82b`) |  | 0.13.1 (`89ce82b`) |  | Country names come from Stash's own table, not the browser's |
+| 2026-08-27 | 2.18.0 (`a668b69`) | 1.5.0 (`a668b69`) | 2.4.0 (`a668b69`) |  | 3.15.0 (`a668b69`) | 4.13.0 (`a668b69`) | 3.23.0 (`a668b69`) |  | 0.13.0 (`a668b69`) | 1.2.1 (`a668b69`) | The tooltip box outlives its dialog, and eight smaller asks |
+| 2026-08-27 | 2.17.0 (`d4a6e40`) | 1.4.0 (`d4a6e40`) | 2.3.0 (`d4a6e40`) |  | 3.14.0 (`d4a6e40`) | 4.12.0 (`d4a6e40`) | 3.22.0 (`d4a6e40`) |  |  |  | Entity cards on every listed name, and three smaller asks |
+| 2026-08-27 | 2.16.0 (`105c196`) |  |  |  | 3.13.0 (`105c196`) | 4.11.0 (`105c196`) | 3.21.0 (`105c196`) |  | 0.12.0 (`105c196`) | 1.2.0 (`105c196`) | Tag tooltips carry the tag's picture, in all six plugins that draw one |
+| 2026-08-27 | 2.15.0 (`03c7cf8`) |  |  |  |  |  |  |  |  |  | CFBE 2.15.0: the entities carrying nothing are in the list, and the scope select is gone |
+| 2026-08-26 |  |  |  |  |  |  |  |  | 0.11.0 (`637e350`) |  | SVR 0.11.0: the default is written into the setting |
+| 2026-08-26 | 2.14.2 (`662770e`) |  |  |  | 3.12.2 (`662770e`) | 4.10.2 (`662770e`) | 3.20.2 (`662770e`) |  | 0.10.2 (`662770e`) |  | The custom-field tooltip is fixed to the viewport, not to an inline span |
+| 2026-08-26 | 2.14.1 (`f116777`) |  |  |  | 3.12.1 (`f116777`) | 4.10.1 (`f116777`) | 3.20.1 (`f116777`) |  | 0.10.1 (`f116777`) |  | The custom-field tooltip is a box of ours, out of the cursor's way |
+| 2026-08-26 |  |  |  |  | 3.12.0 (`4c9e2ca`) |  |  |  |  |  | MPTTS 3.12.0: the custom-field mark works here too, and the settings read like the sibling's |
+| 2026-08-26 | 2.14.0 (`bb1c801`) |  |  |  | 3.11.0 (`bb1c801`) | 4.10.0 (`bb1c801`) | 3.20.0 (`bb1c801`) |  | 0.10.0 (`bb1c801`) |  | A hover-lazy tooltip on every setting that names a custom field |
+| 2026-08-26 |  |  | 2.2.0 (`6ae25c5`) |  |  |  |  |  |  |  | FRETC 2.2.0: Case-sensitive is remembered |
+| 2026-08-26 | 2.13.0 (`3cc17ea`) |  | 2.1.0 (`3cc17ea`) |  | 3.10.0 (`3cc17ea`) |  | 3.19.0 (`3cc17ea`) |  | 0.9.0 (`3cc17ea`) |  | Case-sensitive search, [EDIT] lines, and a tooltip on every tag link |
+| 2026-08-26 | 2.12.3 (`f99e2f9`) |  | 2.0.1 (`f99e2f9`) |  | 3.9.1 (`f99e2f9`) |  | 3.18.1 (`f99e2f9`) |  | 0.8.1 (`f99e2f9`) |  | FRETC 2.0.1, and a wider gap before every tag link |
+| 2026-08-26 |  |  | 2.0.0 (`e36c99a`) |  |  |  |  |  |  |  | FETC 2.0.0: Find & Replace |
+| 2026-08-26 | 2.12.2 (`f84a2cb`) |  |  |  |  |  |  |  |  |  | CFBE 2.12.2: a rescan restates the listing instead of adding a second one |
+| 2026-08-26 | 2.12.1 (`85ada93`) |  |  |  | 3.9.0 (`85ada93`) |  | 3.18.0 (`85ada93`) |  | 0.8.0 (`85ada93`) |  | A tag named in a setting is a link to it, in four plugins |
+| 2026-08-25 |  |  |  |  |  |  | 3.17.0 (`c37c8fa`) |  |  |  | PTP2RE 3.17.0: skip tags NormalizeParentTags would prune straight back off |
+| 2026-08-25 |  |  |  |  |  | 4.9.0 (`3982cfa`) |  |  |  |  | NPT 4.9.0: every name on a change line is a link |
+| 2026-08-25 |  |  |  |  |  |  | 3.16.0 (`9bce32d`) |  |  |  | PTP2RE 3.16.0: the entity an addition came from is a link too |
+| 2026-08-25 |  |  |  |  |  |  | 3.15.1 (`33e96dd`) |  |  |  | PTP2RE 3.15.1: a marker's tags reach its scene when the marker is created, not only when it is edited |
+| 2026-08-25 |  |  |  |  |  | 4.8.4 (`78fe775`) | 3.15.0 (`78fe775`) |  |  |  | NPT 4.8.4 / PTP2RE 3.15.0: Stop can end a scan, and a plan that has stopped describing the run says so |
+| 2026-08-22 |  |  |  |  |  |  |  |  | 0.7.1 (`bde283f`) |  | SceneVariants 0.7.1: Close ends a scan, Stop is for the write it cannot end |
+| 2026-08-22 |  |  |  |  |  |  |  |  | 0.7.0 (`8b684f1`) |  | SceneVariants 0.7.0: the migration dialog can be stopped, scan included |
+| 2026-08-22 |  | 1.3.0 (`7b3793e`) | 1.2.0 (`7b3793e`) |  |  |  |  |  |  |  | FETC 1.2.0 / ENM 1.3.0: lock the controls that steer a run for as long as it runs |
+| 2026-08-22 |  |  |  |  |  | 4.8.3 (`1725c41`) | 3.14.3 (`1725c41`) |  |  |  | NPT 4.8.3 / PTP2RE 3.14.3: a control that changes what a run is doing is locked while it scans, not only while it writes |
+| 2026-08-22 |  |  |  |  |  | 4.8.2 (`033b1eb`) | 3.14.2 (`033b1eb`) |  |  |  | NPT 4.8.2 / PTP2RE 3.14.2: Escape cannot abandon a settings save in flight |
+| 2026-08-22 | 2.11.1 (`dc3f0b5`) | 1.2.1 (`dc3f0b5`) | 1.1.1 (`dc3f0b5`) |  | 3.8.1 (`dc3f0b5`) | 4.8.1 (`dc3f0b5`) | 3.14.1 (`dc3f0b5`) |  | 0.6.1 (`dc3f0b5`) | 1.1.1 (`dc3f0b5`) | Anchor the Reload UI button on markup every released Stash has, not only develop's |
+| 2026-08-22 | 2.11.0 (`6712889`) | 1.2.0 (`6712889`) | 1.1.0 (`6712889`) |  | 3.8.0 (`6712889`) | 4.8.0 (`6712889`) | 3.14.0 (`6712889`) |  | 0.6.0 (`6712889`) | 1.1.0 (`6712889`) | One shared Reload UI button beside Stash's Reload plugins, drawn while any plugin's script is stale |
+| 2026-08-22 |  | 1.1.0 (`8507b96`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 1.1.0: Close is green when it will close rather than ask |
+| 2026-08-22 |  |  |  |  |  | 4.7.1 (`34981ce`) | 3.13.2 (`34981ce`) |  |  |  | NPT 4.7.1 / PTP2RE 3.13.2: the settings dialogs' Save waits for a change |
+| 2026-08-22 |  |  |  |  |  |  |  |  | 0.5.0 (`011ff95`) |  | SceneVariants 0.5.0: a partial-length scene's stash-id moves into a custom field, and the tab matches on both |
+| 2026-08-22 |  |  |  |  |  |  |  |  |  | 1.0.0 (`3e4458b`) | TagBundleClipboard 1.0.0: the major digit, on live use |
+| 2026-08-22 |  | 1.0.2 (`6fd97e2`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 1.0.2: the entity says whether a cancelled rename landed, not the response |
+| 2026-08-22 |  | 1.0.1 (`a5353a8`) | 1.0.0 (`a5353a8`) |  |  |  |  |  |  |  | EntityNameMaintainer 1.0.1 / FindEntitiesByTextContent 1.0.0: a cancelled rename reloads the page it changed |
+| 2026-08-22 |  | 1.0.0 (`1094a8c`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 1.0.0: Cancel takes back the rename itself, while it is the only write |
+| 2026-08-22 |  | 0.1.2 (`23eaeb6`) |  |  |  |  |  |  |  | 0.7.3 (`23eaeb6`) | EntityNameMaintainer 0.1.2 / TagBundleClipboard 0.7.3: a scoped dialog head names the entity, not just its id |
+| 2026-08-22 |  | 0.1.1 (`ba4a138`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.1.1: the skipped store tag no longer reads as something missed |
+| 2026-08-22 | 2.10.0 (`cccd6be`) | 0.1.0 (`cccd6be`) |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.10.0 / EntityNameMaintainer 0.1.0: descriptions are read and written through coop().api |
+| 2026-08-22 | 2.9.0 (`0b9205b`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.9.0: the description tooltip appears where Stash shows the field name |
+| 2026-08-22 | 2.8.4 (`bb28ff4`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.4: the detail tick stops throwing on every page |
+| 2026-08-22 | 2.8.3 (`c8d90e7`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.3: Undo of an applied rename takes the list back, not only the library |
+| 2026-08-22 | 2.8.2 (`2484566`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.2: Apply is quiet until there is something a user would call a change |
+| 2026-08-22 | 2.8.1 (`3d8adb6`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.8.1: Apply goes back to disabled once a rename has been written |
+| 2026-08-22 | 2.8.0 (`06f51e6`) |  | 0.0.9 (`06f51e6`) |  |  |  | 3.13.1 (`06f51e6`) |  |  |  | PropagateTagsAndPerformers 3.13.1 / CustomFieldsBulkEditor 2.8.0 / FindEntitiesByTextContent 0.0.9: an empty box is empty again, Undo Rename, and the search box keeps its own history |
+| 2026-08-22 | 2.7.0 (`16a1bcf`) |  |  |  |  |  | 3.13.0 (`16a1bcf`) |  |  |  | CustomFieldsBulkEditor 2.7.0 / PropagateTagsAndPerformers 3.13.0: the descriptions reach the entity page, and the exclusion field has a default that documents itself |
+| 2026-08-22 | 2.6.0 (`e3597ce`) |  |  |  |  | 4.7.0 (`e3597ce`) |  |  |  |  | CustomFieldsBulkEditor 2.6.0 / NormalizeParentTags 4.7.0: three more boxes remember, and the descriptions pane reads Name then Description |
+| 2026-08-21 |  | 0.0.10 (`d1e1e4a`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.10: a Proceed pressed mid-countdown disarms Close |
+| 2026-08-21 | 2.5.1 (`f39a7a2`) | 0.0.9 (`f39a7a2`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.9 / CustomFieldsBulkEditor 2.5.1: five seconds to answer Close, and the red marks one mode |
+| 2026-08-21 | 2.5.0 (`ee5372e`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.5.0: the filter boxes remember, and a lost Rename is marked rather than switched |
+| 2026-08-21 |  | 0.0.8 (`0e3fa64`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.8: the head wears the whole name, and Close stops asking once Proceed has run |
+| 2026-08-21 | 2.4.0 (`c612d93`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 2.4.0: the field's name in the descriptions dialog is a box, and changing it renames the field |
+| 2026-08-21 | 2.3.0 (`5e37588`) | 0.0.7 (`5e37588`) | 0.0.8 (`5e37588`) |  |  |  | 3.12.0 (`5e37588`) |  |  |  | EntityNameMaintainer 0.0.7 / FindEntitiesByTextContent 0.0.8 / CustomFieldsBulkEditor 2.3.0 / PropagateTagsAndPerformers 3.12.0: a control says what pressing it costs |
+| 2026-08-21 |  | 0.0.6 (`a0b463d`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.6: the hit list reads in the order things happened |
+| 2026-08-21 |  | 0.0.5 (`098d782`) | 0.0.7 (`098d782`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.5 / FindEntitiesByTextContent 0.0.7: the counters say where the scan is, not only how far |
+| 2026-08-21 |  |  | 0.0.6 (`edab204`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.6: search works again - childNodes is not an Array |
+| 2026-08-21 |  |  | 0.0.5 (`7056bd7`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.5: the same attribute filter row EntityNameMaintainer has |
+| 2026-08-21 |  | 0.0.4 (`79a0941`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.4: it asks the server whether the rename landed, not the response |
+| 2026-08-21 |  | 0.0.3 (`16ee35d`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.3: it can be asked what it did, and Reload plugins takes effect |
+| 2026-08-21 |  | 0.0.2 (`76fc8c9`) | 0.0.4 (`76fc8c9`) |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.2 / FindEntitiesByTextContent 0.0.4: the rename hook fires whether or not a sibling reacted, and All On/All Off go dead with nothing to act on |
+| 2026-08-21 |  |  | 0.0.3 (`c22f6dd`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.3: Refresh means something, the counters count toward something, and the log reads in order |
+| 2026-08-21 |  |  | 0.0.2 (`b6f06bb`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.2: its settings group is found again, and it has no settings |
+| 2026-08-21 |  |  | 0.0.1 (`d8440f7`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 0.0.1: one box that asks which entities mention this text |
+| 2026-08-21 |  | 0.0.1 (`82878d1`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 0.0.1: a rename offers to fix every text that named the old name |
+| 2026-08-21 |  |  |  |  |  |  |  |  | 0.4.0 (`147f0d7`) |  | SceneVariants 0.4.0: a row's hover text says how that variant differs |
+| 2026-08-21 |  |  |  |  |  |  |  |  | 0.3.0 (`330502e`) |  | SceneVariants 0.3.0: aliases and descendants classify a variant, and the cover comes back |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.2.3 (`c061a84`) |  | SceneVariants 0.2.3: the Variants tab is amber |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.2.2 (`d2d3cd2`) |  | SceneVariants 0.2.2: the tab goes before Edit, the value leads its own line |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.2.1 (`34e613c`) |  | SceneVariants 0.2.1: partial-length is amber, and sized with the metadata |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.2.0 (`c0dd2a6`) |  | SceneVariants 0.2.0: covers and previews, and one word for one idea |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.1.2 (`b4cec90`) |  | SceneVariants 0.1.2: prove the patch shape against the real React |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.1.1 (`f997b2d`) |  | SceneVariants 0.1.1: the after-patch reads its result off the end |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.1.0 (`6f8240f`) |  | SceneVariants 0.1.0: a real Siblings tab on the scene page |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.0.2 (`1349356`) |  | SceneVariants 0.0.2: the sibling query asks with EQUALS |
+| 2026-08-20 |  |  |  |  |  |  |  |  | 0.0.1 (`5a37e41`) |  | SceneVariants 0.0.1: L0 of the scene-variants plan, as a Siblings panel |
+| 2026-08-20 |  |  |  |  | 3.7.0 (`e8c5914`) |  |  |  |  |  | MPTTS 3.7.0: the superseded notice reads PTP2RE's settings too |
+| 2026-08-20 |  |  |  |  | 3.6.2 (`15dc942`) |  |  |  |  |  | MPTTS 3.6.2: the superseded notice sits in the heading, after the name |
+| 2026-08-20 |  |  |  |  | 3.6.1 (`7d1ad93`) |  |  |  |  |  | MPTTS 3.6.1: the superseded notice moves to the heading line |
+| 2026-08-20 |  |  |  |  | 3.6.0 (`926a2a4`) |  |  |  |  |  | MPTTS 3.6.0: say on the settings page when PTP2RE has taken over |
+| 2026-08-20 | 2.2.2 (`9a4f14a`) |  |  |  | 3.5.3 (`9a4f14a`) | 4.6.6 (`9a4f14a`) | 3.11.2 (`9a4f14a`) |  |  | 0.7.2 (`9a4f14a`) | One grammatical load banner, in all five |
+| 2026-08-19 | 2.2.1 (`fb346a7`) |  |  |  | 3.5.2 (`fb346a7`) | 4.6.5 (`fb346a7`) | 3.11.1 (`fb346a7`) |  |  | 0.7.1 (`fb346a7`) | Release history out of all five plugin sources |
+| 2026-08-19 |  |  |  |  | 3.5.1 (`256fe0f`) | 4.6.4 (`256fe0f`) |  |  |  |  | No version history in a README or in shipped source |
+| 2026-08-19 | 2.2.0 (`c50338b`) |  |  |  | 3.5.0 (`c50338b`) | 4.6.3 (`c50338b`) | 3.11.0 (`c50338b`) |  |  | 0.7.0 (`c50338b`) | Repo review 2026-08-19: all 27 findings fixed |
+| 2026-08-19 |  |  |  |  |  |  | 3.10.0 (`b523556`) |  |  |  | PTP2RE 3.10.0: the paths dialog draws the paths, and you can rearrange them |
+| 2026-08-19 |  |  |  |  |  |  | 3.6.2 (`05be8bd`) |  |  |  | PTP2RE 3.6.2: the progress counters say what their number is |
+| 2026-08-19 |  |  |  |  |  |  | 3.6.1 (`12fce4a`) |  |  |  | PTP2RE 3.6.1: Performers -> Groups above Performers -> Scenes |
+| 2026-08-19 |  |  |  |  |  |  | 3.6.0 (`2085f8d`) |  |  |  | PTP2RE 3.6.0: the layout revised, and a null in a column is a blank row |
+| 2026-08-19 |  |  |  |  |  |  | 3.5.0 (`6bb9093`) |  |  |  | PTP2RE 3.5.0: the layout is the user's, and a path already happening says so |
+| 2026-08-19 |  |  |  |  |  |  | 3.4.0 (`5160f26`) |  |  |  | PTP2RE 3.4.0: the bulk buttons move into the footer, and everything says what it does |
+| 2026-08-19 |  |  |  |  |  |  | 3.3.0 (`595075a`) |  |  |  | PTP2RE 3.3.0: the two moded paths get their own column, and three bulk buttons |
+| 2026-08-19 |  |  |  |  |  |  | 3.2.0 (`0943e39`) |  |  |  | PTP2RE 3.2.0: each path's control is a button carrying its own state |
+| 2026-08-19 |  |  |  |  |  | 4.6.2 (`bcf7d0e`) | 3.1.2 (`bcf7d0e`) |  |  |  | NPT 4.6.2 / PTP2RE 3.1.2: configurePlugin replaces, so send the whole map |
+| 2026-08-19 |  |  |  |  |  |  | 3.1.1 (`992c0b7`) |  |  |  | PTP2RE 3.1.1: the settings row stops deleting a value it could not read |
+| 2026-08-19 |  |  |  |  |  |  | 3.1.0 (`e6c5c43`) |  |  |  | PTP2RE 3.1.0: adopt MPTTS's four exclusion filters where we have none |
+| 2026-08-19 |  |  |  |  |  | 4.6.1 (`01e394c`) | 3.0.2 (`01e394c`) |  |  |  | NPT 4.6.1 / PTP2RE 3.0.2: a self-append fixed, and the row listing in columns |
+| 2026-08-19 |  |  |  |  |  |  | 3.0.1 (`96daa34`) |  |  |  | PTP2RE 3.0.1: the path dialog gets two columns and loses a false heading |
+| 2026-08-19 |  |  |  |  |  |  | 3.0.0 (`706b0c5`) |  |  |  | PTP2RE 3.0.0: fifteen path switches become one string and a dialog |
+| 2026-08-19 |  |  |  |  |  | 4.6.0 (`b30adb3`) |  |  |  |  | NPT 4.6.0: the value is the armed mark, so the bar goes |
+| 2026-08-18 |  |  |  |  |  | 4.5.0 (`8dfab91`) |  |  |  |  | NPT 4.5.0: the setting row is taken over, not hidden |
+| 2026-08-18 |  |  |  |  |  | 4.4.0 (`86a1f2d`) |  |  |  |  | NPT 4.4.0: the settings page shows the dialog, not the setting string |
+| 2026-08-18 |  |  |  |  | 3.4.0 (`e06ff06`) | 4.3.0 (`e06ff06`) | 2.4.0 (`e06ff06`) |  |  |  | NPT 4.3.0 / MPTTS 3.4.0 / PTP2RE 2.4.0: amber reaches inside the dialogs |
+| 2026-08-18 |  |  |  |  |  | 4.2.2 (`febb075`) |  |  |  |  | NPT 4.2.2: the slow-pass warning belongs to the dialog that runs one |
+| 2026-08-18 |  |  |  |  |  | 4.2.1 (`1bff4ac`) |  |  |  |  | NPT 4.2.1: the labels are right-aligned against the aligned selects |
+| 2026-08-18 |  |  |  |  |  | 4.2.0 (`7c0e6f6`) |  |  |  |  | NPT 4.2.0: the Images selector says a whole-library pass is slow |
+| 2026-08-18 |  |  |  |  |  | 4.1.1 (`52ef597`) |  |  |  |  | NPT 4.1.1: a mode selector sits beside its own label |
+| 2026-08-18 |  |  |  |  |  | 4.1.0 (`11d356a`) |  |  |  |  | NPT 4.1.0: an amber bar says a type is armed |
+| 2026-08-18 |  |  |  |  |  | 4.0.3 (`d04bd23`) |  |  |  |  | NPT 4.0.3: the auto-mode setting description shows a shape, not a value |
+| 2026-08-18 |  |  |  |  |  | 4.0.2 (`b6298e0`) |  |  |  |  | NPT 4.0.2: the auto-mode field's border is not ours to colour |
+| 2026-08-18 |  |  |  |  | 3.3.1 (`8a004da`) | 4.0.1 (`8a004da`) | 2.3.1 (`8a004da`) |  |  |  | NPT 4.0.1 / MPTTS 3.3.1 / PTP2RE 2.3.1: the stale banner survives a setting rename |
+| 2026-08-18 |  |  |  |  | 3.3.0 (`cdacce0`) | 4.0.0 (`cdacce0`) | 2.3.0 (`cdacce0`) |  |  |  | NPT 4.0.0: one mode per entity type, and one task that does both |
+| 2026-08-18 |  |  |  |  |  |  |  |  |  | 0.6.1 (`04e2a8a`) | TagBundleClipboard 0.6.1: one word per mode mark |
+| 2026-08-18 |  |  |  |  |  |  |  |  |  | 0.6.0 (`d0bece8`) | TagBundleClipboard 0.6.0: re-bind the planner when the tab comes back |
+| 2026-08-18 |  |  |  |  |  | 3.2.0 (`8215c44`) |  |  |  | 0.5.0 (`8215c44`) | NPT 3.2.0 / TBC 0.5.0: one plugin computes the other's operation |
+| 2026-08-18 |  |  |  |  |  |  |  |  |  | 0.4.0 (`d10b349`) | TagBundleClipboard 0.4.0: warn when NPT will rewrite the save |
+| 2026-08-18 |  |  |  |  |  |  |  |  |  | 0.3.0 (`1480527`) | TagBundleClipboard 0.3.0: named titles, amber where it acts, sibling drift |
+| 2026-08-18 |  |  |  |  |  |  |  |  |  | 0.2.0 (`ff8b899`) | TagBundleClipboard 0.2.0: dots back, columns fixed, modes gated on NPT |
+| 2026-08-18 |  |  |  |  | 3.2.0 (`034b60a`) |  | 2.2.0 (`034b60a`) |  |  | 0.1.0 (`034b60a`) | TagBundleClipboard 0.1.0: prune/roll-up, tag hovers, columns, Undo |
+| 2026-08-17 |  |  |  |  |  |  |  |  |  | 0.0.1 (`b529b9e`) | TagBundleClipboard 0.0.1: a tag clipboard between any two entities |
+| 2026-08-17 | 2.1.0 (`21c9c2a`) |  |  |  | 3.1.0 (`21c9c2a`) | 3.1.0 (`21c9c2a`) | 2.1.0 (`21c9c2a`) |  |  |  | All four: a busy cursor under the last log line |
+| 2026-08-16 | 2.0.3 (`8c6ab97`) |  |  |  |  |  |  |  |  |  | CFBE 2.0.3: Prune clears the rows, and greys itself out |
+| 2026-08-16 | 2.0.1 (`8c8cd24`) |  |  |  |  |  |  |  |  |  | CFBE 2.0.1: the marker field takes the prefix |
+| 2026-08-16 | 2.0.0 (`ae1f4a8`) |  |  |  | 3.0.0 (`ae1f4a8`) | 3.0.0 (`ae1f4a8`) | 2.0.0 (`ae1f4a8`) |  |  |  | All four: the ᝯㄝₓ prefix reaches the scripts |
+| 2026-08-16 | 1.3.1 (`fb5105f`) |  |  |  |  |  | 1.4.2 (`fb5105f`) |  |  |  | CFBE 1.3.1, PTP2RE 1.4.2: the last of the version references |
+| 2026-08-16 |  |  |  |  | 2.4.1 (`b265818`) | 2.6.1 (`b265818`) | 1.4.1 (`b265818`) |  |  |  | READMEs describe the plugin, not its history |
+| 2026-08-16 | 1.3.0 (`eb0e690`) |  |  |  | 2.4.0 (`eb0e690`) | 2.6.0 (`eb0e690`) | 1.4.0 (`eb0e690`) |  |  |  | The stale-script warning in the dialogs, and a README trim |
+| 2026-08-16 | 1.2.0 (`361d826`) |  |  |  | 2.3.0 (`361d826`) | 2.5.0 (`361d826`) | 1.3.0 (`361d826`) |  |  |  | All four: a stale script says so on the settings page |
+| 2026-08-16 | 1.1.1 (`01d2575`) |  |  |  |  |  |  |  |  |  | CFBE 1.1.1: the store-tag row counts its carrier |
+| 2026-08-16 |  |  |  |  | 2.2.3 (`a81564c`) |  |  |  |  |  | MPTTS 2.2.3: the spacing paragraph in the present tense |
+| 2026-08-16 |  |  |  |  | 2.2.2 (`20403e2`) |  | 1.2.2 (`20403e2`) |  |  |  | MPTTS 2.2.2, PTP2RE 1.2.2: two leftovers from the README pass |
+| 2026-08-16 | 1.1.0 (`12866ec`) |  |  |  | 2.2.1 (`12866ec`) | 2.4.0 (`12866ec`) | 1.2.1 (`12866ec`) |  |  |  | CFBE 1.1.0, NPT 2.4.0, MPTTS 2.2.1, PTP2RE 1.2.1 |
+| 2026-08-16 | 1.0.0 (`3d59ab5`) |  |  |  |  |  |  |  |  |  | CFBE 1.0.0: the hide field is nobody's loose end |
+| 2026-08-16 | 0.12.1 (`49a5f5d`) |  |  |  |  |  |  |  |  |  | CFBE 0.12.1: a name pill's tooltip says it is the name |
+| 2026-08-16 | 0.12.0 (`4473b63`) |  |  |  |  |  |  |  |  |  | CFBE 0.12.0: omits, a filter for the entity, and what Overwrite leaves alone |
+| 2026-08-16 | 0.11.0 (`5e68072`) |  |  |  |  |  |  |  |  |  | CFBE 0.11.0: the descriptions dialog divides its own room |
+| 2026-08-16 | 0.10.0 (`c86c1c7`) |  |  |  |  |  |  |  |  |  | CFBE 0.10.0: Rename, a scope that follows the filters, and dialogs that hold still |
+| 2026-08-16 | 0.9.0 (`dd01574`) |  |  |  |  |  |  |  |  |  | CFBE 0.9.0: filter the listing by whether a value is true |
+| 2026-08-16 | 0.8.1 (`8983894`) |  |  |  |  |  |  |  |  |  | CFBE 0.8.1: the descriptions dialog keeps typing, and the settings arrive filled in |
+| 2026-08-15 | 0.8.0 (`112528d`) |  |  |  |  |  |  |  |  |  | CFBE 0.8.0: every custom field can say what it is for |
+| 2026-08-14 | 0.7.3 (`1d1c414`) |  |  |  |  |  |  |  |  |  | CFBE 0.7.3: the dropdowns get Stash's stacked marker |
+| 2026-08-14 | 0.7.2 (`a601928`) |  |  |  |  |  |  |  |  |  | CFBE 0.7.2: the log follows itself again |
+| 2026-08-14 | 0.7.1 (`4999d8b`) |  |  |  | 2.2.0 (`4999d8b`) | 2.3.0 (`4999d8b`) | 1.2.0 (`4999d8b`) |  |  |  | The log stays until you close the dialog, and the footers agree |
+| 2026-08-14 | 0.7.0 (`823b766`) |  |  |  | 2.1.4 (`823b766`) | 2.2.4 (`823b766`) | 1.1.4 (`823b766`) |  |  |  | Wider still, and CFBE gets a setting |
+| 2026-08-13 | 0.6.0 (`2b41b16`) |  |  |  | 2.1.3 (`2b41b16`) | 2.2.3 (`2b41b16`) | 1.1.3 (`2b41b16`) |  |  |  | Wider dialogs, and CFBE stops skipping quietly |
+| 2026-08-13 | 0.5.0 (`bf1f7b8`) |  |  |  |  |  |  |  |  |  | CFBE 0.5.0: one log, and it keeps what it said |
+| 2026-08-13 | 0.4.5 (`91b664b`) |  |  |  | 2.1.2 (`91b664b`) | 2.2.2 (`91b664b`) | 1.1.2 (`91b664b`) |  |  |  | Two words the plugins no longer say: "Stash id", and "(s)" |
+| 2026-08-13 | 0.4.4 (`25b7597`) |  |  |  |  |  |  |  |  |  | CFBE 0.4.4: the legend's ␀ is drawn by the list's own rule |
+| 2026-08-13 | 0.4.3 (`d182176`) |  |  |  | 2.1.1 (`d182176`) | 2.2.1 (`d182176`) | 1.1.1 (`d182176`) |  |  |  | Four dialog heads, one sentence |
+| 2026-08-13 | 0.4.0 (`538cbbc`) |  |  |  |  |  |  |  |  |  | CFBE 0.4.0: five things a whole library made the dialog want |
+| 2026-08-13 | 0.3.2 (`8ba02e7`) |  |  |  |  |  |  |  |  |  | CFBE 0.3.2: the settings decoration was landing on the Tasks panel |
+| 2026-08-13 | 0.3.1 (`2567a45`) |  |  |  |  |  |  |  |  |  | CFBE 0.3.1: the whole-library read is paged, so the counter moves |
+| 2026-08-13 | 0.3.0 (`5407b5a`) |  |  |  |  |  |  |  |  |  | CFBE 0.3.0: a task that opens the same dialog on the whole library |
+| 2026-08-13 | 0.2.5 (`c46b4a4`) |  |  |  |  |  |  |  |  |  | CFBE 0.2.5: an unescaped quote in the yml stopped the plugin loading |
+| 2026-08-13 | 0.2.4 (`68b1d17`) |  |  |  |  |  |  |  |  |  | CFBE 0.2.4: "is empty" is a mode beside the box, not a word in it |
+| 2026-08-13 | 0.2.3 (`324a7b3`) |  |  |  |  |  |  |  |  |  | CFBE 0.2.3: the listing is pills, and ␀ took three rounds |
+| 2026-08-13 | 0.1.2 (`eca51be`) |  |  |  |  |  |  |  |  |  | CFBE 0.1.2: a tag's parent link was eating its own selection |
+| 2026-08-12 | 0.1.1 (`44c902e`) |  |  |  |  | 2.2.0 (`44c902e`) |  |  |  |  | NPT 2.2.0 drops the graph exports; CFBE 0.1.1 finds the lists whose URL lies |
+| 2026-08-12 | 0.1.0 (`4c11384`) |  |  |  | 2.1.0 (`4c11384`) | 2.1.0 (`4c11384`) | 1.1.0 (`4c11384`) |  |  |  | Escape closes every dialog, and CFBE 0.1.0 gets the settings-page description |
+| 2026-08-12 | 0.0.1 (`20bc7c3`) |  |  |  | 2.0.1 (`20bc7c3`) | 2.0.1 (`20bc7c3`) | 1.0.1 (`20bc7c3`) |  |  |  | CustomFieldsBulkEditor 0.0.1: bulk custom fields, off the list view's "..." menu |
+| 2026-08-11 |  |  |  |  | 2.0.0 (`47d06a6`) | 2.0.0 (`47d06a6`) | 1.0.0 (`47d06a6`) |  |  |  | GTTx: NPT 2.0.0, MPT2S 2.0.0, PTP2RE 1.0.0 — one prefix, and a name in every dialog head |
+| 2026-08-11 |  |  |  |  | 1.17.0 (`2aebce9`) | 1.8.0 (`2aebce9`) | 0.17.0 (`2aebce9`) |  |  |  | Amber for "a plugin wrote this": NPT 1.8.0, MPT2S 1.17.0, PTP2RE 0.17.0 |
+| 2026-08-11 |  |  |  |  | 1.16.3 (`2b1332c`) |  | 0.16.0 (`2b1332c`) |  |  |  | PropagateTagsAndPerformers 0.16.0, MergePerformerTagsToScenes 1.16.3: parity was a claim nobody had checked |
+| 2026-08-11 |  |  |  |  |  |  | 0.15.0 (`22aa4bb`) |  |  |  | PropagateTagsAndPerformers 0.15.0: source buttons on their targets' tab, and say where the tags come from |
+| 2026-08-11 |  |  |  |  |  |  | 0.14.0 (`6c5ed24`) |  |  |  | PropagateTagsAndPerformers 0.14.0: a second anchor, for the pages with no action row |
+| 2026-08-11 |  |  |  |  |  |  | 0.13.3 (`c76a624`) |  |  |  | PropagateTagsAndPerformers 0.13.3: four pages have no source-button anchor, not one |
+| 2026-08-11 |  |  |  |  | 1.16.2 (`eff36ee`) |  | 0.13.2 (`eff36ee`) |  |  |  | PropagateTagsAndPerformers 0.13.2, MergePerformerTagsToScenes 1.16.2: a diagnostic that only speaks on a cache miss is silent when it is wanted |
+| 2026-08-11 |  |  |  |  | 1.16.1 (`b0f2d47`) |  | 0.13.1 (`b0f2d47`) |  |  |  | PropagateTagsAndPerformers 0.13.1, MergePerformerTagsToScenes 1.16.1: a switch to ask a button why it is hidden |
+| 2026-08-11 |  |  |  |  | 1.16.0 (`c95d1a4`) |  | 0.13.0 (`c95d1a4`) |  |  |  | PropagateTagsAndPerformers 0.13.0, MergePerformerTagsToScenes 1.16.0: hide a button that would add nothing |
+| 2026-08-11 |  |  |  |  |  |  | 0.12.14 (`27806fa`) |  |  |  | PropagateTagsAndPerformers 0.12.14: measure before you fix, not after |
+| 2026-08-10 |  |  |  |  |  | 1.7.8 (`a2097ec`) | 0.12.10 (`a2097ec`) |  |  |  | PropagateTagsAndPerformers 0.12.10, NormalizeParentTags 1.7.8: say where the buttons are |
+| 2026-08-10 |  |  |  |  | 1.15.9 (`dee5079`) | 1.7.7 (`dee5079`) | 0.12.9 (`dee5079`) |  |  |  | PropagateTagsAndPerformers 0.12.9, MergePerformerTagsToScenes 1.15.9, NormalizeParentTags 1.7.7: say it once |
+| 2026-08-10 |  |  |  |  | 1.15.8 (`1ff1eb3`) |  | 0.12.8 (`1ff1eb3`) |  |  |  | PropagateTagsAndPerformers 0.12.8, MergePerformerTagsToScenes 1.15.8: walk past what you cannot read |
+| 2026-08-10 |  |  |  |  | 1.15.7 (`37293e3`) |  | 0.12.7 (`37293e3`) |  |  |  | PropagateTagsAndPerformers 0.12.7, MergePerformerTagsToScenes 1.15.7: a margin is true whenever you ask |
+| 2026-08-10 |  |  |  |  | 1.15.6 (`780a7d7`) |  | 0.12.6 (`780a7d7`) |  |  |  | PropagateTagsAndPerformers 0.12.6, MergePerformerTagsToScenes 1.15.6: measure the gap, don't derive it |
+| 2026-08-10 |  |  |  |  | 1.15.5 (`36b142d`) |  | 0.12.5 (`36b142d`) |  |  |  | PropagateTagsAndPerformers 0.12.5, MergePerformerTagsToScenes 1.15.5: fill the gap the neighbour leaves |
+| 2026-08-10 |  |  |  |  | 1.15.4 (`e7fd0d8`) |  | 0.12.4 (`e7fd0d8`) |  |  |  | PropagateTagsAndPerformers 0.12.4, MergePerformerTagsToScenes 1.15.4: let the measured margins win the cascade |
+| 2026-08-10 |  |  |  |  | 1.15.3 (`535cd0b`) |  | 0.12.3 (`535cd0b`) |  |  |  | PropagateTagsAndPerformers 0.12.3, MergePerformerTagsToScenes 1.15.3: measure the row's spacing instead of choosing it |
+| 2026-08-10 |  |  |  |  | 1.15.2 (`370d5fc`) |  | 0.12.2 (`370d5fc`) |  |  |  | PropagateTagsAndPerformers 0.12.2, MergePerformerTagsToScenes 1.15.2: source button blink loop, and mx-2 on the scene button |
+| 2026-08-10 |  |  |  |  | 1.15.1 (`e99ee5b`) |  | 0.12.1 (`e99ee5b`) |  |  |  | PropagateTagsAndPerformers 0.12.1, MergePerformerTagsToScenes 1.15.1: find Delete by text, not only by class |
+| 2026-08-10 |  |  |  |  | 1.15.0 (`bdf2ab2`) |  | 0.12.0 (`bdf2ab2`) |  |  |  | PropagateTagsAndPerformers 0.12.0, MergePerformerTagsToScenes 1.15.0: important-action anchor |
+| 2026-08-08 |  |  |  |  | 1.14.0 (`a026fd3`) |  | 0.11.0 (`a026fd3`) |  |  |  | PropagateTagsAndPerformers 0.11.0, MergePerformerTagsToScenes 1.14.0: anchor manual buttons on Delete, not Save |
+| 2026-08-08 |  |  |  |  | 1.13.0 (`d2a9dfe`) |  | 0.10.0 (`d2a9dfe`) |  |  |  | PropagateTagsAndPerformers 0.9.0-0.10.0, MergePerformerTagsToScenes 1.13.0: button fixes and deterministic cross-plugin ordering |
+| 2026-08-07 |  |  |  |  |  |  | 0.8.3 (`399082d`) |  |  |  | PropagateTagsAndPerformers 0.8.3: fix button height, stop duplicating MPTTS's button |
+| 2026-08-07 |  |  |  |  |  |  | 0.8.2 (`6f183c5`) |  |  |  | PropagateTagsAndPerformers 0.8.2: fix manual buttons on the Group page |
+| 2026-08-07 |  |  |  |  |  |  | 0.8.1 (`af185f4`) |  |  |  | PropagateTagsAndPerformers 0.8.1: fix manual buttons never appearing |
+| 2026-08-07 |  |  |  |  |  |  | 0.8.0 (`5eccbfb`) |  |  |  | PropagateTagsAndPerformers 0.8.0: manual buttons and staging (step 8) |
+| 2026-08-07 |  |  |  |  | 1.12.0 (`65a3cfc`) | 1.7.6 (`65a3cfc`) | 0.7.0 (`65a3cfc`) |  |  |  | Cross-plugin cooperation: the declares registry (step 7) |
+| 2026-08-07 |  |  |  |  |  |  | 0.6.0 (`fa58bf2`) |  |  |  | PropagateTagsAndPerformers 0.6.0: auto mode, source side |
+| 2026-08-06 |  |  |  |  |  |  | 0.5.0 (`80d7eba`) |  |  |  | PropagateTagsAndPerformers 0.5.0: auto mode, target side |
+| 2026-08-06 |  |  |  |  |  |  | 0.4.0 (`ebc270a`) |  |  |  | PropagateTagsAndPerformers 0.4.0: a gallery's images |
+| 2026-08-06 |  |  |  |  |  |  | 0.3.1 (`cf4bacc`) |  |  |  | PropagateTagsAndPerformers 0.3.1: name the source entity in the log |
+| 2026-08-06 |  |  |  |  |  |  | 0.3.0 (`3324483`) |  |  |  | PropagateTagsAndPerformers 0.3.0: apply and Undo |
+| 2026-08-06 |  |  |  |  |  |  | 0.2.0 (`a47e793`) |  |  |  | PropagateTagsAndPerformers 0.2.0: the planner |
+| 2026-08-06 |  |  |  |  |  |  | 0.1.0 (`3d44086`) |  |  |  | PropagateTagsAndPerformers 0.1.0: the shared base |
+| 2026-08-06 |  |  |  |  |  |  | 0.0.1 (`64662f0`) |  |  |  | PropagateTagsAndPerformers 0.0.1: scaffold |
+| 2026-08-06 |  |  |  |  | 1.11.0 (`f2883d1`) |  |  |  |  |  | MergePerformerTagsToScenes 1.11.0: summary on the page, detail on hover |
+| 2026-08-06 |  |  |  |  |  | 1.7.5 (`7433b56`) |  |  |  |  | NormalizeParentTags 1.7.5: summary on the page, detail on hover |
+| 2026-08-05 |  |  |  |  | 1.10.5 (`477fbb5`) | 1.6.5 (`477fbb5`) |  |  |  |  | Give "Requires Stash 0.31.0 or newer" its own paragraph |
+| 2026-08-05 |  |  |  |  | 1.10.4 (`e2a6d65`) | 1.6.4 (`e2a6d65`) |  |  |  |  | Rebuild the description's paragraphs as divs, gap about a third of a line |
+| 2026-08-05 |  |  |  |  | 1.10.3 (`dc5c518`) | 1.6.3 (`dc5c518`) |  |  |  |  | Simplify both descriptions, and make their paragraphs render |
+| 2026-08-05 |  |  |  |  | 1.10.2 (`998b7fd`) | 1.6.2 (`998b7fd`) |  |  |  |  | Track main in the README links instead of a pinned SHA |
+| 2026-08-05 |  |  |  |  | 1.10.1 (`901f09f`) | 1.6.1 (`901f09f`) |  |  |  |  | Take the URL out of the descriptions, and pin one that exists |
+| 2026-08-05 |  |  |  |  | 1.10.0 (`e81c380`) | 1.6.0 (`e81c380`) |  |  |  |  | Inject a labelled README link into each plugin's settings group |
+| 2026-08-05 |  |  |  |  | 1.9.3 (`1e435e8`) | 1.5.4 (`1e435e8`) |  |  |  |  | Link the README through the manifest url field |
+| 2026-08-05 |  |  |  |  | 1.9.2 (`60db1b2`) | 1.5.3 (`60db1b2`) |  |  |  |  | Lead both descriptions with a README permalink |
+| 2026-08-05 |  |  |  |  | 1.9.1 (`d6442c7`) | 1.5.2 (`d6442c7`) |  |  |  |  | Lead with F5, keep the hard refresh as the fallback |
+| 2026-08-05 |  |  |  |  |  | 1.5.1 (`f5b7100`) |  |  |  |  | Warn in the hierarchy viewer when the script is stale |
+| 2026-08-05 |  |  |  |  | 1.9.0 (`cfdd46e`) | 1.5.0 (`cfdd46e`) |  |  |  |  | Refuse to write when the running script is not the installed one |
+| 2026-08-05 |  |  |  |  | 1.8.3 (`c196394`) | 1.4.4 (`c196394`) |  |  |  |  | Print the running script's own version at load |
+| 2026-08-05 |  |  |  |  | 1.8.2 (`bc2b0f6`) | 1.4.3 (`bc2b0f6`) |  |  |  |  | Settle both dialogs on the darker #202b33 modal |
+| 2026-08-05 |  |  |  |  |  | 1.4.2 (`ffb3859`) |  |  |  |  | Align the two dialogs' chrome, and pin it |
+| 2026-08-05 |  |  |  |  | 1.8.1 (`ad0306f`) | 1.4.1 (`ad0306f`) |  |  |  |  | Drop the recap tooltips' underline and help cursor |
+| 2026-08-05 |  |  |  |  |  | 1.4.0 (`30c16f0`) |  |  |  |  | Hover the run dialog's recap tags for aliases and description |
+| 2026-08-05 |  |  |  |  | 1.8.0 (`ce9fca7`) |  |  |  |  |  | Hover the merge recap's tags for aliases and description |
+| 2026-08-05 |  |  |  |  |  | 1.3.0 (`4ea7cb3`) |  |  |  |  | Put the tag's aliases and description in the row tooltip |
+| 2026-08-05 |  |  |  |  | 1.7.6 (`9e3730f`) | 1.2.7 (`9e3730f`) |  |  |  |  | Say that the number in brackets is a Stash id |
+| 2026-08-05 |  |  |  |  |  | 1.2.6 (`0931d95`) |  |  |  |  | Undo the detour 1.2.3 and 1.2.4 took |
+| 2026-08-05 |  |  |  |  |  | 1.2.5 (`bfc5da9`) |  |  |  |  | Drive the notice from the checkboxes, and put it next to them |
+| 2026-08-05 |  |  |  |  |  | 1.2.4 (`18f08b9`) |  |  |  |  | Keep the notice within a second of the checkbox |
+| 2026-08-05 |  |  |  |  |  | 1.2.3 (`556b566`) |  |  |  |  | Update the notice when the checkbox is clicked, not when the cache expires |
+| 2026-08-05 |  |  |  |  |  | 1.2.2 (`7bb2bc5`) |  |  |  |  | Anchor the notice on setting ids, not on a heading |
+| 2026-08-05 |  |  |  |  |  | 1.2.1 (`537c947`) |  |  |  |  | Fix the both-modes notice never appearing |
+| 2026-08-05 |  |  |  |  |  | 1.2.0 (`890db9c`) |  |  |  |  | Say on the settings page when both auto modes are on |
+| 2026-08-05 |  |  |  |  |  | 1.1.5 (`d44d4a4`) |  |  |  |  | Say that Roll Up reads a marker's primary tag too |
+| 2026-08-05 |  |  |  |  |  | 1.1.4 (`f86d799`) |  |  |  |  | Shorten the Images setting description |
+| 2026-08-05 |  |  |  |  | 1.7.5 (`c5a83a4`) | 1.1.3 (`c5a83a4`) |  |  |  |  | Nest the merge notes, and move a note that reassures rather than warns |
+| 2026-08-05 |  |  |  |  |  | 1.1.2 (`3b9703c`) |  |  |  |  | Point the notes list at the backup warning |
+| 2026-08-05 |  |  |  |  | 1.7.4 (`365475f`) |  |  |  |  |  | Make the merge README's notes list readable |
+| 2026-08-05 |  |  |  |  | 1.7.3 (`846a4f3`) | 1.1.1 (`846a4f3`) |  |  |  |  | Put the two READMEs in the same order |
+| 2026-08-05 |  |  |  |  | 1.7.2 (`df6dcc3`) |  |  |  |  |  | Carry over the maturity caveat too |
+| 2026-08-05 |  |  |  |  | 1.7.1 (`7dbcbd9`) |  |  |  |  |  | Give the merge README the warnings the other one has |
+| 2026-08-05 |  |  |  |  | 1.7.0 (`8799b8b`) |  |  |  |  |  | Report the sibling's auto modes in the task dialog |
+| 2026-08-05 |  |  |  |  | 1.6.1 (`bf05dea`) |  |  |  |  |  | Bump MergePerformerTagsToScenes to 1.6.1 |
+| 2026-08-05 |  |  |  |  |  | 1.1.0 (`6ad1da2`) |  |  |  |  | Keep entities normalized as Stash saves them |
+| 2026-08-03 |  |  |  |  |  | 1.0.0 (`87fc9de`) |  |  |  |  | Sync NormalizeParentTags manifest version to 1.0.0 |
+| 2026-08-03 |  |  |  |  | 1.6.0 (`6eedb8d`) | 0.12.0 (`6eedb8d`) |  |  |  |  | Let the task dialogs take their own writes back |
+| 2026-08-03 |  |  |  |  | 1.5.1 (`b50dba6`) | 0.11.2 (`b50dba6`) |  |  |  |  | Correct the documentation that fell behind the code |
+| 2026-08-03 |  |  |  |  |  | 0.11.1 (`5224fdb`) |  |  |  |  | Drop the parts of the run dialog that do nothing |
+| 2026-08-03 |  |  |  |  | 1.5.0 (`63ca556`) | 0.11.0 (`63ca556`) |  |  |  |  | Put both plugins on both sides of the bulk-edit lease |
+| 2026-08-03 |  |  |  |  | 1.4.3 (`75e5fb7`) | 0.10.2 (`75e5fb7`) |  |  |  |  | Reset a rerun the same way in both plugins |
+| 2026-08-03 |  |  |  |  | 1.4.2 (`d8e33a3`) |  |  |  |  |  | Point the finished merge task at Rescan |
+| 2026-08-03 |  |  |  |  | 1.4.1 (`7891b5d`) |  |  |  |  |  | Plan a single scene through sceneMergePlan too |
+| 2026-08-03 |  |  |  |  |  | 0.10.1 (`78c707d`) |  |  |  |  | Leave the hierarchy controls inert until the tags arrive |
+| 2026-08-03 |  |  |  |  |  | 0.10.0 (`d2da390`) |  |  |  |  | Drop the Clear log button from the run dialog |
+| 2026-08-03 |  |  |  |  |  | 0.9.0 (`d9b0de5`) |  |  |  |  | Follow a multi-parent tag to its other parents |
+| 2026-08-03 |  |  |  |  |  | 0.8.1 (`2c23ab8`) |  |  |  |  | Give the find box a clear icon too |
+| 2026-08-03 |  |  |  |  |  | 0.8.0 (`8d82d7c`) |  |  |  |  | Jump to a tag instead of reducing the tree to it |
+| 2026-08-03 |  |  |  |  |  | 0.7.2 (`8958615`) |  |  |  |  | Clear the hierarchy filter from inside the box |
+| 2026-08-03 |  |  |  |  |  | 0.7.1 (`ac86556`) |  |  |  |  | Find a tag without matching its case |
+| 2026-08-03 |  |  |  |  |  | 0.7.0 (`fdbc0c1`) |  |  |  |  | Browse the tag hierarchy without running anything |
+| 2026-08-03 |  |  |  |  | 1.4.0 (`8a090c6`) |  |  |  |  |  | Close each phase with the tags it moved |
+| 2026-08-03 |  |  |  |  | 1.3.0 (`7803545`) |  |  |  |  |  | Review the whole merge before writing any of it |
+| 2026-08-03 |  |  |  |  | 1.2.0 (`0df0535`) |  |  |  |  |  | Merge every performer's tags from a library-wide task |
+| 2026-08-03 |  |  |  |  |  | 0.6.1 (`823908f`) |  |  |  |  | Let a separator take the place of spaces in the name filters |
+| 2026-08-03 |  |  |  |  |  | 0.5.0 (`0bd9e5e`) |  |  |  |  | Take a list of substrings in the two name filters |
+| 2026-08-03 |  |  |  |  |  | 0.4.1 (`5a3e0f0`) |  |  |  |  | Count the log lines a rescan actually has |
+| 2026-08-03 |  |  |  |  |  | 0.4.0 (`45dbe71`) |  |  |  |  | Close each phase with the tags it touched |
+| 2026-08-02 |  |  |  |  |  | 0.3.1 (`af72ade`) |  |  |  |  | Name untitled galleries and images by their file |
+| 2026-08-02 |  |  |  |  |  | 0.3.0 (`6c4cebf`) |  |  |  |  | Add a Clear log button to the run dialog |
+| 2026-08-02 |  |  |  |  | 1.1.2 (`461c64e`) | 0.2.0 (`461c64e`) |  |  |  |  | Say why a tag changed, and put ids outside the quotes |
+| 2026-08-02 |  |  |  |  | 1.1.1 (`6b5bfd1`) | 0.1.2 (`6b5bfd1`) |  |  |  |  | Order the settings pages by prefixing the manifest keys |
+| 2026-08-02 |  |  |  |  | 1.1.0 (`4517abb`) | 0.1.0 (`4517abb`) |  |  |  |  | Add NormalizeParentTags 0.1.0, and the bulk-edit lease it needs (MPT2S 1.1.0) |
+| 2026-08-01 |  |  |  |  | 1.0.0 (`6d949c0`) |  |  |  |  |  | Release 1.0.0 |
+| 2026-08-01 |  |  |  |  | 0.9.5 (`33e8556`) |  |  |  |  |  | Bump to 0.9.5: carry the logging note into the README intro |
+| 2026-07-31 |  |  |  |  | 0.9.4 (`c11481c`) |  |  |  |  |  | Bump to 0.9.4: name the browser console in the Plugins page description too |
+| 2026-07-31 |  |  |  |  | 0.9.3 (`04129dc`) |  |  |  |  |  | Bump to 0.9.3: say plainly that merge logs go to the browser console |
+| 2026-07-31 |  |  |  |  | 0.9.2 (`c258f4b`) |  |  |  |  |  | Bump to 0.9.2: announce once when merge logging is enabled |
+| 2026-07-31 |  |  |  |  | 0.9.1 (`fcf454c`) |  |  |  |  |  | Bump to 0.9.1: fix the logMergesToConsole setting description |
+| 2026-07-31 |  |  |  |  | 0.9.0 (`7013642`) |  |  |  |  |  | Bump to 0.9.0: add optional console logging of tag merges |
+| 2026-07-31 |  |  |  |  | 0.8.9 (`2330fe7`) |  |  |  |  |  | Bump to 0.8.9: refresh the performer button's eligibility cache on save |
+| 2026-07-31 |  |  |  |  | 0.8.8 (`1658edb`) |  |  |  |  |  | Bump to 0.8.8: correct the installation refresh step |
+| 2026-07-31 |  |  |  |  | 0.8.7 (`01c7726`) |  |  |  |  |  | Bump to 0.8.7: hide the performer button when the performer has no tags |
+| 2026-07-31 |  |  |  |  | 0.8.6 (`e695d1a`) |  |  |  |  |  | Bump to 0.8.6: trim the Review before saving section |
+| 2026-07-31 |  |  |  |  | 0.8.5 (`af695df`) |  |  |  |  |  | Bump to 0.8.5: document the exclusion-tag lookup cache |
+| 2026-07-31 |  |  |  |  | 0.8.4 (`471eb54`) |  |  |  |  |  | Bump to 0.8.4: refresh the scene button tooltip on hover |
+| 2026-07-31 |  |  |  |  | 0.8.3 (`4646c78`) |  |  |  |  |  | Bump to 0.8.3: document the cross-tab staleness limitation |
+| 2026-07-31 |  |  |  |  | 0.8.2 (`863b1f2`) |  |  |  |  |  | Bump to 0.8.2: iterate over skipped scenes, throttle the settings query |
+| 2026-07-31 |  |  |  |  | 0.8.0 (`91c4add`) |  |  |  |  |  | Bump to 0.8.0: require Stash 0.31.0, exclude tags on custom field presence alone |
+| 2026-07-31 |  |  |  |  | 0.7.0 (`34bd650`) |  |  |  |  |  | Bump to 0.7.0: make tag staging the default, replacing stageTagsInEditForm with saveTagsImmediately |
+| 2026-07-31 |  |  |  |  | 0.6.4 (`dc2eaa7`) |  |  |  |  |  | Bump to 0.6.4: document the performer button's scene scope, retitle the staging flash |
+| 2026-07-31 |  |  |  |  | 0.6.2 (`701a5bd`) |  |  |  |  |  | Bump to 0.6.2: add Stage Tags In Edit Form mode for "Add Perf Tags" |
+| 2026-07-31 |  |  |  |  | 0.5.5 (`54b18af`) |  |  |  |  |  | Bump to 0.5.5: fix merge correctness bugs and performer button placement |
+| 2026-07-30 |  |  |  |  | 0.5.2 (`42bcb9c`) |  |  |  |  |  | Bump to 0.5.2: fix exclusion filter issues found in code review |
+| 2026-07-30 |  |  |  |  | 0.5.1 (`bfc65b7`) |  |  |  |  |  | Bump to 0.5.1: clarify custom field exclusion behavior in README |
+| 2026-07-30 |  |  |  |  | 0.5.0 (`e565d34`) |  |  |  |  |  | Bump to 0.5.0: add exclusion filters for organized scenes, tagged scenes, ignored tags, and custom fields |
+| 2026-07-30 |  |  |  |  | 0.4.4 (`896e71b`) |  |  |  |  |  | Bump to 0.4.4: fix button names in YML setting description |
+| 2026-07-30 |  |  |  |  | 0.4.3 (`73cc990`) |  |  |  |  |  | Bump to 0.4.3: handle bulk scene and performer updates |
+| 2026-07-30 |  |  |  |  | 0.4.1 (`2b8e248`) |  |  |  |  |  | Bump to 0.4.1: rename buttons and update docs |
+| 2026-07-30 |  |  |  |  | 0.3.9 (`0832b26`) |  |  |  |  |  | Bump to 0.3.9: refresh scene list after all performer merge paths |
+| 2026-07-30 |  |  |  |  | 0.3.6 (`4cd8377`) |  |  |  |  |  | Bump to 0.3.6: fix scene refresh, auto-merge, and tab retention |
+| 2026-07-29 |  |  |  |  | 0.3.0 (`4dd8362`) |  |  |  |  |  | Add auto-merge settings and bump to 0.3.0 |
+| 2026-07-29 |  |  |  |  | 0.2.0 (`e10da90`) |  |  |  |  |  | Bump version to 0.2.0 and update descriptions |
+| 2026-07-29 |  |  |  |  | 1.0.0 (`a3e604d`) |  |  |  |  |  | First commit |

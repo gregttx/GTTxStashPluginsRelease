@@ -8,6 +8,9 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.19.0 (`4b81402`) | 2026-09-21 | SceneVariants 1.19.0: a locked variant field is only ever added |
+| 1.18.1 (`ff04112`) | 2026-09-21 | SceneVariants 1.18.1: the Variants tab's drift score matches the review's |
+| 1.18.0 (`06315d2`) | 2026-09-21 | SceneVariants 1.18.0: a pinned base name is not title drift, and the review can exclude organized scenes |
 | 1.17.2 (`7829b08`) | 2026-09-21 | SceneVariants 1.17.2: the Variants Title row folds with the group |
 | 1.17.1 (`7a297f5`) | 2026-09-21 | SceneVariants 1.17.1: Flag Variants renames its own tag instead of failing on the alias |
 | 1.17.0 (`81a6c8c`) | 2026-09-21 | SceneVariants 1.17.0: the eight title settings are one Variants Title dialog |

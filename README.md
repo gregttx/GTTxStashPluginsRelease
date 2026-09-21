@@ -25,6 +25,7 @@ Requires **Stash 0.31.0 or newer** (Scene Variants: 0.28.0).
 | [ᝯㄝₓ Merge Performer Tags To Scenes](MergePerformerTagsToScenes/README.md) | Add a performer's tags to every scene they appear in — one performer, one scene, or the whole library. |
 | [ᝯㄝₓ Normalize Parent Tags](NormalizeParentTags/README.md) | Two operations over the tag hierarchy: **Prune** removes a tag an entity's more specific tag already implies, **Roll Up** adds the ancestors it does not carry. |
 | [ᝯㄝₓ Propagate Tags and Performers to Related Entities](PropagateTagsAndPerformers/README.md) | Thirteen relationship paths — studio→scene, performer→gallery, gallery→image and the rest — each carrying tags or performers along one of Stash's own links. |
+| [ᝯㄝₓ Scene Filename Manager](SceneFilenameManager/README.md) | Keeps a copy of every scene's filename in a custom field before a rename can lose it, and renames the file back on request. |
 | [ᝯㄝₓ Scene Variants](SceneVariants/README.md) | A scene is often in your library twice, whole and cut. This works out which scenes are the same work from the stash-id they share — the identifier a stash-box, a shared metadata database, gives a scene — and puts a Variants tab on the scene page. |
 | [ᝯㄝₓ Tag Bundle Clipboard](TagBundleClipboard/README.md) | Copy a set of tags off one entity and paste it onto another, however unrelated the two are. |
 

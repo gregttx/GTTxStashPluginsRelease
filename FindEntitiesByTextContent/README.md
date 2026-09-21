@@ -221,6 +221,12 @@ modes stand down for it; while another plugin holds one, the dialog's head says 
 overlaps: no other plugin here searches text, and the descriptions ᝯㄝₓ Custom Fields Bulk Editor
 keeps are reached by ᝯㄝₓ Entity Name Maintainer, not by this search.
 
+**Locked custom fields.** Before **Replace** writes, it asks
+[ᝯㄝₓ Custom Fields Bulk Editor](../CustomFieldsBulkEditor/README.md#locked-custom-fields) which custom
+fields are locked. A locked field keeps its name and its value, no field is renamed onto a locked
+name, and the log lists what was left alone. If that plugin is installed but cannot answer, no
+custom field is changed at all; if it is not installed, nothing is locked and the log says so.
+
 ## Notes and limitations
 
 **Why it reads everything.** There is no server-side filter that can answer "does any text field of any type contain this

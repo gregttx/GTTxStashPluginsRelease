@@ -41,7 +41,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
+  var coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.1.3';
+  var PLUGIN_VERSION = '3.2.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1827,6 +1827,7 @@
   //     inverse rather than a restore of a whole record.
   var WRITE_CHUNK = 50;   // entities re-read per query before their mutations go out
 
+
   Run.prototype.replaceAll = function () {
     if (this.replaceBtn.disabled) return;
     var self = this;
@@ -1837,8 +1838,25 @@
     this.changes = [];
     this.msg('INFO', 'Replacing "' + needle + '" with ' + (to ? '"' + to + '"' : 'nothing') +
       ' in ' + plural(scope.length, 'entity', 'entities') + ' on this list.');
-    this.runWrites(scope, 'Replace', function (hit, ent, shapes, inputFields) {
-      return self.replacementFor(hit, ent, shapes, inputFields, needle, to, self.matchCase);
+    // Locked for the round trip, so a second press cannot start a second pass.
+    this.writing = true;
+    this.syncFooter();
+    fieldLocks().then(function (locks) {
+      self.locks = locks;
+      if (locks === null) {
+        self.msg('INFO', 'ᝯㄝₓ Custom Fields Bulk Editor is not installed, or too old to ' +
+          'publish its Locked Custom Fields list, so no custom field is locked for this ' +
+          'replacement.');
+      } else if (locks === false) {
+        self.msg('WARN', 'ᝯㄝₓ Custom Fields Bulk Editor could not say which custom fields ' +
+          'are locked, so this replacement changes no custom field at all.');
+      } else if (locks.names.length) {
+        self.msg('INFO', 'Locked custom ' + (locks.names.length === 1 ? 'field' : 'fields') +
+          ', left alone: ' + locks.names.map(function (n) { return '"' + n + '"'; }).join(', ') + '.');
+      }
+      self.runWrites(scope, 'Replace', function (hit, ent, shapes, inputFields) {
+        return self.replacementFor(hit, ent, shapes, inputFields, needle, to, self.matchCase);
+      });
     });
   };
 
@@ -1912,6 +1930,8 @@
     var failed = 0;
     var at = 0;
     var dropped = {};
+    var lockedHits = {};    // locked field name -> entities it was left alone on
+    var lockedOnly = 0;     // entities whose every match was in a locked field
 
     function chunk() {
       var stopped = self.stopping && at < scope.length;
@@ -1927,9 +1947,19 @@
               'those fields were') + ' left alone.');
         }
         self.noteFolds(foldMark);
+        var lockedNames = Object.keys(lockedHits);
+        if (lockedNames.length) {
+          self.msg('WARN', 'Left alone because the field is locked: ' +
+            lockedNames.map(function (n) {
+              return n === '' ? 'every custom field on ' + plural(lockedHits[n], 'entity', 'entities') +
+                ' (the locks could not be read)'
+                : '"' + n + '" on ' + plural(lockedHits[n], 'entity', 'entities');
+            }).join(', ') + '.');
+        }
         self.msg('INFO', label + (stopped ? ' stopped: ' : ' finished: ') +
           plural(written, 'entity', 'entities') +
           ' rewritten' + (skipped ? ', ' + skipped + ' no longer matching' : '') +
+          (lockedOnly ? ', ' + lockedOnly + ' matching only in a locked field' : '') +
           (stopped ? ', ' + (scope.length - at) + ' not reached' : '') +
           (failed ? ', ' + plural(failed, 'failure') : '') + '. The list on screen still ' +
           'describes what was found before it - press Refresh to search again.');
@@ -1952,6 +1982,10 @@
             var plan = build(hit, ent, self.shapes[hit.typeKey] || [],
               (self.inputs || {})[hit.typeKey] || {});
             (plan && plan.dropped ? plan.dropped : []).forEach(function (f) { dropped[f] = true; });
+            (plan && plan.locked ? plan.locked : []).forEach(function (f) {
+              lockedHits[f] = (lockedHits[f] || 0) + 1;
+            });
+            if (plan && !plan.count && plan.locked && plan.locked.length) { lockedOnly++; return null; }
             if (!plan || !plan.count) { skipped++; return null; }
             return self.sendUpdate(hit.typeKey, hit.id, plan.input).then(function () {
               written++;
@@ -2016,7 +2050,9 @@
     var undo = {};
     var parts = [];
     var dropped = [];
+    var locked = [];
     var count = 0;
+    var locks = this.locks;
 
     shapes.forEach(function (f) {
       var label = f.name === 'custom_fields' ? null : (FIELD_LABEL[f.name] || f.name);
@@ -2060,6 +2096,14 @@
         var newVal = shown[CF_VALUE_LABEL] && typeof val === 'string' &&
           occurrences(val, needle, cased).length ? replaceAllIn(val, needle, to, cased) : val;
         if (newKey === key && newVal === val) return;
+        // A locked field keeps its name and its value, and no key is renamed onto one.
+        // Locks that could not be read (`false`) lock every field; '' records that.
+        if (locks === false) { if (locked.indexOf('') === -1) locked.push(''); return; }
+        if (locks && (locks.isLocked(key) || locks.isLocked(newKey))) {
+          var which = locks.isLocked(key) ? key : newKey;
+          if (locked.indexOf(which) === -1) locked.push(which);
+          return;
+        }
         touched++;
         if (newKey !== key) remove.push(key);
         partial[newKey] = newVal;
@@ -2073,7 +2117,7 @@
       parts.push(remove.length ? CF_NAME_LABEL : CF_VALUE_LABEL);
     });
 
-    return { input: input, undo: undo, count: count, dropped: dropped,
+    return { input: input, undo: undo, count: count, dropped: dropped, locked: locked,
       summary: parts.join(', ') + ' \u21d2 ' + (to ? '"' + to + '"' : 'nothing') };
   };
 

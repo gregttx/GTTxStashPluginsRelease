@@ -45,7 +45,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
+  var coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.3.0';
+  var PLUGIN_VERSION = '2.4.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1274,6 +1274,24 @@
       'point at the same character and a replacement would land in the wrong place.');
   };
 
+  // Custom Fields Bulk Editor's Locked Custom Fields, through Core's `fieldLocks`: null
+  // is no publisher (nothing locked), false a publisher that could not answer (every
+  // custom field locked). A locked field's name and value cannot change, so a mention
+  // in it is never listed, and none is written.
+  Run.prototype.fieldLocked = function (key) {
+    if (this.locks === false) return true;
+    return !!this.locks && this.locks.isLocked(key);
+  };
+
+  // A custom-field hit this rename may not act on: its field is locked, or - a name hit -
+  // the name it would become is.
+  Run.prototype.lockedHit = function (h) {
+    if (h.kind !== 'cfname' && h.kind !== 'cfvalue') return false;   // descriptions: `scanDescriptions`
+    if (this.fieldLocked(h.slot)) return true;
+    return h.kind === 'cfname' && this.fieldLocked(replaceAt(h.slot,
+      occurrences(h.slot, this.oldName), this.oldName.length, this.newName));
+  };
+
   Run.prototype.begin = function () {
     var self = this;
     this.setState('scanning');
@@ -1285,7 +1303,12 @@
         'plugin\'s settings.');
     }
     this.checkVersion();
-    describeFields().then(function (shapes) {
+    this.lockedOut = 0;
+    this.cfSeen = 0;
+    fieldLocks().then(function (locks) {
+      self.locks = locks;
+      return describeFields();
+    }).then(function (shapes) {
       return self.scan(shapes);
     }).then(function () {
       return self.scanDescriptions();
@@ -1350,7 +1373,11 @@
               self.scanned++;
               if (isPluginStore(ent)) { self.skipped++; return; }
               var found = scanEntity(spec, fields, ent, self.oldName, self.origin);
-              for (var h = 0; h < found.length; h++) self.hits.push(found[h]);
+              for (var h = 0; h < found.length; h++) {
+                if (found[h].kind === 'cfname' || found[h].kind === 'cfvalue') self.cfSeen++;
+                if (self.lockedHit(found[h])) { self.lockedOut++; continue; }
+                self.hits.push(found[h]);
+              }
             });
             self.progress(self.progressText());
             if (self.hits.length > self.stopAbove) {
@@ -1389,6 +1416,9 @@
         var text = map[name];
         if (typeof text !== 'string' || !text) return;
         var found = occurrences(text, self.oldName);
+        // A locked field's description is locked with it; its owner refuses the write
+        // anyway, so the mention is not offered.
+        if (found.length && self.fieldLocked(name)) { self.lockedOut += found.length; return; }
         found.forEach(function (pos, i) {
           self.hits.push({
             typeKey: DESC_KEY, entId: name, entName: name,
@@ -1438,6 +1468,16 @@
 
   Run.prototype.summarise = function () {
     this.progress(this.progressText());
+    if (this.lockedOut) {
+      this.msg('INFO', this.locks === false
+        ? 'Left out: ' + plural(this.lockedOut, 'custom-field mention') + '. ' + CFBE_NAME +
+          ' could not say which custom fields are locked, so no custom field is changed here.'
+        : 'Left out: ' + plural(this.lockedOut, 'custom-field mention') + ' in a field ' +
+          CFBE_NAME + '\u2019s Locked Custom Fields setting locks - its name and value cannot change.');
+    } else if (this.cfSeen && this.locks === null) {
+      this.msg('INFO', CFBE_NAME + ' is not installed, or too old to publish its Locked ' +
+        'Custom Fields list, so no custom field is locked for this rename.');
+    }
     // The store tag is skipped as an *entity* whether or not its owner is here to ask -
     // its JSON is not text to rewrite by substring, and that has not changed. What has
     // changed is whether the prose inside it was reached anyway, and the line says which,
@@ -1756,7 +1796,9 @@
       plural(this.enabledHits().length, 'place') + ' across ' +
       plural(p.entities.length, 'entity', 'entities') + '.');
     var lease = acquireLease('Entity name replacement');
-    this.writeAll(p, function (ent) { return self.buildUpdate(p, ent); })
+    // Read again at the press: a lock added since the scan still holds.
+    fieldLocks().then(function (locks) { self.locks = locks; })
+      .then(function () { return self.writeAll(p, function (ent) { return self.buildUpdate(p, ent); }); })
       .then(function () {
         lease.release();
         self.setState('listing');
@@ -1838,6 +1880,11 @@
             if (!hasOwn(cf, key) || !self.stillThere(key, positions, p.len)) return;
             var moved = replaceAt(key, positions, p.len, p.to);
             if (moved === key) return;
+            if (self.fieldLocked(key) || self.fieldLocked(moved)) {
+              self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
+                '" is locked, or would become the locked "' + moved + '". Left alone.');
+              return;
+            }
             if (hasOwn(cf, moved)) {
               self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
                 '" would become "' + moved + '", which it already has. Left alone.');
@@ -1851,6 +1898,11 @@
             return;
           }
           var val = cf[key];
+          if (self.fieldLocked(key)) {
+            self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
+              '" is locked. Its value is left alone.');
+            return;
+          }
           if (typeof val !== 'string' || !self.stillThere(val, positions, p.len)) return;
           partial[key] = replaceAt(val, positions, p.len, p.to);
           oldPartial[key] = val;

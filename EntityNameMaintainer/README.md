@@ -108,6 +108,11 @@ page already carries its type's count.
   recorded by the scan are checked against what is there now; a field somebody has changed
   in the meantime is skipped and said so in the log, rather than overwritten with a string
   built from a stale copy.
+- **Locked custom fields are left alone.** A field named in [ᝯㄝₓ Custom Fields Bulk
+  Editor](../CustomFieldsBulkEditor/README.md#locked-custom-fields)'s **Locked Custom Fields**
+  setting is never offered: not a mention in its value, not its name, not a name that would become
+  it, and not its description. The log says how many mentions were left out. If that plugin is
+  installed but cannot answer, no custom field is offered at all.
 - **Custom fields are changed structurally**, key by key and value by value, never as text.
   A machine-written block in a custom field cannot come out malformed because of a rename.
 - **An entity carrying another plugin's store is left out whole.** ᝯㄝₓ Custom Fields Bulk

@@ -44,7 +44,7 @@
     }
     return;
   }
-  var coop = C.coop, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
+  var coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
     entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick,
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '1.17.2';
+  var PLUGIN_VERSION = '1.19.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -174,6 +174,8 @@
     d4WeightGroup: null,
     d5WeightCover: null,
     d6WeightTitle: null,
+    // The review's Exclude Organized box, kept with the weights under Remember.
+    d7ExcludeOrganized: false,
   };
 
   // What an unremembered dialog starts with: an attribute difference is worth five of
@@ -718,7 +720,7 @@
   var VARIANTS_QUERY =
     'query SVRVariants($ids: [String!]) { findScenes(' +
     'scene_filter: { stash_ids_endpoint: { stash_ids: $ids, modifier: EQUALS } }, ' +
-    'filter: { per_page: -1 }) { scenes { ' + SCENE_FIELDS + ' } } }';
+    'filter: { per_page: -1 }) { scenes { ' + SCENE_FIELDS + ' custom_fields } } }';
 
   // The other half of the same question, for the scenes whose stash-id has been moved
   // into the custom field - and for the full-duration ones carrying both, where either
@@ -732,7 +734,7 @@
   var BY_FIELD_QUERY =
     'query SVRFieldMatch($field: String!, $values: [Any!]) { findScenes(' +
     'scene_filter: { custom_fields: [{ field: $field, value: $values, modifier: MATCHES_REGEX }] }, ' +
-    'filter: { per_page: -1 }) { scenes { ' + SCENE_FIELDS + ' } } }';
+    'filter: { per_page: -1 }) { scenes { ' + SCENE_FIELDS + ' custom_fields } } }';
 
   // What this scene's own custom field holds. `props.scene` is Stash's
   // `SceneDataFragment` and whether it carries `custom_fields` is Stash's to decide, so
@@ -853,6 +855,7 @@
             matchers: m, naming: nm,
             weights: weightsFrom(s),
             remembered: anyRemembered(s),
+            excludeOrganized: !!s.d7ExcludeOrganized,
             coverCheck: !!s.c4CheckCoverMismatch,
           };
         });
@@ -1137,6 +1140,24 @@
     }
     if (job.clear) input.stash_ids = job.stashIds;
     return input;
+  }
+
+  // **Locked custom fields** - Custom Fields Bulk Editor's list, asked through Core's
+  // `fieldLocks()`. A locked field's value cannot change and it cannot come off a scene;
+  // setting it where a scene has none is allowed. `locks` is the worker, null (no
+  // publisher: nothing locked) or false (it could not answer: every field locked).
+  function fieldLocked(locks, field) {
+    return locks === false || !!(locks && locks.isLocked(field));
+  }
+
+  function lockRefusal(field) {
+    return '"' + field + '" is locked in ᝯㄝₓ Custom Fields Bulk Editor\u2019s Locked Custom ' +
+      'Fields setting, so it cannot be changed or taken off a scene.';
+  }
+
+  // The lock list read fresh at a press, so a lock added since the scan still holds.
+  function refreshLocks(run) {
+    return fieldLocks().then(function (l) { run.locks = l; });
   }
 
   var SCENE_UPDATE =
@@ -1450,6 +1471,35 @@
     this.refreshAllBar();
   };
 
+  // The listing is derived from `allSets`, every set whole as the scan found it: with
+  // Exclude Organized on, an organized scene is left out of its set - listed, scored
+  // and synchronized as if absent - and a set left with one scene is not a set. The
+  // picked source survives where it is still listed.
+  Run.prototype.deriveSets = function () {
+    var self = this, m = this.matchers, hidden = 0;
+    this.sets = [];
+    (this.allSets || []).forEach(function (b) {
+      var scenes = b.scenes.filter(function (sc) {
+        if (self.excludeOrganized && sc.organized) { hidden++; return false; }
+        return true;
+      });
+      if (scenes.length < 2) return;
+      self.sets.push({ key: b.key, base: b, scenes: scenes,
+        delta: setDelta(scenes, self.skip, self.coverBy,
+          m ? expectedMap(scenes, m, self.naming) : null, self.naming && self.naming.baseField) });
+    });
+    this.setCount = this.sets.length;
+    this.organizedHidden = hidden;
+    var src = this.source, keep = null;
+    if (src) {
+      this.sets.forEach(function (set) {
+        if (set.scenes.some(function (sc) { return String(sc.id) === String(src.id); })) keep = set;
+      });
+    }
+    if (!keep) { this.source = null; this.plannedFrom = null; }
+    this.sourceSet = keep;
+  };
+
   // The weights strip: what a difference of each kind is worth, 0 to 100, and whether
   // to keep the numbers for next time. Above the listing rather than in the settings
   // page because they are read *while* looking at the scores they produce - a number
@@ -1485,6 +1535,31 @@
         wrap.appendChild(input);
         self.weightBar.appendChild(wrap);
       });
+    // Not a weight: it decides which scenes are in the listing at all. Remembered with
+    // the weights.
+    var org = el('label', 'svr-weight svr-remember');
+    var orgBox = el('input', 'svr-organized-box');
+    orgBox.type = 'checkbox';
+    orgBox.checked = !!this.excludeOrganized;
+    orgBox.title = 'Leave organized scenes out of the listing: out of every set\u2019s ' +
+      'drift score, out of the scenes you can pick, and out of what Synchronize Set ' +
+      'pushes to. A set left with one scene is not listed.';
+    orgBox.addEventListener('click', function () {
+      self.excludeOrganized = !!orgBox.checked;
+      self.deriveSets();
+      self.renderSets(false);
+      if (self.remember) self.saveWeights();
+      self.msg('INFO', self.excludeOrganized
+        ? 'Organized scenes left out: ' + plural(self.organizedHidden, 'scene') + ', ' +
+          plural(self.sets.length, 'variant set') + ' still listed.'
+        : 'Organized scenes included again: ' + plural(self.sets.length, 'variant set') +
+          ' listed.');
+      self.syncFooter();
+    });
+    this.organizedBox = orgBox;
+    org.appendChild(orgBox);
+    org.appendChild(el('span', null, 'Exclude Organized'));
+    this.weightBar.appendChild(org);
     // Set apart from the numbers rather than reading as one more of them: it prices
     // nothing, it decides whether the six survive the dialog.
     var mem = el('label', 'svr-weight svr-remember');
@@ -1524,6 +1599,9 @@
         else delete input[WEIGHT_KEYS[k]];
         if (_settings) _settings[WEIGHT_KEYS[k]] = self.remember ? self.weights[k] : null;
       }
+      if (self.remember) input.d7ExcludeOrganized = !!self.excludeOrganized;
+      else delete input.d7ExcludeOrganized;
+      if (_settings) _settings.d7ExcludeOrganized = !!self.remember && !!self.excludeOrganized;
       return gqlRequest('mutation SVRSaveWeights($id: ID!, $input: Map!) ' +
         '{ configurePlugin(plugin_id: $id, input: $input) }',
       { id: PLUGIN_ID, input: input });
@@ -1661,6 +1739,11 @@
         var got = fresh[String(sc.id)];
         if (!got) return;
         set.scenes[i] = got;
+        if (set.base) {
+          set.base.scenes.forEach(function (b, j) {
+            if (String(b.id) === String(got.id)) set.base.scenes[j] = got;
+          });
+        }
         moved = true;
         // The covers cached by the scan are as old as the scene objects were.
         if (self.coverBy) delete self.coverBy[String(sc.id)];
@@ -1719,7 +1802,8 @@
   Run.prototype.rescoreSet = function (set) {
     if (!set || !set.scoreEl) return;
     set.delta = setDelta(set.scenes, this.skip, this.coverBy,
-      this.matchers ? expectedMap(set.scenes, this.matchers, this.naming) : null);
+      this.matchers ? expectedMap(set.scenes, this.matchers, this.naming) : null,
+      this.naming && this.naming.baseField);
     set.score = scoreOf(set.delta, this.weights);
     set.scoreEl.textContent = ' ' + set.score + ' ';
     set.scoreEl.className = 'svr-score ' + scoreClass(set.score, this.weights);
@@ -1807,6 +1891,7 @@
       if (hasOwn(this.weightInputs, k)) this.weightInputs[k].disabled = busy;
     }
     if (this.rememberBox) this.rememberBox.disabled = busy;
+    if (this.organizedBox) this.organizedBox.disabled = busy;
     this.show(this.syncSetBtn, true);
     // Pressing it a second time on the set already listed would only disable the
     // boxes in front of you and list the same jobs again below. Nothing about the
@@ -2201,6 +2286,7 @@
     this.candidates.forEach(function (c) { c.box.disabled = true; });
     this.candidates = [];
     this.sets = [];
+    this.allSets = [];
     this.setCount = 0;
     this.srcRadios = [];
     this.source = null;
@@ -2308,11 +2394,13 @@
   };
 
   function migrateBegin(run) {
-    return Promise.all([settingsReady(), tagTree()]).then(function (both) {
+    return Promise.all([settingsReady(), tagTree(), fieldLocks()]).then(function (both) {
       var s = both[0];
       var m = matchers(both[1], s);
       var field = fieldName(s);
       run.field = field;
+      run.locks = both[2];
+      run.lockedSkips = 0;
       var conflict = conflictNote(m);
       if (conflict) run.msg('WARN', conflict);
       var tags = tagIdsFor(m);
@@ -2325,6 +2413,15 @@
       run.msg('INFO', 'Looking through every scene tagged full-duration or partial-duration ' +
         'for a stash-id to move into "' + field + '".');
       return run.scanPage(1, m, field, tags).then(function () {
+        if (run.lockedSkips) {
+          run.msg('WARN', 'Left alone: ' + plural(run.lockedSkips, 'scene') + ' already ' +
+            'holding a different value in "' + field + '". ' + (run.locks === false
+              ? 'ᝯㄝₓ Custom Fields Bulk Editor could not say which custom fields are ' +
+                'locked, so none is changed.' : lockRefusal(field)));
+        } else if (run.locks === null && run.jobs.length) {
+          run.msg('INFO', 'ᝯㄝₓ Custom Fields Bulk Editor is not installed, or too old to ' +
+            'publish its Locked Custom Fields list, so no custom field is locked for this run.');
+        }
         if (!run.jobs.length) {
           run.msg('INFO', 'Nothing to migrate: every tagged scene either carries no ' +
             'stash-id or has been through this already.');
@@ -2368,6 +2465,12 @@
         warnPseudoDrift(self, scene, field);
         var job = planScene(scene, m, field);
         if (!job) return;
+        // Adding the field is allowed; changing a value it already holds is not - and a
+        // partial's stash-ids must not come off where the field cannot take them.
+        if (job.had != null && job.had !== job.value && fieldLocked(self.locks, field)) {
+          self.lockedSkips++;
+          return;
+        }
         self.jobs.push(job);
         self.jobLine(job);
       });
@@ -2415,8 +2518,9 @@
     this.setState('writing');
     this.stopped = false;
     this.msg('INFO', 'Writing ' + plural(jobs.length, task.planUnit || 'scene') + '.');
-    this.writeThen(task.prepare ? function () { return task.prepare(self); } : null,
-      jobs, task.writeInput, task.verb, task.leaseLabel, function () {
+    this.writeThen(function () {
+      return refreshLocks(self).then(function () { return task.prepare ? task.prepare(self) : null; });
+    }, jobs, task.writeInput, task.verb, task.leaseLabel, function () {
         self.msg('INFO', 'Done: ' + plural(self.written, task.planUnit || 'scene') + ' ' + task.verb +
           (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
           (self.stopped ? ' (stopped early; what was written stays written, and Undo takes ' +
@@ -2437,7 +2541,8 @@
     // `changes` is emptied a scene at a time by the write itself rather than upfront, so
     // a stopped or failed reversal still knows what it did not reach. Empty at the end
     // means back to a listing nobody has used, and Proceed offers the same jobs again.
-    this.writeThen(null, jobs, task.undoInput, 'put back', task.leaseLabel + ' (undo)',
+    this.writeThen(function () { return refreshLocks(self); }, jobs, task.undoInput, 'put back',
+      task.leaseLabel + ' (undo)',
       function () {
         self.msg('INFO', 'Undone: ' + plural(self.written, task.planUnit || 'scene') + ' put back' +
           (self.failed ? ', ' + plural(self.failed, 'failure') : '') +
@@ -2542,10 +2647,18 @@
           (job.clear ? '  (stash-ids removed)' : ''),
       };
     },
-    writeInput: function (job) {
+    writeInput: function (job, run) {
+      if (job.had != null && job.had !== job.value && fieldLocked(run.locks, job.field)) {
+        throw new Error('not written: ' + lockRefusal(job.field));
+      }
       return { query: SCENE_UPDATE, variables: { input: writeInput(job) } };
     },
-    undoInput: function (job) {
+    // Where the write added the field, putting it back means taking it off - which a
+    // lock refuses. That scene keeps what the write gave it; the rest are put back.
+    undoInput: function (job, run) {
+      if (job.had == null && fieldLocked(run.locks, job.field)) {
+        throw new Error('not put back: ' + lockRefusal(job.field));
+      }
       return { query: SCENE_UPDATE, variables: { input: undoInput(job) } };
     },
   };
@@ -2859,6 +2972,9 @@
     },
     undoInput: function (job, run) {
       if (job.kind === 'group') {
+        if (fieldLocked(run.locks, job.field)) {
+          throw new Error('not put back: ' + lockRefusal(job.field));
+        }
         return { query: SCENE_UPDATE, variables: { input:
           { id: job.id, custom_fields: { remove: [job.field] } } } };
       }
@@ -3868,7 +3984,12 @@
     var full = (input.custom_fields || {}).full;
     var lines = splitValues(full && hasOwn(full, field) ? full[field] : customField(before, field));
     var keep = lines.filter(function (l) { return goneVals.indexOf(l) === -1; });
-    return tagTree().then(function (tags) {
+    var cfLocked = false;
+    return fieldLocks().then(function (locks) {
+      // A locked field is not tidied: its lines stay, and so does what they still bind.
+      if (keep.length !== lines.length && fieldLocked(locks, field)) { keep = lines; cfLocked = true; }
+      return tagTree();
+    }).then(function (tags) {
       var hit = tagsMatchingName(tags, flagTagName(s))[0];
       var flagId = hit ? String(hit.id) : null;
       var tagIds = hasOwn(input, 'tag_ids') ? (input.tag_ids || []).map(String) : idsOfList(before, 'tags');
@@ -3906,7 +4027,7 @@
             }
           });
           var plan = { gone: gone, field: field, keep: keep, flagId: flagId,
-            flagName: flagTagName(s), cfChanged: keep.length !== lines.length,
+            flagName: flagTagName(s), cfChanged: keep.length !== lines.length, cfLocked: cfLocked,
             unflagSelf: flagged && !still, still: flagged ? still : 0,
             sets: sets, lone: lone };
           return plan.cfChanged || plan.unflagSelf || plan.lone.length ? plan : null;
@@ -3944,6 +4065,10 @@
         p.field + '" custom field' + (p.keep.length
           ? ', keeping ' + plural(p.keep.length, 'other line') + '.'
           : ' - the field comes off the scene.'));
+    }
+    if (p.cfLocked) {
+      out.push('Leave the "' + p.field + '" custom field as it is: it is locked in ᝯㄝₓ Custom ' +
+        'Fields Bulk Editor\u2019s Locked Custom Fields setting.');
     }
     if (p.unflagSelf) {
       out.push('Remove the tag "' + p.flagName + '" from this scene: no other scene shares ' +
@@ -4295,12 +4420,20 @@
   // With a naming rule and a base, a title counts against a set only where it is not
   // the expected one - a partial named after its set is not drift, and a full-duration
   // scene's title is what the base is read from. Without a base, the plurality count.
-  function setDelta(scenes, skip, coverBy, expectedBy) {
+  // Either way a scene carrying the base-name field is left out of the title count:
+  // its name was pinned by hand, so its title differing is a decision, not drift.
+  function setDelta(scenes, skip, coverBy, expectedBy, baseField) {
     var out = setDeltaRaw(scenes, skip, coverBy);
+    var counted = baseField ? scenes.filter(function (sc) {
+      var v = sc.custom_fields && sc.custom_fields[baseField];
+      return !(typeof v === 'string' && trim(v));
+    }) : scenes;
     if (expectedBy) {
-      out.title = scenes.filter(function (sc) {
+      out.title = counted.filter(function (sc) {
         return hasOwn(expectedBy, String(sc.id)) && (sc.title || '') !== expectedBy[String(sc.id)];
       }).length;
+    } else if (counted.length !== scenes.length) {
+      out.title = setDeltaRaw(counted, skip, null).title;
     }
     return out;
   }
@@ -5219,6 +5352,7 @@
       run.naming = naming(s);
       run.weights = weightsFrom(s);
       run.remember = anyRemembered(s);
+      run.excludeOrganized = !!s.d7ExcludeOrganized;
       run.skip = skipTagIds(both[1], s, m);
       run.buildWeightBar();
       // Bound before the scan, so the first Synchronize Set can read it synchronously.
@@ -5245,15 +5379,13 @@
           // library, which is the difference between a few hundred images and all of
           // them.
           return readSetCovers(run, s, raw).then(function () {
-            run.sets = raw.map(function (set) {
+            run.allSets = raw.map(function (set) {
             // Longest first inside a set, the order the tab lists variants in.
-            var members = set.scenes.slice().sort(function (a, b) {
-              return ((bestFile(b) || {}).duration || 0) - ((bestFile(a) || {}).duration || 0);
+              return { key: set.key, scenes: set.scenes.slice().sort(function (a, b) {
+                return ((bestFile(b) || {}).duration || 0) - ((bestFile(a) || {}).duration || 0);
+              }) };
             });
-              return { key: set.key, scenes: members,
-                delta: setDelta(members, run.skip, run.coverBy, expectedMap(members, m, run.naming)) };
-            });
-            run.setCount = run.sets.length;
+            run.deriveSets();
           if (!raw.length) {
             run.msg('INFO', 'No scene in the library shares a stash-id or a "' + field +
               '" line with another, so there are no variant sets to review.');
@@ -6163,10 +6295,24 @@
       // synchronized from here reads as the listing would show it afterwards. Priced
       // by the weights the review dialog remembered, or its defaults. The cover count
       // lands with the pictures, after the rows, like the badge.
-      if (found.self && found.rows.length) {
-        var members = [found.self].concat(found.rows.map(function (r) { return r.scene; }));
+      // With Exclude Organized remembered, the listing scores the set without its
+      // organized scenes, and a set left with one scene is not listed at all.
+      var members = found.self && found.rows.length
+        ? [found.self].concat(found.rows.map(function (r) { return r.scene; })) : [];
+      if (found.excludeOrganized) {
+        var before = members.length;
+        members = members.filter(function (sc) { return !sc.organized; });
+        if (before && members.length < 2) {
+          kids.push(React.createElement('div', { key: 'drift', className: 'svr-drift' },
+            'No drift score: Exclude Organized is on in ' +
+            REVIEW_TASK_NAME.replace(/\.\.\.$/, '') + ', and fewer than two scenes of this ' +
+            'set are not organized, so the listing leaves it out.'));
+        }
+      }
+      if (members.length > 1) {
         var delta = setDelta(members, found.skip || {}, coverBy,
-          found.matchers ? expectedMap(members, found.matchers, found.naming) : null);
+          found.matchers ? expectedMap(members, found.matchers, found.naming) : null,
+          found.naming && found.naming.baseField);
         var score = scoreOf(delta, found.weights);
         // The tooltip hangs on the whole phrase, not the digit: a one-character hover
         // target is hard to hit, and the words are part of the thing being explained.

@@ -1,0 +1,23 @@
+name: ᝯㄝₓ Scene Filename Manager
+description: "A file's name is metadata nothing else in Stash remembers: once a file is renamed, by hand or by another tool, the name it had is gone. This plugin keeps a copy of every scene's filename in a custom field, and can put it back.\n\nArchive Original Filenames, in Settings → Tasks, writes the name of each scene's primary file, without its extension, into the custom field named below, on every scene that does not carry that field yet. A scene that already carries it is never overwritten, so the field keeps the first name the plugin saw; delete the field on a scene and the next run archives it again under its current name.\n\nRestore Original Filenames renames the primary file of every scene back to the archived name, keeping the file's current extension and its folder, wherever the two differ. A scene whose archived name could not be a filename is listed as skipped rather than renamed, and a name already taken in the folder fails for that scene alone.\n\nBoth tasks list every scene they would touch before anything is written, write nothing until you press Proceed, and Undo reverses what the dialog wrote while it stays open. With ᝯㄝₓ Custom Fields Bulk Editor installed, the field is given a description there.\n\nRequires Stash 0.31.0 or newer: a scene's custom fields are where the name is kept."
+url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/SceneFilenameManager/README.md"
+version: 0.1.0
+ui:
+  # Loaded before this script, and installed with it. `plugins.tsx` topologically
+  # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished
+  # running before this file begins - which is what lets the shared blocks be bound
+  # at load rather than looked up on every call.
+  requires:
+    - GTTxCore
+  javascript:
+    - SceneFilenameManager.js
+settings:
+  a1FilenameField:
+    displayName: Original Filename Custom Field
+    description: "The custom field the original filename is archived in, and restored from.\n\nThe default, ᱜ╦╦🞮_Original_Filename, is written into this box the first time the plugin loads, so what you see here is the name it is actually using; clearing the box goes back to that same default. The value is the primary file's name without its extension.\n\nChange it only if that name collides with a field you already use. Renaming it here does not move anything already written: Archive will write the new field beside the old one, and Restore reads only the new one."
+    type: STRING
+tasks:
+  - name: Archive Original Filenames...
+    description: Write the name of each scene's primary file, without its extension, into the original-filename custom field, on every scene that does not carry the field yet. A scene that already carries it is never overwritten - delete the field on a scene to archive it again. Every scene it would write is listed before anything is written, and Undo takes the fields back off while the dialog stays open.
+  - name: Restore Original Filenames...
+    description: Rename the primary file of every scene back to the name archived in the original-filename custom field, keeping the file's current extension and folder, wherever the two differ. Every rename is listed before anything is written, and Undo puts the old names back while the dialog stays open.

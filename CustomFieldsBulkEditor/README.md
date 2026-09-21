@@ -327,16 +327,17 @@ or delete the tag's description by hand — which loses the descriptions in it.
 
 ## Settings
 
-One switch and two names, in Settings → Plugins:
+One switch, two names and a lock list, in Settings → Plugins:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
 | **Skip Images in the Whole-Library Task** | off | Leaves Images out of the library-wide task, so it covers the other six types only. Images are usually the most numerous type by a wide margin, and reading them can be most of the wait. The dialog says in an `[INFO]` line when it is on. It applies to the descriptions task too, where a field only images carry will then read as an orphan. |
 | **Description Store Tag Name** | `ᱜ╦╦🞮 🗃️🔌 🛂🧲 🛠🛈🖫 ❌∙` | The name of the tag that holds every custom field's description. Changing it **renames the existing tag** rather than starting a second store — the tag is found by a marker custom field (`ᱜ╦╦🞮_🛂🧲_🛠🛈🖫_desc_store`), not by its name. Leave it empty to go back to the default. Once a store exists, a **🔗** appears on the value's own line, left of **Edit**, linking to the tag the descriptions are actually on — found by that marker, so it is right even before a rename has been applied. Hover it for what that tag is: its picture, its aliases, its parents, its children and its description. |
 | **Hide from Add Lists - Custom Field Name** | `ᱜ╦╦🞮_exclude_from_add_list` | Entities carrying this custom field are hidden from Stash's add/select dropdowns. Any value other than empty, `0` or `false` counts as marked. Clear the setting to switch the filtering off. Renaming that field with the dialog's **Rename** mode moves this setting with it, so the two cannot drift apart. A **ⓘ** beside the value hovers to the field's own description, how many entities carry it and the first ten of them — read on hover, never on the page's own redraw ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)). |
+| **Locked Custom Fields** | empty | Custom fields no bulk edit may change, as exact names separated by commas — for example `ᱜ╦╦🞮_Original_Filename, ᱜ╦╦🞮_Variant_Base_Name`. See [Locked custom fields](#locked-custom-fields). |
 
-The first two are read when you press a task button, so flipping one and running the task in the
-same session does what it says. **Skip Images** does not affect a selection — the **"..."** menu acts
+The settings are read when you press a task button or open the **"..."** dialog, so changing one and
+running the task in the same session does what it says. **Skip Images** does not affect a selection — the **"..."** menu acts
 on exactly what you selected, image lists included.
 
 **The two names are written into your settings the first time the plugin loads**, since Stash has no
@@ -345,6 +346,32 @@ the defaults above. Whatever you have put there is never written over — includ
 **cleared on purpose**, which is a different thing from one that was never set: an empty **Hide from
 Add Lists** means no filtering at all, and an empty **Description Store Tag Name** goes back to the
 default name.
+
+## Locked custom fields
+
+A locked field's **name**, **description** and **values** cannot change, and it cannot be
+**removed** from an entity. It can still be **added** where an entity does not have it. In detail:
+
+- **Overwrite** and **Remove** on a locked field, and a **Rename** away from one, are refused: Apply
+  is disabled and its tooltip says why. **Add** stays open, because it never overwrites — it only
+  sets the field on entities that do not carry it — and so does a Rename *onto* a locked name, which
+  already refuses every entity carrying that name.
+- The descriptions dialog refuses to rename a locked field, and **Migrate** does not write a rename
+  to or from one. **Undo** puts back the rest, but never removes a locked field: an entity that got
+  it from an Add (or a Rename onto it) keeps it, and the log says so.
+- In the descriptions dialog a locked field is **red** in the list, and its heading reads **🔒 Name
+  (Read-only)**; an unlocked one reads **🔓 Name**.
+- A locked field's **description** is locked with it: read-only in the descriptions dialog, kept by
+  **Prune**, and skipped when another plugin (ᝯㄝₓ Entity Name Maintainer) updates descriptions. A
+  plugin documenting its own field where there is no description yet can still add one.
+- [ᝯㄝₓ Find & Replace Entities by Text Content](../FindEntitiesByTextContent/README.md)'s **Replace**
+  leaves a locked field's name and value alone, and never renames a field onto a locked name.
+
+It is for the fields you or another plugin keep by hand — an archived filename, a pinned base name —
+that one bulk press could otherwise rewrite across the library. [ᝯㄝₓ Entity Name
+Maintainer](../EntityNameMaintainer/README.md), [ᝯㄝₓ Scene Variants](../SceneVariants/README.md) and
+[ᝯㄝₓ Scene Filename Manager](../SceneFilenameManager/README.md) honour the same list. Stash's own edit
+form is not stopped by it. Names are matched exactly, case included.
 
 ## Relationship to the other plugins in this repo
 

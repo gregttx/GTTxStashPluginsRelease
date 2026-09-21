@@ -210,7 +210,7 @@ The Variants tab and the save dialog both start from a scene you are already loo
 multi-variant set and gives each a **drift score** for how far its members have drifted apart, worst first.
 
 ```
- Drift score weights: title [1] cover [5] other attribute [5] tag [1] performer [1] group [1]   ☐ Remember
+ Drift score weights: title [1] cover [5] other attribute [5] tag [1] performer [1] group [1]   ☐ Exclude Organized   ☐ Remember
 ──────────────────────────────────────────────────────────────────────────────────────────
 ▸ 28  3 scenes: Work - Variant A + 2 more   (1 title, 4 attr, 5 tag, 2 perf, 0 group)
 ▸ 12  2 scenes: Rescanned One + 1 more      (1 title, 1 attr, 1 tag, 0 perf, 0 group, 1 cover)
@@ -224,6 +224,12 @@ apart on purpose. Tick **Remember** and the six are kept in the plugin's setting
 untick it and they are forgotten — the keys are removed rather than written as zeros. The
 remembered weights are also what the Variants tab prices its own drift score by.
 
+Tick **Exclude Organized** and every scene marked Organized is left out of the listing: out of its
+set's drift score, out of the scenes you can pick, and out of what Synchronize Set pushes to. A set
+left with a single scene is not listed. It is off by default and kept with the weights under
+**Remember** - and remembered, the Variants tab's own drift score leaves organized scenes out too, so
+the two numbers stay the same.
+
 The drift score is the set's counts, each priced by the weight strip: for every attribute, the members
 that disagree with the set's most common value; for tags, performers and groups, every membership
 a member is missing from what the set carries between them — then divided by the number of other
@@ -231,7 +237,9 @@ scenes in the set and rounded up, so it reads as how far one variant typically s
 and a pair and a set of five are scored alike. Hovering the number says so — it is a
 sorting value, not a count of anything. The full-duration, partial-duration and flag tags are **not**
 counted: a cut differs from the whole work by those by definition. They are still offered in the
-plan; they never move a drift score.
+plan; they never move a drift score. Nor does the title of a scene carrying the base-name
+custom field (`ᱜ╦╦🞮_Variant_Base_Name` by default): its name was pinned by hand, so a title that
+differs from the rest is a decision rather than drift.
 
 **Hover a set line for how it is split.** A column per variant (four at most), each header naming
 the scene with its resolution and running time under it, and a row per attribute or list they do
@@ -488,6 +496,15 @@ whether that creates a multi-variant set or extends one (by whether those scenes
 tag), and that running **Migrate Variant Stash-IDs** and **Flag Variants** is recommended, since
 the field line and the flag tag that record the set are those two tasks' to write. Nothing is
 written by the box itself. An added id nobody else carries is not a set and raises nothing.
+
+## Locked custom fields
+
+Name the variant stash-id field in [ᝯㄝₓ Custom Fields Bulk Editor](../CustomFieldsBulkEditor/README.md#locked-custom-fields)'s
+**Locked Custom Fields** setting and this plugin only ever *adds* it: Migrate still writes it onto
+scenes that do not have it, but leaves alone a scene whose field already holds a different value;
+Create Variant Group still writes it; Undo will not take a locked field back off a scene, and says so
+for each one; and the stash-id question on save no longer removes lines from it. If that plugin is
+installed but cannot say what is locked, every custom field is treated as locked.
 
 ## Settings
 

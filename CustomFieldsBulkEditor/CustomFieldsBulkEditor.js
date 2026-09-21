@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.1.4';
+  var PLUGIN_VERSION = '3.3.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -105,6 +105,8 @@
   // The two boxes in the descriptions dialog's right pane say what they are, since one
   // is typed into and the other is read-only and neither is obvious from its contents.
   var NAME_HEAD  = 'Name';
+  var LOCK_MARK = '\ud83d\udd12';     // 🔒, a field in the Locked Custom Fields setting
+  var UNLOCK_MARK = '\ud83d\udd13';   // 🔓, one that is not
   var DESC_HEAD  = 'Description';
   var USERS_HEAD = 'List of entities';
   var EQ = '🟰';  // the name-value separator, U+1F7F0
@@ -175,7 +177,44 @@
     a1SkipImagesInTask: false,
     b1DescriptionTagName: DEFAULT_STORE_TAG,
     c1ExcludeFromAddListField: 'ᱜ╦╦🞮_exclude_from_add_list',
+    d1LockedFields: '',
   };
+
+  // The custom fields no bulk write of this plugin's, or of Find & Replace's, may touch:
+  // exact names, comma- or newline-separated. A lock guards a field a person or another
+  // plugin keeps by hand - an archived filename, a pinned base name - against the one
+  // press that rewrites it across the library. Stash's own edit form is not ours to stop.
+  function lockedFields(s) {
+    var out = [];
+    String((s && s.d1LockedFields) || '').split(/[,\n]/).forEach(function (t) {
+      t = t.replace(/^\s+|\s+$/g, '');
+      if (t && out.indexOf(t) === -1) out.push(t);
+    });
+    return out;
+  }
+
+  // Which of `names` are locked, in the order given - for the sentence that refuses.
+  function lockedAmong(s, names) {
+    var locked = lockedFields(s);
+    return names.filter(function (n, i) {
+      return n && locked.indexOf(n) !== -1 && names.indexOf(n) === i;
+    });
+  }
+
+  // A locked field's description is locked with it: the dialog shows it read-only, Prune
+  // keeps it, and `updateDescriptions` skips it.
+  function descLocked(s, name) {
+    return name != null && lockedFields(s).indexOf(String(name)) !== -1;
+  }
+
+  function lockSentence(names) {
+    return (names.length === 1 ? '"' + names[0] + '" is' : '"' + names.join('", "') + '" are') +
+      ' locked in this plugin\u2019s Locked Custom Fields setting: ' +
+      (names.length === 1 ? 'its' : 'their') + ' name, description and values cannot change, ' +
+      'and ' + (names.length === 1 ? 'it' : 'they') + ' cannot be removed from an entity - ' +
+      'only added where missing. Take ' +
+      (names.length === 1 ? 'it' : 'them') + ' off that list first.';
+  }
   // The default this replaced: a name in a namespace with no owner, so a setting
   // still reading it is moved onto the prefixed one wherever it is read.
   var LEGACY_HIDE_FIELD = 'Exclude_from_add_list';
@@ -391,7 +430,8 @@
     var k;
     for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
     for (k in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, k) || typeof DEFAULTS[k] === 'boolean') continue;
+      // An empty default has nothing to show in the box, so there is nothing to seed.
+      if (!hasOwn(DEFAULTS, k) || typeof DEFAULTS[k] === 'boolean' || DEFAULTS[k] === '') continue;
       if (hasOwn(raw, k) && raw[k] != null) continue;
       input[k] = DEFAULTS[k];
       missing++;
@@ -742,6 +782,8 @@
     '.cfbe-name-orphan{color:#ffb648;}' +
     // Not the orphan amber: a store-tag field is accounted for, not a loose end.
     '.cfbe-name-store{color:#48aff0;}' +
+    // After the two above, so a locked orphan or store-tag field still reads as locked.
+    '.cfbe-name-locked{color:#ff7373;}' +
     '.cfbe-detail{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:.35rem;}' +
     '.cfbe-detail-head{color:#a7b6c2;font-size:.85rem;display:flex;align-items:center;' +
     'gap:.35rem;flex-wrap:wrap;}' +
@@ -1394,13 +1436,25 @@
   // plugin had before the setting existed.
   var _opening = false;
 
+  // A selection reads them too, since the Locked Custom Fields list governs its Apply.
   function startRun(type, ids) {
     if (_active) { _active.focus(); return; }
-    if (type) { openRun(type, ids, DEFAULTS); return; }
     if (_opening) return;                      // a second click inside the round trip
     _opening = true;
-    var go = function (s) { _opening = false; openRun(null, null, s); };
-    loadSettings().then(go, function () { go(DEFAULTS); });
+    var go = function (s, failed) {
+      _opening = false;
+      openRun(type || null, type ? ids : null, s);
+      if (failed && _active) noteUnread(_active);
+    };
+    loadSettings().then(function (s) { go(s, false); }, function () { go(DEFAULTS, true); });
+  }
+
+  // A dialog opened on the defaults because the settings could not be read cannot see
+  // the lock list, and says so rather than looking like one that honours it.
+  function noteUnread(run) {
+    run.msg('WARN', 'This plugin\u2019s settings could not be read, so the dialog runs on ' +
+      'its defaults - and the Locked Custom Fields list is not in force here. Close and ' +
+      'reopen it to try again.');
   }
 
   // The manage-descriptions task. Same shape as the whole-library one - the settings
@@ -1415,7 +1469,7 @@
       _active = new DescRun(s);
       _active.begin();
     };
-    loadSettings().then(go, function () { go(DEFAULTS); });
+    loadSettings().then(go, function () { go(DEFAULTS); if (_active) noteUnread(_active); });
   }
 
   function openRun(type, ids, settings) {
@@ -1894,20 +1948,34 @@
     run.show(run.closeBtn, offerClose);
   }
 
+  // The locked names the press in front of the user would write: the field in the name
+  // box, and for a Rename the field it renames from.
+  // A lock means the field's name, its description, its presence on an entity and its
+  // value there cannot change. Setting it where an entity has none changes none of those,
+  // so Add is open on a locked field - it never overwrites - and so is a Rename *onto* a
+  // locked name, which refuses every entity already carrying it. Overwrite and Remove are
+  // refused, and so is a Rename *from* a locked field.
+  Run.prototype.lockedHit = function () {
+    var name = String(this.nameInput.value || '').replace(/^\s+|\s+$/g, '');
+    var mode = this.modeSel.value;
+    return mode === 'add' ? [] : lockedAmong(this.settings, mode === 'rename' ? [this.renameName] : [name]);
+  };
+
   Run.prototype.syncApply = function () {
     var rename = this.modeSel.value === 'rename';
+    var locked = this.lockedHit();
     // `!this.covered`: the scope is the listing, and a listing filtered down to no
     // entity leaves Apply nothing to write - an amber button that writes nothing.
     this.applyBtn.disabled = this.state !== 'listing' ||
       !String(this.nameInput.value || '').replace(/^\s+|\s+$/g, '') || this.stale ||
-      (rename && !this.renameName) || !this.covered;
+      (rename && !this.renameName) || !this.covered || locked.length > 0;
     // **What Apply covers, on the button that does it.** With the "Apply to" select
     // gone the scope is the listing, and a listing is counted in lines while a write is
     // counted in entities - so the number the user needs before pressing is one nothing
     // on screen would otherwise state.
     var covers = 'Apply covers ' + plural(this.covered || 0, 'entity', 'entities') +
       ' - the ones listed now. Clear the filters to cover everything this dialog read.';
-    this.applyBtn.title = rename && !this.renameName
+    this.applyBtn.title = locked.length ? lockSentence(locked) : rename && !this.renameName
       ? 'Rename needs one field name in scope: what Apply covers carries more than one, ' +
         'or nothing at all. Filter the list down to a single field name first.'
       : (rename
@@ -2982,6 +3050,8 @@
   Run.prototype.apply = function () {
     var self = this;
     if (!this.covered) return;   // guarded in the handler, not only at render
+    var locked = this.lockedHit();
+    if (locked.length) { this.msg('ERROR', lockSentence(locked)); return; }
     var planned = this.plan();
     this.reportSkips(planned);
     if (!planned.changes.length) {
@@ -3075,10 +3145,26 @@
     this.undoArmed = 0;
     this.undoBtn.textContent = 'Undo';
 
+    // An Add onto a locked field, or a Rename onto a locked name, is undone by taking the
+    // locked field off again - which a lock forbids. Those entities keep it; the rest of
+    // the undo goes ahead, and a line says how many were kept and why.
+    var settings = this.settings;
+    var removes = function (c) {
+      return c.to ? lockedAmong(settings, [c.to]).length > 0
+        : !c.had && lockedAmong(settings, [c.name]).length > 0;
+    };
+    var kept = this.changes.filter(removes);
+    var undoable = this.changes.filter(function (c) { return !removes(c); });
+    if (kept.length) {
+      this.msg('WARN', 'Kept on ' + plural(kept.length, 'entity', 'entities') + ': ' +
+        lockSentence(lockedAmong(settings, kept.map(function (c) { return c.to || c.name; }))));
+    }
+    if (!undoable.length) return;
+
     // One batch per distinct previous value, plus one for everything that had no
     // value at all. Entities that shared a value before the apply share a mutation.
     var groups = {};
-    this.changes.forEach(function (c) {
+    undoable.forEach(function (c) {
       // By type as well as by previous value, for the reason `apply` groups by type.
       var key = c.spec.key + '|' + (c.had ? 'v:' + valueText(c.before) : 'absent');
       if (!groups[key]) {
@@ -3105,7 +3191,7 @@
       // rename was the hide field's; both follow the undo back. Read off the changes
       // rather than remembered separately - `c.to` is what a rename leaves on one.
       var ren = null;
-      self.changes.forEach(function (c) { if (!ren && c.to) ren = { from: c.name, to: c.to }; });
+      undoable.forEach(function (c) { if (!ren && c.to) ren = { from: c.name, to: c.to }; });
       if (ok && ren) {
         self.moveDescription(ren.to, ren.from).then(function () {
           if (!self.hideRename) return null;
@@ -3114,12 +3200,16 @@
           return self.followHideRename(h.to, h.from);
         });
       }
-      self.changes.forEach(function (c) {
+      undoable.forEach(function (c) {
         if (c.to) delete c.entity.fields[c.to];
         if (c.had) c.entity.fields[c.name] = c.before;
         else delete c.entity.fields[c.name];
       });
+      // The listing names what was put back, not the entities a lock kept.
+      var all = self.changes;
+      self.changes = undoable;
       self.renderChanges(null, true);
+      self.changes = all;
       // Back to `applied` rather than to `listing`: the listing this dialog opened
       // with describes a library it has now written to twice, and re-offering Apply
       // over it would write from a plan nobody is looking at. **Rescan** is the way
@@ -3400,6 +3490,11 @@
     this.textEl.disabled = true;
     this.textEl.addEventListener('input', function () {
       if (self.sel == null) return;
+      // Guarded here as well as by `disabled`: a locked description is not taken.
+      if (descLocked(self.settings, self.sel)) {
+        self.textEl.value = String(self.desc[self.sel] || '');
+        return;
+      }
       self.desc[self.sel] = self.textEl.value;
       self.renderNames();
       self.syncApply();
@@ -3683,8 +3778,10 @@
       var orphan = !hasOwn(self.fields, name) && !store;
       var has = String(self.desc[name] || '').replace(/^\s+|\s+$/g, '') !== '';
       var changed = String(self.desc[name] || '') !== String(self.base[name] || '');
+      var locked = descLocked(self.settings, name);
       var b = el('button', 'cfbe-name' + (self.sel === name ? ' cfbe-name-on' : '') +
-        (orphan ? ' cfbe-name-orphan' : store ? ' cfbe-name-store' : ''),
+        (orphan ? ' cfbe-name-orphan' : store ? ' cfbe-name-store' : '') +
+        (locked ? ' cfbe-name-locked' : ''),
       (changed ? '* ' : has ? '• ' : '  ') + name +
         (orphan ? ' [orphan]' : store ? ' [store tag] x1' : ' x' + self.fields[name].length));
       b.type = 'button';
@@ -3694,6 +3791,7 @@
           ? 'Carried by the description store tag itself, which this scan leaves out - ' +
             'no other entity carries it'
           : plural(self.fields[name].length, 'entity', 'entities') + ' carry this field';
+      if (locked) b.title += '. Locked in the Locked Custom Fields setting.';
       b.addEventListener('click', function () { self.pick(name); });
       self.namesEl.appendChild(b);
     });
@@ -3702,13 +3800,19 @@
   DescRun.prototype.pick = function (name) {
     this.sel = name;
     this.textEl.value = String(this.desc[name] || '');
-    this.textEl.disabled = !this.editable();
+    this.textEl.disabled = !this.editable() || descLocked(this.settings, name);
+    this.textEl.title = descLocked(this.settings, name) ? lockSentence([name]) : '';
     this.sizeText();
     var users = this.fields[name] || [];
     // A field only the store tag carries has one carrier this scan never read, so the
     // pane names it and draws it as a row of its own rather than reading as an orphan.
     var store = !users.length && hasOwn(_storeTagFields, name) && this.tag;
-    this.detailLabel.textContent = NAME_HEAD;
+    // The lock state in front of the name, locked or open, and (Read-only) after it.
+    this.detailLabel.textContent = descLocked(this.settings, name)
+      ? LOCK_MARK + ' ' + NAME_HEAD + ' (Read-only)' : UNLOCK_MARK + ' ' + NAME_HEAD;
+    this.detailLabel.title = descLocked(this.settings, name) ? lockSentence([name])
+      : 'Not locked. List it in the Locked Custom Fields setting to protect its name, ' +
+        'description and values from bulk edits.';
     this.nameBox.value = name;
     this.show(this.nameBox, true);
     this.syncRename();
@@ -3810,6 +3914,11 @@
       this.msg('ERROR', 'Cannot rename "' + from + '" to "' + to + '": a custom field of ' +
         'that name already exists. Renaming onto it would overwrite its values, which is ' +
         'a merge rather than a rename.');
+      return;
+    }
+    var locked = lockedAmong(this.settings, [this.stagedFrom(from) || from, from, to]);
+    if (locked.length) {
+      this.msg('ERROR', 'Cannot rename "' + from + '" to "' + to + '": ' + lockSentence(locked));
       return;
     }
     // The hide field's name is a *setting*, and this dialog already implements the other
@@ -4007,7 +4116,7 @@
     this.undoBtn.disabled = busy;
     this.rescanBtn.disabled = busy;
     this.closeBtn.disabled = busy;
-    this.textEl.disabled = !edit || this.sel == null;
+    this.textEl.disabled = !edit || this.sel == null || descLocked(this.settings, this.sel);
     this.syncApply();
     this.spin(state === 'loading' || busy);
   };
@@ -4016,7 +4125,9 @@
   // whether there is anything to do.
   DescRun.prototype.prunable = function () {
     var self = this;
-    return (this.orphans || []).filter(function (n) { return hasOwn(self.desc, n); });
+    return (this.orphans || []).filter(function (n) {
+      return hasOwn(self.desc, n) && !descLocked(self.settings, n);
+    });
   };
 
   DescRun.prototype.syncApply = function () {
@@ -4185,6 +4296,13 @@
     if (!m || !m.armed || (reversed ? !m.done : m.done)) return Promise.resolve();
     var from = reversed ? m.to : m.from;
     var to = reversed ? m.from : m.to;
+    // Forward only: Undo is never gated, and puts back what this dialog wrote.
+    var locked = reversed ? [] : lockedAmong(this.settings, [from, to]);
+    if (locked.length) {
+      this.msg('ERROR', 'The rename of "' + from + '" to "' + to + '" was not written: ' +
+        lockSentence(locked));
+      return Promise.resolve();
+    }
 
     var groups = {};
     var batches = [];
@@ -5045,8 +5163,15 @@
     if (!patch || typeof patch !== 'object') {
       return Promise.reject(new Error('updateDescriptions needs an object of name -> description.'));
     }
-    return filterSettings().then(function (s) {
+    // The lock list read fresh, not off the filter's once-a-page cache: a lock added a
+    // minute ago must hold. A read that fails writes nothing rather than guess.
+    var locks = null;
+    return loadSettings().then(function (s) {
+      locks = s;
       return readStore(s);
+    }, function () {
+      throw new Error('The settings could not be read, so the Locked Custom Fields list is ' +
+        'unknown and no description is written.');
     }).then(function () {
       if (!_storeTagId || !_store) {
         throw new Error('There is no custom field description store in this library yet.');
@@ -5066,7 +5191,7 @@
       var written = [], skipped = [];
       for (var name in patch) {
         if (!hasOwn(patch, name)) continue;
-        if (!hasOwn(descriptions, name)) { skipped.push(name); continue; }
+        if (!hasOwn(descriptions, name) || descLocked(locks, name)) { skipped.push(name); continue; }
         var text = String(patch[name] == null ? '' : patch[name]);
         if (text === descriptions[name]) continue;
         descriptions[name] = text;
@@ -5086,8 +5211,23 @@
     });
   }
 
+  // The question Find & Replace asks before a replacement reaches a custom field:
+  // resolves to a worker answering `isLocked(name)` synchronously, from settings read
+  // now. The list is this plugin's setting, so the rule stays here rather than being
+  // copied; a failed read rejects, and a caller treats that as "cannot tell".
+  function apiLocks() {
+    return loadSettings().then(function (s) {
+      var names = lockedFields(s);
+      return {
+        names: names.slice(),
+        isLocked: function (name) { return names.indexOf(String(name)) !== -1; },
+      };
+    });
+  }
+
   coop().api[PLUGIN_ID] = {
     version: API_VERSION,
+    locks: apiLocks,
     describeField: apiDescribeField,
     descriptions: apiDescriptions,
     updateDescriptions: apiUpdateDescriptions,

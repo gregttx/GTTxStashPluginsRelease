@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '2.3.0';
+  var PLUGIN_VERSION = '2.4.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -327,6 +327,22 @@
   // pins `min-width` to the laid-out width, once; a zero width is a button not laid out
   // yet and is not pinned. A caption longer than the label still grows the button, so a
   // caller keeps those short - a sign and a count, one word.
+  // **Custom Fields Bulk Editor's Locked Custom Fields list**, asked for every plugin that
+  // writes a custom field. A lock means a field's name, description, presence and value
+  // cannot change; adding it where an entity has none is allowed. Resolves to that
+  // plugin's worker `{ names, isLocked(name) }`, to null where nothing publishes one -
+  // nothing is locked, and a caller says so - or to false where the publisher is there and
+  // could not answer, which a caller treats as every custom field locked: a lock that
+  // could not be read is not one to guess past. The rule stays with its owner; this is
+  // only the asking.
+  function fieldLocks() {
+    var api = coop().api && coop().api.CustomFieldsBulkEditor;
+    if (!api || typeof api.locks !== 'function') return Promise.resolve(null);
+    return Promise.resolve().then(function () { return api.locks(); })
+      .then(function (w) { return w && typeof w.isLocked === 'function' ? w : false; },
+        function () { return false; });
+  }
+
   function holdWidth(btn) {
     if (btn && btn.style && !btn.style.minWidth && btn.offsetWidth > 0) {
       btn.style.minWidth = btn.offsetWidth + 'px';
@@ -2472,7 +2488,7 @@
     settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, waitingOn: waitingOn,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
     splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
-    linkTarget: linkTarget, holdWidth: holdWidth,
+    linkTarget: linkTarget, holdWidth: holdWidth, fieldLocks: fieldLocks,
     tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace, tipRatingBadge: tipRatingBadge,
     tipOpen: tipOpen, tipClose: tipClose, tagTip: tagTip,
     tipText: tipText, tagTipNames: tagTipNames, tagLinkTitle: tagLinkTitle,
