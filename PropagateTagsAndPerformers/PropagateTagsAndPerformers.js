@@ -36,7 +36,7 @@
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
     coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
     entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.2.2';
+  var PLUGIN_VERSION = '5.2.5';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -2900,7 +2900,10 @@
   // either way - Copy log hands over text, and a tooltip is not text.
   Run.prototype.log = function (kind, message, parts) {
     var line = '[' + kind + '] ' + message;
+    this.logged = (this.logged || 0) + 1;
     this.lines.push(line);
+    // Bounded, because the copy buffer is what a library-wide pass grows without limit.
+    this.logDropped = (this.logDropped || 0) + keepLog(this.lines);
     this.pending.push({ kind: kind, line: line, parts: parts || null });
     this.scheduleFlush();
   };
@@ -2938,8 +2941,10 @@
     });
   }
 
+  // The progress line is redrawn even with no line waiting: a state change is written
+  // with a flush behind it, and the recap before it has usually flushed the lines already.
   Run.prototype.flush = function () {
-    if (!this.pending.length) return;
+    if (!this.pending.length) { this.renderProgress(); return; }
     var pending = this.pending;
     this.pending = [];
     // Out of the way while the lines land, so the cursor is neither counted against
@@ -2989,7 +2994,7 @@
       summary = 'Scanning. ' + plural(this.plan.length, 'change') + ' found';
     } else if (this.state === 'ready') {
       summary = 'Review complete. ' + plural(this.plan.length, 'entity change') +
-        ' planned, ' + plural(this.lines.length, 'log line');
+        ' planned, ' + plural(this.logged || 0, 'log line');
     } else if (this.state === 'applying') {
       summary = 'Applying. ' + this.applied + ' of ' + this.plan.length + ' entities updated';
     } else if (this.state === 'undoing') {
@@ -3000,8 +3005,8 @@
         (this.undone ? ', ' + this.undone + ' reversed by Undo' : '');
     }
     if (this.errors) summary += ', ' + plural(this.errors, 'error');
-    if (this.lines.length > LOG_RENDER_CAP) {
-      summary += ' - showing the last ' + LOG_RENDER_CAP + ' of ' + this.lines.length + ' lines';
+    if ((this.logged || 0) > LOG_RENDER_CAP) {
+      summary += ' - showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines';
     }
     this.progressEl.textContent = parts.length ? summary + '\n' + parts.join('   ') : summary;
   };
@@ -4087,7 +4092,8 @@
   }
 
   Run.prototype.copy = function () {
-    copyToClipboard(this.lines.join('\n'), copyFeedback(this.copyBtn, 'Copy log'));
+    copyToClipboard([droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n'),
+      copyFeedback(this.copyBtn, 'Copy log'));
   };
 
   // ── Escape ────────────────────────────────────────────────────────────────

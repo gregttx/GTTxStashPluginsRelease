@@ -187,6 +187,12 @@ to ask for whichever keys an entity happens to carry. So the rows come back and 
 happens in the browser, one page of one type at a time, with a progress line and a limit that
 can end it early.
 
+## What a run costs in memory
+
+The dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+whole run. Past ᝯㄝₓ Core's **Log Lines Kept** (200,000 by default) the oldest lines are dropped
+and the copy says how many went; nothing else changes.
+
 ## Troubleshooting
 
 **The dialog never appears.** It reacts to a rename made in that same browser tab. A rename

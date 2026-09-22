@@ -8,6 +8,20 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.0.0 (`7aafdc7`) | 2026-09-22 | SceneFilenameManager 1.0.0: 0 performers names none, and performercount |
+| 0.8.4 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 0.8.3 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
+| 0.8.2 (`0fe713b`) | 2026-09-22 | SceneFilenameManager 0.8.2: the cut warning says what the name would have been |
+| 0.8.1 (`533a7f1`) | 2026-09-22 | SceneFilenameManager 0.8.1: only a name that was cut is reported as cut |
+| 0.8.0 (`e90e288`) | 2026-09-22 | SceneFilenameManager 0.8.0: an ellipsis at the cut, and a clearer test-value pane |
+| 0.7.0 (`91efdcc`) | 2026-09-22 | SceneFilenameManager 0.7.0: Maximum Filename Length and Maximum Full Path Length |
+| 0.6.1 (`d8661a9`) | 2026-09-22 | SceneFilenameManager 0.6.1: Rename reads file names first, then plans page by page |
+| 0.6.0 (`cfbb8e6`) | 2026-09-22 | SceneFilenameManager 0.6.0: carry archived names to the scene a file moves to |
+| 0.5.1 (`14d71ed`) | 2026-09-22 | SceneFilenameManager 0.5.1: the default template falls back to the archived filename |
+| 0.5.0 (`5795b6b`) | 2026-09-22 | SceneFilenameManager 0.5.0: new default template, Recent values kept, test boxes keep the focus |
+| 0.4.0 (`2d4d0e9`) | 2026-09-22 | SceneFilenameManager 0.4.0: more tokens, autoindex, every file archived, template editor |
+| 0.3.0 (`22d58d2`) | 2026-09-22 | SceneFilenameManager 0.3.0: nested template groups and !token |
+| 0.2.0 (`b69883f`) | 2026-09-21 | SceneFilenameManager 0.2.0: Rename Files From Metadata |
 | 0.1.0 (`ed1a858`) | 2026-09-21 | SceneFilenameManager 0.1.0: an Archive Undo is refused on a locked field |
 | 0.0.3 (`268dff3`) | 2026-09-21 | SceneFilenameManager 0.0.3: writes a hundred scenes per request |
 | 0.0.2 (`af5c89e`) | 2026-09-21 | SceneFilenameManager 0.0.2: the seeded field name shows in the settings box at once |

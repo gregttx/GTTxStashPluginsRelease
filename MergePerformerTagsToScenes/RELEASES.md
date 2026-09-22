@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.1.5 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 4.1.4 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 4.1.3 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 4.1.2 (`46f966b`) | 2026-09-17 | Close is green in every dialog once nothing is left to write |
 | 4.1.1 (`4fcd6bb`) | 2026-09-02 | Review fixes 2026-09-02: the All row is drawn once, and sixty more |

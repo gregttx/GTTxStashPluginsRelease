@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.6.0 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 2.5.0 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 2.4.0 (`0aa020e`) | 2026-09-21 | GTTxCore 2.4.0: fieldLocks() asks CFBE's Locked Custom Fields for every writer |
 | 2.3.0 (`549fc1e`) | 2026-09-20 | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |
 | 2.2.0 (`ae8cf25`) | 2026-09-19 | Core 2.2.0, PropagateTagsAndPerformers 5.1.3, SceneVariants 1.9.5: a save settles before the propagate offer |

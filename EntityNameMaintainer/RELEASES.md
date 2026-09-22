@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.4.2 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 2.4.1 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 2.4.0 (`0a753cc`) | 2026-09-21 | EntityNameMaintainer 2.4.0: renames never reach a locked custom field |
 | 2.3.0 (`9c2319c`) | 2026-09-21 | EntityNameMaintainer 2.3.0, SceneVariants 1.16.1: renamed titles go over as one batch, and a swap offers nothing back |
 | 2.2.0 (`ce6fd55`) | 2026-09-20 | SceneVariants 1.14.0, EntityNameMaintainer 2.2.0: titles Rename Variants writes reach Entity Name Maintainer |

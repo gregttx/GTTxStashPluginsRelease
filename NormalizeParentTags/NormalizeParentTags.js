@@ -34,7 +34,7 @@
     findEditContainer = C.findEditContainer,
     applyButtonSpacing = C.applyButtonSpacing, domBus = C.domBus,
     coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
     tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
     entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
@@ -64,7 +64,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.5.4';
+  var PLUGIN_VERSION = '5.5.6';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -2196,7 +2196,10 @@
   // either way - Copy log hands over text, and a tooltip is not text.
   Run.prototype.log = function (kind, message, parts) {
     var line = '[' + kind + '] ' + message;
+    this.logged = (this.logged || 0) + 1;
     this.lines.push(line);
+    // Bounded, because the copy buffer is what a library-wide pass grows without limit.
+    this.logDropped = (this.logDropped || 0) + keepLog(this.lines);
     this.pending.push({ kind: kind, line: line, parts: parts || null });
     this.scheduleFlush();
   };
@@ -2267,7 +2270,7 @@
       summary = 'Scanning. ' + plural(this.plan.length, 'change') + ' found';
     } else if (this.state === 'ready') {
       summary = 'Review complete. ' + plural(this.plan.length, 'entity change') +
-        ' planned, ' + plural(this.lines.length, 'log line');
+        ' planned, ' + plural(this.logged || 0, 'log line');
     } else if (this.state === 'applying') {
       summary = 'Applying. ' + this.applied + ' of ' + this.plan.length + ' entities updated';
     } else if (this.state === 'undoing') {
@@ -2278,8 +2281,8 @@
         (this.undone ? ', ' + this.undone + ' reversed by Undo' : '');
     }
     if (this.errors) summary += ', ' + plural(this.errors, 'error');
-    if (this.lines.length > LOG_RENDER_CAP) {
-      summary += ' - showing the last ' + LOG_RENDER_CAP + ' of ' + this.lines.length + ' lines';
+    if ((this.logged || 0) > LOG_RENDER_CAP) {
+      summary += ' - showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines';
     }
     this.progressEl.textContent = parts.length ? summary + '\n' + parts.join('   ') : summary;
   };
@@ -2652,7 +2655,7 @@
     // The caption flash is the caller's, like every sibling's: the shared helper answers
     // whether the copy landed and says nothing about buttons.
     var self = this;
-    copyToClipboard(this.lines.join('\n'), function (ok) {
+    copyToClipboard([droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n'), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);

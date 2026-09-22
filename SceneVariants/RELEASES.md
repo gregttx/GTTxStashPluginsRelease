@@ -8,6 +8,14 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.21.4 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 1.21.3 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
+| 1.21.2 (`119f817`) | 2026-09-22 | SceneVariants 1.21.2: review and rename scans hold set members only, the flag scan a slim record |
+| 1.21.1 (`34e4df1`) | 2026-09-22 | SceneVariants 1.21.1: titleParts reads keys first, full fields of set members only |
+| 1.21.0 (`66de589`) | 2026-09-22 | SceneVariants 1.21.0: publish stashIds for Scene Filename Manager |
+| 1.20.0 (`8525b9e`) | 2026-09-21 | SceneVariants 1.20.0: publish titleParts for Scene Filename Manager |
+| 1.19.2 (`371b8ec`) | 2026-09-21 | SceneVariants 1.19.2: the (ignored) after a title is grey |
+| 1.19.1 (`9ce48a2`) | 2026-09-21 | SceneVariants 1.19.1: an uncounted title difference reads Title (ignored) on the tab |
 | 1.19.0 (`4b81402`) | 2026-09-21 | SceneVariants 1.19.0: a locked variant field is only ever added |
 | 1.18.1 (`ff04112`) | 2026-09-21 | SceneVariants 1.18.1: the Variants tab's drift score matches the review's |
 | 1.18.0 (`06315d2`) | 2026-09-21 | SceneVariants 1.18.0: a pinned base name is not title drift, and the review can exclude organized scenes |

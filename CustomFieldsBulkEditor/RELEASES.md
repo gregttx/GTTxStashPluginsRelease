@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.3.2 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 3.3.1 (`9208353`) | 2026-09-22 | CustomFieldsBulkEditor 3.3.1: the whole-library read counts as it goes |
 | 3.3.0 (`3c7e906`) | 2026-09-21 | CustomFieldsBulkEditor 3.3.0: locked fields are marked in the descriptions dialog |
 | 3.2.3 (`1db94bb`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.3: Undo never removes a locked field |
 | 3.2.2 (`8e0a443`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.2: a locked field can still be added where missing |

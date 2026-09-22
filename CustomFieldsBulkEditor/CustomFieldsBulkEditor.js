@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.3.0';
+  var PLUGIN_VERSION = '3.3.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -1497,8 +1497,10 @@
     this.spec = type ? ENTITIES[type] : null;   // null: the whole library, every type
     this.specs = type ? [ENTITIES[type]] : allSpecs(this.settings);
     this.ids = ids || [];
-    // { id, label, fields } per entity that still exists, in selection order.
+    // { id, label, fields } per entity that still exists, in selection order, and how
+    // many of them carry a custom field.
     this.entities = [];
+    this.withFields = 0;
     // The listing, flattened: one per (entity, custom field).
     this.rows = [];
     // What the last Apply wrote, and what each entity carried before it. This is what
@@ -2096,6 +2098,7 @@
   // replaces it, which is the one thing that can.
   Run.prototype.rescan = function () {
     this.entities = [];
+    this.withFields = 0;
     this.rows = [];
     this.applied = 0;
     this.failed = 0;
@@ -2207,12 +2210,21 @@
         // than silently dropped: the count in the head came from the selection.
         if (!ent) { self.msg('WARN', spec.label + ' ' + id + ' no longer exists.'); return; }
         if (!self.keep(spec, ent)) return;
-        self.entities.push({
-          spec: spec, id: String(ent.id), display: displayName(ent) || 'untitled',
-          fields: ent.custom_fields || {},
-        });
+        self.take(spec, ent);
       });
     });
+  };
+
+  // One entity kept, and the count of those carrying a field kept with it: the progress
+  // line asked that question of every entity read so far, on every page and again on
+  // every batch written, which is a pass over the whole library per page.
+  Run.prototype.take = function (spec, ent) {
+    var fields = ent.custom_fields || {};
+    for (var k in fields) {
+      if (hasOwn(fields, k)) { this.withFields++; break; }
+    }
+    this.entities.push({ spec: spec, id: String(ent.id),
+      display: displayName(ent) || 'untitled', fields: fields });
   };
 
   // The task's read: one query per type, paged. `per_page: -1` is the repo's
@@ -2251,10 +2263,7 @@
         var list = res[spec.key] || [];
         list.forEach(function (ent) {
           if (!self.keep(spec, ent)) return;
-          self.entities.push({
-            spec: spec, id: String(ent.id), display: displayName(ent) || 'untitled',
-            fields: ent.custom_fields || {},
-          });
+          self.take(spec, ent);
         });
         read += list.length;
         self.loadingWhat = spec.plural.toLowerCase() + ' - ' + read +
@@ -2741,10 +2750,7 @@
   };
 
   Run.prototype.renderProgress = function (listed) {
-    var withFields = this.entities.filter(function (e) {
-      for (var k in e.fields) { if (hasOwn(e.fields, k)) return true; }
-      return false;
-    }).length;
+    var withFields = this.withFields;
 
     var summary;
     if (this.state === 'loading') {
@@ -3388,6 +3394,7 @@
     this.spec = null;                       // always a whole-library read
     this.specs = allSpecs(this.settings);
     this.entities = [];
+    this.withFields = 0;
     this.rows = [];
     this.changes = [];
     this.applied = 0;
@@ -3564,6 +3571,7 @@
   DescRun.prototype.fillList = Run.prototype.fillList;
   DescRun.prototype.load = Run.prototype.load;          // `spec` is null: the task's branch
   DescRun.prototype.loadAll = Run.prototype.loadAll;
+  DescRun.prototype.take = Run.prototype.take;
   DescRun.prototype.keep = Run.prototype.keep;
   DescRun.prototype.checkVersion = Run.prototype.checkVersion;
   DescRun.prototype.runWrites = Run.prototype.runWrites;

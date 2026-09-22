@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '2.4.0';
+  var PLUGIN_VERSION = '2.6.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -296,6 +296,47 @@
   // Stash is commonly served over plain HTTP on a LAN, where the async clipboard API does
   // not exist at all, so the textarea fallback is what makes this work for the users most
   // likely to press the button.
+  // ── A run's log, bounded ──────────────────────────────────────────────────
+  //
+  // The log a run keeps is for Copy log, so it grows with the run rather than with the
+  // screen: every dialog here renders only its last thousand lines and held all of
+  // them. A library-wide pass can write millions - one Normalize Parent Tags run over
+  // 100,000 scenes and 1,000,000 images kept 9.8 million, gigabytes of strings, next to
+  // a plan that was already the largest thing in the page.
+  //
+  // So the array is bounded and says what it dropped, which the copy then says too. The
+  // oldest tenth goes at once rather than a line per line, so a run pays for the trim
+  // once every `cap / 10` lines instead of on every one of them.
+  var LOG_KEEP = 200000;
+  var LOG_KEEP_MIN = 1000;
+  var LOG_KEEP_MAX = 5000000;
+
+  // The setting, when it has been read and is a number in range; the default until then.
+  // Read off the cache rather than awaited: this is called once per line written, and a
+  // cap that starts at the default and moves on the next settings read is what a caller
+  // can afford.
+  function logKeep() {
+    var n = parseInt(settings().a5LogLinesKept, 10);
+    if (isNaN(n)) return LOG_KEEP;
+    return Math.max(LOG_KEEP_MIN, Math.min(LOG_KEEP_MAX, n));
+  }
+
+  function keepLog(lines, cap) {
+    var max = cap || logKeep();
+    if (lines.length <= max) return 0;
+    var drop = Math.max(1, Math.round(max / 10));
+    lines.splice(0, drop);
+    return drop;
+  }
+
+  // The line a copy opens with when the oldest lines are gone, or ''.
+  function droppedLine(dropped, kind) {
+    if (!dropped) return '';
+    return '[' + (kind || 'INFO') + '] The first ' + dropped + ' lines of this log are not ' +
+      'kept, so this copy begins after them. The last ' + logKeep() + ' are here - ' +
+      'ᝯㄝₓ Core\'s Log Lines Kept setting says how many.';
+  }
+
   function copyToClipboard(text, done) {
     function fallback() {
       try {
@@ -1660,6 +1701,7 @@
     a2SelectPaste: false,
     a3SameTab: false,
     a4HeadingCounts: false,
+    a5LogLinesKept: '',
     b1DevMods: '',
   };
   var _settings = null;
@@ -2487,6 +2529,7 @@
     byClass: byClass, gqlRequest: gqlRequest, settingElement: settingElement,
     settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, waitingOn: waitingOn,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
+    keepLog: keepLog, droppedLine: droppedLine, logKeep: logKeep, LOG_KEEP: LOG_KEEP,
     splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
     linkTarget: linkTarget, holdWidth: holdWidth, fieldLocks: fieldLocks,
     tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace, tipRatingBadge: tipRatingBadge,

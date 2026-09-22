@@ -107,6 +107,21 @@ read from your library for it, and nothing but the heading's text changes.
 It is off by default because it changes a page this plugin does not own. Turn it off and every
 heading goes back to Stash's own word on the next tick.
 
+### How many log lines a dialog keeps
+
+Every ᝯㄝₓ dialog shows the last 1,000 lines of its log — a node per line is a page that stops
+responding — and keeps the rest so **Copy log** can hand over the whole run. That buffer is what a
+library-wide run grows: ᝯㄝₓ Normalize Parent Tags over 100,000 scenes and 1,000,000 images writes
+9.8 million lines, several gigabytes of them, beside a plan that is already the largest thing in
+the page.
+
+**Log Lines Kept** is how many are kept, 200,000 by default and anywhere from 1,000 to 5,000,000.
+Past it the oldest lines are dropped and the copy opens by saying how many went. Nothing else is
+affected: the listing, the counters, what is written and what Undo can take back are all whole.
+
+About 200 bytes a line, so 200,000 lines is roughly 40 MB. Raise it if you copy the logs of very
+large runs; lower it on a machine short of memory. A run of a few thousand lines never reaches it.
+
 ### Dev Mods
 
 Three switches for working on these plugins rather than for using them. Press **Dev Mods…** in the

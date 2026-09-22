@@ -26,6 +26,7 @@
   }
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
+    keepLog = C.keepLog, droppedLine = C.droppedLine,
     linkTarget = C.linkTarget, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen,
     tipClose = C.tipClose, tagTip = C.tagTip, tipText = C.tipText, tagTipNames = C.tagTipNames,
@@ -75,7 +76,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.1.3';
+  var PLUGIN_VERSION      = '4.1.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -1671,7 +1672,10 @@
   // either way - Copy log hands over text, and a tooltip is not text.
   TaskRun.prototype.log = function (kind, message, parts) {
     var line = '[' + kind + '] ' + message;
+    this.logged = (this.logged || 0) + 1;
     this.lines.push(line);
+    // Bounded, because the copy buffer is what a library-wide pass grows without limit.
+    this.logDropped = (this.logDropped || 0) + keepLog(this.lines);
     this.pending.push({ kind: kind, line: line, parts: parts || null });
     this.scheduleFlush();
   };
@@ -1750,8 +1754,8 @@
         (this.stopped ? ' (stopped early; what was written stays written)' : '');
     }
     if (this.errors) summary += ', ' + plural(this.errors, 'error');
-    if (this.lines.length > TASK_LOG_CAP) {
-      summary += ' - showing the last ' + TASK_LOG_CAP + ' of ' + this.lines.length + ' lines';
+    if ((this.logged || 0) > TASK_LOG_CAP) {
+      summary += ' - showing the last ' + TASK_LOG_CAP + ' of ' + this.logged + ' lines';
     }
     this.progressEl.textContent = summary;
   };
@@ -2516,7 +2520,7 @@
   };
 
   TaskRun.prototype.copy = function () {
-    var text = this.lines.join('\n');
+    var text = [droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n');
     var self = this;
     function done(ok) {
       holdWidth(self.copyBtn);

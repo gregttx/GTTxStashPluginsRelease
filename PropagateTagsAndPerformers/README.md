@@ -622,6 +622,23 @@ not your library.
   yet, the sentence waits until you next open **Manage Custom Field Descriptions...** and press
   Apply.
 
+## What a run costs in memory
+
+<!-- memory:start -->
+Against a library of 100,000 scenes and 1,000,000 images, with each task set to cover everything it can — the worst case, not a typical run:
+
+| Task | While it reads and plans | While it writes | Held for Undo |
+|---|--:|--:|--:|
+| Propagate All | 1777 MB | 1822 MB | 1819 MB |
+
+All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
+<!-- memory:end -->
+
+A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+whole run. Past ᝯㄝₓ Core's **Log Lines Kept** (200,000 by default) the oldest lines are dropped
+and the copy says how many went; nothing else changes — the plan, the counters, what is written
+and what Undo takes back are all whole.
+
 ## Troubleshooting
 
 ### Why is a button missing?

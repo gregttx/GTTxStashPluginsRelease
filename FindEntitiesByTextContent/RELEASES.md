@@ -8,6 +8,10 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.2.5 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 3.2.4 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
+| 3.2.3 (`fe3987f`) | 2026-09-22 | FindEntitiesByTextContent 3.2.3: the number box takes the standard input background |
+| 3.2.2 (`d40d2a0`) | 2026-09-22 | FindEntitiesByTextContent 3.2.2: the dialog title is the plugin's full name |
 | 3.2.1 (`11cbd46`) | 2026-09-21 | FindEntitiesByTextContent 3.2.1: asks the locks through Core's fieldLocks() |
 | 3.2.0 (`8315bdd`) | 2026-09-21 | CustomFieldsBulkEditor 3.2.0, FindEntitiesByTextContent 3.2.0: locked custom fields |
 | 3.1.3 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |

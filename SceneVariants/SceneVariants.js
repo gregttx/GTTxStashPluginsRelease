@@ -45,7 +45,7 @@
     return;
   }
   var coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
     entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '1.19.0';
+  var PLUGIN_VERSION = '1.21.4';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -836,7 +836,8 @@
             ' from ' + matchedOn(ids, own));
           var nm = naming(s);
           return {
-            rows: ordered(others, self, m, self ? expectedMap([self].concat(others), m, nm) : null),
+            rows: ordered(others, self, m, self ? expectedMap([self].concat(others), m, nm) : null,
+              nm.baseField),
             // The viewed scene as the query returned it - the delta's other side, and
             // what the synchronize task pushes from: the same fields, selected the same
             // way, for both readers.
@@ -986,17 +987,26 @@
   // `expected`, the set's titles under the naming rule where it has any: a title is then
   // a difference only where a side that has an expected title is not wearing it - a
   // partial named after its set does not differ from the scene it is named after, and
-  // the review's title count says the same.
-  function deltaOf(self, other, expected) {
+  // the review's title count says the same. A side carrying the base-name field
+  // (`baseField`) is left out the way the review leaves it out. A title that differs
+  // but is not counted - pinned, following the rule, or on a scene the rule skips -
+  // is listed as "Title (ignored)" rather than dropped, "(ignored)" in grey, so the box still says it differs.
+  function deltaOf(self, other, expected, baseField) {
     if (!self || String(self.id) === String(other.id)) return null;
     var d = tagDelta(self, other), out = [];
+    var pinned = function (sc) {
+      var v = baseField && sc.custom_fields && sc.custom_fields[baseField];
+      return typeof v === 'string' && !!trim(v);
+    };
     var titleDiffers = function () {
-      var ruled = expected && (hasOwn(expected, String(self.id)) || hasOwn(expected, String(other.id)));
-      if (!ruled) return attrValue(self, ATTRS[0]) !== attrValue(other, ATTRS[0]);
+      if (!expected) return !pinned(self) && !pinned(other) &&
+        attrValue(self, ATTRS[0]) !== attrValue(other, ATTRS[0]);
       return [self, other].some(function (sc) {
-        return hasOwn(expected, String(sc.id)) && (sc.title || '') !== expected[String(sc.id)];
+        return !pinned(sc) && hasOwn(expected, String(sc.id)) &&
+          (sc.title || '') !== expected[String(sc.id)];
       });
     };
+    var titleIgnored = false;
     if (d.extra.length) {
       out.push({ head: 'Extra ' + plural(d.extra.length, 'tag') + ':',
         body: d.extra.join(', '), kind: 'extra' });
@@ -1006,10 +1016,14 @@
         body: d.missing.join(', '), kind: 'missing' });
     }
     var differ = ATTRS.filter(function (a) {
-      return a.key === 'title' ? titleDiffers() : attrValue(self, a) !== attrValue(other, a);
+      if (a.key !== 'title') return attrValue(self, a) !== attrValue(other, a);
+      if (titleDiffers()) return true;
+      titleIgnored = attrValue(self, a) !== attrValue(other, a);
+      return false;
     }).map(function (a) { return a.label; });
-    if (differ.length) {
-      out.push({ head: 'Differing attributes:', body: differ.join(', '), kind: 'attrs' });
+    if (differ.length || titleIgnored) {
+      out.push({ head: 'Differing attributes:', body: differ.join(', '), kind: 'attrs',
+        ignored: titleIgnored ? ATTRS[0].label : '' });
     }
     if (!out.length) out.push({ head: '', body: 'Same tags and attributes as this scene.' });
     return { sections: out, extra: d.extra.length, missing: d.missing.length,
@@ -1046,9 +1060,9 @@
   // than one candidate at the top - which the user says is rare.
   var ROLE_RANK = { fl: 0, none: 1, bad: 1, pl: 2 };
 
-  function ordered(variants, self, m, expected) {
+  function ordered(variants, self, m, expected, baseField) {
     return variants.map(function (scene) {
-      return { scene: scene, cls: classify(scene, m), delta: deltaOf(self, scene, expected) };
+      return { scene: scene, cls: classify(scene, m), delta: deltaOf(self, scene, expected, baseField) };
     }).sort(function (a, b) {
       var ra = ROLE_RANK[a.cls.role], rb = ROLE_RANK[b.cls.role];
       if (ra !== rb) return ra - rb;
@@ -2135,7 +2149,10 @@
   Run.prototype.appendLine = function (line, text, sub) {
     this.logEl.appendChild(line);
     if (sub) this.logEl.appendChild(sub);
+    this.logged = (this.logged || 0) + 1;
     this.logText.push(text);
+    // Bounded, because the copy buffer is what a library-wide run grows without limit.
+    this.logDropped = (this.logDropped || 0) + keepLog(this.logText);
     this.capLog();
     if (this.spinEl) this.logEl.appendChild(this.spinEl);
     this.scrollLog();
@@ -2218,8 +2235,8 @@
     }
     if (this.written) parts.push(plural(this.written, this.task.planUnit || 'scene') + ' written');
     if (this.failed) parts.push(plural(this.failed, 'failure'));
-    if (this.logText.length > LOG_RENDER_CAP) {
-      parts.push('showing the last ' + LOG_RENDER_CAP + ' of ' + this.logText.length + ' lines');
+    if ((this.logged || 0) > LOG_RENDER_CAP) {
+      parts.push('showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines');
     }
     return parts.join('. ') + '.';
   };
@@ -2248,7 +2265,8 @@
 
   Run.prototype.copyLog = function () {
     var self = this;
-    var text = [this.progressEl.textContent].concat(this.logText).join('\n');
+    var text = [this.progressEl.textContent, droppedLine(this.logDropped)].filter(Boolean)
+      .concat(this.logText).join('\n');
     var was = this.copyBtn.textContent;
     copyToClipboard(text, function (ok) {
       holdWidth(self.copyBtn);
@@ -2708,7 +2726,7 @@
   // One pass of the scan: pages through one query, collecting scenes not already seen
   // by an earlier pass. `total` is left alone - the three counts overlap, so there is
   // no honest denominator and the progress line counts scenes rather than promising one.
-  function flagScanPass(run, query, vars, seen, scenes) {
+  function flagScanPass(run, query, vars, seen, scenes, keep) {
     function page(p) {
       var v = { f: { page: p, per_page: READ_PAGE, sort: 'id', direction: 'ASC' } }, k;
       for (k in vars) if (hasOwn(vars, k)) v[k] = vars[k];
@@ -2717,7 +2735,7 @@
         got.forEach(function (sc) {
           if (hasOwn(seen, String(sc.id))) return;
           seen[String(sc.id)] = true;
-          scenes.push(sc);
+          scenes.push(keep ? keep(sc) : sc);
           run.scanned++;
         });
         // A task that can say more about what it has read so far says it here, before
@@ -2766,14 +2784,23 @@
       run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
         '" line with another scene, to put "' + name + '" on exactly those.');
       var seen = {}, scenes = [];
-      return flagScanPass(run, FLAG_BY_STASHID_QUERY, {}, seen, scenes)
+      // What the plan reads of a scene, taken as its page lands: the scene as read is
+      // not kept, so the scan holds a few strings per scene rather than its tags and
+      // every custom field.
+      var keep = function (sc) {
+        return { id: sc.id, name: sceneName(sc), keys: sceneKeys(sc, field),
+          flagged: !!run.flagTagId && (sc.tags || []).some(function (t) {
+            return String(t.id) === run.flagTagId;
+          }) };
+      };
+      return flagScanPass(run, FLAG_BY_STASHID_QUERY, {}, seen, scenes, keep)
         .then(function () {
           return run.stopped ? null
-            : flagScanPass(run, FLAG_BY_FIELD_QUERY, { field: field }, seen, scenes);
+            : flagScanPass(run, FLAG_BY_FIELD_QUERY, { field: field }, seen, scenes, keep);
         })
         .then(function () {
           return (run.stopped || !run.flagTagId) ? null
-            : flagScanPass(run, FLAG_BY_TAG_QUERY, { tags: [run.flagTagId] }, seen, scenes);
+            : flagScanPass(run, FLAG_BY_TAG_QUERY, { tags: [run.flagTagId] }, seen, scenes, keep);
         })
         .then(function () {
           if (run.stopped) return null;
@@ -2782,7 +2809,7 @@
           // cannot carry it, and the listing is where a number is worth a glance.
           var byKey = {};
           scenes.forEach(function (sc) {
-            sceneKeys(sc, field).forEach(function (k) {
+            sc.keys.forEach(function (k) {
               (byKey[k] = byKey[k] || []).push(String(sc.id));
             });
           });
@@ -2810,25 +2837,23 @@
           });
           scenes.forEach(function (sc) {
             var id = String(sc.id), partners = {}, n = 0;
-            var keys = sceneKeys(sc, field);
+            var keys = sc.keys;
             keys.forEach(function (k) {
               byKey[k].forEach(function (other) {
                 if (other !== id && !hasOwn(partners, other)) { partners[other] = true; n++; }
               });
             });
-            var flagged = run.flagTagId && (sc.tags || []).some(function (t) {
-              return String(t.id) === run.flagTagId;
-            });
+            var flagged = sc.flagged;
             // A flagged scene with no evidence at all is not unflagged by machine: the
             // flag is either left over or the user's own "group these" mark, and the
             // two are indistinguishable from here. Listed as a [GROUP?] candidate and
             // decided by the buttons instead.
             if (flagged && !keys.length) {
-              run.candLine({ id: id, title: sceneName(sc) });
+              run.candLine({ id: id, title: sc.name });
               return;
             }
             if (!!flagged === (n > 0)) return;
-            var job = { id: id, title: sceneName(sc), flag: n > 0, others: n };
+            var job = { id: id, title: sc.name, flag: n > 0, others: n };
             run.jobs.push(job);
             run.jobLine(job);
           });
@@ -4895,14 +4920,9 @@
         'after its set: "<base>' + bareTitle('', nm.postfix) + '"' + (nm.first
           ? ', with an index counted from "' + nm.first + '"' + (nm.loneIndex ? '.' : ' where a set has more than one.')
           : ', with no index.'));
-      var seen = {}, scenes = [];
       run.afterPage = function (got) { run.setCount = variantSetsOf(got, field).length; };
-      return flagScanPass(run, REVIEW_BY_STASHID_QUERY, {}, seen, scenes)
-        .then(function () {
-          return run.stopped ? null
-            : flagScanPass(run, REVIEW_BY_FIELD_QUERY, { field: field }, seen, scenes);
-        })
-        .then(function () {
+      return setMembersScan(run, field)
+        .then(function (scenes) {
           if (run.stopped) return null;
           run.scannedSets = variantSetsOf(scenes, field);
           run.setCount = run.scannedSets.length;
@@ -5028,6 +5048,44 @@
     'query SVRReviewScanField($f: FindFilterType, $field: String!) { findScenes(' +
     'scene_filter: { custom_fields: [{ field: $field, value: [], modifier: NOT_NULL }] }, ' +
     'filter: $f) ' + REVIEW_SCENE_SEL + ' }';
+
+  // The same two scans reading a scene's keys alone, and the full fields read back by id.
+  var KEYS_SEL = '{ count scenes { id custom_fields stash_ids { endpoint stash_id } } }';
+  var KEYS_BY_STASHID_QUERY = REVIEW_BY_STASHID_QUERY.replace('SVRReviewScanIds', 'SVRReviewScanIdsKeys')
+    .replace(REVIEW_SCENE_SEL, KEYS_SEL);
+  var KEYS_BY_FIELD_QUERY = REVIEW_BY_FIELD_QUERY.replace('SVRReviewScanField', 'SVRReviewScanFieldKeys')
+    .replace(REVIEW_SCENE_SEL, KEYS_SEL);
+  var SET_SCENES_QUERY = 'query SVRSetScenes($ids: [ID!]) { findScenes(ids: $ids, ' +
+    'filter: { per_page: -1 }) ' + REVIEW_SCENE_SEL + ' }';
+
+  // Every member of a variant set, in full, in id order. Two passes: every scene's keys
+  // alone, paged, to find the sets - `run.afterPage` counts them as pages land - then the
+  // full fields of the members only, `READ_PAGE` at a time. A library where most scenes
+  // carry a stash-id and few share one is never held in full.
+  function setMembersScan(run, field) {
+    var seen = {}, keys = [], full = [];
+    return flagScanPass(run, KEYS_BY_STASHID_QUERY, {}, seen, keys).then(function () {
+      return run.stopped ? null : flagScanPass(run, KEYS_BY_FIELD_QUERY, { field: field }, seen, keys);
+    }).then(function () {
+      var ids = [];
+      if (!run.stopped) {
+        variantSetsOf(keys, field).forEach(function (set) {
+          set.scenes.forEach(function (sc) { ids.push(Number(sc.id)); });
+        });
+      }
+      keys = null;
+      ids.sort(function (a, b) { return a - b; });
+      var next = function (i) {
+        if (i >= ids.length || run.stopped) return Promise.resolve(full);
+        return gqlRequest(SET_SCENES_QUERY, { ids: ids.slice(i, i + READ_PAGE).map(String) })
+          .then(function (data) {
+            full = full.concat((((data || {}).findScenes) || {}).scenes || []);
+            return next(i + READ_PAGE);
+          });
+      };
+      return next(0);
+    });
+  }
 
   // The weights in force: what the dialog's strip holds, seeded from the settings when
   // they have been remembered and from the defaults when they have not.
@@ -5359,18 +5417,13 @@
       var pruning = nptPruner(s).then(function (w) { run.pruner = w; });
       run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
         '" line with another, to give each set its drift score.');
-      var seen = {}, scenes = [];
       // The count the listing is about, updated as pages land rather than only at the
       // end: a library-wide scan is the one place here that runs for minutes, and
       // "scenes read" alone says nothing about whether it is finding anything.
       run.afterPage = function (got) { run.setCount = variantSetsOf(got, field).length; };
       return pruning
-        .then(function () { return flagScanPass(run, REVIEW_BY_STASHID_QUERY, {}, seen, scenes); })
-        .then(function () {
-          return run.stopped ? null
-            : flagScanPass(run, REVIEW_BY_FIELD_QUERY, { field: field }, seen, scenes);
-        })
-        .then(function () {
+        .then(function () { return setMembersScan(run, field); })
+        .then(function (scenes) {
           if (run.stopped) return null;
           var raw = variantSetsOf(scenes, field);
           // The covers, once the sets are known - and only for scenes that are *in*
@@ -5717,6 +5770,7 @@
     '.svr-delta-extra{color:#84d68a;}' +
     '.svr-delta-missing{color:#ff7b72;}' +
     '.svr-delta-attrs{color:#7cc4ff;}' +
+    '.svr-delta-ignored{color:#8a8a8a;}' +
     // The asked-for half-line of air between sections, and only between them.
     '.svr-delta-sec+.svr-delta-sec{margin-top:.5em;}' +
     // A fixed 16:9 box, so a row is the same height whatever the cover's aspect is and the
@@ -6184,7 +6238,11 @@
           }
           bits.push(sec.kind
             ? React.createElement('span',
-              { key: 'b', className: 'svr-delta-' + sec.kind }, sec.body)
+              { key: 'b', className: 'svr-delta-' + sec.kind }, sec.ignored
+                ? [sec.ignored, React.createElement('span',
+                  { key: 'i', className: 'svr-delta-ignored' }, ' (ignored)'),
+                  sec.body ? ', ' + sec.body : '']
+                : sec.body)
             : sec.body);
           return React.createElement('div', { key: 's' + i, className: 'svr-delta-sec' }, bits);
         })));
@@ -6925,6 +6983,46 @@
   // down" from "too old to know".
   coop().respecters[PLUGIN_ID] = true;
   installSaveWatch();
+
+  // For ᝯㄝₓ Scene Filename Manager's rename template: the base title and partial
+  // postfix of every scene in a variant set whose base the naming rule reads, as
+  // { sceneId: { base, postfix } }. A read call, library-wide - the two scans Review
+  // Variant Sets runs - so its caller asks once per run. A full-duration scene, or a
+  // partial the rule skips, has the base and an empty postfix.
+  function apiTitleParts() {
+    return Promise.all([settingsReady(), tagTree()]).then(function (both) {
+      var s = both[0], m = matchers(both[1], s), nm = naming(s), field = fieldName(s);
+      var quiet = { scanned: 0, progress: function () {}, progressText: function () { return ''; } };
+      return setMembersScan(quiet, field).then(function (scenes) {
+        var out = {};
+        variantSetsOf(scenes, field).forEach(function (set) {
+          var n = namingOf(set.scenes, m, nm), base = n.base.base;
+          if (!base) return;
+          set.scenes.forEach(function (sc) {
+            var id = String(sc.id);
+            var want = n.expected && hasOwn(n.expected, id) ? n.expected[id] : '';
+            out[id] = { base: base,
+              postfix: want.indexOf(base) === 0 ? want.slice(base.length) : '' };
+          });
+        });
+        return out;
+      });
+    });
+  }
+
+  // For its `stashid` token: every name a scene is known by as a work - its own
+  // stash-ids spelled the way the field stores them, then what the field holds - as
+  // `sceneKeys` reads them. The worker reads the scene it is handed, which must carry
+  // `stash_ids` and `custom_fields`.
+  function apiStashIds() {
+    return settingsReady().then(function (s) {
+      var field = fieldName(s);
+      return { of: function (scene) { return sceneKeys(scene, field); } };
+    });
+  }
+
+  coop().api[PLUGIN_ID] = { version: PLUGIN_VERSION, titleParts: apiTitleParts,
+    stashIds: apiStashIds };
 
   if (window.addEventListener) {
     window.addEventListener('load', function () {

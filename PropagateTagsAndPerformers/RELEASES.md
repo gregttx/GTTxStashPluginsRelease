@@ -8,6 +8,9 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.2.5 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 5.2.4 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
+| 5.2.3 (`19f0a3a`) | 2026-09-22 | PropagateTagsAndPerformers 5.2.3: the progress line says Review complete and Finished |
 | 5.2.2 (`e9a80b2`) | 2026-09-20 | PropagateTagsAndPerformers 5.2.2: a bulk button with nothing to do is unavailable |
 | 5.2.1 (`9da8af3`) | 2026-09-20 | PropagateTagsAndPerformers 5.2.1: OK is unavailable while nothing is ticked |
 | 5.2.0 (`549fc1e`) | 2026-09-20 | Core 2.3.0, PropagateTagsAndPerformers 5.2.0, SceneVariants 1.9.6: the review says who is waiting on it |

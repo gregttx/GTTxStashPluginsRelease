@@ -42,7 +42,7 @@
     return;
   }
   var coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
     entityTipCountry = C.entityTipCountry, entityTipGender = C.entityTipGender,
@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.2.1';
+  var PLUGIN_VERSION = '3.2.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -449,7 +449,7 @@
     // sit a clear step away from the search box rather than at the row's own gap.
     '.fretc-opts{display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;' +
     'margin-left:.5rem;}' +
-    '.fretc-num{background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
+    '.fretc-num{background:#30404d;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
     'padding:.25rem .35rem;width:4rem;}' +
     '.fretc-check{display:flex;align-items:center;gap:.35rem;color:#a7b6c2;font-size:.85rem;' +
     'white-space:nowrap;cursor:pointer;margin:0;}' +
@@ -981,7 +981,7 @@
 
     var head = el('div', 'fretc-head');
     // A plain block, so a title too long for one line wraps rather than being clipped.
-    this.titleEl = el('div', 'fretc-title', PLUGIN_SHORT_NAME);
+    this.titleEl = el('div', 'fretc-title', PLUGIN_NAME);
     head.appendChild(this.titleEl);
     this.staleEl = el('div', 'fretc-stale fretc-hidden', '');
     head.appendChild(this.staleEl);
@@ -1541,6 +1541,8 @@
     line.textContent = '[' + kind + '] ' + message;
     this.logEl.appendChild(line);
     this.logText.push('[' + kind + '] ' + message);
+    // Bounded, because the copy buffer is what a library-wide search grows without limit.
+    this.logDropped = (this.logDropped || 0) + keepLog(this.logText);
     if (this.spinEl) this.logEl.appendChild(this.spinEl);   // back to the end
     this.scrollLog();
     return line;
@@ -1675,7 +1677,7 @@
     this.show(this.attrRow, false);
     this.shownFrom = 0;
     this.remember(text);
-    this.titleEl.textContent = PLUGIN_SHORT_NAME + ' - "' + text + '"';
+    this.titleEl.textContent = PLUGIN_NAME + ' - "' + text + '"';
     this.queue = this.chosen().slice();
     // The queue is consumed as the search goes; this stays, so the breakdown goes on
     // naming every type the search covers rather than only the ones it has left.
@@ -2220,6 +2222,7 @@
       if (self.shownAttrs(hit).length) lines.push(self.resultText(hit));
     });
     lines.push('');
+    if (this.logDropped) lines.push(droppedLine(this.logDropped));
     this.logText.forEach(function (l) { lines.push(l); });
     var was = this.copyBtn.textContent;
     copyToClipboard(lines.join('\n'), function (ok) {

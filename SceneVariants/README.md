@@ -95,7 +95,7 @@ scene carries and it does not. The last section names the attributes that disagr
 studio, performers, groups, rating, studio code, director, details, URLs, Organized — and **only
 their names**: which fields differ is what sends you to the two pages; what each of them says is a
 question for those pages. A list attribute in a different order is not a difference: the same three
-performers on both scenes agree, however each page has them sorted. A variant that differs in
+performers on both scenes agree, however each page has them sorted. A title that differs but does not count toward drift is listed as **Title (ignored)**, the "(ignored)" in grey, and left out of the badge: a partial wearing the title the naming rule expects, a scene the rule skips, or one whose base name is pinned in the base-name field. A variant that differs in
 nothing says so. The tag that decided a row's label is on the row's tooltip, which is how an alias
 or a child tag says which one it matched.
 
@@ -579,6 +579,11 @@ many there are. The plugin uses all of them; the link goes to the first.
 - **ᝯㄝₓ Custom Fields Bulk Editor**, where it is present, is handed a description of the variant
   stash-id field for its description store at load; the console says whether it was filed or is
   waiting for an Apply in that plugin's **Manage Custom Field Descriptions...** dialog.
+- **ᝯㄝₓ Scene Filename Manager** asks this plugin, once per Rename Files From Metadata run, for
+  each variant's base title and partial postfix under the title rules here, so a file can be
+  named after its set; the answer covers every set Review Variant Sets would find. For its
+  `stashid` token it asks for each scene's stash-ids - its own, spelled `stashdb.org:<id>`, then
+  what the variant stash-id field holds.
 - **The merge plugins** read the never-propagate mark the flag tag is created with, so the flag is
   never merged onto anything.
 
@@ -610,6 +615,26 @@ the plugin knows; the two tag names are the only part of it you can configure.
 
 **No scrubber on the covers, and no O-counter.** A cover carries the preview loop, the rating and
 the Organized mark, and nothing else of Stash's own scene card.
+
+## What a run costs in memory
+
+<!-- memory:start -->
+Against a library of 100,000 scenes and 1,000,000 images, with each task set to cover everything it can — the worst case, not a typical run:
+
+| Task | While it reads and plans | While it writes | Held for Undo |
+|---|--:|--:|--:|
+| Migrate Variant Stash-IDs | 58 MB | 73 MB | 73 MB |
+| Flag Variants | 46 MB | 64 MB | 58 MB |
+| Review Variant Sets | 1936 MB | — | — |
+| Rename Variants | 629 MB | 635 MB | 635 MB |
+
+All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
+<!-- memory:end -->
+
+A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+whole run. Past ᝯㄝₓ Core's **Log Lines Kept** (200,000 by default) the oldest lines are dropped
+and the copy says how many went; nothing else changes — the plan, the counters, what is written
+and what Undo takes back are all whole.
 
 ## Troubleshooting
 

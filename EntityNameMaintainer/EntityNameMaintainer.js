@@ -46,7 +46,7 @@
     return;
   }
   var coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
     entityTipCountry = C.entityTipCountry, entityTipGender = C.entityTipGender,
@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.4.0';
+  var PLUGIN_VERSION = '2.4.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1241,6 +1241,8 @@
     line.textContent = '[' + kind + '] ' + message;
     this.logEl.appendChild(line);
     this.logText.push('[' + kind + '] ' + message);
+    // Bounded, because the copy buffer is what a long-running dialog grows without limit.
+    this.logDropped = (this.logDropped || 0) + keepLog(this.logText);
     if (this.spinEl) this.logEl.appendChild(this.spinEl);   // back to the end
     this.scrollLog();
     if (this.settings.d1LogToConsole) enm('[enm] ' + kind + ': ' + message);
@@ -1745,6 +1747,7 @@
         h.ctx.pre + h.ctx.hit + h.ctx.post);
     });
     lines.push('');
+    if (this.logDropped) lines.push(droppedLine(this.logDropped));
     this.logText.forEach(function (l) { lines.push(l); });
     var was = this.copyBtn.textContent;
     copyToClipboard(lines.join('\n'), function (ok) {

@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.5.6 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 5.5.5 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 5.5.4 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |
 | 5.5.3 (`56e09fa`) | 2026-09-18 | NormalizeParentTags 5.5.3: the button holds its size through the flash |
 | 5.5.2 (`6a9f3c9`) | 2026-09-18 | NormalizeParentTags 5.5.2: Prune Tags and Roll Up Tags are disabled, never removed, when there is nothing to do |

@@ -10,6 +10,30 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SFM | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-22 |  |  |  |  |  |  |  | 1.0.0 (`7aafdc7`) |  |  | SceneFilenameManager 1.0.0: 0 performers names none, and performercount |
+| 2026-09-22 | 3.3.2 (`021a16c`) | 2.4.2 (`021a16c`) | 3.2.5 (`021a16c`) | 2.6.0 (`021a16c`) | 4.1.5 (`021a16c`) | 5.5.6 (`021a16c`) | 5.2.5 (`021a16c`) | 0.8.4 (`021a16c`) | 1.21.4 (`021a16c`) |  | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
+| 2026-09-22 |  | 2.4.1 (`69afdae`) | 3.2.4 (`69afdae`) | 2.5.0 (`69afdae`) | 4.1.4 (`69afdae`) | 5.5.5 (`69afdae`) | 5.2.4 (`69afdae`) | 0.8.3 (`69afdae`) | 1.21.3 (`69afdae`) |  | Core 2.5.0 and seven plugins: a run's log is bounded |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.8.2 (`0fe713b`) |  |  | SceneFilenameManager 0.8.2: the cut warning says what the name would have been |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.8.1 (`533a7f1`) |  |  | SceneFilenameManager 0.8.1: only a name that was cut is reported as cut |
+| 2026-09-22 |  |  | 3.2.3 (`fe3987f`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 3.2.3: the number box takes the standard input background |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.8.0 (`e90e288`) |  |  | SceneFilenameManager 0.8.0: an ellipsis at the cut, and a clearer test-value pane |
+| 2026-09-22 | 3.3.1 (`9208353`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.3.1: the whole-library read counts as it goes |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.7.0 (`91efdcc`) |  |  | SceneFilenameManager 0.7.0: Maximum Filename Length and Maximum Full Path Length |
+| 2026-09-22 |  |  |  |  |  |  | 5.2.3 (`19f0a3a`) |  |  |  | PropagateTagsAndPerformers 5.2.3: the progress line says Review complete and Finished |
+| 2026-09-22 |  |  |  |  |  |  |  |  | 1.21.2 (`119f817`) |  | SceneVariants 1.21.2: review and rename scans hold set members only, the flag scan a slim record |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.6.1 (`d8661a9`) |  |  | SceneFilenameManager 0.6.1: Rename reads file names first, then plans page by page |
+| 2026-09-22 |  |  |  |  |  |  |  |  | 1.21.1 (`34e4df1`) |  | SceneVariants 1.21.1: titleParts reads keys first, full fields of set members only |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.6.0 (`cfbb8e6`) |  |  | SceneFilenameManager 0.6.0: carry archived names to the scene a file moves to |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.5.1 (`14d71ed`) |  |  | SceneFilenameManager 0.5.1: the default template falls back to the archived filename |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.5.0 (`5795b6b`) |  |  | SceneFilenameManager 0.5.0: new default template, Recent values kept, test boxes keep the focus |
+| 2026-09-22 |  |  | 3.2.2 (`d40d2a0`) |  |  |  |  |  |  |  | FindEntitiesByTextContent 3.2.2: the dialog title is the plugin's full name |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.4.0 (`2d4d0e9`) |  |  | SceneFilenameManager 0.4.0: more tokens, autoindex, every file archived, template editor |
+| 2026-09-22 |  |  |  |  |  |  |  |  | 1.21.0 (`66de589`) |  | SceneVariants 1.21.0: publish stashIds for Scene Filename Manager |
+| 2026-09-22 |  |  |  |  |  |  |  | 0.3.0 (`22d58d2`) |  |  | SceneFilenameManager 0.3.0: nested template groups and !token |
+| 2026-09-21 |  |  |  |  |  |  |  | 0.2.0 (`b69883f`) |  |  | SceneFilenameManager 0.2.0: Rename Files From Metadata |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.20.0 (`8525b9e`) |  | SceneVariants 1.20.0: publish titleParts for Scene Filename Manager |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.19.2 (`371b8ec`) |  | SceneVariants 1.19.2: the (ignored) after a title is grey |
+| 2026-09-21 |  |  |  |  |  |  |  |  | 1.19.1 (`9ce48a2`) |  | SceneVariants 1.19.1: an uncounted title difference reads Title (ignored) on the tab |
 | 2026-09-21 | 3.3.0 (`3c7e906`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.3.0: locked fields are marked in the descriptions dialog |
 | 2026-09-21 |  | 2.4.0 (`0a753cc`) |  |  |  |  |  |  |  |  | EntityNameMaintainer 2.4.0: renames never reach a locked custom field |
 | 2026-09-21 |  |  |  |  |  |  |  |  | 1.19.0 (`4b81402`) |  | SceneVariants 1.19.0: a locked variant field is only ever added |

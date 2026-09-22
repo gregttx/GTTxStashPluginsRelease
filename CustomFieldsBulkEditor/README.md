@@ -384,6 +384,19 @@ and it will not refuse.
 Nothing else overlaps: no other plugin here touches custom fields, and none of them puts anything in
 the list-view menu.
 
+## What a run costs in memory
+
+<!-- memory:start -->
+Against a library of 100,000 scenes and 1,000,000 images, with each task set to cover everything it can — the worst case, not a typical run:
+
+| Task | While it reads and plans | While it writes | Held for Undo |
+|---|--:|--:|--:|
+| Edit Custom Fields Across the Whole Library | 551 MB | 1065 MB | 1065 MB |
+| Manage Custom Field Descriptions | 213 MB | 267 MB | 267 MB |
+
+All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
+<!-- memory:end -->
+
 ## Troubleshooting
 
 **The menu item is not there.** Turn on the

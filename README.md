@@ -32,6 +32,26 @@ Requires **Stash 0.31.0 or newer** (Scene Variants: 0.28.0).
 The ᝯㄝₓ prefix is the shared mark of this collection, put in front of every plugin name so they
 sort together and are found with one search in **Settings → Plugins**.
 
+## What they do together
+
+Every plugin works on its own with ᝯㄝₓ Core. Install two of them and each asks the other the
+questions only it can answer, rather than copying its rules. Nothing below needs configuring: a
+plugin finds its sibling at load, and says in its log when one it would have asked is absent.
+
+| This plugin | Asks | For what | Without it |
+|---|---|---|---|
+| Every plugin that writes | **all the others** | a shared **bulk-edit lease** while it writes, so the automatic modes stand down instead of reacting to every entity of a library-wide run | the automatic modes react to another plugin's bulk run, each possibly undoing part of the other |
+| **Entity Name Maintainer**, **Find & Replace**, **Scene Filename Manager**, **Scene Variants** | **Custom Fields Bulk Editor** | which custom fields are **locked**: a locked field's name, value and presence are left alone, and no Undo removes one | nothing is locked, and each says so in its log. With that plugin present but unable to answer, no custom field is written at all |
+| **Entity Name Maintainer** | **Custom Fields Bulk Editor** | the **field descriptions** it keeps, so a rename can carry into the prose you wrote about a field | descriptions are not listed and nothing else changes |
+| **Scene Filename Manager**, **Scene Variants**, **Propagate**, **Find & Replace** | **Custom Fields Bulk Editor** | a **description filed** for the custom field they create, shown wherever that plugin shows a field | the field carries no description |
+| **Scene Filename Manager** | **Scene Variants** | the **base title** and **partial postfix** of a variant set for the `basetitle` and `variantpostfix` tokens, and a scene's **stash-id** for `stashid` | `basetitle` is the scene's title, `variantpostfix` and `stashid` are empty, and the log says so |
+| **Scene Variants**, **Propagate**, **Tag Bundle Clipboard** | **Normalize Parent Tags** | whether a tag is **redundant** under the hierarchy, so none of them copies a parent a more specific tag already implies | every tag is copied, and the sibling would prune it again afterwards |
+| **Scene Variants** | **Entity Name Maintainer** | to **carry a renamed title** into everything that mentioned the old one, for every title it writes | the rename stands on its own |
+| **Propagate**, **Merge Performer Tags**, **Scene Variants** | **each other** | a registry of the **relationship paths** each performs, so an overlap is noted in the log | overlapping paths are not pointed out |
+| **Merge Performer Tags** ↔ **Normalize Parent Tags** | each other | the lease above, in both directions: auto-merge stands down while the other applies, and the library-wide merge takes a lease of its own | each reacts to the other's writes, merging back what was just pruned |
+
+Each plugin's own README has the detail, under **Relationship to the other plugins in this repo**.
+
 ## Installing
 
 There is **no build step**. A plugin folder is copied as-is:
@@ -63,6 +83,34 @@ plugin scripts by their declared dependencies but does not object when one is mi
 - **An id in brackets is Stash's own database id** — the number in the URL — never a stash-id.
 - **Back up your database before the first library-wide run.** Undo reaches only what the open
   dialog wrote, and Stash has no undo of its own.
+- **How much memory a task takes** in your browser tab, against 100,000 scenes and 1,000,000
+  images, is in [MEMORY.md](MEMORY.md), measured again for every release.
+
+## What a run costs in memory
+
+<!-- memory:start -->
+Measured against 100,000 scenes and 1,000,000 images, with every task set to cover the whole library and plan as much as it can — the worst case, not a typical run. In MB of browser memory, from [MEMORY.md](MEMORY.md), which is measured again for every release.
+
+| Plugin | Task | While it reads and plans | While it writes | Held for Undo |
+|---|---|--:|--:|--:|
+| SceneFilenameManager | Archive Original Filenames | 58 MB | 79 MB | 78 MB |
+| SceneFilenameManager | Restore Original Filenames | 49 MB | 69 MB | 69 MB |
+| SceneFilenameManager | Rename Files From Metadata | 154 MB | 185 MB | 183 MB |
+| SceneVariants | Migrate Variant Stash-IDs | 58 MB | 73 MB | 73 MB |
+| SceneVariants | Flag Variants | 46 MB | 64 MB | 58 MB |
+| SceneVariants | Review Variant Sets | 1936 MB | — | — |
+| SceneVariants | Rename Variants | 629 MB | 635 MB | 635 MB |
+| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1065 MB | 1065 MB |
+| CustomFieldsBulkEditor | Manage Custom Field Descriptions | 213 MB | 267 MB | 267 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1524 MB | 1517 MB |
+| NormalizeParentTags | Normalize Parent Tags | 3813 MB | 4155 MB | 4053 MB |
+| NormalizeParentTags | Auto Mode Settings | 0 MB | — | — |
+| NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 294 MB | 282 MB |
+| PropagateTagsAndPerformers | Propagate All | 1777 MB | 1822 MB | 1819 MB |
+
+A task gives all of it back when its dialog is closed.
+<!-- memory:end -->
 
 ## Repository layout
 
@@ -71,8 +119,9 @@ plugin scripts by their declared dependencies but does not object when one is mi
 | `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `CLAUDE.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
 | `GTTxCore/` | the shared half every other plugin binds at load, and requires |
 | `tests/` | `node tests/run.js` (or `npm test`). See [tests/README.md](tests/README.md) |
-| `tools/` | repo tooling — release-row generation and two live-Stash probes. See [tools/README.md](tools/README.md) |
+| `tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See [tools/README.md](tools/README.md) |
 | `RELEASES.md` | every release of every plugin, one row per commit. **Generated** |
+| `MEMORY.md` | what every task holds in memory against 100,000 scenes and 1,000,000 images. **Generated** by `node tools/memory-watermark.js`; a release waits for it |
 | `CLAUDE.md` | the rules, one table per kind — the onboarding document |
 | `docs/` | the reasoning behind each rule (`decisions/`), and dated readings of Stash's source (`stash-reference.md`) |
 
