@@ -10,6 +10,26 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SFM | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-23 |  |  |  |  |  |  |  | 1.3.1 (`3ddf739`) |  |  | SceneFilenameManager 1.3.1: Rescan clears the log |
+| 2026-09-23 |  |  |  |  |  |  |  | 1.3.0 (`abac2e3`) |  |  | SceneFilenameManager 1.3.0: files already named are listed as SAME, with a filter box |
+| 2026-09-23 |  |  |  |  |  |  |  | 1.2.0 (`e9a1e1d`) |  |  | SceneFilenameManager 1.2.0: Rescan in Rename Files From Metadata |
+| 2026-09-23 |  |  |  |  |  |  |  | 1.1.0 (`7cba4aa`) |  |  | SceneFilenameManager 1.1.0: a filter over the dialog's log |
+| 2026-09-23 | 3.4.6 (`8b7048d`) |  |  | 2.9.1 (`8b7048d`) | 4.1.7 (`8b7048d`) |  | 5.2.9 (`8b7048d`) | 1.0.7 (`8b7048d`) |  |  | Revert the Apollo-client change; Locked Custom Fields is display-only |
+| 2026-09-23 | 3.4.5 (`e4c8d6c`) |  |  | 2.9.0 (`e4c8d6c`) | 4.1.6 (`e4c8d6c`) |  | 5.2.8 (`e4c8d6c`) | 1.0.6 (`e4c8d6c`) |  |  | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
+| 2026-09-23 |  |  |  | 2.8.2 (`61add82`) |  |  |  |  |  |  | GTTxCore 2.8.2: a carrier with no title is named by its file |
+| 2026-09-23 | 3.4.4 (`9293a04`) |  |  | 2.8.1 (`9293a04`) |  |  |  |  |  |  | GTTxCore 2.8.1, CFBE 3.4.4: a mark per name on Locked Custom Fields; the card change taken back |
+| 2026-09-23 | 3.4.3 (`3217fc3`) |  |  | 2.8.0 (`3217fc3`) |  |  |  |  |  |  | GTTxCore 2.8.0: the card lists an entity's custom fields, described; CFBE 3.4.3 points at the lock |
+| 2026-09-22 |  |  |  |  |  |  | 5.2.7 (`3e4b5b7`) |  |  |  | PropagateTagsAndPerformers 5.2.7: the task caption once; record the releases |
+| 2026-09-22 | 3.4.2 (`5f0d74f`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.4.2: the caption once, the dialog titled after the task, a grey lock |
+| 2026-09-22 |  |  |  |  |  |  | 5.2.6 (`2098bfe`) |  |  |  | PropagateTagsAndPerformers 5.2.6: names the renamed descriptions task; record the releases |
+| 2026-09-22 | 3.4.1 (`c73aa78`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.4.1: Manage Custom Field Descriptions and Locks |
+| 2026-09-22 | 3.4.0 (`e5c0e75`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.4.0: the lock in the descriptions dialog is a switch |
+| 2026-09-22 |  |  |  | 2.7.0 (`3770de7`) |  |  |  |  |  |  | GTTxCore 2.7.0: Maximum Log Lines Kept, filled with its default |
+| 2026-09-22 |  |  |  |  |  |  |  | 1.0.5 (`e3331db`) |  |  | SceneFilenameManager 1.0.5: Archive rewrites the older bare value by file id |
+| 2026-09-22 |  |  |  |  |  |  |  | 1.0.4 (`26f4711`) |  |  | SceneFilenameManager 1.0.4: every archived name is stored by file id |
+| 2026-09-22 |  |  |  |  |  |  |  | 1.0.3 (`ed5bb7e`) |  |  | SceneFilenameManager 1.0.3: the Archive line shows the file id beside each name written by id |
+| 2026-09-22 |  |  |  |  |  |  |  | 1.0.2 (`53cd03e`) |  |  | SceneFilenameManager 1.0.2: every Archive line names the custom field |
+| 2026-09-22 |  |  |  |  |  |  |  | 1.0.1 (`7f1f580`) |  |  | SceneFilenameManager 1.0.1: the editor starts an index present |
 | 2026-09-22 |  |  |  |  |  |  |  | 1.0.0 (`7aafdc7`) |  |  | SceneFilenameManager 1.0.0: 0 performers names none, and performercount |
 | 2026-09-22 | 3.3.2 (`021a16c`) | 2.4.2 (`021a16c`) | 3.2.5 (`021a16c`) | 2.6.0 (`021a16c`) | 4.1.5 (`021a16c`) | 5.5.6 (`021a16c`) | 5.2.5 (`021a16c`) | 0.8.4 (`021a16c`) | 1.21.4 (`021a16c`) |  | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 2026-09-22 |  | 2.4.1 (`69afdae`) | 3.2.4 (`69afdae`) | 2.5.0 (`69afdae`) | 4.1.4 (`69afdae`) | 5.5.5 (`69afdae`) | 5.2.4 (`69afdae`) | 0.8.3 (`69afdae`) | 1.21.3 (`69afdae`) |  | Core 2.5.0 and seven plugins: a run's log is bounded |

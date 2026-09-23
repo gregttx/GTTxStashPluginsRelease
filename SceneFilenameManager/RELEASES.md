@@ -8,6 +8,17 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.3.1 (`3ddf739`) | 2026-09-23 | SceneFilenameManager 1.3.1: Rescan clears the log |
+| 1.3.0 (`abac2e3`) | 2026-09-23 | SceneFilenameManager 1.3.0: files already named are listed as SAME, with a filter box |
+| 1.2.0 (`e9a1e1d`) | 2026-09-23 | SceneFilenameManager 1.2.0: Rescan in Rename Files From Metadata |
+| 1.1.0 (`7cba4aa`) | 2026-09-23 | SceneFilenameManager 1.1.0: a filter over the dialog's log |
+| 1.0.7 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
+| 1.0.6 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
+| 1.0.5 (`e3331db`) | 2026-09-22 | SceneFilenameManager 1.0.5: Archive rewrites the older bare value by file id |
+| 1.0.4 (`26f4711`) | 2026-09-22 | SceneFilenameManager 1.0.4: every archived name is stored by file id |
+| 1.0.3 (`ed5bb7e`) | 2026-09-22 | SceneFilenameManager 1.0.3: the Archive line shows the file id beside each name written by id |
+| 1.0.2 (`53cd03e`) | 2026-09-22 | SceneFilenameManager 1.0.2: every Archive line names the custom field |
+| 1.0.1 (`7f1f580`) | 2026-09-22 | SceneFilenameManager 1.0.1: the editor starts an index present |
 | 1.0.0 (`7aafdc7`) | 2026-09-22 | SceneFilenameManager 1.0.0: 0 performers names none, and performercount |
 | 0.8.4 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 0.8.3 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |

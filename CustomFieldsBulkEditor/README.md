@@ -241,9 +241,10 @@ schema fact, not a gap in this plugin.
 
 ## Custom field descriptions
 
-Settings → Tasks → **Manage Custom Field Descriptions...** scans the library and shows every custom
+Settings → Tasks → **Manage Custom Field Descriptions and Locks...** scans the library and shows every custom
 field it found on the left, with how many entities carry each. Pick one and you get a box to
-describe it in and a list of exactly what carries it; the description then shows as a tooltip on
+describe it in, a lock to protect it with (see [Locked custom fields](#locked-custom-fields)) and a
+list of exactly what carries it; the description then shows as a tooltip on
 that field's name everywhere in the bulk-edit dialog — **and on the entity's own page**, where Stash
 shows the field's name and nothing else. Hover it there and you get the name, then the description
 under it.
@@ -334,7 +335,7 @@ One switch, two names and a lock list, in Settings → Plugins:
 | **Skip Images in the Whole-Library Task** | off | Leaves Images out of the library-wide task, so it covers the other six types only. Images are usually the most numerous type by a wide margin, and reading them can be most of the wait. The dialog says in an `[INFO]` line when it is on. It applies to the descriptions task too, where a field only images carry will then read as an orphan. |
 | **Description Store Tag Name** | `ᱜ╦╦🞮 🗃️🔌 🛂🧲 🛠🛈🖫 ❌∙` | The name of the tag that holds every custom field's description. Changing it **renames the existing tag** rather than starting a second store — the tag is found by a marker custom field (`ᱜ╦╦🞮_🛂🧲_🛠🛈🖫_desc_store`), not by its name. Leave it empty to go back to the default. Once a store exists, a **🔗** appears on the value's own line, left of **Edit**, linking to the tag the descriptions are actually on — found by that marker, so it is right even before a rename has been applied. Hover it for what that tag is: its picture, its aliases, its parents, its children and its description. |
 | **Hide from Add Lists - Custom Field Name** | `ᱜ╦╦🞮_exclude_from_add_list` | Entities carrying this custom field are hidden from Stash's add/select dropdowns. Any value other than empty, `0` or `false` counts as marked. Clear the setting to switch the filtering off. Renaming that field with the dialog's **Rename** mode moves this setting with it, so the two cannot drift apart. A **ⓘ** beside the value hovers to the field's own description, how many entities carry it and the first ten of them — read on hover, never on the page's own redraw ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)). |
-| **Locked Custom Fields** | empty | Custom fields no bulk edit may change, as exact names separated by commas — for example `ᱜ╦╦🞮_Original_Filename, ᱜ╦╦🞮_Variant_Base_Name`. See [Locked custom fields](#locked-custom-fields). |
+| **Locked Custom Fields** | empty | Custom fields no bulk edit may change, as exact names separated by commas — for example `ᱜ╦╦🞮_Original_Filename, ᱜ╦╦🞮_Variant_Base_Name`. Shown on the settings page, each name with a ⓘ to hover for its description and what carries it; changed only by the lock in front of a field's name in the descriptions dialog, since Stash's own Edit box would not see that write until a reload. See [Locked custom fields](#locked-custom-fields). |
 
 The settings are read when you press a task button or open the **"..."** dialog, so changing one and
 running the task in the same session does what it says. **Skip Images** does not affect a selection — the **"..."** menu acts
@@ -359,8 +360,11 @@ A locked field's **name**, **description** and **values** cannot change, and it 
 - The descriptions dialog refuses to rename a locked field, and **Migrate** does not write a rename
   to or from one. **Undo** puts back the rest, but never removes a locked field: an entity that got
   it from an Add (or a Rename onto it) keeps it, and the log says so.
-- In the descriptions dialog a locked field is **red** in the list, and its heading reads **🔒 Name
-  (Read-only)**; an unlocked one reads **🔓 Name**.
+- In the descriptions dialog a locked field is **red** in the list, the lock in front of its name is
+  closed (🔒) and the heading reads **Name (Read-only)**; an unlocked one has an open lock (🔓). **The
+  lock is a switch**: pressing it writes the field into, or out of, the **Locked Custom Fields**
+  setting at once, and the log says so. It is a setting, not the library, so Apply has no part in
+  it. A field with a rename staged is not locked until the rename is undone.
 - A locked field's **description** is locked with it: read-only in the descriptions dialog, kept by
   **Prune**, and skipped when another plugin (ᝯㄝₓ Entity Name Maintainer) updates descriptions. A
   plugin documenting its own field where there is no description yet can still add one.
@@ -392,7 +396,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Edit Custom Fields Across the Whole Library | 551 MB | 1065 MB | 1065 MB |
-| Manage Custom Field Descriptions | 213 MB | 267 MB | 267 MB |
+| Manage Custom Field Descriptions and Locks | 214 MB | 267 MB | 267 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

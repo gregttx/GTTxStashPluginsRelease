@@ -8,6 +8,10 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.2.9 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
+| 5.2.8 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
+| 5.2.7 (`3e4b5b7`) | 2026-09-22 | PropagateTagsAndPerformers 5.2.7: the task caption once; record the releases |
+| 5.2.6 (`2098bfe`) | 2026-09-22 | PropagateTagsAndPerformers 5.2.6: names the renamed descriptions task; record the releases |
 | 5.2.5 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 5.2.4 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 5.2.3 (`19f0a3a`) | 2026-09-22 | PropagateTagsAndPerformers 5.2.3: the progress line says Review complete and Finished |

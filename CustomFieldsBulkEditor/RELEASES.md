@@ -8,6 +8,13 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.4.6 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
+| 3.4.5 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
+| 3.4.4 (`9293a04`) | 2026-09-23 | GTTxCore 2.8.1, CFBE 3.4.4: a mark per name on Locked Custom Fields; the card change taken back |
+| 3.4.3 (`3217fc3`) | 2026-09-23 | GTTxCore 2.8.0: the card lists an entity's custom fields, described; CFBE 3.4.3 points at the lock |
+| 3.4.2 (`5f0d74f`) | 2026-09-22 | CustomFieldsBulkEditor 3.4.2: the caption once, the dialog titled after the task, a grey lock |
+| 3.4.1 (`c73aa78`) | 2026-09-22 | CustomFieldsBulkEditor 3.4.1: Manage Custom Field Descriptions and Locks |
+| 3.4.0 (`e5c0e75`) | 2026-09-22 | CustomFieldsBulkEditor 3.4.0: the lock in the descriptions dialog is a switch |
 | 3.3.2 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 3.3.1 (`9208353`) | 2026-09-22 | CustomFieldsBulkEditor 3.3.1: the whole-library read counts as it goes |
 | 3.3.0 (`3c7e906`) | 2026-09-21 | CustomFieldsBulkEditor 3.3.0: locked fields are marked in the descriptions dialog |

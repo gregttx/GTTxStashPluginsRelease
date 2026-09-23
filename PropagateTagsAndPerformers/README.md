@@ -523,7 +523,7 @@ Once it is set, a **ⓘ** appears beside the value: hover it for what the field 
 
 If a value is adopted from `MergePerformerTagsToScenes` on that first load, it replaces the default
 — the field is theirs, and you have already answered this question over there. The description filed
-for the default is then an orphan: it shows as `[orphan]` in **Manage Custom Field Descriptions...**
+for the default is then an orphan: it shows as `[orphan]` in **Manage Custom Field Descriptions and Locks...**
 and **Prune orphans** clears it.
 
 **Exclude tags whose name contains (space separated substring)** — one or more substrings,
@@ -619,7 +619,7 @@ not your library.
   open it while a run here is writing. And if it is installed, this plugin asks it to file a
   description for `ᱜ╦╦🞮_Do_Not_Propagate_Tag`, so the field explains itself wherever that plugin
   shows a description. Nothing is written to your library for it: if there is no description store
-  yet, the sentence waits until you next open **Manage Custom Field Descriptions...** and press
+  yet, the sentence waits until you next open **Manage Custom Field Descriptions and Locks...** and press
   Apply.
 
 ## What a run costs in memory
@@ -629,13 +629,13 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1777 MB | 1822 MB | 1819 MB |
+| Propagate All | 1767 MB | 1815 MB | 1810 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->
 
 A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
-whole run. Past ᝯㄝₓ Core's **Log Lines Kept** (200,000 by default) the oldest lines are dropped
+whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
 

@@ -51,7 +51,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '1.0.0';
+  var PLUGIN_VERSION = '1.3.1';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -303,8 +303,15 @@
     '.sfm-elink{color:#7cc4ff;text-decoration:none;}' +
     '.sfm-elink:hover{text-decoration:underline;}' +
     '.sfm-spin{color:#a7b6c2;}' +
+    '.sfm-filter{padding:.35rem 1rem;border-bottom:1px solid #394b59;display:flex;gap:.75rem;' +
+    'flex-wrap:wrap;align-items:center;font-size:.8rem;}' +
+    '.sfm-filter-label{color:#a7b6c2;}' +
+    '.sfm-filter-kind{display:inline-flex;gap:.25rem;align-items:center;margin:0;cursor:pointer;}' +
+    '.sfm-filter-cut{color:#a7b6c2;}' +
+    '.sfm-filter-find{flex:1 1 12rem;min-width:8rem;background:#1f2b33;color:#f5f8fa;' +
+    'border:1px solid #394b59;border-radius:3px;padding:.15rem .4rem;}' +
     '.sfm-ERROR{color:#ff7373;} .sfm-WARN{color:#ffb648;} .sfm-INFO{color:#a7b6c2;}' +
-    '.sfm-EDIT{color:#84d68a;}' +
+    '.sfm-EDIT{color:#84d68a;} .sfm-SAME{color:#7d8f9c;}' +
     '.sfm-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.sfm-foot button{margin-right:.5rem;}' +
@@ -401,10 +408,12 @@
     name: 'Archive Original Filenames...',
     title: 'Archive Original Filenames',
     legend: 'One line per scene with a file whose name is not archived yet: the scene with ' +
-      'its id in brackets, then the names its files have now, without the extension, which ' +
-      'is what Proceed writes into the field - the primary file\u2019s name alone, or every ' +
-      'file\u2019s by id for a scene with more than one. A name already archived is never ' +
-      'overwritten - delete the field on a scene to archive it again under its current names.',
+      'its id in brackets, then the names its files have now, without the extension, each ' +
+      'with its file id, and the custom field Proceed writes them into, by file id. A name ' +
+      'already archived is never ' +
+      'overwritten - delete the field on a scene to archive it again under its current names. ' +
+      'A scene holding the older bare name gets a line too: Proceed rewrites it by file id, ' +
+      'the name unchanged.',
     verb: 'to archive',
     prepare: function (run) { return lockedFor(run); },
     plan: function (scene, field, run) {
@@ -415,20 +424,28 @@
       }
       var names = archivedNames(scene, field), map = withEveryFile(scene, names.map);
       var added = files.filter(function (f) { return !hasOwn(names.map, f.id); })
-        .map(function (f) { return map[f.id]; });
-      if (!added.length) return null;
+        .map(function (f) { return { id: f.id, name: map[f.id] }; });
+      // The older bare value is rewritten by file id, its name kept.
+      var bare = names.bare ? Object.keys(names.map).map(function (k) {
+        return { id: k, name: names.map[k] };
+      })[0] : null;
+      if (!added.length && !bare) return null;
       // A missing field may be added whatever the lock; a present one only changed.
       if (names.raw != null && run.locked) {
-        run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] has ' +
-          plural(added.length, 'file') + ' not archived yet, and is skipped: "' + field +
-          '" is locked in ᝯㄝₓ Custom Fields Bulk Editor, so it cannot be added to.');
+        run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] ' + (added.length ? 'has ' +
+          plural(added.length, 'file') + ' not archived yet' : 'holds the older bare name') +
+          ', and is skipped: "' + field + '" is locked in ᝯㄝₓ Custom Fields Bulk Editor, so it ' +
+          (added.length ? 'cannot be added to.' : 'cannot be rewritten by file id.'));
         return null;
       }
-      return { scene: scene, value: archiveValue(scene, map), prev: names.raw, added: added };
+      return { scene: scene, value: archiveValue(map), prev: names.raw, added: added, bare: bare };
     },
-    tail: function (job) {
-      return ': ' + job.added.map(function (n) { return '"' + n + '"'; }).join(', ') +
-        (job.prev != null ? ' (added to the archive)' : '');
+    tail: function (job, field) {
+      if (!job.added.length) {
+        return ': "' + job.bare.name + '" [' + job.bare.id + '] rewritten by file id in "' + field + '"';
+      }
+      return ': ' + job.added.map(function (a) { return '"' + a.name + '" [' + a.id + ']'; })
+        .join(', ') + (job.prev != null ? ' added to "' : ' into "') + field + '"';
     },
     op: 'SFMArchive',
     // Undo takes the field off again, which a lock in Custom Fields Bulk Editor forbids.
@@ -824,10 +841,10 @@
     }
     for (var k = 0; ; k++) {
       run.autoTokens.forEach(function (t) { values[t] = k ? String(run.specs[t].arg + k - 1) : ''; });
-      var stem = cleanStem(renderTemplate(run.nodes, values), room);
+      var rep = cleanReport(renderTemplate(run.nodes, values), room), stem = rep.stem;
       if (!stem) return { why: 'the template gives it an empty name' };
       var to = stem + ext, holder = holderOf(run, folderOf(file), to, file);
-      if (!holder) return { to: to };
+      if (!holder) return { to: to, cut: !!rep.cut };
       if (to === last) {
         return { why: '"' + to + '" is already ' + (holder.planned ? 'the new name of scene '
           : 'the name of a file of scene ') + holder.scene.id + ' in the same folder' };
@@ -849,7 +866,7 @@
     if (ok) return { raw: raw, map: parsed };
     var f = primaryFile(scene);
     if (f) map[f.id] = raw;
-    return { raw: raw, map: map };
+    return { raw: raw, map: map, bare: true };
   }
 
   // `map` with every file of the scene that is missing from it, under its name now.
@@ -860,11 +877,9 @@
     return out;
   }
 
-  // The primary file alone is stored plain, as it always was; more than one as JSON.
-  function archiveValue(scene, map) {
-    var keys = Object.keys(map), f = primaryFile(scene);
-    return keys.length === 1 && f && keys[0] === String(f.id) ? map[keys[0]] : JSON.stringify(map);
-  }
+  // Always by file id, so a name follows its file and never the scene's primary of the day.
+  // `archivedNames` still reads the older bare stem as the primary file's.
+  function archiveValue(map) { return JSON.stringify(map); }
 
   function lockedFor(run) {
     return fieldLocks().then(function (locks) {
@@ -954,7 +969,8 @@
           (filesOf(scene).length > 1 ? ', file "' + f.basename + '",' : '');
         var got = nameFor(scene, f, run, names);
         if (got.why) { run.msg('WARN', who + ' is skipped: ' + got.why + '.'); return; }
-        var job = { scene: slim, file: { id: f.id }, folder: folderOf(f), from: f.basename, to: got.to };
+        var job = { scene: slim, file: { id: f.id }, folder: folderOf(f), from: f.basename, to: got.to,
+          cut: got.cut };
         if (got.to !== f.basename && !hasOwn(names.map, f.id)) {
           // A missing field may be added whatever the lock; a present one only changed.
           if (names.raw != null && run.locked) {
@@ -962,11 +978,15 @@
               '" is locked in ᯯㄝₓ Custom Fields Bulk Editor, so it cannot be added.');
             return;
           }
-          archive = archive || { scene: slim, value: archiveValue(scene, withEveryFile(scene, names.map)) };
+          archive = archive || { scene: slim, value: archiveValue(withEveryFile(scene, names.map)) };
           job.archive = archive;
         }
         run.claimed[nameKey(job.folder, got.to)] = { scene: slim, file: job.file };
-        if (got.to !== f.basename) jobs.push(job);
+        if (got.to !== f.basename) { jobs.push(job); return; }
+        // Already named as the template says: nothing to write, but a line of its own, so
+        // "why was this one left alone" has an answer the filter can find.
+        run.same++;
+        run.sceneLine('SAME', job, ': "' + f.basename + '" already has the name the template gives');
       });
       return jobs;
     },
@@ -1153,7 +1173,7 @@
         var m = archivedNames(src, field).map;
         if (!hasOwn(m, f.id)) return false;
         map[f.id] = m[f.id];
-        added.push(m[f.id]);
+        added.push({ id: f.id, name: m[f.id] });
         return true;
       });
     });
@@ -1179,7 +1199,7 @@
       plan: function (scene, field, run) {
         var c = carried(move, scene, field), now = archivedNames(scene, field);
         if (!c.added.length) return null;
-        var value = archiveValue(scene, c.map);
+        var value = archiveValue(c.map);
         if (value === now.raw) return null;
         if (now.raw != null && run.locked) {
           run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] is not given the archived ' +
@@ -1276,11 +1296,16 @@
   function Run(task) {
     this.task = task;
     this.logText = [];
+    this.logMeta = [];    // per kept line: { kind, id, nameLen, cut }, trimmed with logText
+    this.shown = 0;       // lines in the DOM
+    this.matched = 0;     // kept lines the filter lets through
+    this.filter = { off: {}, cut: false, find: '' };
     this.jobs = [];       // what the scan found to do
     this.changes = [];    // what Proceed wrote, newest last, for Undo
     this.scanned = 0;
     this.total = 0;
     this.noFile = 0;
+    this.same = 0;        // files already named as planned, left alone
     this.written = 0;
     this.failed = 0;
     this.state = 'scanning';
@@ -1312,6 +1337,7 @@
 
     this.progressEl = el('div', 'sfm-progress', 'Starting…');
     this.modal.appendChild(this.progressEl);
+    this.modal.appendChild(this.filterBar());
     this.logEl = el('div', 'sfm-log');
     this.modal.appendChild(this.logEl);
 
@@ -1321,6 +1347,12 @@
     this.undoBtn = button('Undo', 'sfm-undo sfm-hidden');
     paintButton(this.undoBtn, PLUGIN_BTN_VARIANT);
     this.stopBtn = button('Stop', 'sfm-stop sfm-hidden');
+    // Rename only: a template or a limit changed in the settings, or a pass written and
+    // undone, is a plan worth reading again without closing the dialog and its Undo.
+    this.rescanBtn = button('Rescan', 'sfm-rescan sfm-hidden');
+    this.rescanBtn.title = 'Read your settings and the library again and plan afresh. The log ' +
+      'is kept, and so is Undo for what this dialog has already written.';
+    this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.copyBtn = button('Copy log', 'sfm-copy');
     this.copyBtn.title = 'Copy the counters and every line of the log as plain text.';
     this.closeBtn = button('Close', 'sfm-close');
@@ -1329,7 +1361,7 @@
     this.stopBtn.addEventListener('click', function () { self.stop(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
-    [this.goBtn, this.stopBtn, this.copyBtn, this.undoBtn, this.closeBtn]
+    [this.goBtn, this.stopBtn, this.rescanBtn, this.copyBtn, this.undoBtn, this.closeBtn]
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -1350,39 +1382,136 @@
     this.show(this.noteEl, !!text);
   };
 
-  Run.prototype.appendLine = function (line, text) {
+  // Every line is kept as text with a small record beside it, so the filter can redraw
+  // any of them - a scene's line with its link - from the buffer Copy log already keeps.
+  Run.prototype.appendLine = function (text, rec) {
     this.logged = (this.logged || 0) + 1;
     this.logText.push(text);
+    this.logMeta.push(rec);
     // Bounded, because the copy buffer is what a library-wide run grows without limit.
-    this.logDropped = (this.logDropped || 0) + keepLog(this.logText);
-    if (this.spinEl) this.logEl.insertBefore(line, this.spinEl);
-    else this.logEl.appendChild(line);
-    // `firstChild` is always a line: the spinner sits last.
-    if ((this.logged || 0) > LOG_RENDER_CAP && this.logEl.firstChild) {
-      this.logEl.removeChild(this.logEl.firstChild);
-    }
+    var dropped = keepLog(this.logText);
+    if (dropped) this.logMeta.splice(0, dropped);
+    this.logDropped = (this.logDropped || 0) + dropped;
+    if (!this.passes(text, rec)) return;
+    this.matched++;
+    this.addNode(lineNode(text, rec));
     this.scrollLog();
   };
 
+  Run.prototype.addNode = function (line) {
+    if (this.spinEl) this.logEl.insertBefore(line, this.spinEl);
+    else this.logEl.appendChild(line);
+    // `firstChild` is always a line: the spinner sits last.
+    if (++this.shown > LOG_RENDER_CAP && this.logEl.firstChild) {
+      this.logEl.removeChild(this.logEl.firstChild);
+      this.shown--;
+    }
+  };
+
   Run.prototype.msg = function (kind, message) {
-    var text = '[' + kind + '] ' + message;
-    this.appendLine(el('div', 'sfm-line sfm-' + kind, text), text);
+    this.appendLine('[' + kind + '] ' + message, { kind: kind });
   };
 
   // A line naming a scene: the scene is a link and a hover card, `logText` keeps the text.
   Run.prototype.sceneLine = function (kind, job, tail) {
     var name = sceneName(job.scene) + ' [' + job.scene.id + ']';
-    var head = '[' + kind + '] ';
-    var line = el('div', 'sfm-line sfm-' + kind);
+    this.appendLine('[' + kind + '] ' + name + tail,
+      { kind: kind, id: job.scene.id, nameLen: name.length, cut: !!job.cut });
+  };
+
+  function lineNode(text, rec) {
+    if (!rec.id) return el('div', 'sfm-line sfm-' + rec.kind, text);
+    var head = '[' + rec.kind + '] ';
+    var line = el('div', 'sfm-line sfm-' + rec.kind);
     line.appendChild(el('span', null, head));
-    var link = el('a', 'sfm-elink', name);
-    link.href = '/scenes/' + job.scene.id;
+    var link = el('a', 'sfm-elink', text.substr(head.length, rec.nameLen));
+    link.href = '/scenes/' + rec.id;
     link.target = linkTarget();
     link.rel = 'noopener noreferrer';
-    entityTip(link, 'scenes', job.scene.id);
+    entityTip(link, 'scenes', rec.id);
     line.appendChild(link);
-    line.appendChild(el('span', null, tail));
-    this.appendLine(line, head + name + tail);
+    line.appendChild(el('span', null, text.slice(head.length + rec.nameLen)));
+    return line;
+  }
+
+  // ── The log's filter ──────────────────────────────────────────────────────
+  //
+  // A library-wide rename writes tens of thousands of lines and the dialog draws the last
+  // thousand, so the ones worth reading - a warning, an error, a name cut to fit - scroll
+  // away under the plan. The filter picks which kept lines are drawn: by kind, names cut
+  // to fit, and text found anywhere in the line. It changes what the screen shows and
+  // nothing else, so it stays live through a run; Copy log still copies every line.
+  var LOG_KINDS = ['PLAN', 'SAME', 'EDIT', 'UNDO', 'INFO', 'WARN', 'ERROR'];
+
+  Run.prototype.filterBar = function () {
+    var self = this, bar = el('div', 'sfm-filter');
+    bar.appendChild(el('span', 'sfm-filter-label', 'Show:'));
+    LOG_KINDS.forEach(function (kind) {
+      var box = el('input');
+      box.type = 'checkbox';
+      box.checked = true;
+      box.addEventListener('change', function () {
+        if (box.checked) delete self.filter.off[kind]; else self.filter.off[kind] = true;
+        self.redraw();
+      });
+      var label = el('label', 'sfm-filter-kind sfm-' + kind);
+      label.appendChild(box);
+      label.appendChild(el('span', null, kind));
+      bar.appendChild(label);
+    });
+    if (this.task === RENAME_TASK) {
+      var cut = el('input');
+      cut.type = 'checkbox';
+      cut.addEventListener('change', function () { self.filter.cut = !!cut.checked; self.redraw(); });
+      var cutLabel = el('label', 'sfm-filter-kind sfm-filter-cut');
+      cutLabel.title = 'Only the names cut to fit the Maximum Filename Length or the Maximum Full ' +
+        'Path Length.';
+      cutLabel.appendChild(cut);
+      cutLabel.appendChild(el('span', null, 'Only cut names'));
+      bar.appendChild(cutLabel);
+    }
+    var find = el('input', 'sfm-filter-find');
+    find.type = 'search';
+    find.placeholder = 'Find in the log';
+    find.title = 'Only the lines holding this text, in any case.';
+    find.addEventListener('input', function () {
+      self.filter.find = String(find.value || '').toLowerCase();
+      self.redraw();
+    });
+    bar.appendChild(find);
+    return bar;
+  };
+
+  Run.prototype.filtering = function () {
+    var f = this.filter;
+    return f.cut || !!f.find || Object.keys(f.off).length > 0;
+  };
+
+  Run.prototype.passes = function (text, rec) {
+    var f = this.filter;
+    if (f.off[rec.kind]) return false;
+    if (f.cut && !rec.cut) return false;
+    return !f.find || text.toLowerCase().indexOf(f.find) !== -1;
+  };
+
+  // The last `LOG_RENDER_CAP` kept lines the filter lets through, oldest first.
+  Run.prototype.redraw = function () {
+    var keep = [], matched = 0;
+    for (var i = this.logText.length - 1; i >= 0; i--) {
+      if (!this.passes(this.logText[i], this.logMeta[i])) continue;
+      matched++;
+      if (keep.length < LOG_RENDER_CAP) keep.push(i);
+    }
+    while (this.logEl.firstChild && this.logEl.firstChild !== this.spinEl) {
+      this.logEl.removeChild(this.logEl.firstChild);
+    }
+    this.shown = 0;
+    this.matched = matched;
+    for (var k = keep.length - 1; k >= 0; k--) {
+      this.addNode(lineNode(this.logText[keep[k]], this.logMeta[keep[k]]));
+    }
+    this.progress();
+    this.scrollLog();
   };
 
   Run.prototype.scrollLog = function () {
@@ -1400,9 +1529,13 @@
       : plural(this.scanned, 'scene'))];
     parts.push(plural(this.jobs.length, this.task.unit || 'scene') + ' ' + this.task.verb);
     if (this.noFile) parts.push(plural(this.noFile, 'scene') + ' with no file, skipped');
+    if (this.same) parts.push(plural(this.same, 'file') + ' already named, left alone');
     if (this.written) parts.push(this.written + ' written');
     if (this.failed) parts.push(plural(this.failed, 'failure'));
-    if ((this.logged || 0) > LOG_RENDER_CAP) {
+    if (this.filtering()) {
+      parts.push(plural(this.matched, 'line') + ' match the filter' +
+        (this.matched > LOG_RENDER_CAP ? ', showing the last ' + LOG_RENDER_CAP : ''));
+    } else if ((this.logged || 0) > LOG_RENDER_CAP) {
       parts.push('showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines');
     }
     this.progressEl.textContent = parts.join('. ') + '.';
@@ -1452,6 +1585,8 @@
     this.show(this.undoBtn, this.changes.length > 0);
     this.undoBtn.disabled = busy;
     this.show(this.stopBtn, writing);
+    this.show(this.rescanBtn, this.task === RENAME_TASK);
+    this.rescanBtn.disabled = busy;
     this.closeBtn.disabled = writing;
     // Green once nothing is left to write; an error, a stopped pass or a stale script
     // keeps it grey. An offered Undo does not take the green away.
@@ -1527,7 +1662,7 @@
     var self = this;
     [].concat(this.task.plan(scene, this.field, this) || []).forEach(function (job) {
       self.jobs.push(job);
-      self.sceneLine('PLAN', job, self.task.tail(job));
+      self.sceneLine('PLAN', job, self.task.tail(job, self.field));
     });
   };
 
@@ -1572,7 +1707,7 @@
             job.written = true;
             self.changes.push(job);
             self.written++;
-            self.sceneLine('EDIT', job, task.tail(job));
+            self.sceneLine('EDIT', job, task.tail(job, field));
           }
         });
     }).then(function () {
@@ -1654,12 +1789,28 @@
         self.changes.splice(self.changes.lastIndexOf(job), 1);
         job.written = false;
         self.written--;
-        self.sceneLine('UNDO', job, task.tail(job));
+        self.sceneLine('UNDO', job, task.tail(job, field));
       }).then(function () {
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.changes.length, self.task.unit || 'scene') +
         ' still written.');
       self.setState('listing');
     });
+  };
+
+  // A fresh plan on a clean log: the settings read again, so an edited template or limit
+  // counts, and every line and count of the last plan cleared. What was written stays in
+  // `changes`, so Undo still reverses it, newest first.
+  Run.prototype.rescan = function () {
+    if (this.state !== 'listing') return;
+    this.jobs = [];
+    this.scanned = this.total = this.noFile = this.same = this.failed = 0;
+    this.stopped = this.scanFailed = false;
+    this.logText = [];
+    this.logMeta = [];
+    this.logged = this.logDropped = this.matched = 0;
+    this.redraw();
+    _settingsAt = 0;
+    this.begin();
   };
 
   Run.prototype.stop = function () {
@@ -1750,8 +1901,8 @@
     ocount: '42', stashid: 'stashdb.org:9f3c1e2a-5b7d-4c1e-8a2f-0d6e3b9c4a71', organized: '1',
     fileresolution: '1920x1080', filereslabel: '1080p', fileduration: '00h21m07s' };
 
-  // A test value never typed: the token's last one, else a sample. An index starts
-  // missing, which is a name no other file has.
+  // A test value never typed: the token's last one, else a sample. An index starts present,
+  // since the editor is the only place its shape can be seen.
   function firstValue(tok) {
     var recent = recentValues()[tok];
     if (recent && recent.length) return { value: recent[0], missing: false };
@@ -1761,7 +1912,7 @@
   // The value this token starts with when nothing has been typed for it.
   function sampleValue(tok) {
     var spec = tokenSpec(tok) || {};
-    if (spec.kind === 'autoindex') return { value: String(spec.arg), missing: true };
+    if (spec.kind === 'autoindex') return { value: String(spec.arg), missing: false };
     var v = spec.kind === 'tag' ? '1' : spec.kind === 'rating' ? String(Math.ceil(spec.arg * 0.8))
       : SAMPLE_VALUES[tok] || '';
     return { value: v, missing: false };
@@ -2390,8 +2541,8 @@
   //
   // Feature-detected and never overwriting: a description already filed under the name
   // is somebody's writing, and `describeField` itself refuses to replace it.
-  var FIELD_DESCRIPTION = 'The name this scene’s file had when it was archived, ' +
-    'without the extension.\n\n' +
+  var FIELD_DESCRIPTION = 'The names this scene’s files had when they were archived, ' +
+    'without the extension, by file id.\n\n' +
     'Written by ' + PLUGIN_NAME + '’s Archive Original Filenames task on scenes that do ' +
     'not carry it yet, and never overwritten - delete it to archive the scene again under ' +
     'its current name. Restore Original Filenames renames the file back to it.';

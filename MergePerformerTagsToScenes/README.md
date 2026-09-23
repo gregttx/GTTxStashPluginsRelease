@@ -366,7 +366,7 @@ All of it is given back when the dialog is closed. The figures come from [MEMORY
 <!-- memory:end -->
 
 A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
-whole run. Past ᝯㄝₓ Core's **Log Lines Kept** (200,000 by default) the oldest lines are dropped
+whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
 

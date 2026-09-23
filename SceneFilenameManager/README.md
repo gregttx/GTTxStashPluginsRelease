@@ -20,13 +20,16 @@ Writes the names of each scene's files, **without their extensions**, into the c
 (`ᱜ╦╦🞮_Original_Filename` by default), wherever a file's name is not there yet.
 
 ```
-[PLAN] Cool Shoot [412]: "cool.shoot.2024.1080p"
-[PLAN] Two Angles [414]: "cam-a", "cam-b"
-[PLAN] Scene 413 [413]: "IMG_0413_b" (added to the archive)
+[PLAN] Cool Shoot [412]: "cool.shoot.2024.1080p" [87] into "ᱜ╦╦🞮_Original_Filename"
+[PLAN] Two Angles [414]: "cam-a" [88], "cam-b" [89] into "ᱜ╦╦🞮_Original_Filename"
+[PLAN] Scene 413 [413]: "IMG_0413_b" [90] added to "ᱜ╦╦🞮_Original_Filename"
+[PLAN] Old Shoot [415]: "old.shoot" [91] rewritten by file id in "ᱜ╦╦🞮_Original_Filename"
 ```
 
-A scene with one file stores its name as it is. A scene with more than one stores every file's name
-by file id, as JSON: `{"88":"cam-a","89":"cam-b"}`. A file added to a scene that is already
+Every file's name is stored by file id, as JSON: `{"88":"cam-a","89":"cam-b"}`, so a name follows
+its file whichever scene or primary slot it ends up in. A value holding a bare name, as older
+releases wrote for a scene's only file, is read as the primary file's name, and Archive rewrites it by
+file id the next time it runs, the name unchanged. A file added to a scene that is already
 archived is added to its value.
 
 A name already archived is **never overwritten**: the field keeps the first name the plugin saw.
@@ -159,7 +162,7 @@ reads the scenes the files leave before Stash moves them, and if a moved file ha
 opens a dialog offering to add it to the field of the scene it went to:
 
 ```
-[PLAN] Dest [50]: "a51", "b52", "c53" (added to the archive)
+[PLAN] Dest [50]: "a51" [51], "b52" [52], "c53" [53] added to "ᱜ╦╦🞮_Original_Filename"
 ```
 
 A file with no archived name moves without a dialog. If Merge copied a source's value into a
@@ -171,6 +174,18 @@ field back as the move left it. A locked field that already holds a value is not
 Nothing is written until you press **Proceed**. **Stop** ends a write after the scene in flight.
 **Undo** reverses what this dialog wrote — the fields put back as they were, the files renamed back —
 for as long as the dialog stays open. **Copy log** puts the counters and every line on the clipboard.
+
+A run over a whole library writes far more lines than the dialog shows, so a bar over the log
+filters what is drawn: a box per kind of line — PLAN, SAME, EDIT, UNDO, INFO, WARN, ERROR — to hide it,
+**Only cut names** in Rename Files From Metadata for the names cut to fit the length limits, and a
+**Find** box for any text in the line, in any case. The counters say how many lines match. It
+works while a run is going and searches every line kept, not only the ones on screen; Copy log
+still copies them all.
+In Rename Files From Metadata a file that already has the name the template gives is left alone
+and listed as **SAME**, and the counters say how many; untick SAME to hide them.
+**Rescan**, in Rename Files From Metadata, reads your settings and the library again and plans
+afresh on a cleared log — after editing the template, or after an Undo — keeping the Undo of what
+the dialog already wrote.
 **Close** turns green once there is nothing left to write.
 
 Backing up your database before proceeding is recommended.
@@ -220,15 +235,15 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 58 MB | 79 MB | 78 MB |
-| Restore Original Filenames | 49 MB | 69 MB | 69 MB |
-| Rename Files From Metadata | 154 MB | 185 MB | 183 MB |
+| Archive Original Filenames | 111 MB | 151 MB | 144 MB |
+| Restore Original Filenames | 52 MB | 74 MB | 74 MB |
+| Rename Files From Metadata | 190 MB | 243 MB | 238 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->
 
 A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
-whole run. Past ᝯㄝₓ Core's **Log Lines Kept** (200,000 by default) the oldest lines are dropped
+whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
 

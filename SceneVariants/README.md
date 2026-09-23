@@ -578,7 +578,7 @@ many there are. The plugin uses all of them; the link goes to the first.
   nothing is said.
 - **ᝯㄝₓ Custom Fields Bulk Editor**, where it is present, is handed a description of the variant
   stash-id field for its description store at load; the console says whether it was filed or is
-  waiting for an Apply in that plugin's **Manage Custom Field Descriptions...** dialog.
+  waiting for an Apply in that plugin's **Manage Custom Field Descriptions and Locks...** dialog.
 - **ᝯㄝₓ Scene Filename Manager** asks this plugin, once per Rename Files From Metadata run, for
   each variant's base title and partial postfix under the title rules here, so a file can be
   named after its set; the answer covers every set Review Variant Sets would find. For its
@@ -624,15 +624,15 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Migrate Variant Stash-IDs | 58 MB | 73 MB | 73 MB |
-| Flag Variants | 46 MB | 64 MB | 58 MB |
-| Review Variant Sets | 1936 MB | — | — |
+| Flag Variants | 46 MB | 65 MB | 59 MB |
+| Review Variant Sets | 1938 MB | — | — |
 | Rename Variants | 629 MB | 635 MB | 635 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->
 
 A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
-whole run. Past ᝯㄝₓ Core's **Log Lines Kept** (200,000 by default) the oldest lines are dropped
+whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
 

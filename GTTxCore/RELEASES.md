@@ -8,6 +8,12 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.9.1 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
+| 2.9.0 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
+| 2.8.2 (`61add82`) | 2026-09-23 | GTTxCore 2.8.2: a carrier with no title is named by its file |
+| 2.8.1 (`9293a04`) | 2026-09-23 | GTTxCore 2.8.1, CFBE 3.4.4: a mark per name on Locked Custom Fields; the card change taken back |
+| 2.8.0 (`3217fc3`) | 2026-09-23 | GTTxCore 2.8.0: the card lists an entity's custom fields, described; CFBE 3.4.3 points at the lock |
+| 2.7.0 (`3770de7`) | 2026-09-22 | GTTxCore 2.7.0: Maximum Log Lines Kept, filled with its default |
 | 2.6.0 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 2.5.0 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 2.4.0 (`0aa020e`) | 2026-09-21 | GTTxCore 2.4.0: fieldLocks() asks CFBE's Locked Custom Fields for every writer |

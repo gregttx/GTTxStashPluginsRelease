@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.3.2';
+  var PLUGIN_VERSION = '3.4.6';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -241,7 +241,7 @@
   // can act on; the blob is parsed from the first `{` to the last `}`, which is why the
   // header must not contain a brace.
   var STORE_HEADER = PLUGIN_NAME + ' - custom field descriptions. Managed by the ' +
-    'plugin: edit them in Settings - Tasks - "' + 'Manage Custom Field Descriptions...' +
+    'plugin: edit them in Settings - Tasks - "' + 'Manage Custom Field Descriptions and Locks...' +
     '". Delete this whole description to reset the store.';
 
 
@@ -793,7 +793,10 @@
     '.cfbe-namebox{flex:1 1 12rem;min-width:8rem;background:#1f2b33;color:#f5f8fa;' +
     'border:1px solid #394b59;border-radius:3px;padding:.15rem .4rem;' +
     'font-family:monospace;font-size:.8rem;}' +
-    '.cfbe-rename{padding:.05rem .4rem;line-height:1.2;flex:0 0 auto;}' +
+    '.cfbe-readonly-row button{display:none;}' +
+    '.cfbe-rename,.cfbe-lock{padding:.05rem .4rem;line-height:1.2;flex:0 0 auto;}' +
+    // Grey, not amber: the glyph drowned on the orange. Large enough to read as a switch.
+    '.cfbe-lock{font-size:1.25rem;padding:0 .35rem;}' +
     '.cfbe-text{width:100%;box-sizing:border-box;min-height:5rem;background:#1f2b33;' +
     'color:#f5f8fa;border:1px solid #394b59;border-radius:3px;padding:.35rem .5rem;' +
     'font-family:inherit;font-size:.85rem;resize:vertical;color-scheme:dark;}' +
@@ -1364,7 +1367,7 @@
   // no dialog opens and Stash queues a job that does nothing. Add the second layer if
   // that is ever seen, not before.
   var TASK_NAME = 'Edit Custom Fields Across the Whole Library...';
-  var TASK_DESC = 'Manage Custom Field Descriptions...';
+  var TASK_DESC = 'Manage Custom Field Descriptions and Locks...';
   var TASK_NAMES = [TASK_NAME, TASK_DESC];
 
   // Ours only if the label matches *and* the enclosing SettingGroup is headed with
@@ -2960,7 +2963,7 @@
       this.msg('WARN', 'The description filed under "' + from + '" stays there: the ' +
         'description store on tag ' + _storeTagId + ' is ' + (_store.broken
         ? 'not something this plugin wrote' : 'from a newer release') + ', and this ' +
-        'dialog will not write over it. "Manage Custom Field Descriptions..." says how ' +
+        'dialog will not write over it. "Manage Custom Field Descriptions and Locks..." says how ' +
         'to recover it.');
       return Promise.resolve();
     }
@@ -2992,7 +2995,7 @@
       }, function (e) {
         self.msg('WARN', 'The field was renamed, but its description is still filed ' +
           'under "' + from + '": ' + (e && e.message ? e.message : String(e)) +
-          ' Move it by hand in "Manage Custom Field Descriptions...".');
+          ' Move it by hand in "Manage Custom Field Descriptions and Locks...".');
       });
   };
 
@@ -3430,7 +3433,7 @@
 
     var head = el('div', 'cfbe-head');
     head.appendChild(el('div', 'cfbe-title',
-      PLUGIN_SHORT_NAME + ' - Custom field descriptions'));
+      PLUGIN_SHORT_NAME + ' - Manage Custom Field Descriptions and Locks'));
     // The stale-script warning gets a box of its own, in the same red the settings
     // banner uses, rather than a sentence appended to `noteEl` among the run's other
     // warnings. Every other note here is about the library or another plugin; this one
@@ -3450,7 +3453,9 @@
       'tag, and nothing is written until you press Apply. A value under a field that is ' +
       'not text says so after it - num, bool or null - the same mark the bulk dialog ' +
       'draws, since a null and an empty value look alike. Counts are written with ' +
-      'prefix "x".'));
+      'prefix "x". The lock in front of the name is a switch: pressing it writes the ' +
+      'field into, or out of, the Locked Custom Fields setting at once - a setting, not ' +
+      'the library, so Apply has no part in it.'));
     this.noteEl = el('div', 'cfbe-note', '');
     head.appendChild(this.noteEl);
     this.modal.appendChild(head);
@@ -3463,6 +3468,12 @@
     panes.appendChild(this.namesEl);
     var detail = el('div', 'cfbe-detail');
     this.detailEl = el('div', 'cfbe-detail-head');
+    // The lock in front of the name is the switch: a press writes the Locked Custom
+    // Fields setting at once, rather than the library through Apply. Grey rather than
+    // amber, by choice: the glyph is the whole caption, and it drowned on the orange.
+    this.lockBtn = button(UNLOCK_MARK, 'cfbe-lock cfbe-hidden');
+    this.lockBtn.addEventListener('click', function () { self.toggleLock(); });
+    this.detailEl.appendChild(this.lockBtn);
     this.detailLabel = el('span', null, NAME_HEAD + ' - pick a custom field on the left.');
     this.detailEl.appendChild(this.detailLabel);
     // The name the heading was already showing, as a box. Editing it and pressing
@@ -3815,12 +3826,20 @@
     // A field only the store tag carries has one carrier this scan never read, so the
     // pane names it and draws it as a row of its own rather than reading as an orphan.
     var store = !users.length && hasOwn(_storeTagFields, name) && this.tag;
-    // The lock state in front of the name, locked or open, and (Read-only) after it.
-    this.detailLabel.textContent = descLocked(this.settings, name)
-      ? LOCK_MARK + ' ' + NAME_HEAD + ' (Read-only)' : UNLOCK_MARK + ' ' + NAME_HEAD;
-    this.detailLabel.title = descLocked(this.settings, name) ? lockSentence([name])
-      : 'Not locked. List it in the Locked Custom Fields setting to protect its name, ' +
-        'description and values from bulk edits.';
+    // The lock state on the switch in front of the name, and (Read-only) after it.
+    var locked = descLocked(this.settings, name);
+    this.detailLabel.textContent = NAME_HEAD + (locked ? ' (Read-only)' : '');
+    this.detailLabel.title = locked ? lockSentence([name])
+      : 'Not locked. Press the lock to protect its name, description and values from ' +
+        'bulk edits.';
+    this.lockBtn.textContent = locked ? LOCK_MARK : UNLOCK_MARK;
+    this.lockBtn.title = locked
+      ? 'Locked. Press to take "' + name + '" out of the Locked Custom Fields setting, ' +
+        'written at once.'
+      : 'Not locked. Press to write "' + name + '" into the Locked Custom Fields setting, ' +
+        'at once: its name, description and values then cannot change, and it cannot be ' +
+        'removed from an entity - only added where missing.';
+    this.show(this.lockBtn, true);
     this.nameBox.value = name;
     this.show(this.nameBox, true);
     this.syncRename();
@@ -3895,11 +3914,72 @@
   // reaching it too.
   DescRun.prototype.syncRename = function () {
     this.nameBox.disabled = !this.editable() || this.sel == null;
+    this.lockBtn.disabled = !this.editable() || this.sel == null || !!this.locking;
     // Offered only while there is a staged rename to take back, which is the whole of
     // what it does.
     this.show(this.renameBtn, this.sel != null && !!this.stagedFrom(this.sel));
     this.renameBtn.disabled = !this.editable();
   };
+
+  // The switch. The map is read from the server and sent back whole, since
+  // `configurePlugin` replaces it; the dialog's own copy follows the write, and Stash's
+  // cached configuration is evicted so the settings page shows the new list.
+  DescRun.prototype.toggleLock = function () {
+    var self = this, name = this.sel;
+    if (name == null || !this.editable() || this.locking) return;
+    var was = descLocked(this.settings, name);
+    // A lock landing on a name with a rename staged would be applied to the new name
+    // and refused for the old one: one instruction at a time.
+    if (!was && this.stagedFrom(name)) {
+      this.msg('WARN', 'Undo the staged rename of "' + name + '" before locking it.');
+      return;
+    }
+    this.locking = true;
+    this.syncRename();
+    gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      var input = {}, k;
+      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+      var list = lockedFields(raw).filter(function (n) { return n !== name; });
+      if (!was) list.push(name);
+      input.d1LockedFields = list.join(', ');
+      return gqlRequest('mutation CFBE_SetSetting($id: ID!, $input: Map!) ' +
+        '{ configurePlugin(plugin_id: $id, input: $input) }',
+      { id: PLUGIN_ID, input: input }).then(function () { return input.d1LockedFields; });
+    }).then(function (value) {
+      // Never onto the shared defaults, which a failed settings read opens on.
+      if (self.settings === DEFAULTS) {
+        var copy = {};
+        for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) copy[k] = DEFAULTS[k];
+        self.settings = copy;
+      }
+      self.settings.d1LockedFields = value;
+      self.msg('INFO', '"' + name + '" is ' + (was ? 'unlocked: taken out of' : 'locked: written into') +
+        ' the Locked Custom Fields setting.');
+      evictConfiguration();
+    }, function (e) {
+      self.msg('ERROR', 'The Locked Custom Fields setting could not be written: ' +
+        (e && e.message ? e.message : String(e)));
+    }).then(function () {
+      self.locking = false;
+      self.renderNames();
+      if (self.sel === name) self.pick(name);
+      self.syncRename();
+      self.syncApply();
+    });
+  };
+
+  // The settings page reads the configuration through Stash's Apollo cache; evicting
+  // the root field makes it ask again. Where Apollo is absent the box catches up on the
+  // next visit instead.
+  function evictConfiguration() {
+    var client = window.__APOLLO_CLIENT__;
+    if (!client || !client.cache || !client.cache.evict) return;
+    try {
+      client.cache.evict({ id: 'ROOT_QUERY', fieldName: 'configuration' });
+      if (client.cache.gc) client.cache.gc();
+    } catch (e) { /* the box catches up on the next visit */ }
+  }
 
   // The way off a staged rename: put the library's own name back in the box and let
   // `renameField` see there is nothing left to write. One path, not two.
@@ -4228,7 +4308,7 @@
       { input: { name: name, description: description, custom_fields: marks,
         aliases: [STORE_TAG_ALIAS], ignore_auto_tag: true } });
 
-    var lease = acquireLease('Custom field descriptions');
+    var lease = acquireLease('Custom field descriptions and locks');
     write.then(function (data) {
       var tag = (data && (data.tagUpdate || data.tagCreate)) || null;
       if (!self.tag) {
@@ -4365,7 +4445,7 @@
     this.renderProgress();
 
     var back = this.undoTo;
-    var lease = acquireLease('Custom field descriptions (undo)');
+    var lease = acquireLease('Custom field descriptions and locks (undo)');
     var write = back
       ? gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) { tagUpdate(input: $input) ' +
         '{ id name description } }',
@@ -4775,8 +4855,8 @@
   var _cfTickAt = 0, _cfTickWait = null, _cfTickSettings = null;
 
   function cfFieldTick() {
-    var key = 'c1ExcludeFromAddListField';
-    if (!settingRow(key)) return;
+    var key = 'c1ExcludeFromAddListField', locks = 'd1LockedFields';
+    if (!settingRow(key) && !settingRow(locks)) return;
     if (!_cfTickWait || Date.now() - _cfTickAt > CF_TICK_TTL_MS) {
       _cfTickAt = Date.now();
       _cfTickWait = loadSettings().then(function (s) { _cfTickSettings = s; }, function () {});
@@ -4785,6 +4865,14 @@
     // different key from one holding a single.
     cfTipTick(PLUGIN_ID, key, _cfTickSettings
       ? String(_cfTickSettings[key] || '').replace(/^\s+|\s+$/g, '') : '');
+    // The locked list: one mark per name, drawn after the name it describes. Shown, not
+    // edited here: Stash's Edit box holds its own copy of the value and does not see a
+    // write from the lock switch until a reload, so the switch is the one way to change it.
+    cfTipTick(PLUGIN_ID, locks, _cfTickSettings ? lockedFields(_cfTickSettings) : []);
+    var lockRow = settingRow(locks);
+    if (lockRow && !hasClass(lockRow, 'cfbe-readonly-row')) {
+      lockRow.className = ((lockRow.className || '') + ' cfbe-readonly-row').replace(/^\s+/, '');
+    }
   }
 
   function settingsTick() {
@@ -5186,7 +5274,7 @@
       }
       if (_store.broken) {
         throw new Error('The description store cannot be read, so nothing will be written ' +
-          'over it. Open Manage Custom Field Descriptions to see what it holds.');
+          'over it. Open Manage Custom Field Descriptions and Locks to see what it holds.');
       }
       if (_store.version && cmpVersion(_store.version, PLUGIN_VERSION) > 0) {
         throw new Error('The description store was written by ' + PLUGIN_NAME + ' ' +

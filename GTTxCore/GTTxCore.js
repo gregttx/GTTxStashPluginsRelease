@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '2.6.0';
+  var PLUGIN_VERSION = '2.9.1';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -334,7 +334,7 @@
     if (!dropped) return '';
     return '[' + (kind || 'INFO') + '] The first ' + dropped + ' lines of this log are not ' +
       'kept, so this copy begins after them. The last ' + logKeep() + ' are here - ' +
-      'ᝯㄝₓ Core\'s Log Lines Kept setting says how many.';
+      'ᝯㄝₓ Core\'s Maximum Log Lines Kept setting says how many.';
   }
 
   function copyToClipboard(text, done) {
@@ -929,9 +929,16 @@
   var CF_TIP_HITS = 10;      // carriers named before the rest become a count
   var CF_TIP_MARK = 'ⓘ';     // circled Latin small letter i
 
-  // `id` and one display field per type, and the filter argument each `find*` takes.
+  // `id` and what names a row per type, and the filter argument each `find*` takes.
   // The alias is the list field's own name, so `data.scenes.scenes` is the rows and
-  // `data.scenes.count` is how many there are altogether.
+  // `data.scenes.count` is how many there are altogether. A scene, image or gallery
+  // with no title is named by its file, as the card is (`entityTipName`): "untitled"
+  // says nothing about which one it is.
+  var CF_FILE_NAMES = {
+    scenes: 'title files { basename }',
+    images: 'title visual_files { ... on ImageFile { basename } ... on VideoFile { basename } }',
+    galleries: 'title files { basename } folder { basename }',
+  };
   var CF_TIP_TYPES = [
     { label: 'Scene', plural: 'Scenes', list: 'scenes', arg: 'scene_filter', name: 'title' },
     { label: 'Image', plural: 'Images', list: 'images', arg: 'image_filter', name: 'title' },
@@ -949,7 +956,7 @@
     var parts = CF_TIP_TYPES.map(function (t) {
       return t.list + ': find' + t.plural + '(filter: { per_page: ' + CF_TIP_HITS + ' }, ' +
         t.arg + ': { custom_fields: [{ field: ' + JSON.stringify(field) +
-        ', modifier: NOT_NULL }] }) { count ' + t.list + ' { id ' + t.name + ' } }';
+        ', modifier: NOT_NULL }] }) { count ' + t.list + ' { id ' + (CF_FILE_NAMES[t.list] || t.name) + ' } }';
     });
     _cfCarriers[field] = gqlRequest('query GTTxCarriers { ' + parts.join(' ') + ' }', null)
       .then(function (data) {
@@ -960,7 +967,8 @@
           total += block.count || 0;
           (block[t.list] || []).forEach(function (o) {
             if (names.length >= CF_TIP_HITS) return;
-            names.push(t.label + ' "' + (tipText(o[t.name]) || 'untitled') + '" (' + o.id + ')');
+            var name = CF_FILE_NAMES[t.list] ? entityTipName(o) : o[t.name];
+            names.push(t.label + ' "' + (tipText(name) || 'untitled') + '" (' + o.id + ')');
           });
         });
         return { total: total, names: names };
@@ -1007,7 +1015,7 @@
   // has no size. Re-measured on every open: the panel scrolls.
   function cfTipPlace(node) {
     var box = node._gttxCfBox;
-    var mark = node.firstChild;
+    var mark = node._gttxCfMark || node.firstChild;
     if (!box || !mark || !mark.getBoundingClientRect || !box.getBoundingClientRect) return;
     var a = mark.getBoundingClientRect();
     var b = box.getBoundingClientRect();
@@ -1051,29 +1059,58 @@
   // The id is built from the plugin id and the setting key, so five plugins can carry
   // this block byte-identically and still never collide - the same reasoning the shared
   // Reload UI button's id follows.
+  //
+  // `field` may be a list - a setting naming several fields, Custom Fields Bulk Editor's
+  // Locked Custom Fields - and then every name gets a mark of its own, drawn after the
+  // name so it is plain which one it describes, the names separated by commas as the
+  // box is, and Stash's own text of the value hidden under `.gttx-cflisted` rather than
+  // shown twice. The first mark carries the bare id and the rest `-2`, `-3`, …, so a
+  // list that shrinks takes its spare marks off.
   function cfTipTick(pluginId, key, field) {
     var row = settingRow(pluginId, key);
-    var id = 'gttx-cffield-' + pluginId + '-' + key;
-    var node = document.getElementById(id);
-    if (!row || !field) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
+    var named = Array.isArray(field);   // not instanceof: a list from another realm is a list
+    var list = named ? field.filter(Boolean) : field ? [field] : [];
+    var base = 'gttx-cffield-' + pluginId + '-' + key;
+    if (row) {
+      var on = named && list.length > 0;
+      var cls = String(row.className || '').replace(/\s*gttx-cflisted\b/, '');
+      row.className = (on ? cls + ' gttx-cflisted' : cls).replace(/^\s+/, '');
     }
+    for (var i = 0; ; i++) {
+      var id = i ? base + '-' + (i + 1) : base;
+      var node = document.getElementById(id);
+      if (!row || i >= list.length) {
+        if (!node) break;
+        if (node.parentNode) node.parentNode.removeChild(node);
+        continue;
+      }
+      cfTipNode(node, id, row, list[i], named, i);
+    }
+  }
+
+  function cfTipNode(node, id, row, field, named, index) {
     if (!node) {
       // A wrapper holding the mark and the box: it carries the id and the open-state
       // class, and nothing else - the box is fixed to the viewport, so it is not
       // positioned against this.
       node = el('span', 'gttx-cftipped');
       node.id = id;
+      if (named) {
+        if (index) node.appendChild(el('span', 'gttx-cfsep', ', '));
+        node._gttxCfName = el('span', 'gttx-cfname', '');
+        node.appendChild(node._gttxCfName);
+      }
       var mark = el('span', 'gttx-cftip', CF_TIP_MARK);
       // Reachable without a mouse, like the setting descriptions' own mark.
       mark.tabIndex = 0;
       node.appendChild(mark);
+      node._gttxCfMark = mark;
       node._gttxCfBox = el('span', 'gttx-cftipbox', '');
       node.appendChild(node._gttxCfBox);
     }
     if (node._gttxCfField !== field) {
       node._gttxCfField = field;
+      if (node._gttxCfName) node._gttxCfName.textContent = field;
       // Honest until the read lands rather than a promise about what is coming: the
       // name is the one thing known without asking anything.
       node._gttxCfBox.textContent = 'Custom field "' + field + '"';
@@ -1751,12 +1788,42 @@
         _settingsAt = Date.now();
         _settingsInFlight = null;
         applyDevMods(parseDevMods(out.b1DevMods));
+        seedLogKeep(raw, out);
         return out;
       }, function () {
         _settingsInFlight = null;
         return settings();
       });
     return _settingsInFlight;
+  }
+
+  // The log cap's box is written once with the default, so the settings page shows the
+  // number in force rather than an empty box. Only from the Plugins tab, where the box
+  // is, since §8 holds: a page drawing none of ours writes nothing. Sent with the whole map, since
+  // `configurePlugin` replaces it; the settings page reads through Stash's Apollo cache,
+  // so the cached root field is evicted for it to show the seeded number.
+  var _seeded = false;
+  function onPluginsTab() {
+    var l = window.location;
+    return !!l && /^\/settings\b/.test(String(l.pathname || '')) &&
+      /\btab=plugins\b/.test(String(l.pathname || '') + String(l.search || ''));
+  }
+  function seedLogKeep(raw, out) {
+    if (_seeded || hasOwn(raw, 'a5LogLinesKept') || !onPluginsTab()) return;
+    _seeded = true;
+    var input = {}, k;
+    for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+    input.a5LogLinesKept = out.a5LogLinesKept = LOG_KEEP;
+    gqlRequest('mutation GTTxCoreSeedSettings($plugin_id: ID!, $input: Map!) { ' +
+      'configurePlugin(plugin_id: $plugin_id, input: $input) }',
+      { plugin_id: PLUGIN_ID, input: input }).then(function () {
+        var client = window.__APOLLO_CLIENT__;
+        if (!client || !client.cache || !client.cache.evict) return;
+        try {
+          client.cache.evict({ id: 'ROOT_QUERY', fieldName: 'configuration' });
+          if (client.cache.gc) client.cache.gc();
+        } catch (e) { /* the box fills on the next visit instead */ }
+      }, function () { _seeded = false; });
   }
 
   // **`configurePlugin` replaces a plugin's settings; it never merges.** So the stored map
@@ -2314,6 +2381,10 @@
     // the input rather than widening the row, which is the better of the two anyway.
     '.gttx-selectpaste .react-select__input-container{grid-template-columns:0 1fr;}' +
     '.gttx-cftip{margin-left:.9rem;color:#a7b6c2;cursor:help;}' +
+    // A listed setting: our names stand in for Stash's text of the value, each with
+    // its mark close behind it.
+    '.gttx-cflisted .value > span:not(.gttx-cftipped){display:none;}' +
+    '.gttx-cfname+.gttx-cftip{margin-left:.3rem;}' +
     '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
     'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
     'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +

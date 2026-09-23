@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.1.7 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
+| 4.1.6 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
 | 4.1.5 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 4.1.4 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 4.1.3 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |

@@ -93,21 +93,21 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
-| SceneFilenameManager | Archive Original Filenames | 58 MB | 79 MB | 78 MB |
-| SceneFilenameManager | Restore Original Filenames | 49 MB | 69 MB | 69 MB |
-| SceneFilenameManager | Rename Files From Metadata | 154 MB | 185 MB | 183 MB |
+| SceneFilenameManager | Archive Original Filenames | 111 MB | 151 MB | 144 MB |
+| SceneFilenameManager | Restore Original Filenames | 52 MB | 74 MB | 74 MB |
+| SceneFilenameManager | Rename Files From Metadata | 190 MB | 243 MB | 238 MB |
 | SceneVariants | Migrate Variant Stash-IDs | 58 MB | 73 MB | 73 MB |
-| SceneVariants | Flag Variants | 46 MB | 64 MB | 58 MB |
-| SceneVariants | Review Variant Sets | 1936 MB | — | — |
+| SceneVariants | Flag Variants | 46 MB | 65 MB | 59 MB |
+| SceneVariants | Review Variant Sets | 1938 MB | — | — |
 | SceneVariants | Rename Variants | 629 MB | 635 MB | 635 MB |
 | CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1065 MB | 1065 MB |
-| CustomFieldsBulkEditor | Manage Custom Field Descriptions | 213 MB | 267 MB | 267 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1524 MB | 1517 MB |
-| NormalizeParentTags | Normalize Parent Tags | 3813 MB | 4155 MB | 4053 MB |
+| CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 267 MB | 267 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1525 MB | 1518 MB |
+| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4158 MB | 4054 MB |
 | NormalizeParentTags | Auto Mode Settings | 0 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
 | MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 294 MB | 282 MB |
-| PropagateTagsAndPerformers | Propagate All | 1777 MB | 1822 MB | 1819 MB |
+| PropagateTagsAndPerformers | Propagate All | 1767 MB | 1815 MB | 1810 MB |
 
 A task gives all of it back when its dialog is closed.
 <!-- memory:end -->
@@ -148,7 +148,9 @@ A task gives all of it back when its dialog is closed.
   the repo's own Stop hooks: a plugin's docs left behind by a change to its
   source, a script changed without its version moving, a release missing from `RELEASES.md`, a new
   plugin starting above `0.0.1`. They are tracked; the `settings.local.json` that calls them is not,
-  so a fresh clone has to wire them once.
+  so a fresh clone has to wire them once. A git pre-commit hook in `.githooks/` refuses a commit
+  that stages a plugin's script without moving its version, before the commit exists; wire it with
+  `git config core.hooksPath .githooks`.
 
 ## Licence
 

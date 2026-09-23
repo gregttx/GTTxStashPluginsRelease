@@ -115,7 +115,9 @@ library-wide run grows: ᝯㄝₓ Normalize Parent Tags over 100,000 scenes and 
 9.8 million lines, several gigabytes of them, beside a plan that is already the largest thing in
 the page.
 
-**Log Lines Kept** is how many are kept, 200,000 by default and anywhere from 1,000 to 5,000,000.
+**Maximum Log Lines Kept** is how many are kept, 200,000 by default and anywhere from 1,000 to
+5,000,000; a number outside that is clamped. The box is filled with the default the first time the
+Plugins tab of the settings page is opened, so it shows the number in force.
 Past it the oldest lines are dropped and the copy opens by saying how many went. Nothing else is
 affected: the listing, the counters, what is written and what Undo can take back are all whole.
 
@@ -155,8 +157,11 @@ page.
 
 A setting that names a **custom field** carries a grey **ⓘ** mark at the end of its value. Hover
 it and the tooltip names the field, its description if it has one, and what in the library carries
-it - a count and the first few entities by name and id. The tooltip opens *above* the mark rather
-than under the pointer, so the pointer does not cover its first line.
+it - a count and the first few entities by name and id, a scene, image or gallery with no title by
+its file. The tooltip opens *above* the mark rather
+than under the pointer, so the pointer does not cover its first line. A setting that names
+**several** fields - Custom Fields Bulk Editor's Locked Custom Fields - shows each name with a mark
+of its own behind it.
 
 ## The bulk-edit lease
 

@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.2.5';
+  var PLUGIN_VERSION = '5.2.9';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1537,7 +1537,7 @@
           '\u2019s description store.');
       } else if (outcome === 'queued') {
         ptp2re('[ptp2re] a description for "' + F4_DEFAULT + '" is waiting for ' + CFBE_ID +
-          '\u2019s description store - open "Manage Custom Field Descriptions..." and ' +
+          '\u2019s description store - open "Manage Custom Field Descriptions and Locks..." and ' +
           'press Apply to file it.');
       }
     }, function () { /* a sentence is not worth an error */ });
