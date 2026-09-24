@@ -119,7 +119,8 @@ An unknown token, a rating scale outside 5–100, or a tag no tag or alias is na
 is named. `/` and `\` are dropped; the other characters a filename cannot hold become look-alikes it
 can — `:` becomes `∶`, `?` `？`, `*` `∗`, `"` `＂`, `<` `‹`, `>` `›`, `|` `∣`. Spaces are collapsed, a
 trailing dot or space trimmed, and the name capped at the **Maximum Filename Length**, and its full
-path at the **Maximum Full Path Length** when one is set. A scene whose template gives an
+path at the **Maximum Full Path Length**; a name cut for the path is also a WARN line, saying how
+much room its folder left. A scene whose template gives an
 empty name is skipped.
 
 **Names already taken.** A name another file in the same folder has now, or that an earlier file in
@@ -173,10 +174,12 @@ field back as the move left it. A locked field that already holds a value is not
 
 Nothing is written until you press **Proceed**. **Stop** ends a write after the scene in flight.
 **Undo** reverses what this dialog wrote — the fields put back as they were, the files renamed back —
-for as long as the dialog stays open. **Copy log** puts the counters and every line on the clipboard.
+for as long as the dialog stays open. Every pass is also kept in ᝯㄝₓ Core's
+[Undo History](../GTTxCore/README.md#undo-history), where it can be undone later — a file renamed back in its folder. **Copy log** puts the counters and every line on the clipboard.
 
 A run over a whole library writes far more lines than the dialog shows, so a bar over the log
-filters what is drawn: a box per kind of line — PLAN, SAME, EDIT, UNDO, INFO, WARN, ERROR — to hide it,
+filters what is drawn: a box per kind of line — PLAN, SAME, EDIT (RENAME in Rename Files From Metadata), UNDO, INFO,
+WARN, ERROR — to hide it,
 **Only cut names** in Rename Files From Metadata for the names cut to fit the length limits, and a
 **Find** box for any text in the line, in any case. The counters say how many lines match. It
 works while a run is going and searches every line kept, not only the ones on screen; Copy log
@@ -204,7 +207,7 @@ remove a locked field. A file Rename cannot archive for that reason is not renam
 | **Max Performers In Filename** | 3 | How many performers the `performers` token names — the ones with the most scenes, ties by name. The rest are counted as `+N`. **0 names none**, so the token writes nothing; `performercount` gives the number on its own. |
 | **List Performers Alphabetically** | off | Off: the kept performers by scene count, most first. On: the same performers alphabetically. |
 | **Maximum Filename Length** | 200 | The longest name Rename gives, extension included, in UTF-8 bytes (an accented letter is 2, an emoji 4), from 60 to 255. Most filesystems allow 255; an encrypted Synology shared folder or any eCryptfs folder about 143, so use 140 there. |
-| **Maximum Full Path Length** | none | The longest full path - folder, separator and name - in characters as Windows counts them. A name that would pass it is cut further; a folder whose own path leaves no room is skipped with a warning. Use 259 when the files are opened from Windows without long paths turned on. |
+| **Maximum Full Path Length** | Auto | The longest full path - folder, separator and name - in characters as Windows counts them: Auto, a number from 100, or 0 for none. A name that would pass it is cut further, with a warning; a folder whose own path leaves no room is skipped with a warning. Auto is 259 when Stash or your browser runs on Windows (Explorer and many Windows programs cannot open a longer path), else 1023 on macOS and 4095 on Linux; the dialog says which and why. Stash's edit box for it has a **Set to Auto** button that puts Auto back in the box; Confirm saves it. **Auto cannot see** a Linux or Docker Stash whose files you open from Windows through a share while you browse from another system — type 259 there — nor how long the share's own path is on the Windows side. |
 
 ## Relationship to the other plugins in this repo
 
@@ -236,8 +239,8 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Archive Original Filenames | 111 MB | 151 MB | 144 MB |
-| Restore Original Filenames | 52 MB | 74 MB | 74 MB |
-| Rename Files From Metadata | 190 MB | 243 MB | 238 MB |
+| Restore Original Filenames | 53 MB | 74 MB | 74 MB |
+| Rename Files From Metadata | 191 MB | 248 MB | 239 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

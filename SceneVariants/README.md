@@ -130,7 +130,8 @@ far the scan has got. **Each scene in the plan is a link to it**, and hovering o
 its cover, its studio, its performers and its tags — since a title and an id are exactly what does
 not say which scene it is. **Undo** puts every one of them back — the field to what it said before,
 or removed where the scene had none, and the stash-ids back on — for as long as the dialog stays
-open.
+open. Every write here is also kept in ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history), where it can
+be undone after the dialog has closed.
 
 **Copy log** hands over the counters and every line as plain text, including the ones a long list
 no longer shows: the dialog keeps the last thousand lines on screen so a library-sized migration
@@ -143,8 +144,8 @@ Undo up on its offer. Once a write is under way that exit is
 gone and **Stop** takes over: it ends after the batch in flight, what landed stays landed, and Undo
 still covers exactly the scenes that were written.
 
-**Rescan** reads the library again and replaces the plan with whatever is left to do — the log is
-kept, with a `--- Rescan ---` line between the passes, and so is anything Undo can still reverse.
+**Rescan** reads the library again and replaces the plan with whatever is left to do. The log
+starts afresh; anything Undo can still reverse is kept.
 It is in every one of this plugin's dialogs, shown whenever the dialog is not busy.
 
 Running it twice is safe: a scene whose field already says the right thing, and which has no
@@ -225,7 +226,7 @@ untick it and they are forgotten — the keys are removed rather than written as
 remembered weights are also what the Variants tab prices its own drift score by.
 
 Tick **Exclude Organized** and every scene marked Organized is left out of the listing: out of its
-set's drift score, out of the scenes you can pick, and out of what Synchronize Set pushes to. A set
+set's drift score, out of the scenes you can pick, and out of what Synchronize Set from Selected pushes to. A set
 left with a single scene is not listed. It is off by default and kept with the weights under
 **Remember** - and remembered, the Variants tab's own drift score leaves organized scenes out too, so
 the two numbers stay the same.
@@ -274,20 +275,26 @@ read off your own weights rather than fixed in points, so repricing a difference
 colours with it.
 
 The listing and the log below it share the dialog, and the bar between them is the divider — grab
-it anywhere along its width and pull to resize the listing. The counter line says what the scan
+it anywhere along its width and pull to resize the listing, which opens at half the room it shares
+with the log; it stays under the pointer, stops at
+the smallest and largest the listing can be, and a growing log does not take the space back. The counter line says what the scan
 has found **as it goes**, page by page: `Scanned 812 scenes. 37 variant sets found. 0 changes
-listed.`
+listed.` A set's score is worked out again as soon as a write or an Undo in its review lands.
 
 Open a set and pick the scene whose values are right — that one radio picks the set *and* the
-source, because they are one decision — then press **Synchronize Set...**. What follows is exactly
+source, because they are one decision — then press **Synchronize Set from Selected...**, which sits
+before Proceed. One set is open at a time: opening one closes the others and sorts the list again
+by score. A set opens with its first scene picked, and a set you opened before comes back with the
+scene you last picked in it. What follows is exactly
 the plan the tab's own button produces: one checkbox line per difference, adds and replaces, the
 All boxes, the ▸ pickers, and nothing written until **Proceed**. Each press of **Synchronize
-Set...** re-reads that set's scenes first, so a second source picked out of a set you have just
+Set from Selected...** re-reads that set's scenes first, so a second source picked out of a set you have just
 written to is planned from what the library holds now rather than from what the scan saw. The
 set's drift score and counts are restated on the line they are already drawn on — **the listing does not
-re-sort**; re-sorting is what **Rescan** is for. **Undo** reaches every set written while the
-dialog has been open, in reverse order. On the set already listed the button is unavailable, with
-the reason on it.
+re-sort** until you open a set or press **Rescan**. After each press the selection moves on to
+the next scene in the set, the first after the last, so pressing again synchronizes from that one.
+**Undo** reaches every set written while the dialog has been open, in reverse order. Picked again,
+the scene just listed from leaves the button unavailable, with the reason on it.
 
 ### Naming the partials of a set
 
@@ -301,11 +308,14 @@ of ` - cut #` with a first index of `00` gives "Song - cut #00", and an empty po
 and "Song2" — or, with the first index empty too, "Song" for every partial. Full-duration scenes
 are never renamed: the base is read from them.
 
-The base name is what the set's titles share once the plugin's own postfix is taken off — so a
-full-duration "Song - Remastered" beside "Song - Promo 2" gives "Song", and a partial titled any
-old way does not get a vote. Where the titles share nothing, the base is the full-duration scene's
-title, if the set has exactly one; a set with neither is listed with a warning and nothing
-proposed. Either way a base you have written into the **Variant Base Name** custom field on any
+The base name is the full-duration scene's title — what the full-duration titles share, where a set
+has several — with the plugin's own postfix taken off. The partials do not vote beside it, so a
+set whose full-duration scene was retitled "Adventures #04, Scene #04" names its partials after
+that, not after the "Adventures #04 - Scene 4" they still carry. Only in a set with no
+full-duration scene do the partials already titled `<base><postfix><index>` vote, and a partial
+titled any old way never does. A set whose titles share nothing is listed with a warning and
+nothing proposed. The hover on each line names the scenes the base was read from. A full-duration title carrying words the partials should not — "Song - Remastered" — is settled
+by the base you write into the **Variant Base Name** custom field: a base you have written into the **Variant Base Name** custom field on any
 scene of the set wins over the titles, which is how a set the rule reads wrong is settled once. A
 scene carrying anything in the **Variant No-Rename** custom field is left alone, and so is one
 carrying the tag named in **Exclude Scenes Carrying This Tag From Renaming**, or any tag filed
@@ -316,10 +326,11 @@ Indexes count from the **First Partial Index** setting, whose spelling is the ru
 it, and no index is ever added: every partial wears the postfix alone, however many there are. They
 are handed out longest scene first — the order the Variants tab lists them in — with the bigger
 file breaking a tie, and a partial whose title already carries an index in the expected shape keeps
-it, so a run never renumbers a set you numbered by hand. Turn on **Renumber by Duration** and the
+it — doubled or non-breaking spaces included, which the rename then makes single and marks
+**(spacing fixed)**, since the log line cannot show them — so a run never renumbers a set you numbered by hand. Turn on **Renumber by Duration** and the
 index a partial is expected to carry is the one its duration gives it, everywhere the rule is
 applied: a set numbered the other way round is title drift in the review and on the tab, and this
-task, Synchronize Variants, Synchronize Set and the offer after a save all propose the swap. The
+task, Synchronize Variants, Synchronize Set from Selected and the offer after a save all propose the swap. The
 box above this task's listing starts from that setting and overrides it for the dialog only,
 re-planning at once. A set you want left as it is numbered is marked, per scene, in the no-rename
 field or with the no-rename tag.
@@ -464,7 +475,7 @@ were named after. The scene you just renamed is the base, so partials still wear
 cannot vote it back; a base pinned in the **Variant Base Name** field still wins, and the listing
 then says the partials keep their titles because of it. Renaming a partial pushes its title onto
 no sibling. The same rule applies to the title lines of **Synchronize Variants** and of the review
-dialog's Synchronize Set.
+dialog's Synchronize Set from Selected.
 
 ### Taking a stash-id off a scene
 
@@ -510,7 +521,9 @@ installed but cannot say what is locked, every custom field is treated as locked
 
 All under **Settings → Plugins → ᝯㄝₓ Scene Variants**, all optional. The eight about how a
 partial-duration scene is titled are in one dialog, opened from the **Variants Title...** row at
-the end of the group, so the page itself keeps to the tags and the switches the tab runs on:
+the end of the group, which says what they are set to - with a **ⓘ** after each custom field
+Custom Fields Bulk Editor describes, as in the dialog - so the page itself keeps to the tags and the
+switches the tab runs on:
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -623,10 +636,10 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Migrate Variant Stash-IDs | 58 MB | 73 MB | 73 MB |
-| Flag Variants | 46 MB | 65 MB | 59 MB |
-| Review Variant Sets | 1938 MB | — | — |
-| Rename Variants | 629 MB | 635 MB | 635 MB |
+| Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
+| Flag Variants | 46 MB | 88 MB | 81 MB |
+| Review Variant Sets | 1948 MB | — | — |
+| Rename Variants | 635 MB | 646 MB | 646 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

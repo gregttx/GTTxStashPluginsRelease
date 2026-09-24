@@ -16,10 +16,11 @@ and UI plugin component patching (staging tags in the scene edit form) both depe
 >
 > The dialog does have an **[Undo](#undoing-a-run)** button, but it only reaches its own writes and
 > only while it stays open. It is a way out of a run you regret in the moment, not a safety net —
-> the backup is the safety net.
+> the backup is the safety net. ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history) keeps every run for
+> later, automatic ones included, but it lives in this browser and is no backup either.
 >
 > The two **auto-merge** settings deserve the same caution for a different reason: they write on
-> every save, with no dialog and nothing to undo them. The manual buttons are the safe way to try
+> every save, with no dialog; only ᝯㄝₓ Core's Undo History can take them back. The manual buttons are the safe way to try
 > this plugin out.
 
 A front-end-only Stash plugin that adds two tag-merging buttons:
@@ -360,7 +361,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Merge Performer Tags into All Their Scenes | 271 MB | 294 MB | 282 MB |
+| Merge Performer Tags into All Their Scenes | 268 MB | 293 MB | 282 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

@@ -15,7 +15,8 @@ copy must copy the `GTTxCore` folder too. Tag custom fields (two of the exclusio
 >
 > The dialog does have an **[Undo](#undo)** button, but it only reaches its own writes and only
 > while it stays open. It is a way out of a run you regret in the moment, not a safety net — the
-> backup is the safety net.
+> backup is the safety net. ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history) keeps every pass for later,
+> automatic ones included, but it lives in this browser and is no backup either.
 
 A front-end-only Stash plugin that adds three tasks to **Settings → Tasks → Plugin Tasks**:
 
@@ -107,8 +108,8 @@ is saved. The Images selector is marked **(slow)** here for the same reason, and
 label says why. The Auto Mode Settings dialog does not mark it, since nothing there starts a
 whole-library pass.
 
-Under the selectors, **Set All Prune**, **Set All Roll Up** and **Set All Off** move all seven at
-once. Change a selector, by hand or with one of those, and the plan on screen stops being what
+Beside the keep-this-selection box, **Set All:** **Prune**, **Roll Up** and **Off** move all seven
+at once. Change a selector, by hand or with one of those, and the plan on screen stops being what
 **Proceed** would write, so Proceed is disabled and **Rescan** appears; pressing it re-plans
 against the new selection. **Keep this
 selection for the next time this dialog opens** does what it says — it lives in your browser, not
@@ -344,8 +345,8 @@ A type set to **PRUNE** has any tag another tag on the same entity implies remov
 Stash saves one; a type set to **ROLLUP** has every ancestor added; **OFF** is left alone. A type
 that is not mentioned at all is OFF.
 
-**The Auto Mode Settings... dialog is the editor for it** — seven selectors, the same three
-**Set All** buttons, and an amber **Save**, so nobody has to type the line.
+**The Auto Mode Settings... dialog is the editor for it** — seven selectors, the same **Set All:**
+buttons under them, and an amber **Save**, so nobody has to type the line.
 
 **On the settings page you get that dialog instead of Stash's text editor.** In the **Automatic
 mode per entity type** row, the value is shown in words — `Performers=Off, Scenes=Prune, Scene
@@ -559,7 +560,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Normalize Parent Tags | 3818 MB | 4158 MB | 4054 MB |
+| Normalize Parent Tags | 3818 MB | 4144 MB | 4042 MB |
 | Auto Mode Settings | 0 MB | — | — |
 | Show Tag Hierarchy | 15 MB | — | — |
 

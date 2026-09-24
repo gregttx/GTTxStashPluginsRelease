@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.5.1 (`af8d8e3`) | 2026-09-23 | Undo History, step 2: every writing plugin records; the memory tool counts it |
+| 3.5.0 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |
 | 3.4.6 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
 | 3.4.5 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
 | 3.4.4 (`9293a04`) | 2026-09-23 | GTTxCore 2.8.1, CFBE 3.4.4: a mark per name on Locked Custom Fields; the card change taken back |

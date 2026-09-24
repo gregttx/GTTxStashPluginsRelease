@@ -51,7 +51,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '1.3.1';
+  var PLUGIN_VERSION = '1.5.1';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -92,8 +92,11 @@
   var NAME_BYTES_MIN = 60;
   var NAME_BYTES_MAX = 255;
   // The folder's path, a separator and the name, in UTF-16 units as Windows counts
-  // them. 0 checks nothing; 259 is Windows' limit without long paths turned on.
+  // them. 0 checks nothing; 259 is Windows' limit without long paths turned on. Auto,
+  // the default, picks one from the operating systems it can see (`autoPath`).
   var PATH_MIN = 100;
+  var PATH_AUTO = 'Auto';
+  var PATH_WINDOWS = 259, PATH_MAC = 1023, PATH_LINUX = 4095;
 
   function trim(text) {
     return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
@@ -147,7 +150,9 @@
     a1FilenameField: FIELD_DEFAULT,
     b1RenameTemplate: TEMPLATE_DEFAULT,
     b2MaxPerformers: MAX_PERFORMERS_DEFAULT,
+    b3PerformersAlphabetical: false,
     b4MaxNameBytes: NAME_BYTES_DEFAULT,
+    b5MaxPathLength: PATH_AUTO,
   };
 
   // **Absent is seeded, present is answered** - even an empty box, which means the
@@ -243,10 +248,29 @@
     return isNaN(n) ? NAME_BYTES_DEFAULT : Math.max(NAME_BYTES_MIN, Math.min(NAME_BYTES_MAX, n));
   }
 
-  // 0 (or empty) is no limit; anything else is at least PATH_MIN.
+  // PATH_AUTO where the box says Auto, is empty or holds no number; 0 (or less) is no
+  // limit; any other number is at least PATH_MIN.
   function maxPathLength(s) {
     var n = parseInt((s || settings()).b5MaxPathLength, 10);
-    return isNaN(n) || n <= 0 ? 0 : Math.max(PATH_MIN, n);
+    return isNaN(n) ? PATH_AUTO : n <= 0 ? 0 : Math.max(PATH_MIN, n);
+  }
+
+  // Auto: Windows' limit where the Stash server or this browser runs on Windows - the
+  // browser standing in for the machine the files are opened from - else the server's own.
+  // Resolves to { max, why }. A server that cannot say is taken for Linux.
+  function autoPath() {
+    var nav = window.navigator || {};
+    var ua = String((nav.userAgentData && nav.userAgentData.platform) || nav.platform || nav.userAgent || '');
+    var browserWin = /win/i.test(ua) && !/darwin/i.test(ua);
+    return gqlRequest('query SFMServerOs { systemStatus { os } }', null)
+      .then(function (d) { return String(((d && d.systemStatus) || {}).os || ''); }, function () { return ''; })
+      .then(function (os) {
+        if (/windows/i.test(os)) return { max: PATH_WINDOWS, why: 'Stash runs on Windows' };
+        if (browserWin) return { max: PATH_WINDOWS, why: 'this browser runs on Windows, where the files are likely opened' };
+        if (/darwin/i.test(os)) return { max: PATH_MAC, why: 'Stash runs on macOS' };
+        return { max: PATH_LINUX, why: os ? 'Stash runs on ' + os + ' and this browser not on Windows'
+          : 'Stash did not say what it runs on, and this browser does not run on Windows' };
+      });
   }
 
   function maxPerformers(s) {
@@ -311,7 +335,7 @@
     '.sfm-filter-find{flex:1 1 12rem;min-width:8rem;background:#1f2b33;color:#f5f8fa;' +
     'border:1px solid #394b59;border-radius:3px;padding:.15rem .4rem;}' +
     '.sfm-ERROR{color:#ff7373;} .sfm-WARN{color:#ffb648;} .sfm-INFO{color:#a7b6c2;}' +
-    '.sfm-EDIT{color:#84d68a;} .sfm-SAME{color:#7d8f9c;}' +
+    '.sfm-EDIT,.sfm-RENAME{color:#84d68a;} .sfm-SAME{color:#7d8f9c;}' +
     '.sfm-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.sfm-foot button{margin-right:.5rem;}' +
@@ -844,7 +868,7 @@
       var rep = cleanReport(renderTemplate(run.nodes, values), room), stem = rep.stem;
       if (!stem) return { why: 'the template gives it an empty name' };
       var to = stem + ext, holder = holderOf(run, folderOf(file), to, file);
-      if (!holder) return { to: to, cut: !!rep.cut };
+      if (!holder) return { to: to, cut: !!rep.cut, cutBy: rep.by, full: rep.cut ? stem.length + ext.length : 0 };
       if (to === last) {
         return { why: '"' + to + '" is already ' + (holder.planned ? 'the new name of scene '
           : 'the name of a file of scene ') + holder.scene.id + ' in the same folder' };
@@ -911,10 +935,13 @@
       run.maxPath = maxPathLength(s);
       run.claimed = {};
       run.existing = {};
-      run.msg('INFO', 'Template: "' + run.template + '". ' + plural(run.maxPerformers, 'performer') +
-        ' at most, listed ' + (run.alphabetical ? 'alphabetically' : 'by scene count') + '. Names ' +
-        'at most ' + run.maxNameBytes + ' bytes with their extension' + (run.maxPath ? ', and full paths at ' +
-        'most ' + run.maxPath + ' characters' : '') + '.');
+      var pathDone = (run.maxPath === PATH_AUTO ? autoPath() : Promise.resolve(null)).then(function (auto) {
+        if (auto) run.maxPath = auto.max;
+        run.msg('INFO', 'Template: "' + run.template + '". ' + plural(run.maxPerformers, 'performer') +
+          ' at most, listed ' + (run.alphabetical ? 'alphabetically' : 'by scene count') + '. Names ' +
+          'at most ' + run.maxNameBytes + ' bytes with their extension' + (run.maxPath ? ', and full paths at ' +
+          'most ' + run.maxPath + ' characters' + (auto ? ' (Auto: ' + auto.why + ')' : '') : '') + '.');
+      });
       run.nodes = parseTemplate(run.template);
       run.used = templateTokens(run.nodes);
       run.specs = {};
@@ -938,6 +965,7 @@
       }
       var api = coop().api && coop().api.SceneVariants;
       return Promise.all([
+        pathDone,
         lockedFor(run),
         tagSetsFor(run),
         uses('basetitle') || uses('variantpostfix') ? titlePartsFor(run, api) : null,
@@ -971,6 +999,10 @@
         if (got.why) { run.msg('WARN', who + ' is skipped: ' + got.why + '.'); return; }
         var job = { scene: slim, file: { id: f.id }, folder: folderOf(f), from: f.basename, to: got.to,
           cut: got.cut };
+        if (got.cutBy === 'path') {
+          run.msg('WARN', who + ' has its new name cut to ' + got.full + ' characters: its folder\'s path ' +
+            'leaves no more under the ' + run.maxPath + '-character path limit.');
+        }
         if (got.to !== f.basename && !hasOwn(names.map, f.id)) {
           // A missing field may be added whatever the lock; a present one only changed.
           if (names.raw != null && run.locked) {
@@ -978,7 +1010,8 @@
               '" is locked in ᯯㄝₓ Custom Fields Bulk Editor, so it cannot be added.');
             return;
           }
-          archive = archive || { scene: slim, value: archiveValue(withEveryFile(scene, names.map)) };
+          archive = archive || { scene: slim, value: archiveValue(withEveryFile(scene, names.map)),
+            prev: names.raw };
           job.archive = archive;
         }
         run.claimed[nameKey(job.folder, got.to)] = { scene: slim, file: job.file };
@@ -1442,11 +1475,25 @@
   // to fit, and text found anywhere in the line. It changes what the screen shows and
   // nothing else, so it stays live through a run; Copy log still copies every line.
   var LOG_KINDS = ['PLAN', 'SAME', 'EDIT', 'UNDO', 'INFO', 'WARN', 'ERROR'];
+  var KIND_TIPS = {
+    PLAN: 'The changes the scan found, before they are written.',
+    SAME: 'The files that already have the name the template gives, left alone.',
+    EDIT: 'The changes written.',
+    RENAME: 'The files renamed.',
+    UNDO: 'The changes Undo put back.',
+    INFO: 'Notes on the run: what was read, what was recorded, totals.',
+    WARN: 'What was skipped, and why.',
+    ERROR: 'What failed to write.',
+  };
+
+  // What a written line is called: a rename renames, every other task edits a field.
+  function doneKind(task) { return task === RENAME_TASK ? 'RENAME' : 'EDIT'; }
 
   Run.prototype.filterBar = function () {
     var self = this, bar = el('div', 'sfm-filter');
     bar.appendChild(el('span', 'sfm-filter-label', 'Show:'));
     LOG_KINDS.forEach(function (kind) {
+      if (kind === 'EDIT') kind = doneKind(self.task);
       var box = el('input');
       box.type = 'checkbox';
       box.checked = true;
@@ -1455,6 +1502,7 @@
         self.redraw();
       });
       var label = el('label', 'sfm-filter-kind sfm-' + kind);
+      label.title = 'Untick to hide these lines. ' + KIND_TIPS[kind];
       label.appendChild(box);
       label.appendChild(el('span', null, kind));
       bar.appendChild(label);
@@ -1464,7 +1512,7 @@
       cut.type = 'checkbox';
       cut.addEventListener('change', function () { self.filter.cut = !!cut.checked; self.redraw(); });
       var cutLabel = el('label', 'sfm-filter-kind sfm-filter-cut');
-      cutLabel.title = 'Only the names cut to fit the Maximum Filename Length or the Maximum Full ' +
+      cutLabel.title = 'Show only the names cut to fit the Maximum Filename Length or the Maximum Full ' +
         'Path Length.';
       cutLabel.appendChild(cut);
       cutLabel.appendChild(el('span', null, 'Only cut names'));
@@ -1473,7 +1521,7 @@
     var find = el('input', 'sfm-filter-find');
     find.type = 'search';
     find.placeholder = 'Find in the log';
-    find.title = 'Only the lines holding this text, in any case.';
+    find.title = 'Show only the lines holding this text, in any case. Searches every line kept, not only those on screen.';
     find.addEventListener('input', function () {
       self.filter.find = String(find.value || '').toLowerCase();
       self.redraw();
@@ -1688,12 +1736,38 @@
     });
   };
 
+  // Undo History, where ᝯㄝₓ Core keeps one. A job here is one of two changes: a value
+  // for the custom field (Archive, the archive a rename writes first, a carried name), or
+  // a file's new name, which goes back by moving it in its folder under the old one.
+  function journalEntry(job, field, reversed) {
+    var e = job.value !== undefined
+      ? { type: 'scenes', id: String(job.scene.id), name: sceneName(job.scene), field: 'custom_fields.' + field,
+        before: job.prev == null ? undefined : job.prev, after: job.value }
+      : { type: 'scenes', id: String(job.scene.id), name: sceneName(job.scene), field: 'files.' + job.file.id,
+        before: job.from, after: job.to, folder: job.folder };
+    if (reversed) { var b = e.before; e.before = e.after; e.after = b; }
+    return e;
+  }
+
+  function journalPass(label) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+  }
+
   Run.prototype.go = function () {
     if (this.state !== 'listing' || this.stale) return;
     var self = this, task = this.task, field = this.field, jobs = this.pending();
     if (!jobs.length) return;
     this.setState('writing');
+    var pass = journalPass(task.title), steps = [];
     this.archiveFirst(jobs).then(function () {
+      // The archives written ahead of the renames are changes of their own.
+      jobs.forEach(function (j) {
+        var step = task.before ? task.before(j) : null;
+        if (step && step.done && steps.indexOf(step) === -1) steps.push(step);
+      });
+      if (pass) pass.entries(steps.map(function (st) { return journalEntry(st, field, false); }));
       jobs = jobs.filter(function (j) { return !j.failed; });
       if (self.stopped) return null;
       return self.runJobs(jobs, task.op, PLUGIN_SHORT_NAME + ': ' + task.title,
@@ -1707,12 +1781,14 @@
             job.written = true;
             self.changes.push(job);
             self.written++;
-            self.sceneLine('EDIT', job, task.tail(job, field));
+            self.sceneLine(doneKind(task), job, task.tail(job, field));
+            if (pass) pass.entries([journalEntry(job, field, false)]);
           }
         });
     }).then(function () {
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.pending().length, self.task.unit || 'scene') +
         ' left unwritten.');
+      if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
       self.setState('listing');
     });
   };
@@ -1775,6 +1851,7 @@
   Run.prototype.undoWrites = function () {
     var self = this, task = this.task, field = this.field;
     var jobs = this.changes.slice().reverse();
+    var pass = journalPass(task.title + ', undone');
     this.setState('undoing');
     this.runJobs(jobs, task.op + 'Undo', PLUGIN_SHORT_NAME + ': ' + task.title + ' (undo)',
       function (job) { return task.undo(job, field); },
@@ -1790,9 +1867,11 @@
         job.written = false;
         self.written--;
         self.sceneLine('UNDO', job, task.tail(job, field));
+        if (pass) pass.entries([journalEntry(job, field, true)]);
       }).then(function () {
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.changes.length, self.task.unit || 'scene') +
         ' still written.');
+      if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
       self.setState('listing');
     });
   };
@@ -2563,8 +2642,48 @@
   // ── Wiring ────────────────────────────────────────────────────────────────
   //
   // Decoration only, so a one-second timer and no `domBus` subscription.
+  // **Set to Auto, in Stash's own edit box for Maximum Full Path Length.** Stash opens a
+  // modal to edit a STRING setting, headed with its display name; the button fills the
+  // box with Auto the way typing does - through the input's native value setter and an
+  // `input` event, since React owns the box and a bare `.value` is undone on its next
+  // render - and Stash's Confirm saves it. Nothing is written from here.
+  var PATH_SETTING_NAME = 'Maximum Full Path Length';
+  function pathModalTick() {
+    var heads = document.querySelectorAll ? document.querySelectorAll('.modal-header') : [];
+    for (var i = 0; i < heads.length; i++) {
+      var head = heads[i];
+      if (trim(head.textContent).indexOf(PATH_SETTING_NAME) !== 0) continue;
+      var box = head.parentNode, foot = null, input = null;
+      var kids = box && box.querySelectorAll ? box.querySelectorAll('.modal-footer') : [];
+      foot = kids[0] || null;
+      var inputs = box && box.querySelectorAll ? box.querySelectorAll('input') : [];
+      input = inputs[0] || null;
+      if (!foot || !input || foot._sfmAuto) continue;
+      foot._sfmAuto = true;
+      var btn = button('Set to Auto', 'sfm-path-auto');
+      paintButton(btn, 'btn-info');
+      btn.title = 'Put Auto in the box: 259 when Stash or this browser runs on Windows, else ' +
+        '1023 on macOS and 4095 on Linux. Press Confirm to save it.';
+      btn.addEventListener('click', setAuto(input));
+      foot.insertBefore(btn, foot.firstChild);
+    }
+  }
+  function setAuto(input) {
+    return function (e) {
+      if (e && e.preventDefault) e.preventDefault();
+      var proto = window.HTMLInputElement && window.HTMLInputElement.prototype;
+      var desc = proto && Object.getOwnPropertyDescriptor(proto, 'value');
+      if (desc && desc.set) desc.set.call(input, PATH_AUTO); else input.value = PATH_AUTO;
+      try {
+        if (input.dispatchEvent) input.dispatchEvent(new window.Event('input', { bubbles: true }));
+      } catch (err) { /* a browser without Event: the box shows Auto, typing once saves it */ }
+      if (input.focus) input.focus();
+    };
+  }
+
   function tick() {
     try { settingsTick(); } catch (e) { console.error('[sfm] settings tick:', e); }
+    try { pathModalTick(); } catch (e) { console.error('[sfm] path box tick:', e); }
   }
 
   coop().respecters[PLUGIN_ID] = true;

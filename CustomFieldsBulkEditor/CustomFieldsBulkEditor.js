@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.4.6';
+  var PLUGIN_VERSION = '3.5.4';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -3106,9 +3106,11 @@
       byType[key].ids.push(c.id);
     });
     var label = 'Custom Fields - ' + planned.mode + ' "' + planned.name + '"';
+    var written = {};
 
-    this.runWrites(batches, label).then(function (ok) {
+    this.runWrites(batches, label, written).then(function (ok) {
       self.applied = ok;
+      self.recordPass(label, planned.changes, written, false);
       // Only once something was actually written: a rename that failed everywhere must
       // not move a description, or the setting, off the name the library still carries.
       if (ok && planned.mode === 'rename' && planned.from) {
@@ -3194,8 +3196,10 @@
 
     this.setState('undoing');
     this.renderProgress();
-    this.runWrites(batches, 'Custom Fields (undo)').then(function (ok) {
+    var undoWritten = {};
+    this.runWrites(batches, 'Custom Fields (undo)', undoWritten).then(function (ok) {
       self.undone = ok;
+      self.recordPass('Custom Fields, undone', undoable, undoWritten, true);
       // The description followed the rename out, and the setting with it where the
       // rename was the hide field's; both follow the undo back. Read off the changes
       // rather than remembered separately - `c.to` is what a rename leaves on one.
@@ -3232,10 +3236,63 @@
     });
   };
 
+  // Undo History, where ᝯㄝₓ Core keeps one. A change here is a custom field's value on
+  // one entity - there, or not - so it is recorded as it is: `before` and `after`, absent
+  // as `undefined`; a rename as the old name going and the new one arriving.
+  function journalEntries(changes, reversed) {
+    var out = [];
+    changes.forEach(function (c) {
+      var base = { type: c.spec.key, id: String(c.id), name: c.display || '' };
+      var one = function (field, before, after) {
+        out.push({ type: base.type, id: base.id, name: base.name, field: 'custom_fields.' + field,
+          before: reversed ? after : before, after: reversed ? before : after });
+      };
+      if (c.to) {
+        one(c.name, c.before, undefined);
+        one(c.to, undefined, c.before);
+      } else {
+        one(c.name, c.had ? c.before : undefined, c.remove ? undefined : c.after);
+      }
+    });
+    return out;
+  }
+
+  function journalPass(label, libraryWide) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
+  }
+
+  // What landed of `changes`, per the chunks `runWrites` reports written - handed over a
+  // slice at a time, each written before the next is built, so a pass over the whole
+  // library never holds its entries all at once.
+  var JOURNAL_SLICE = 2000;
+  // `shape` turns a slice's items into changes, for a caller whose list is not one yet.
+  function journalSlices(pass, changes, keep, reversed, shape) {
+    var at = 0;
+    function next() {
+      if (at >= changes.length) return pass.finish();
+      var slice = changes.slice(at, at + JOURNAL_SLICE).filter(keep);
+      if (shape) slice = slice.map(shape);
+      at += JOURNAL_SLICE;
+      pass.entries(journalEntries(slice, reversed));
+      return pass.drain().then(next);
+    }
+    return next();
+  }
+
+  Run.prototype.recordPass = function (label, changes, writtenIds, reversed) {
+    var pass = journalPass(label, !this.spec), self = this;
+    if (!pass) return;
+    journalSlices(pass, changes, function (c) { return hasOwn(writtenIds, c.spec.key + ':' + c.id); }, reversed)
+      .then(function (line) { if (line) self.msg('INFO', line); });
+  };
+
   // The one write driver, shared by Apply and Undo. Takes the lease, renews it per
   // batch and releases it in every outcome - success, failure, an empty batch list -
-  // so a reactive plugin is never left standing down.
-  Run.prototype.runWrites = function (batches, label) {
+  // so a reactive plugin is never left standing down. `written` gains `<type>:<id>` for
+  // every entity a chunk wrote, which is what Undo History records.
+  Run.prototype.runWrites = function (batches, label, written) {
     var self = this;
     var lease = acquireLease(label);
     var ok = 0;
@@ -3258,6 +3315,7 @@
         lease.renew();
         return self.writeChunk(chunk.spec, chunk).then(function () {
           ok += chunk.ids.length;
+          if (written) chunk.ids.forEach(function (id) { written[chunk.spec.key + ':' + id] = true; });
           self.applied = self.state === 'applying' ? ok : self.applied;
           self.undone = self.state === 'undoing' ? ok : self.undone;
           self.renderProgress();
@@ -3778,7 +3836,9 @@
     }
 
     this.setState('listing');
-    this.renderNames();
+    // The selected field's entity list is drawn by `pick`, so a rescan redraws it too,
+    // or the counts move and the list under them does not.
+    if (this.sel != null) this.pick(this.sel); else this.renderNames();
     this.renderProgress();
   };
 
@@ -4311,6 +4371,18 @@
     var lease = acquireLease('Custom field descriptions and locks');
     write.then(function (data) {
       var tag = (data && (data.tagUpdate || data.tagCreate)) || null;
+      // The store tag is a tag like any other, so Undo History has it too: its name and
+      // description as they were, or its creation.
+      var pass = journalPass('Custom field descriptions', false);
+      if (pass && tag) {
+        if (self.tag) {
+          pass.add('tags', self.tag.id, name, { id: self.tag.id, name: name, description: description },
+            { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
+        } else {
+          pass.entries([{ type: 'tags', id: String(tag.id), name: name, action: 'create' }]);
+        }
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+      }
       if (!self.tag) {
         self.created = true;
         self.msg('INFO', 'Created tag "' + name + '"' + (tag ? ' (' + tag.id + ')' : '') +
@@ -4411,8 +4483,21 @@
     // and stops Apply offering the same staged rename again.
     if (!batches.length) { m.done = !reversed; return Promise.resolve(); }
 
-    return this.runWrites(batches, 'Custom field rename "' + from + '" to "' + to + '"')
+    var label = 'Custom field rename "' + from + '" to "' + to + '"', written = {};
+    return this.runWrites(batches, label, written)
       .then(function (ok) {
+        // Recorded as the rename it is on each entity: `from` going, `to` arriving.
+        var pass = journalPass(reversed ? label + ', undone' : label, true);
+        if (pass) {
+          // As a rename on each entity - `from` going, `to` arriving - in slices.
+          journalSlices(pass, m.entities, function (e) {
+            return e.fields[from] !== undefined && hasOwn(written, e.spec.key + ':' + e.id);
+          }, false, function (e) {
+            return { spec: e.spec, id: e.id, display: e.display || e.label || '', name: from, to: to,
+              before: e.fields[from] };
+          })
+            .then(function (line) { if (line) self.msg('INFO', line); });
+        }
         m.done = !reversed;
         m.entities.forEach(function (e) {
           if (e.fields[from] === undefined) return;

@@ -16,7 +16,8 @@ and UI plugin component patching (staging into an edit form) both depend on that
 >
 > The dialog has an **Undo** button, but it only reaches its own writes and only while it
 > stays open. It is a way out of a run you regret in the moment, not a safety net — the backup is
-> the safety net.
+> the safety net. ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history) keeps every pass for later, automatic
+> ones included, but it lives in this browser and is no backup either.
 >
 > The two **automatic** modes deserve the same caution for a different reason: they react to
 > every save, and with **Silent Auto-propagation** on they write with no dialog and nothing to
@@ -629,7 +630,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1767 MB | 1815 MB | 1810 MB |
+| Propagate All | 1757 MB | 1800 MB | 1782 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.3.0 (`af8d8e3`) | 2026-09-23 | Undo History, step 2: every writing plugin records; the memory tool counts it |
 | 5.2.9 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
 | 5.2.8 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
 | 5.2.7 (`3e4b5b7`) | 2026-09-22 | PropagateTagsAndPerformers 5.2.7: the task caption once; record the releases |

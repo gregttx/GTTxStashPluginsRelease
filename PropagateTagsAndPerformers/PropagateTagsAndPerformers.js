@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.2.9';
+  var PLUGIN_VERSION = '5.3.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -2587,6 +2587,27 @@
     return input;
   }
 
+  // Undo History, where ᝯㄝₓ Core keeps one: a batch landed is, per entity, the tags or
+  // performers it added (or, undone, took away) - recorded as that delta, which an undo
+  // checks is still true and reverses, whatever else the entity gained since.
+  function journalPass(label, libraryWide) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
+  }
+
+  function journalBatch(pass, batch, mode) {
+    if (!pass) return;
+    var type = TARGETS[batch.target].plural.toLowerCase();
+    var field = batch.kind === 'performers' ? 'performer_ids' : 'tag_ids';
+    pass.entries(batch.entries.map(function (entry) {
+      // The label is `Scene "name" (id)`; the history names the type and id itself.
+      var m = /"(.*)" \(\d+\)$/.exec(String(entry.label || ''));
+      return { type: type, id: String(entry.id), name: m ? m[1] : '', field: field,
+        before: mode === 'ADD' ? [] : batch.ids.slice(), after: mode === 'ADD' ? batch.ids.slice() : [] };
+    }));
+  }
+
   function batchCount(batches) {
     var n = 0;
     batches.forEach(function (b) { n += b.entries.length; });
@@ -3834,6 +3855,7 @@
         // reverse a write that never landed.
         self.undoable.push(batch);
         self.noteWritten(batch);
+        journalBatch(self.journalRun, batch, 'ADD');
         batch.entries.forEach(function (entry) {
           batch.ids.forEach(function (id) {
             var line = self.changeParts(entry, batch.kind, id);
@@ -3870,6 +3892,12 @@
     var self = this;
     var lease = acquireLease(leaseLabel);
     var i = 0;
+    var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, true);
+    var recorded = function () {
+      self.journalRun = null;
+      if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+    };
 
     function nextBatch() {
       if (self.stopped || i >= batches.length) return Promise.resolve();
@@ -3883,11 +3911,13 @@
     guarded(nextBatch).then(function () {
       lease.release();
       finish.call(self);
+      recorded();
     }, function (e) {
       lease.release();
       self.log('ERROR', verb + ' aborted: ' + (e && e.message ? e.message : e));
       self.errors++;
       finish.call(self);
+      recorded();
     });
   };
 
@@ -3954,6 +3984,7 @@
         var at = self.undoable.indexOf(batch);
         if (at !== -1) self.undoable.splice(at, 1);
         self.noteWritten(batch);
+        journalBatch(self.journalRun, batch, 'REMOVE');
         batch.entries.forEach(function (entry) {
           batch.ids.forEach(function (id) {
             var back = self.changeParts(entry, batch.kind, id, 'Undo - ');
@@ -6087,6 +6118,8 @@
     var batches = buildBatches(this.plan);
     if (!batches.length) return Promise.resolve(0);
     var lease = acquireLease(label, AUTO_LEASE_TTL_MS);
+    // One run in Undo History per save that set it off.
+    var pass = journalPass(label, false);
     // Only what the server accepted, so a failed batch does not drop a cache entry
     // that still matches the library.
     var wrote = {};
@@ -6096,6 +6129,7 @@
         lease.renew();
         return gqlRequest(bulkMutation(batch.target), { input: batchInput(batch, 'ADD') })
           .then(function () {
+            journalBatch(pass, batch, 'ADD');
             if (!wrote[batch.target]) wrote[batch.target] = {};
             batch.entries.forEach(function (entry) {
               wrote[batch.target][String(entry.id)] = true;
@@ -6123,10 +6157,12 @@
     return chain.then(function () {
       lease.release();
       evictWritten(wrote);
+      if (pass) pass.finish();
       return self.written;
     }, function (e) {
       lease.release();
       evictWritten(wrote);
+      if (pass) pass.finish();
       throw e;
     });
   };

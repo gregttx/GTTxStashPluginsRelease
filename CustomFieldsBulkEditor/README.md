@@ -12,8 +12,9 @@ copy must copy the `GTTxCore` folder too. `custom_fields` on the entity types, a
 > exactly what that Apply wrote, so most mistakes are one click from being reversed.
 >
 > Two limits are worth knowing before you rely on it: Undo only reaches **this dialog's own writes**,
-> and only **while the dialog stays open**. Close it, or reload the page, and Stash itself has no
-> undo. Read the list before pressing Apply — that is what it is for — and for a first run over a
+> and only **while the dialog stays open**. After that, what is left is ᝯㄝₓ Core's
+> [Undo History](../GTTxCore/README.md#undo-history), which keeps every Apply in this browser within its limits; Stash
+> itself has no undo. Read the list before pressing Apply — that is what it is for — and for a first run over a
 > large selection, stop Stash and copy `stash-go.sqlite` (next to your `config.yml`) somewhere safe.
 
 Stash stores custom fields on seven kinds of entity and lets you edit them **one record at a time**.
@@ -395,7 +396,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Edit Custom Fields Across the Whole Library | 551 MB | 1065 MB | 1065 MB |
+| Edit Custom Fields Across the Whole Library | 551 MB | 1149 MB | 1148 MB |
 | Manage Custom Field Descriptions and Locks | 214 MB | 267 MB | 267 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.

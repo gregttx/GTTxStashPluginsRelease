@@ -123,7 +123,8 @@ page already carries its type's count.
   line that reports the skip says so, rather than reading as something missed. With that
   plugin absent or disabled it says the descriptions are searchable when it is enabled.
 - **Undo only reverses what this dialog wrote**, while it stays open, and cannot account for
-  changes made elsewhere in the meantime. Backing up your database before proceeding is
+  changes made elsewhere in the meantime. Every replacement, its Undo and a cancelled rename are
+  also kept in ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history), where they can be undone later. Backing up your database before proceeding is
   recommended.
 
 ## Matching

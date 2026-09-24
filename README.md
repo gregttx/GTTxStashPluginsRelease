@@ -48,6 +48,7 @@ plugin finds its sibling at load, and says in its log when one it would have ask
 | **Scene Variants**, **Propagate**, **Tag Bundle Clipboard** | **Normalize Parent Tags** | whether a tag is **redundant** under the hierarchy, so none of them copies a parent a more specific tag already implies | every tag is copied, and the sibling would prune it again afterwards |
 | **Scene Variants** | **Entity Name Maintainer** | to **carry a renamed title** into everything that mentioned the old one, for every title it writes | the rename stands on its own |
 | **Propagate**, **Merge Performer Tags**, **Scene Variants** | **each other** | a registry of the **relationship paths** each performs, so an overlap is noted in the log | overlapping paths are not pointed out |
+| Every plugin that writes | **ᝯㄝₓ Core** | its **Undo History**: each pass and each automatic write is recorded, so it can be undone after the dialog has closed, in this browser | only the dialog's own Undo, while it is open (Core is always installed; a browser with no IndexedDB has no history) |
 | **Merge Performer Tags** ↔ **Normalize Parent Tags** | each other | the lease above, in both directions: auto-merge stands down while the other applies, and the library-wide merge takes a lease of its own | each reacts to the other's writes, merging back what was just pruned |
 
 Each plugin's own README has the detail, under **Relationship to the other plugins in this repo**.
@@ -94,20 +95,20 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
 | SceneFilenameManager | Archive Original Filenames | 111 MB | 151 MB | 144 MB |
-| SceneFilenameManager | Restore Original Filenames | 52 MB | 74 MB | 74 MB |
-| SceneFilenameManager | Rename Files From Metadata | 190 MB | 243 MB | 238 MB |
-| SceneVariants | Migrate Variant Stash-IDs | 58 MB | 73 MB | 73 MB |
-| SceneVariants | Flag Variants | 46 MB | 65 MB | 59 MB |
-| SceneVariants | Review Variant Sets | 1938 MB | — | — |
-| SceneVariants | Rename Variants | 629 MB | 635 MB | 635 MB |
-| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1065 MB | 1065 MB |
+| SceneFilenameManager | Restore Original Filenames | 53 MB | 74 MB | 74 MB |
+| SceneFilenameManager | Rename Files From Metadata | 191 MB | 248 MB | 239 MB |
+| SceneVariants | Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
+| SceneVariants | Flag Variants | 46 MB | 88 MB | 81 MB |
+| SceneVariants | Review Variant Sets | 1948 MB | — | — |
+| SceneVariants | Rename Variants | 635 MB | 646 MB | 646 MB |
+| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1149 MB | 1148 MB |
 | CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 267 MB | 267 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1525 MB | 1518 MB |
-| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4158 MB | 4054 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1737 MB | 1524 MB |
+| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4144 MB | 4042 MB |
 | NormalizeParentTags | Auto Mode Settings | 0 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
-| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 294 MB | 282 MB |
-| PropagateTagsAndPerformers | Propagate All | 1767 MB | 1815 MB | 1810 MB |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 268 MB | 293 MB | 282 MB |
+| PropagateTagsAndPerformers | Propagate All | 1757 MB | 1800 MB | 1782 MB |
 
 A task gives all of it back when its dialog is closed.
 <!-- memory:end -->

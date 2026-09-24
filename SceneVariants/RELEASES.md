@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.22.0 (`af8d8e3`) | 2026-09-23 | Undo History, step 2: every writing plugin records; the memory tool counts it |
 | 1.21.4 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 1.21.3 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 1.21.2 (`119f817`) | 2026-09-22 | SceneVariants 1.21.2: review and rename scans hold set members only, the flag scan a slim record |

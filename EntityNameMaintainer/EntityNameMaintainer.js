@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.4.2';
+  var PLUGIN_VERSION = '2.5.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1991,6 +1991,21 @@
   // how a write of this plugin's is told from a replay of one, in a Stash log and in
   // this repo's own suites. The fork stays about *who writes*, not about which of the
   // two this is.
+  // Undo History, where ᝯㄝₓ Core keeps one: an entity's text rewritten is recorded from
+  // the input sent and the one that puts it back. A job with a writer of its own - the
+  // custom field descriptions, which live in another plugin's store - is not an entity
+  // write, and is left to that store.
+  function journalPass(label) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+  }
+
+  function journalJob(pass, job, name, forward, back) {
+    if (!pass || job.write || !job.spec || !forward) return;
+    pass.add(job.spec.key, forward.id, name || '', forward, back || {});
+  }
+
   function sendJob(job, input, op) {
     if (job.write) return job.write(input);
     return gqlRequest('mutation ' + op + '($input: ' + job.spec.updateInput + '!) { ' +
@@ -2002,9 +2017,13 @@
   Run.prototype.writeAll = function (p, build) {
     var self = this;
     var list = p.entities;
+    var pass = journalPass('Name replaced: "' + (self.oldName || '') + '" to "' + (self.newName || '') + '"');
 
     function batch(i) {
-      if (i >= list.length) return Promise.resolve();
+      if (i >= list.length) {
+        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        return Promise.resolve();
+      }
       var slice = list.slice(i, i + WRITE_CHUNK);
       return Promise.all(slice.map(function (ent) {
         var what = self.entityLabel(ent.typeKey, ent.entId, ent.entName);
@@ -2015,7 +2034,8 @@
             // The undo entry carries the writer as well as the values, so replaying it
             // does not have to work out again who owns the thing being put back.
             self.changes.push({ spec: job.spec, input: job.before, write: job.write,
-              label: what });
+              label: what, run: pass && !job.write ? pass.id : null });
+            journalJob(pass, job, ent.entName, job.input, job.before);
             job.hits.forEach(function (h) { h.done = true; });
             self.msg('INFO', what + ': ' + plural(job.count, 'occurrence') + ' replaced.');
             return null;
@@ -2045,12 +2065,20 @@
     var lease = acquireLease('Entity name replacement (undo)');
     var undone = 0;
     var failed = 0;
+    var pass = journalPass('Name replacement, undone');
 
     function step(i) {
-      if (i >= jobs.length) return Promise.resolve();
+      if (i >= jobs.length) {
+        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        return Promise.resolve();
+      }
       var job = jobs[i];
       return sendJob(job, job.input, 'ENM_Undo')
-        .then(function () { undone++; }, function (e) {
+        .then(function () {
+          undone++;
+          // Recorded from the replacement's own run in the history, reversed.
+          if (pass && job.run && job.spec) pass.reverse(job.run, job.spec.key, job.input.id);
+        }, function (e) {
           failed++;
           self.msg('ERROR', job.label + ': ' + (e && e.message ? e.message : String(e)));
         }).then(function () { return step(i + 1); });
@@ -2093,7 +2121,14 @@
       // the dialog describing a library it no longer matches, with no reload to show it.
       // So the write's own error is carried along and only used if the read agrees.
       return sendJob({ spec: self.spec }, input, 'ENM_Cancel')
-        .then(function () { return null; }, function (err) { return err; })
+        .then(function () {
+          var pass = journalPass('Rename cancelled');
+          var back = { id: self.id };
+          back[self.spec.nameField] = self.newName;
+          journalJob(pass, { spec: self.spec }, self.oldName, input, back);
+          if (pass) pass.finish();
+          return null;
+        }, function (err) { return err; })
         .then(function (err) {
           return currentName(self.spec, self.id).then(function (after) {
             if (after === self.oldName) return null;

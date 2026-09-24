@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.2.5';
+  var PLUGIN_VERSION = '3.3.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1874,6 +1874,7 @@
     this.writing = true;
     this.syncFooter();
     var lease = acquireLease('Find & Replace (undo)');
+    var pass = journalPass('Find & Replace, undone');
     var i = 0;
     var ok = 0;
     var failed = 0;
@@ -1887,6 +1888,7 @@
         // the pile rather than being dropped: pressing Undo again carries on.
         if (left.length) self.changes = left.slice().reverse().concat(self.changes);
         self.syncFooter();
+        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         self.msg('INFO', 'Undo ' + (left.length ? 'stopped' : 'finished') + ': ' +
           plural(ok, 'entity', 'entities') + ' put back' +
           (failed ? ', ' + plural(failed, 'failure') : '') +
@@ -1897,7 +1899,11 @@
       }
       lease.renew();
       var c = back[i++];
-      self.sendUpdate(c.typeKey, c.id, c.input).then(function () { ok++; }, function (e) {
+      self.sendUpdate(c.typeKey, c.id, c.input).then(function () {
+        ok++;
+        // Recorded from the Replace's own run in the history, reversed - nothing is kept here.
+        if (pass) pass.reverse(c.run, c.typeKey, c.id);
+      }, function (e) {
         failed++;
         self.msg('ERROR', ENTITIES[c.typeKey].label + ' ' + c.id + ' could not be put back: ' +
           (e && e.message ? e.message : String(e)));
@@ -1905,6 +1911,15 @@
     }
     next();
   };
+
+  // Undo History, where ᝯㄝₓ Core keeps one: a pass collects what it wrote and records it
+  // when it ends, so it can be undone after this dialog has closed. Without it, the
+  // dialog's own Undo is the only one, as before.
+  function journalPass(label) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+  }
 
   // One mutation, named from the table rather than assembled at each call site.
   Run.prototype.sendUpdate = function (typeKey, id, input) {
@@ -1926,6 +1941,7 @@
     this.writing = true;
     this.syncFooter();
     var lease = acquireLease('Find & Replace');
+    var pass = journalPass(label);
     var foldMark = foldSkips();
     var written = 0;
     var skipped = 0;
@@ -1942,6 +1958,7 @@
         self.writing = false;
         self.stopping = false;
         self.syncFooter();
+        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         var missing = Object.keys(dropped);
         if (missing.length) {
           self.msg('WARN', 'This Stash has no ' + missing.join(', ') + ' on the update ' +
@@ -1991,7 +2008,9 @@
             if (!plan || !plan.count) { skipped++; return null; }
             return self.sendUpdate(hit.typeKey, hit.id, plan.input).then(function () {
               written++;
-              self.changes.push({ typeKey: hit.typeKey, id: hit.id, input: plan.undo });
+              self.changes.push({ typeKey: hit.typeKey, id: hit.id, input: plan.undo,
+                run: pass ? pass.id : null });
+              if (pass) pass.add(hit.typeKey, hit.id, hit.name, plan.input, plan.undo);
               // **`EDIT`, not `INFO`.** Every other line this dialog writes is about the
               // run - what it is looking for, how far it got, what it could not do. These
               // are the only ones that say an entity in the library was changed, and a log

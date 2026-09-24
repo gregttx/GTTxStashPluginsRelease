@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.3.0 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |
 | 3.2.5 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 3.2.4 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |
 | 3.2.3 (`fe3987f`) | 2026-09-22 | FindEntitiesByTextContent 3.2.3: the number box takes the standard input background |

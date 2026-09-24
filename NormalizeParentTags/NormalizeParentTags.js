@@ -64,7 +64,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.5.6';
+  var PLUGIN_VERSION = '5.6.1';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1274,6 +1274,23 @@
     run.errors++;
   }
 
+  // Undo History, where ᝯㄝₓ Core keeps one: a batch landed is, per entity, the tags it
+  // added or took away - recorded as that delta, which is what an undo checks is still
+  // true and what it reverses, whatever else the entity gained since.
+  function journalPass(label) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+  }
+
+  function journalBatch(run, batch, mode) {
+    if (!run.journalRun) return;
+    run.journalRun.entries(batch.entries.map(function (entry) {
+      return { type: batch.type.key, id: String(entry.id), name: entry.label || '', field: 'tag_ids',
+        before: mode === 'ADD' ? [] : batch.tagIds.slice(), after: mode === 'ADD' ? batch.tagIds.slice() : [] };
+    }));
+  }
+
   function applyBatch(batch, run, graph) {
     return gqlRequest(bulkMutation(batch.type), {
       input: { ids: batchIds(batch), tag_ids: { ids: batch.tagIds, mode: batch.mode } },
@@ -1281,6 +1298,7 @@
       // Recorded only once the server has taken it, so Undo can never try to
       // reverse a write that never landed.
       run.undoable.push(batch);
+      journalBatch(run, batch, batch.mode);
       batch.entries.forEach(function (entry) {
         batch.tagIds.forEach(function (tid) {
           // Entities are batched by identical delta, but each carries its own
@@ -1314,6 +1332,7 @@
       // exactly the batches that are still applied.
       var at = run.undoable.indexOf(batch);
       if (at !== -1) run.undoable.splice(at, 1);
+      journalBatch(run, batch, mode);
       batch.entries.forEach(function (entry) {
         batch.tagIds.forEach(function (tid) {
           // No "due to" clause: the reason explained why the tag was written, and
@@ -1465,9 +1484,11 @@
     '.npt-i-hint{color:#7d8f9c;}' +
     // The per-type mode selectors, in the head of the run dialog and as the whole
     // body of the settings one. A grid rather than a flex row: seven labels of very
-    // different lengths line their selects up only if the columns are shared.
-    '.npt-modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));' +
-    'gap:.35rem .9rem;margin:.5rem 0;}' +
+    // different lengths line their selects up only if the columns are shared. The
+    // columns are fixed and packed to the left rather than stretched across the dialog,
+    // so each select stays close to the name it sets.
+    '.npt-modes{display:grid;grid-template-columns:repeat(auto-fill,12.5rem);' +
+    'justify-content:start;gap:.35rem .6rem;margin:.5rem 0;}' +
     // The select sits at the far end of its column so the seven line up, and the
     // label is right-aligned against it: a flexing label puts its text next to the
     // select it names rather than at the opposite end of the row, which is what made
@@ -1481,13 +1502,16 @@
     // Amber wherever the selector is set to something that writes, the same rule the
     // buttons follow. A <select> has no Bootstrap variant to borrow.
     '.npt-mode-on{border-color:#ffb648;color:#ffb648;}' +
-    // The Set All row spans the grid and sits at its right edge.
-    '.npt-modes-all{grid-column:1/-1;display:flex;justify-content:flex-end;gap:.4rem;}' +
+    // Set All: and its three buttons - beside the keep-this-selection box in the run
+    // dialog, under the grid, at its left, in the settings one.
+    '.npt-modes-all{display:flex;align-items:center;gap:.4rem;color:#a7b6c2;font-size:.85rem;}' +
+    '.npt-persist-line{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem 1.5rem;' +
+    'margin:.35rem 0 0;}' +
     // The run dialog's panel lives in the padded head; the settings dialog's is the
     // whole body, so it brings its own side padding rather than touching the border.
     '.npt-modesbody{padding:.5rem 1rem;}' +
     '.npt-persist{display:flex;align-items:center;gap:.4rem;color:#a7b6c2;' +
-    'font-size:.85rem;margin:.35rem 0 0;}' +
+    'font-size:.85rem;margin:0;}' +
     // The string the settings dialog is about to write, shown in the form the setting
     // holds it - monospace, because it is a value rather than a sentence.
     '.npt-modestring{font-family:monospace;font-size:.85rem;color:#a7b6c2;' +
@@ -1668,13 +1692,14 @@
       wrap.appendChild(row);
       selects[t.key] = sel;
     });
-    // Three buttons under the grid, at its right, that set every selector at once.
-    // They go through the same path a hand-moved selector does - `modes`, the paint
-    // and one `onChange` - so the run dialog's Rescan and the settings dialog's Save
-    // react exactly as they would to seven separate changes.
+    // Set All: and three buttons that set every selector at once, returned as `all`
+    // for the dialog to place. They go through the same path a hand-moved selector
+    // does - `modes`, the paint and one `onChange` - so the run dialog's Rescan and the
+    // settings dialog's Save react exactly as they would to seven separate changes.
     var all = el('div', 'npt-modes-all');
+    all.appendChild(el('span', null, 'Set All:'));
     var allBtns = [MODE_PRUNE, MODE_ROLLUP, MODE_OFF].map(function (m) {
-      var b = button('Set All ' + MODE_LABEL[m], 'npt-set-all');
+      var b = button(MODE_LABEL[m], 'npt-set-all');
       b.title = 'Set every type to ' + MODE_LABEL[m] + '.';
       b.addEventListener('click', function () {
         TYPES.forEach(function (t) {
@@ -1687,9 +1712,9 @@
       all.appendChild(b);
       return b;
     });
-    wrap.appendChild(all);
     return {
       el: wrap,
+      all: all,
       selects: selects,
       // Sets the values without calling `onChange`: this is the dialog telling the
       // selectors what it found, which is not the user changing them.
@@ -2000,7 +2025,10 @@
     // *library* pass covers, and this pass covers one entity in the direction the button
     // named. See "a control that steers a run" in the repo-root CLAUDE.md.
     if (!this.scope) head.appendChild(this.modesPanel.el);
-    head.appendChild(this.buildPersist());
+    var line = el('div', 'npt-persist-line');
+    line.appendChild(this.buildPersist());
+    if (!this.scope) line.appendChild(this.modesPanel.all);
+    head.appendChild(line);
     this.noteEl = el('div', 'npt-note', '');
     head.appendChild(this.noteEl);
     this.modal.appendChild(head);
@@ -2494,6 +2522,12 @@
     var self = this;
     var lease = acquireLease(leaseLabel);
     var i = 0;
+    var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel);
+    function done() {
+      self.journalRun = null;
+      if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+    }
 
     function nextBatch() {
       if (self.stopped || i >= batches.length) return Promise.resolve();
@@ -2507,11 +2541,13 @@
     guarded(nextBatch).then(function () {
       lease.release();
       finish.call(self);
+      done();
     }, function (e) {
       lease.release();
       self.log('ERROR', verb + ' aborted: ' + (e && e.message ? e.message : e));
       self.errors++;
       finish.call(self);
+      done();
     });
   };
 
@@ -2772,6 +2808,7 @@
     this.panel = modesPanel(this.modes, function () { self.refreshSave(); }, true);
     this.panel.enable(false);
     body.appendChild(this.panel.el);
+    body.appendChild(this.panel.all);
     this.modal.appendChild(body);
 
     var foot = el('div', 'npt-foot');
@@ -3777,6 +3814,8 @@
           if (!plan.length) return;
 
           var sink = autoSink();
+          // One run in Undo History per save that set it off.
+          sink.journalRun = journalPass(AUTO_MODES_NAME + ' - ' + type.plural + ', ' + MODE_TOKEN[mode]);
           var batches = buildBatches(plan);
           // Marked before the write, not after: the window has to cover the time the
           // mutation is in flight, which is exactly when another plugin reacting to
@@ -3791,10 +3830,13 @@
             lease.renew();
             return applyBatch(batches[i++], sink, graph).then(nextBatch);
           }
+          var recorded = function () { if (sink.journalRun) sink.journalRun.finish(); };
           return guarded(nextBatch).then(function () {
             lease.release();
+            recorded();
           }, function (e) {
             lease.release();
+            recorded();
             throw e;
           });
         });

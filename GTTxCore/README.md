@@ -3,8 +3,8 @@
 The shared half of the ᝯㄝₓ plugins, and the home for the things that belong to none of them.
 
 **Install this alongside any other ᝯㄝₓ plugin.** Each one declares it as a dependency, so Stash
-installs it with them and loads it before them. On its own it changes nothing about your library
-and adds no task to Settings → Tasks.
+installs it with them and loads it before them. It adds one task, **Undo History...**, and writes to
+your library only when you undo something there.
 
 Requires Stash 0.31.0 or newer.
 
@@ -33,7 +33,8 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 
 ## What you actually see
 
-Five things, and all of them are off until you turn them on.
+Five things, and all of them are off until you turn them on — and [Undo History](#undo-history),
+which is on.
 
 ### The Scene Tagger's duration mismatch
 
@@ -213,10 +214,71 @@ does.
   your tab is running is not the one on disk. Press the button, or reload the page - see
   [above](#the-stale-script-banner-and-the-reload-ui-button).
 
-## Nothing here touches your library
+## Undo History
 
-No task, no mutation, no write of any kind — the only thing this plugin stores is its own
-settings. Every other ᝯㄝₓ plugin still asks before it writes, exactly as it did.
+What the ᝯㄝₓ plugins write, and what you save in Stash's own pages in this browser, is kept in this
+browser so it can be undone later — after the dialog that wrote it has closed, days later if need be.
+Open it from **Settings → Tasks → Undo History...**, or from the **↶** button in Stash's top bar,
+beside Settings.
+
+- **The list** shows the history newest first, a run a row: when, who — *Your edit*, a plugin, or an
+  *Undo* — what, and how many changes. Click a row for its changes: the entity, with its hover card,
+  the field, and the value before and after. Tags, performers, studios, groups and the other related
+  entities are named with their id — `+Blonde (105)` — each a link with its hover card. The list
+  says what the change did; the review and the undo's result say what the undo does, so the same
+  change reads `−Blonde (105)` there. Filter by text, type, who, and a range of days.
+- **Undo Selected...** — tick runs or single changes, then press it. Every ticked change is checked
+  against what your library holds now, and the list says which can be undone and which are skipped,
+  before anything is written. **Proceed** writes it.
+- **A change is undone only while its field still holds what was written.** Anything else — a later
+  edit by hand, in another browser, by a Stash task — makes it *changed since*, and it is skipped
+  rather than overwritten. A later edit to a *different* field of the same entity does not stop it.
+  A custom field locked in ᝯㄝₓ Custom Fields Bulk Editor is never changed or removed by an undo; one
+  an edit removed can be put back.
+- **An undo is recorded too**, so undoing it is redo.
+- **Undoing a create deletes what was created** — never its files.
+- **Export** saves the whole history to a file; **Import...** brings files back, here or in another
+  browser, without doubling what is already there. **Back Up and Export** takes a backup of the
+  Stash database, as Settings → Tasks does, and saves the history with it, says which folder the
+  backup went to, then offers **Drop What the Backup Holds...**: the runs recorded before the backup
+  leave this browser, kept in the file just saved. It and **Clear History...** ask twice. With
+  nothing recorded, only Import... can be pressed.
+
+What is recorded and what is not:
+
+| Recorded | Not recorded |
+|---|---|
+| every write a ᝯㄝₓ plugin makes, as it lands | edits made in another browser or on another device |
+| edits you save in Stash's own pages in this browser — edit forms and bulk edits of scenes, images, galleries, performers, studios, groups and tags, and creating one | Stash's own tasks: Scan, Identify, Auto Tag, Clean |
+| | scripts using Stash's API |
+| | deletes and merges (they cannot be undone yet) |
+| | a cover image, a picture or a stash-id in a save — the run says so |
+
+To record an edit of yours, the entity is read just before Stash saves it and again just after, so
+a save waits for one small read; a large bulk edit pauses a moment. If that read fails, the save still
+goes through and the history shows a gap there.
+
+**Its settings**, in this plugin's group:
+
+| Setting | Default | |
+|---|---|---|
+| Keep For (Days) | 90 | 1 to 999, or Forever |
+| Size Limit (MB) | 256 | 16 to 4096. A single run over half of it is not recorded, and its dialog's own Undo still covers it |
+| Only Since the Last Backup | off | keeps only what came after the last backup this browser saw |
+| Record Edits Made in Stash's Pages | on | |
+| Record Library-Wide Image Writes | off | a pass over a million images would crowd everything else out |
+| Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
+
+The history lives in this browser's own storage, per browser and per device, and goes if you clear
+this site's data. The dialog says how much it holds, how old the oldest run is, whether the browser
+protects it, and warns — offering Back Up and Export — when it nears its size or age limit or the
+browser runs short of space.
+
+## Nothing else touches your library
+
+Apart from an undo you proceed with in Undo History, nothing here writes to your library — the
+only other thing this plugin stores is its own settings. Every other ᝯㄝₓ plugin still asks before
+it writes, exactly as it did.
 
 ## Licence
 

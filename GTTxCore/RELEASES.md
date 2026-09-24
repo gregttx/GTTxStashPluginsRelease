@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.10.4 (`af8d8e3`) | 2026-09-23 | Undo History, step 2: every writing plugin records; the memory tool counts it |
+| 2.10.3 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |
+| 2.10.2 (`527582f`) | 2026-09-23 | Core 2.10.2: the Undo History dialog, its Tasks entry and top-bar button |
+| 2.10.1 (`2d2f230`) | 2026-09-23 | Core 2.10.1: Undo History's settings, the capture of Stash's saves, and undo |
+| 2.10.0 (`4b5c6a1`) | 2026-09-23 | Core 2.10.0: the undo journal's store |
 | 2.9.1 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |
 | 2.9.0 (`e4c8d6c`) | 2026-09-23 | Core 2.9.0: the Apollo client through PluginApi; five plugins evict through it |
 | 2.8.2 (`61add82`) | 2026-09-23 | GTTxCore 2.8.2: a carrier with no title is named by its file |

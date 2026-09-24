@@ -47,7 +47,7 @@
   var coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
-    entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick,
+    entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick, cfTipMark = C.cfTipMark,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
     hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, byClass = C.byClass,
     coreSettingElement = C.settingElement, coreSettingRow = C.settingRow;
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '1.21.4';
+  var PLUGIN_VERSION = '2.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -1219,6 +1219,8 @@
     this.source = null;      // the scene a set will be synchronized from
     this.sourceSet = null;
     this.plannedFrom = null; // the id of the source whose set is already listed below
+    this.openKey = null;     // the key of the one set shown open
+    this.picked = {};        // set key -> the scene id last picked in it, while the dialog is open
     this.written = 0;
     this.failed = 0;
     this.state = 'scanning';
@@ -1236,7 +1238,9 @@
     // dialog that flashed open and shut on every unremarkable save would be worse
     // than no feature.
     if (this.auto) this.backdrop.className += ' svr-hidden';
-    this.modal = el('div', 'svr-modal');
+    // Tall, as its siblings' run dialogs are: the log takes the height the listing leaves,
+    // rather than the dialog shrinking to what has been written so far.
+    this.modal = el('div', 'svr-modal svr-tall');
     this.backdrop.appendChild(this.modal);
 
     var head = el('div', 'svr-head');
@@ -1280,11 +1284,25 @@
     this.splitEl.title = 'Drag to resize the set listing';
     (function (run) {
       run.splitEl.addEventListener('mousedown', function (e) {
+        // The height is clamped here, to the listing's own min/max-height and to what
+        // the log can give up above its minimum, so the bar stays under the pointer:
+        // a height the CSS clamps or the flexbox shrinks leaves the pointer running
+        // ahead of the bar, and a dead stretch to drag back through.
         var startY = e.clientY || 0;
-        var startH = run.setsEl.getBoundingClientRect
-          ? run.setsEl.getBoundingClientRect().height : 0;
+        var rect = function (n) { return n.getBoundingClientRect ? n.getBoundingClientRect().height : 0; };
+        var css = function (n, key) {
+          var v = window.getComputedStyle ? parseFloat(window.getComputedStyle(n)[key]) : NaN;
+          return isNaN(v) ? null : v;
+        };
+        var startH = rect(run.setsEl);
+        var lo = css(run.setsEl, 'minHeight') || 0;
+        var hi = css(run.setsEl, 'maxHeight');
+        var logMin = css(run.logEl, 'minHeight');
+        if (hi === null) hi = Infinity;
+        if (logMin !== null) hi = Math.min(hi, startH + Math.max(0, rect(run.logEl) - logMin));
         function move(ev) {
-          run.setsEl.style.height = Math.max(0, startH + ((ev.clientY || 0) - startY)) + 'px';
+          var h = startH + ((ev.clientY || 0) - startY);
+          run.setsEl.style.height = Math.max(lo, Math.min(Math.max(hi, lo), h)) + 'px';
         }
         function up() {
           document.removeEventListener('mousemove', move);
@@ -1325,7 +1343,7 @@
     this.untagBtn.className = this.untagBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     // Amber and dotted: it lists a plan rather than writing one, and the listing is
     // what Proceed then acts on.
-    this.syncSetBtn = button('Synchronize Set...', 'svr-syncset svr-hidden');
+    this.syncSetBtn = button('Synchronize Set from Selected...', 'svr-syncset svr-hidden');
     this.syncSetBtn.className =
       this.syncSetBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.closeBtn = button('Close', 'svr-close');
@@ -1361,7 +1379,7 @@
     this.unselAllBtn.title = 'Untick every [GROUP?] line still open.';
     this.selAllBtn.addEventListener('click', function () { self.tickCandidates(true); });
     this.unselAllBtn.addEventListener('click', function () { self.tickCandidates(false); });
-    [this.goBtn, this.stopBtn, this.syncSetBtn, this.candLabel, this.groupBtn, this.untagBtn,
+    [this.syncSetBtn, this.goBtn, this.stopBtn, this.candLabel, this.groupBtn, this.untagBtn,
       this.candSep, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn,
       this.selAllBtn, this.unselAllBtn]
       .forEach(function (b) { foot.appendChild(b); });
@@ -1556,7 +1574,7 @@
     orgBox.type = 'checkbox';
     orgBox.checked = !!this.excludeOrganized;
     orgBox.title = 'Leave organized scenes out of the listing: out of every set\u2019s ' +
-      'drift score, out of the scenes you can pick, and out of what Synchronize Set ' +
+      'drift score, out of the scenes you can pick, and out of what Synchronize Set from Selected ' +
       'pushes to. A set left with one scene is not listed.';
     orgBox.addEventListener('click', function () {
       self.excludeOrganized = !!orgBox.checked;
@@ -1641,20 +1659,54 @@
     this.srcRadios = [];
     this.show(this.setsEl, true);
     this.show(this.splitEl, true);
+    // The first time the listing shows, it and the log share the height half and half;
+    // after that the bar stays where it was dragged, across rescans.
+    if (!this.splitSized && this.setsEl.getBoundingClientRect) {
+      var both = this.setsEl.getBoundingClientRect().height + this.logEl.getBoundingClientRect().height;
+      if (both > 0) {
+        this.splitSized = true;
+        this.setsEl.style.height = Math.floor(both / 2) + 'px';
+      }
+    }
     this.sets.forEach(function (set) { set.score = scoreOf(set.delta, w); });
     var order = this.sets.slice().sort(function (a, b) {
       return b.score - a.score || String(a.key).localeCompare(String(b.key));
     });
+    // One set open at a time. Opening one whose source is not the scene picked puts back
+    // the scene last picked in it while this dialog has been open, or, the first time it
+    // opens, picks its first scene.
+    var opened = null;
+    this.sets.forEach(function (set) { if (set.key === self.openKey) opened = set; });
+    if (opened && this.sourceSet !== opened) {
+      var was = this.picked[opened.key], back = null;
+      opened.scenes.forEach(function (sc) { if (String(sc.id) === was) back = sc; });
+      if (was === undefined && opened.scenes.length) {
+        back = opened.scenes[0];
+        this.picked[opened.key] = String(back.id);
+      }
+      this.source = back;
+      this.sourceSet = back ? opened : null;
+    }
     this.setsEl.textContent = '';
     order.forEach(function (set) {
       var head = el('div', 'svr-line svr-set');
-      var toggle = el('span', 'svr-expand', '▸');
-      toggle.title = 'Open to pick the scene whose values are right.';
-      var sub = el('div', 'svr-sub svr-hidden');
+      var isOpen = set === opened;
+      var toggle = el('span', 'svr-expand', isOpen ? '▾' : '▸');
+      toggle.title = isOpen ? 'Close this set.'
+        : 'Open to pick the scene whose values are right. The other sets close, and the ' +
+          'list is sorted again by score.';
+      var sub = el('div', 'svr-sub' + (isOpen ? '' : ' svr-hidden'));
+      set.radios = {};
       toggle.addEventListener('click', function () {
-        var open = hasClass(sub, 'svr-hidden');
-        self.show(sub, open);
-        toggle.textContent = open ? '▾' : '▸';
+        if (self.openKey === set.key) {
+          self.openKey = null;
+          self.show(sub, false);
+          toggle.textContent = '▸';
+          return;
+        }
+        self.openKey = set.key;
+        self.renderSets(false);
+        self.syncFooter();
       });
       head.appendChild(toggle);
       set.scoreEl = el('span', 'svr-score ' + scoreClass(set.score, w),
@@ -1692,8 +1744,10 @@
           radio.checked = true;
           self.source = sc;
           self.sourceSet = set;
+          self.picked[set.key] = String(sc.id);
           self.syncFooter();
         });
+        set.radios[String(sc.id)] = radio;
         self.srcRadios.push(radio);
         row.appendChild(radio);
         var link = el('a', 'svr-elink', (sc.title || ('Scene ' + sc.id)) + ' [' + sc.id + ']');
@@ -1716,7 +1770,7 @@
     if (first) this.capLog();
   };
 
-  // Pressing Synchronize Set: the same `planSyncScene` both other doors use, over the
+  // Pressing Synchronize Set from Selected: the same `planSyncScene` both other doors use, over the
   // members of one set against the picked source. Add-only, like the tab's button and
   // for the same reason - nothing here knows what the source deliberately dropped, so
   // a value only the target holds is its own.
@@ -1739,7 +1793,7 @@
     this.plannedFrom = String(this.source.id);
     this.pruned = 0;
     // The covers are the one part of a plan that has to be read before it can be
-    // built, so the listing is a state of its own while they land - Synchronize Set
+    // built, so the listing is a state of its own while they land - Synchronize Set from Selected
     // is a scan like any other, and the footer already knows what to do with one.
     this.setState('scanning');
     this.progress('Reading the set as it stands now…');
@@ -1747,44 +1801,9 @@
     // Read before planning, every time: the listing was built before whatever this
     // dialog has already written, and the second source out of one set is exactly the
     // press that would otherwise offer changes that have already been made.
-    var ready = refreshScenes(set.scenes).then(function (fresh) {
-      var moved = false;
-      set.scenes.forEach(function (sc, i) {
-        var got = fresh[String(sc.id)];
-        if (!got) return;
-        set.scenes[i] = got;
-        if (set.base) {
-          set.base.scenes.forEach(function (b, j) {
-            if (String(b.id) === String(got.id)) set.base.scenes[j] = got;
-          });
-        }
-        moved = true;
-        // The covers cached by the scan are as old as the scene objects were.
-        if (self.coverBy) delete self.coverBy[String(sc.id)];
-      });
-      if (moved) {
-        self.source = fresh[String(self.source.id)] || self.source;
-        others = set.scenes.filter(function (sc) {
-          return String(sc.id) !== String(self.source.id);
-        });
-      }
-      // The covers again, for the set alone: cheap where the comparison is on, and
-      // `null` where it is off, exactly as it was for the scan.
-      return gatherCovers(self, self.settings, self.source, others);
-    });
-    ready.then(function (covers) {
-      self.covers = covers;
-      // What the fresh read says the set is worth now, put back on the line it is
-      // already drawn on. **Not a re-render**: the score changes after a write and the
-      // sort would carry the set away from the pointer that is working on it.
-      if (covers) {
-        self.coverBy = self.coverBy || {};
-        self.coverBy[String(self.source.id)] = covers.src;
-        others.forEach(function (sc) {
-          self.coverBy[String(sc.id)] = covers.had[String(sc.id)];
-        });
-      }
-      self.rescoreSet(set);
+    this.rereadSet(set).then(function (r) {
+      others = r.others;
+      self.covers = r.covers;
       var nmg = self.matchers ? namingOf(set.scenes, self.matchers, self.naming, self.source.id)
         : { base: { base: '', from: null }, expected: null };
       self.expected = nmg.expected;
@@ -1798,6 +1817,7 @@
       }
       reportPruneFilter(self, self.settings || {});
       self.buildAllBar();
+      self.pickNext(set);
       self.setState('listing');
       self.progress(self.progressText());
     }, function (err) {
@@ -1805,6 +1825,46 @@
       self.setState('listing');
       self.msg('ERROR', 'The set could not be planned: ' +
         (err && err.message ? err.message : String(err)));
+    });
+  };
+
+  // The set read again, its covers with it, and its score put back on the line it is
+  // already drawn on. **Not a re-render**: the score changes after a write and the
+  // sort would carry the set away from the pointer that is working on it. Before a
+  // plan, and after every write or undo, so the score says what the set is now.
+  Run.prototype.rereadSet = function (set) {
+    var self = this;
+    return refreshScenes(set.scenes).then(function (fresh) {
+      set.scenes.forEach(function (sc, i) {
+        var got = fresh[String(sc.id)];
+        if (!got) return;
+        set.scenes[i] = got;
+        if (set.base) {
+          set.base.scenes.forEach(function (b, j) {
+            if (String(b.id) === String(got.id)) set.base.scenes[j] = got;
+          });
+        }
+        // The covers cached by the scan are as old as the scene objects were.
+        if (self.coverBy) delete self.coverBy[String(sc.id)];
+      });
+      if (self.source) self.source = fresh[String(self.source.id)] || self.source;
+      var others = set.scenes.filter(function (sc) {
+        return !self.source || String(sc.id) !== String(self.source.id);
+      });
+      // The covers again, for the set alone: cheap where the comparison is on, and
+      // `null` where it is off, exactly as it was for the scan.
+      return Promise.resolve(self.source ? gatherCovers(self, self.settings, self.source, others) : null)
+        .then(function (covers) {
+          if (covers) {
+            self.coverBy = self.coverBy || {};
+            self.coverBy[String(self.source.id)] = covers.src;
+            others.forEach(function (sc) {
+              self.coverBy[String(sc.id)] = covers.had[String(sc.id)];
+            });
+          }
+          self.rescoreSet(set);
+          return { covers: covers, others: others };
+        });
     });
   };
 
@@ -1830,6 +1890,18 @@
       // this is the one place they change under it - a set re-read after a write.
       diffTip(set.headEl, [{ node: setTable(set, this.skip, this.coverBy) }]);
     }
+  };
+
+  // After a set is listed, the pick moves on to the next scene in it, the first after
+  // the last, so pressing again synchronizes from the next one.
+  Run.prototype.pickNext = function (set) {
+    var n = set.scenes.length, i = 0, src = this.source;
+    set.scenes.forEach(function (sc, j) { if (String(sc.id) === String(src.id)) i = j; });
+    var next = set.scenes[(i + 1) % n];
+    this.source = next;
+    this.picked[set.key] = String(next.id);
+    this.clearSourceRadios();
+    if (set.radios && set.radios[String(next.id)]) set.radios[String(next.id)].checked = true;
   };
 
   Run.prototype.clearSourceRadios = function () {
@@ -1917,9 +1989,10 @@
             ? 'This set is already listed below.'
             : '';
     this.syncSetBtn.disabled = !!why;
-    this.syncSetBtn.title = why || ('List what would be pushed from "' +
-      (this.source.title || ('Scene ' + this.source.id)) + '" to the ' +
-      plural(this.sourceSet.scenes.length - 1, 'other scene') + ' in its set.');
+    this.syncSetBtn.title = why || ('List what would be pushed from the selected scene, "' +
+      (this.source.title || ('Scene ' + this.source.id)) + '", to the ' +
+      plural(this.sourceSet.scenes.length - 1, 'other scene') + ' in its set. The selection ' +
+      'then moves to the next scene in the set.');
   };
 
   Run.prototype.syncCandidates = function () {
@@ -2328,7 +2401,10 @@
     this.written = 0;
     this.failed = 0;
     this.scanFailed = false;
-    this.msg('INFO', '--- Rescan ---');
+    // A rescan starts a fresh log, as the siblings' do: what it lists is all that holds.
+    while (this.logEl.firstChild) this.logEl.removeChild(this.logEl.firstChild);
+    this.logText = [];
+    this.logged = this.logDropped = 0;
     this.begin();
   };
 
@@ -2507,11 +2583,23 @@
   // scene - the flag task creates its tag there when the library has none, because a
   // tag must not be created by a scan, and a failure has to leave a listing nobody has
   // acted on.
+  // Undo History, where ᝯㄝₓ Core keeps one: each write recorded from the input it sent
+  // and the one that puts it back, a pass per press.
+  function journalPass(label) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+  }
+
   Run.prototype.writeThen = function (before, jobs, build, verb, leaseLabel, say) {
     var self = this;
     var lease = acquireLease(leaseLabel);
     self.renamed = [];
+    var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel);
     function settle(err) {
+      self.journalRun = null;
+      if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
       lease.release();
       self.setState('listing');
       self.progress(self.progressText());
@@ -2520,6 +2608,12 @@
           (err && err.message ? err.message : String(err)));
       } else say();
       handRenames(self);
+      if (self.sourceSet) {
+        self.rereadSet(self.sourceSet).then(null, function (e) {
+          self.msg('WARN', 'The set could not be read again, so its score is as it was: ' +
+            (e && e.message ? e.message : String(e)));
+        });
+      }
     }
     Promise.resolve().then(function () { return before ? before() : null; })
       .then(function () { return self.writeAll(jobs, build, verb, lease); })
@@ -2582,13 +2676,27 @@
       return Promise.all(slice.map(function (job) {
         // The builder runs inside the promise so a throw in it is this job's failure,
         // logged like a refused write, rather than an exception out of the click.
+        var req = null;
         return Promise.resolve().then(function () {
-          var req = build(job, self);
+          req = build(job, self);
           return gqlRequest(req.query, req.variables);
         }).then(function () {
           self.written++;
           self.dirty = true;
           var forward = verb === self.task.verb;
+          // The forward input is kept on the job, so its undo is recorded against it
+          // without calling a builder a second time.
+          if (self.journalRun && req && req.variables && req.variables.input) {
+            var sent = req.variables.input, back = null;
+            if (forward) {
+              job.journalSent = sent;
+              try { back = self.task.undoInput(job, self); } catch (e) { back = null; }
+              back = back && back.variables ? back.variables.input : null;
+            } else {
+              back = job.journalSent || null;
+            }
+            self.journalRun.add('scenes', job.id, job.title || '', sent, back || {});
+          }
           if (forward) self.changes.push(job);
           else {
             var ix = self.changes.indexOf(job);
@@ -3694,7 +3802,7 @@
   }
 
   // The tail of a sync listing, shared by the run that reaches it through `syncBegin`
-  // and the one the review dialog's Synchronize Set builds.
+  // and the one the review dialog's Synchronize Set from Selected builds.
   function finishSyncPlan(run, s) {
     titleRuleNotes(run);
     var unticked = 0;
@@ -4438,7 +4546,7 @@
   // have drifted, worst first, so the sets worth a minute are the ones at the top.
   //
   // It is a *listing*, not a plan: nothing is written until a set and a source are
-  // picked and Synchronize Set is pressed, at which point the same `planSyncScene`
+  // picked and Synchronize Set from Selected is pressed, at which point the same `planSyncScene`
   // that both other doors use lists the changes below, with the same boxes, the same
   // All bar, the same Proceed and the same Undo.
 
@@ -4513,6 +4621,12 @@
   }
 
   function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  // The same, with every run of spaces matching any run of whitespace: a title typed with
+  // two spaces, or a non-breaking one, before its index is still in the expected shape,
+  // so it keeps its index and is only respaced rather than renumbered.
+  function looseRe(s) { return escapeRe(s).replace(/\s+/g, '\\s+'); }
+  // Whitespace a log line cannot show: doubled, leading or trailing, or not a plain space.
+  function oddSpacing(t) { return /\s\s|[^\S ]|^\s|\s$/.test(String(t || '')); }
 
   // ── The base name ─────────────────────────────────────────────────────────
   //
@@ -4526,8 +4640,8 @@
     // With no postfix there is nothing to tell an index from a number in the name, so
     // every title votes whole: "Episode 12" must not vote "Episode".
     if (!postfix) return title;
-    var re = new RegExp('(' + escapeRe(postfix) + (alpha ? indexPattern(alpha) : '') + '|' +
-      escapeRe(bareTitle('', postfix)) + ')$');
+    var re = new RegExp('(' + looseRe(postfix) + (alpha ? indexPattern(alpha) : '') + '|' +
+      looseRe(bareTitle('', postfix)) + ')\\s*$');
     return title.replace(re, '');
   }
   function commonPrefix(titles) {
@@ -4547,8 +4661,8 @@
 
   // `members`: [{ id, title, role ('fl'|'pl'|other), duration, size, custom_fields }].
   // `naming`: { postfix, first, baseField, skipField }.
-  // Returns { base, from: 'field'|'prefix'|'full'|null }. `leadId`, for a sync planned
-  // from one scene: that scene alone votes where it is full-duration, else the
+  // Returns { base, from: 'field'|'prefix'|'full'|null, voters }. `leadId`, for a sync
+  // planned from one scene: that scene alone votes where it is full-duration, else the
   // full-duration members do - the save that just renamed a scene is the base now, and
   // the partials still wearing the old one would vote the new one down to nothing.
   function baseOf(members, naming, leadId) {
@@ -4562,20 +4676,21 @@
       });
     if (pinned !== null) return { base: pinned, from: 'field' };
     var titled = members.filter(function (m) { return typeof m.title === 'string' && m.title; });
-    // Who votes on the prefix: the full-duration members, and the partials already
-    // named in the expected shape. A partial titled any old way is what the rename is
-    // for, and it must not be allowed to vote the shared prefix down to nothing. With
-    // no such member, every titled member votes.
+    // Who votes on the prefix: the full-duration members alone, where the set has any -
+    // the base is read from them, and a partial still wearing an old base would vote a
+    // new one down to what the two share ("Adventures #04, Scene #04" against "Adventures
+    // #04 - Scene 4 - Promo 1" is "Adventures #04"). With none, the partials already
+    // named in the expected shape; a partial titled any old way is what the rename is
+    // for. With no such member either, every titled member votes.
     var lead = leadId != null ? titled.filter(function (m) { return m.id === String(leadId); })[0] : null;
-    var voters = lead && lead.role === 'fl' ? [lead] : titled.filter(function (m) {
-      return m.role === 'fl' || (!lead && stripPostfix(m.title, naming.postfix, alpha) !== m.title);
+    var full = titled.filter(function (m) { return m.role === 'fl'; });
+    var voters = lead && lead.role === 'fl' ? [lead] : full.length ? full : titled.filter(function (m) {
+      return !lead && stripPostfix(m.title, naming.postfix, alpha) !== m.title;
     });
     if (!voters.length) voters = titled;
     var prefix = commonPrefix(voters.map(function (m) { return stripPostfix(m.title, naming.postfix, alpha); }));
-    if (prefix && voters.length > 1) return { base: prefix, from: 'prefix' };
-    if (prefix && voters[0].role === 'fl') return { base: prefix, from: 'full' };
-    if (prefix) return { base: prefix, from: 'prefix' };
-    return { base: '', from: null };
+    if (!prefix) return { base: '', from: null, voters: [] };
+    return { base: prefix, from: voters.length === 1 && voters[0].role === 'fl' ? 'full' : 'prefix', voters: voters };
   }
 
   // Partials in the order the tab shows them - longest first, then the bigger file,
@@ -4606,7 +4721,7 @@
       live.forEach(function (o) { o.expected = bareTitle(base, naming.postfix); });
       return out;
     }
-    var shape = new RegExp('^' + escapeRe(base + naming.postfix) + '(' + indexPattern(alpha) + ')$');
+    var shape = new RegExp('^\\s*' + looseRe(base + naming.postfix) + '(' + indexPattern(alpha) + ')\\s*$');
     var taken = {};
     if (!renumber) {
       live.forEach(function (o) {
@@ -4614,6 +4729,7 @@
         if (!m || taken[indexValue(m[1], alpha)]) return;
         taken[indexValue(m[1], alpha)] = true;
         o.kept = true;
+        o.expected = base + naming.postfix + m[1];
       });
     }
     var n = indexValue(naming.first, alpha);
@@ -4700,7 +4816,7 @@
         'one. The box in the Rename Variants dialog starts from this and overrides it for ' +
         'that dialog only. A scene marked in the no-rename field or wearing the no-rename ' +
         'tag keeps its title either way.' },
-    { key: 'e3BaseNameField', label: 'Variant Base Name Custom Field',
+    { key: 'e3BaseNameField', cfDefault: BASE_FIELD_DEFAULT, label: 'Variant Base Name Custom Field',
       tip: 'The custom field whose value names a variant set: whatever is written in it on ' +
         'any scene of the set is the base every partial is titled from, before the postfix ' +
         'and the index. Empty means the default name, ' + BASE_FIELD_DEFAULT + '.\n\n' +
@@ -4713,12 +4829,12 @@
         'full-duration scene\'s title when they share nothing. Either way the base names ' +
         'the partials only: a full-duration scene is never renamed, so the field on it ' +
         'changes nothing but its partials\' titles.\n\nRead everywhere the rule applies - ' +
-        'Rename Variants, Synchronize Variants and Synchronize Set, the offer after a save, ' +
+        'Rename Variants, Synchronize Variants and Synchronize Set from Selected, the offer after a save, ' +
         'and the title drift the review and the tab count. Never written by this plugin, ' +
         'and never checked against the titles: a value left on a partial from a set it ' +
         'used to belong to names the whole set. A scene marked in the no-rename field or ' +
         'wearing the no-rename tag keeps its title whatever the base is.' },
-    { key: 'e4NoRenameField', label: 'Variant No-Rename Custom Field',
+    { key: 'e4NoRenameField', cfDefault: SKIP_FIELD_DEFAULT, label: 'Variant No-Rename Custom Field',
       tip: 'A custom field that, set to anything on a scene, keeps every title rule from ' +
         'proposing a title for it. Empty means the default name, ' + SKIP_FIELD_DEFAULT +
         '.\n\nFor the partial that falls outside the rule. The scene is still counted as ' +
@@ -4735,6 +4851,7 @@
 
   function TitleDialog() {
     this.boxes = {};
+    this.remarks = [];
     this.stored = null;
     this.saving = false;
   }
@@ -4766,6 +4883,19 @@
       // The switch sits before its caption, as Stash's own do; a text box sits under it.
       if (f.bool) { row.appendChild(box); row.appendChild(cap); }
       else { row.appendChild(cap); row.appendChild(box); }
+      if (f.cfDefault) {
+        // The field in force - the box, else the default - marked after the caption.
+        var remark = function () {
+          var field = trim(box.value) || f.cfDefault;
+          if (cap._cf === field) return;
+          var old = cap.nextSibling;
+          if (old && old !== box && /\bgttx-cftipped\b/.test(String(old.className || ''))) row.removeChild(old);
+          cap._cf = field;
+          markField(cap, field);
+        };
+        box.addEventListener('change', remark);
+        self.remarks.push(remark);
+      }
       row.appendChild(el('span', 'svr-field-note', oneLine(f.tip.split('\n\n')[0])));
       self.boxes[f.key] = box;
       self.body.appendChild(row);
@@ -4792,6 +4922,7 @@
         else self.boxes[f.key].value = s[f.key] == null ? '' : String(s[f.key]);
         self.boxes[f.key].disabled = false;
       });
+      self.remarks.forEach(function (r) { r(); });
       self.noteEl.textContent = '';
       self.refreshSave();
     }, function (e) {
@@ -4871,8 +5002,47 @@
   // Live, on a preview of 0.32. The group is the fallback where no row can be found.
   var TITLE_ROW_ID = 'svr-title-row';
 
+  // What the eight settings say now, in one line under the row's description, the way
+  // Stash shows a setting's value under its own.
+  // Text, with each custom field's name as `{ cf }` so the row can mark it.
+  function titleSummaryParts(s) {
+    var nm = naming(s);
+    return ['Postfix "' + (nm.postfix || '') + '"' + (nm.postfix ? '' : ' (none)') +
+      (nm.first ? ', indexes from "' + nm.first + '"' + (nm.loneIndex ? ', a lone partial indexed too' : '') +
+        (nm.renumber ? ', renumbered by duration' : ', indexes kept') : ', no index') +
+      '; base name in "', { cf: nm.baseField }, '", no-rename in "', { cf: nm.skipField }, '"' +
+      (nm.skipTag ? ' or tagged "' + nm.skipTag + '"' : '') +
+      '; a title change after a save is ' + (s.c5PropagateTitleOnSave ? '' : 'not ') + 'offered to the variants.'];
+  }
+  function titleSummary(s) {
+    return titleSummaryParts(s).map(function (p) { return typeof p === 'string' ? p : p.cf; }).join('');
+  }
+  // A custom field's ⓘ after its name, where Custom Fields Bulk Editor describes it.
+  function markField(nameNode, field) {
+    if (typeof cfTipMark !== 'function') return;
+    cfTipMark(field).then(function (mark) {
+      if (!mark || !nameNode.parentNode || nameNode._cf !== field) return;
+      nameNode.parentNode.insertBefore(mark, nameNode.nextSibling);
+    });
+  }
+  function drawTitleSummary(node, s) {
+    while (node.firstChild) node.removeChild(node.firstChild);
+    node._summary = titleSummary(s);
+    titleSummaryParts(s).forEach(function (p) {
+      if (typeof p === 'string') { node.appendChild(el('span', null, p)); return; }
+      var name = el('span', 'svr-cfname', p.cf);
+      name._cf = p.cf;
+      node.appendChild(name);
+      markField(name, p.cf);
+    });
+  }
+
   function ensureTitleRow(group) {
-    if (document.getElementById(TITLE_ROW_ID)) return;
+    var had = document.getElementById(TITLE_ROW_ID);
+    if (had) {
+      if (had._sum && had._sum._summary !== titleSummary(settings())) drawTitleSummary(had._sum, settings());
+      return;
+    }
     var host = null;
     for (var key in DEFAULTS) {
       if (!hasOwn(DEFAULTS, key)) continue;
@@ -4886,6 +5056,8 @@
     left.appendChild(el('div', 'sub-heading', 'How a partial-duration scene is titled after ' +
       'its set: the postfix, the index, the base-name and no-rename marks, and whether a ' +
       'title change after a save is offered to the variants. Eight settings, in a dialog.'));
+    row._sum = left.appendChild(el('div', 'value svr-title-sum'));
+    drawTitleSummary(row._sum, settings());
     row.appendChild(left);
     var right = el('div');
     var btn = button(TITLE_TASK_NAME, 'svr-title-btn');
@@ -4931,8 +5103,8 @@
     });
   }
 
-  var FROM_TEXT = { field: 'the "%s" field', prefix: 'what the set\'s titles share',
-    full: 'the full-duration scene\'s title, since the titles share nothing' };
+  var FROM_TEXT = { field: 'the "%s" field', prefix: 'what these titles share',
+    full: 'the full-duration scene\'s title' };
 
   function planRenames(run, m, nm) {
     if (!run.scannedSets.length) {
@@ -4952,12 +5124,17 @@
           'Put the base name in "' + nm.baseField + '" on one of them to name this set.');
         return;
       }
-      var from = FROM_TEXT[b.from].replace('%s', nm.baseField);
+      // Which scenes the base was read from, so a base that looks wrong says why.
+      var from = FROM_TEXT[b.from].replace('%s', nm.baseField) + (b.voters && b.voters.length
+        ? ': ' + b.voters.map(function (v) { return '"' + v.title + '" [' + v.id + ']' + (v.role === 'fl' ? ' (full-duration)' : ''); }).join(', ')
+        : '');
       expectedTitles(members, nm, b.base, !!run.renumber).forEach(function (p) {
         if (p.skipped) { skipped++; return; }
         if (p.expected === p.member.title) return;
         changes++;
         var ops = valueDiffOps(p.member.title, p.expected);
+        // The line collapses whitespace, so a change in spacing alone would read as none.
+        var respaced = oddSpacing(p.member.title) && !oddSpacing(p.expected);
         run.tickLine({ id: p.member.id, title: p.member.title || '(untitled)', kind: 'set',
           input: 'title', group: 'Title', value: p.expected, had: p.member.title || '' },
         'svr-op-set', '[RENAME]  ',
@@ -4966,10 +5143,12 @@
         // titles are in the hover text below.
         [['  Title: ', null]].concat(ops ? valueDiffParts(ops)
           : [[syncValShow(p.member.title || ''), 'svr-del'], [' \u2192 ', 'svr-mod'],
-            [syncValShow(p.expected), 'svr-add']]),
+            [syncValShow(p.expected), 'svr-add']]).concat(respaced ? [['  (spacing fixed)', 'svr-mod']] : []),
         false,
-        'Rename "' + (p.member.title || '') + '" to "' + p.expected + '". The base "' + b.base +
-          '" is ' + from + (b.from === 'full' ? '; the line starts unticked either way' : '') + '.');
+        'Rename "' + (p.member.title || '') + '" to "' + p.expected + '".' + (respaced
+          ? ' The title has doubled, leading, trailing or non-breaking spaces, which the line cannot ' +
+            'show; the new one has single plain spaces.' : '') + ' The base "' + b.base +
+          '" is ' + from + '.');
       });
     });
     if (skipped) {
@@ -5006,7 +5185,7 @@
       self.rescan();
     });
     wrap.appendChild(box);
-    wrap.appendChild(el('span', null, ' Renumber by duration, longest first'));
+    wrap.appendChild(el('span', null, ' Force renumber by duration, longest first'));
     this.weightBar.appendChild(wrap);
     this.show(this.weightBar, true);
   };
@@ -5413,7 +5592,7 @@
       run.excludeOrganized = !!s.d7ExcludeOrganized;
       run.skip = skipTagIds(both[1], s, m);
       run.buildWeightBar();
-      // Bound before the scan, so the first Synchronize Set can read it synchronously.
+      // Bound before the scan, so the first Synchronize Set from Selected can read it synchronously.
       var pruning = nptPruner(s).then(function (w) { run.pruner = w; });
       run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
         '" line with another, to give each set its drift score.');
@@ -5448,7 +5627,7 @@
             reportCoverCheck(run, s);
             run.msg('INFO', plural(run.sets.length, 'variant set') + ' found. Pick the ' +
               'scene whose values are right - that is both the set and the source - then ' +
-              'press Synchronize Set to list what would be pushed to the others.');
+              'press Synchronize Set from Selected to list what would be pushed to the others.');
             return null;
           });
         });
@@ -5462,12 +5641,12 @@
       'disagree on and the tags, performers and groups one carries and another does ' +
       'not. What each of those is worth is the strip above the listing, and Remember ' +
       'keeps your numbers for next time. Open a set and pick the scene whose values ' +
-      'are right; Synchronize Set then lists exactly what would be pushed to the ' +
+      'are right; Synchronize Set from Selected then lists exactly what would be pushed to the ' +
       'others, one checkbox line each - green for what a variant gains, red for what ' +
       'it loses, blue for a value replaced - and nothing is written until you press ' +
       'Proceed. The full-duration, partial-duration and flag tags are never pushed, and ' +
       'never counted against a set.',
-    nothing: 'Pick a source scene and press Synchronize Set first.',
+    nothing: 'Pick a source scene and press Synchronize Set from Selected first.',
     scanNoun: 'scene',
     planNoun: 'listed',
     planUnit: 'change',
@@ -5661,7 +5840,10 @@
     //
     // `flex:0 1 auto` rather than `0 0 auto`: the dragged height is kept while there
     // is room for it, and given up before the log's own minimum pushes the footer off
-    // the bottom of a short window. `color-scheme:dark` keeps the box's own scrollbar
+    // the bottom of a short window. The log's shrink factor is what keeps it: flex
+    // shrinks in proportion to size, so with equal factors a log growing through a pass
+    // took an ever larger share of the listing's height. The log's factor makes it give
+    // up everything above its own minimum first. `color-scheme:dark` keeps the box's own scrollbar
     // in the dialog's colours - CustomFieldsBulkEditor's lesson.
     '.svr-sets{flex:0 1 auto;overflow:auto;height:22vh;min-height:7.2rem;' +
     'max-height:46vh;color-scheme:dark;padding:0 1rem;font-family:ui-monospace,' +
@@ -5669,6 +5851,8 @@
     '.svr-splitbar{flex:0 0 auto;height:8px;margin:.15rem 1rem .35rem;' +
     'cursor:ns-resize;background:#2b3a45;border-radius:4px;}' +
     '.svr-splitbar:hover{background:#425a6b;}' +
+    // The log after the bar - the shared `.log` rule stays as every sibling has it.
+    '.svr-splitbar+.svr-log{flex-shrink:100000;}' +
     '.svr-set{white-space:pre-wrap;}' +
     // The score, banded: green at one or nothing to do, then yellow, amber and
     // red as a set drifts further apart. The weights decide where the bands fall, so
@@ -5692,6 +5876,7 @@
     // with its first sentence under it and the rest on hover. The row it opens from
     // borrows Stash's own `.setting` classes, so it is laid out as the rows above it.
     '.svr-modal.svr-narrow{width:min(58rem,94vw);}' +
+    '.svr-modal.svr-tall{height:88vh;}' +
     '.svr-form{padding:.5rem 1rem;overflow:auto;}' +
     '.svr-field{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;' +
     'margin:.6rem 0;color:#d6dee4;font-size:.9rem;cursor:pointer;}' +

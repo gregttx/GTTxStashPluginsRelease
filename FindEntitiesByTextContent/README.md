@@ -177,7 +177,8 @@ alone with a line saying so, rather than failing that entity's whole write.
 **Undo** puts back what the press changed, field by field, while the dialog stays open. It
 is an exact per-field inverse, not a restore of the whole record, so an unrelated edit made
 in between is not reverted. The list on screen still describes what was found *before* the
-write — press **Refresh** to search again.
+write — press **Refresh** to search again. Every Replace, and every Undo, is also kept in ᝯㄝₓ Core's
+[Undo History](../GTTxCore/README.md#undo-history), where it can be undone after this dialog has closed.
 
 ## Nothing is written until you ask
 
@@ -246,7 +247,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Find & Replace Entities by Text Content | 769 MB | 1525 MB | 1518 MB |
+| Find & Replace Entities by Text Content | 769 MB | 1737 MB | 1524 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

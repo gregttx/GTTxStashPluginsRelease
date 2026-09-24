@@ -76,7 +76,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.1.7';
+  var PLUGIN_VERSION      = '4.2.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -336,6 +336,21 @@
         if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
         return json.data;
       });
+  }
+
+  // Undo History, where ᝯㄝₓ Core keeps one: a merge is, per scene, the tags it added -
+  // recorded as that delta, which an undo checks are still there and takes off again,
+  // whatever else the scene gained since.
+  function journalPass(label, libraryWide) {
+    var j = coop().journal;
+    return j && typeof j.pass === 'function'
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
+  }
+
+  function journalTags(scene, added, removing) {
+    var name = scene.title || ((scene.files || [])[0] || {}).basename || '';
+    return { type: 'scenes', id: String(scene.id), name: name, field: 'tag_ids',
+      before: removing ? added.slice() : [], after: removing ? [] : added.slice() };
   }
 
   function updateSceneTags(sceneId, tagIds) {
@@ -660,6 +675,11 @@
         if (!plan) return false;
         return updateSceneTags(sceneId, plan.existingIds.concat(plan.missing)).then(function () {
           logMerges(plan.missing.map(function (id) { return plan.tagById[id]; }), scene, sceneId, 'saved');
+          var pass = journalPass('Tags merged into one scene');
+          if (pass) {
+            pass.entries([journalTags({ id: sceneId, title: scene.title, files: scene.files }, plan.missing, false)]);
+            pass.finish();
+          }
           return true;
         });
       });
@@ -841,6 +861,7 @@
 
           var i = 0;
           var failed = 0;
+          var pass = journalPass('Tags merged into a performer\u2019s scenes');
           // Skipped scenes advance the loop; only a scene that actually needs updating
           // chains a promise and re-enters. Recursing on skips instead grew the stack
           // by a frame per scene and overflowed at roughly twelve thousand consecutive
@@ -857,6 +878,7 @@
                 .catch(makeSceneFailureHandler(scene))
                 .then(next);
             }
+            if (pass) pass.finish();
             // Report failures only after every scene has been attempted, so one bad
             // scene cannot silently cancel the rest of the run.
             if (failed) {
@@ -878,6 +900,7 @@
           // is never logged as merged.
           function makeSceneLogger(scene, mergedIds) {
             return function () {
+              if (pass) pass.entries([journalTags(scene, mergedIds, false)]);
               logMerges(mergedIds.map(function (id) { return perfTagById[id]; }),
                 scene, scene.id, 'saved');
             };
@@ -2255,6 +2278,12 @@
     var self = this;
     var lease = acquireLease(leaseLabel);
     var i = 0;
+    var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, true);
+    var recorded = function () {
+      self.journalRun = null;
+      if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+    };
 
     guarded(function () {
       function next() {
@@ -2266,11 +2295,13 @@
     }).then(function () {
       lease.release();
       finish.call(self);
+      recorded();
     }, function (e) {
       lease.release();
       self.log('ERROR', verb + ' aborted: ' + (e && e.message ? e.message : e));
       self.errors++;
       finish.call(self);
+      recorded();
     });
   };
 
@@ -2302,6 +2333,7 @@
       // a write that never landed. Only the tags this run added are kept: the scene's
       // own tags are none of Undo's business.
       self.undoable.push({ scene: entry.scene, tagIds: entry.tagIds.slice() });
+      if (self.journalRun) self.journalRun.entries([journalTags(entry.scene, entry.tagIds, false)]);
       self.wroteScenes[entry.scene.id] = true;
       self.scenesUpdated++;
       self.tagsAdded += entry.tagIds.length;
@@ -2442,6 +2474,7 @@
         // exactly the scenes that still carry what this run added.
         var at = self.undoable.indexOf(entry);
         if (at !== -1) self.undoable.splice(at, 1);
+        if (self.journalRun) self.journalRun.entries([journalTags(entry.scene, entry.tagIds, true)]);
         self.wroteScenes[entry.scene.id] = true;
         entry.tagIds.forEach(function (id) {
           self.undoneTagCounts[id] = (hasOwn(self.undoneTagCounts, id) ? self.undoneTagCounts[id] : 0) + 1;

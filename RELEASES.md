@@ -10,6 +10,11 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SFM | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-23 | 3.5.1 (`af8d8e3`) | 2.5.0 (`af8d8e3`) |  | 2.10.4 (`af8d8e3`) |  |  | 5.3.0 (`af8d8e3`) |  | 1.22.0 (`af8d8e3`) |  | Undo History, step 2: every writing plugin records; the memory tool counts it |
+| 2026-09-23 | 3.5.0 (`7ee2847`) |  | 3.3.0 (`7ee2847`) | 2.10.3 (`7ee2847`) | 4.2.0 (`7ee2847`) | 5.6.0 (`7ee2847`) |  | 1.4.0 (`7ee2847`) |  |  | Undo History, step 2: five plugins record their writes |
+| 2026-09-23 |  |  |  | 2.10.2 (`527582f`) |  |  |  |  |  |  | Core 2.10.2: the Undo History dialog, its Tasks entry and top-bar button |
+| 2026-09-23 |  |  |  | 2.10.1 (`2d2f230`) |  |  |  |  |  |  | Core 2.10.1: Undo History's settings, the capture of Stash's saves, and undo |
+| 2026-09-23 |  |  |  | 2.10.0 (`4b5c6a1`) |  |  |  |  |  |  | Core 2.10.0: the undo journal's store |
 | 2026-09-23 |  |  |  |  |  |  |  | 1.3.1 (`3ddf739`) |  |  | SceneFilenameManager 1.3.1: Rescan clears the log |
 | 2026-09-23 |  |  |  |  |  |  |  | 1.3.0 (`abac2e3`) |  |  | SceneFilenameManager 1.3.0: files already named are listed as SAME, with a filter box |
 | 2026-09-23 |  |  |  |  |  |  |  | 1.2.0 (`e9a1e1d`) |  |  | SceneFilenameManager 1.2.0: Rescan in Rename Files From Metadata |
