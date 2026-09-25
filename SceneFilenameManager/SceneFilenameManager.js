@@ -11,9 +11,9 @@
 // Three Settings → Tasks entries, one dialog:
 //
 //   - **Archive** writes each file's name, without its extension, into the field
-//     wherever a file's name is not there yet - the primary file's alone as plain text,
-//     more than one as JSON by file id. It never overwrites a name, and deleting the
-//     field by hand is how a scene is re-archived under its current names.
+//     wherever a file's name is not there yet, as JSON by file id. It never overwrites
+//     a name, and deleting the field by hand is how a scene is re-archived under its
+//     current names.
 //   - **Restore** renames each file the field names back to its archived name, keeping
 //     the file's current extension.
 //   - **Rename** gives files the name the rename template builds from the scene's
@@ -51,7 +51,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '1.5.2';
+  var PLUGIN_VERSION = '1.5.4';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -313,7 +313,7 @@
 
   var CSS =
     // The shared dialog chrome, identical to the siblings' with the prefix swapped;
-    // `tests/style.test.js` pins the overlap.
+    // `.tests/style.test.js` pins the overlap.
     '.sfm-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
     '.sfm-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
@@ -450,7 +450,9 @@
         if (archivedNames(scene, field).raw == null) run.noFile++;
         return null;
       }
-      var names = archivedNames(scene, field), map = withEveryFile(scene, names.map);
+      var names = namesOf(run, scene, field);
+      if (!names) return null;
+      var map = withEveryFile(scene, names.map);
       var added = files.filter(function (f) { return !hasOwn(names.map, f.id); })
         .map(function (f) { return { id: f.id, name: map[f.id] }; });
       // The older bare value is rewritten by file id, its name kept.
@@ -503,8 +505,8 @@
     verb: 'to rename',
     unit: 'file',
     plan: function (scene, field, run) {
-      var names = archivedNames(scene, field);
-      if (names.raw == null) return null;
+      var names = namesOf(run, scene, field);
+      if (!names || names.raw == null) return null;
       var files = filesOf(scene);
       if (!files.length) { run.noFile++; return null; }
       return files.map(function (f) {
@@ -743,6 +745,10 @@
   var LOOK_ALIKES = { ':': '∶', '*': '∗', '?': '？', '"': '＂', '<': '‹',
     '>': '›', '|': '∣' };
 
+  // The names Windows keeps for devices, in any case and whatever follows a dot: a file
+  // cannot be called CON, nul.mp4 or Com1.part.mp4 there.
+  var RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]) *(\.|$)/i;
+
   function utf8Length(text) { return unescape(encodeURIComponent(text)).length; }
 
   // One character off the end, both halves of a surrogate pair together:
@@ -757,7 +763,7 @@
   function cleanReport(text, room) {
     room = room || { bytes: NAME_BYTES_DEFAULT, units: Infinity };
     var fits = function (x) { return utf8Length(x) <= room.bytes && x.length <= room.units; };
-    var r = { replaced: [], dropped: [], cut: '', by: '' };
+    var r = { replaced: [], dropped: [], cut: '', by: '', reserved: '' };
     var note = function (list, c) { if (list.indexOf(c) === -1) list.push(c); };
     var v = String(text).replace(/[\/\\:*?"<>|\u0000-\u001f]/g, function (c) {
       if (hasOwn(LOOK_ALIKES, c)) { note(r.replaced, c); return LOOK_ALIKES[c]; }
@@ -767,6 +773,12 @@
     v = trim(v).replace(/[. ]+$/, '');
     var at = v.indexOf(INDEX_OPEN), head = at === -1 ? v : v.slice(0, at);
     var keep = at === -1 ? '' : v.slice(at).split(INDEX_OPEN).join('').split(INDEX_CLOSE).join('');
+    // A device name takes an underscore after the word, before the fit counts it.
+    var dev = RESERVED_NAME.exec(head + keep);
+    if (dev && dev[1].length <= head.length) {
+      r.reserved = dev[1];
+      head = dev[1] + '_' + head.slice(dev[1].length);
+    }
     var whole = head;
     if (!fits(head + keep)) {
       r.by = utf8Length(head + keep) > room.bytes ? 'bytes' : 'path';
@@ -801,8 +813,9 @@
 
   function folderOf(f) { return f.parent_folder && f.parent_folder.id; }
 
-  // Case-blind, because some filesystems are.
-  function nameKey(folder, basename) { return folder + '/' + String(basename).toLowerCase(); }
+  // Case-blind, because some filesystems are, and blind to how an accent is composed,
+  // because macOS's are: "é" typed and "é" from a Mac's filename are one name there.
+  function nameKey(folder, basename) { return folder + '/' + String(basename).normalize('NFC').toLowerCase(); }
 
   // Every token the template names, for one file of one scene.
   function valuesOf(scene, file, run, names) {
@@ -863,14 +876,16 @@
   function nameFor(scene, file, run, names) {
     var values = valuesOf(scene, file, run, names), ext = extOf(file.basename), last = null;
     var room = roomFor(run, file);
-    if (room.units < 1) {
+    var noRoom = function () {
       return { why: 'its folder\'s path is already ' + file.parent_folder.path.length + ' characters, ' +
         'leaving no room for a name under the ' + run.maxPath + '-character path limit' };
-    }
+    };
+    if (room.units < 1) return noRoom();
     for (var k = 0; ; k++) {
       run.autoTokens.forEach(function (t) { values[t] = k ? String(run.specs[t].arg + k - 1) : ''; });
       var rep = cleanReport(renderTemplate(run.nodes, values), room), stem = rep.stem;
-      if (!stem) return { why: 'the template gives it an empty name' };
+      // Cut to nothing for the path is the folder's doing, not the template's.
+      if (!stem) return rep.by === 'path' ? noRoom() : { why: 'the template gives it an empty name' };
       var to = stem + ext, holder = holderOf(run, folderOf(file), to, file);
       if (!holder) return { to: to, cut: !!rep.cut, cutBy: rep.by, full: rep.cut ? stem.length + ext.length : 0 };
       if (to === last) {
@@ -881,20 +896,41 @@
     }
   }
 
-  // The field's value read as names by file id. A plain value is the primary file's
-  // stem; a scene archived with more than one file holds a JSON object of them.
+  // The field's value read as names by file id: a JSON object of them. A value that does
+  // not open with `{` is the older bare stem, the primary file's; one that does and is
+  // not such an object is `broken`, and names nothing.
   function archivedNames(scene, field) {
     var cf = scene.custom_fields || {};
     var raw = hasOwn(cf, field) && cf[field] != null && trim(cf[field]) !== '' ? String(cf[field]) : null;
     var map = {}, parsed = null;
     if (raw == null) return { raw: null, map: map };
-    if (/^\s*\{/.test(raw)) { try { parsed = JSON.parse(raw); } catch (e) { parsed = null; } }
-    var ok = parsed && typeof parsed === 'object' && !(parsed instanceof Array) &&
-      Object.keys(parsed).every(function (k) { return typeof parsed[k] === 'string'; });
-    if (ok) return { raw: raw, map: parsed };
+    if (/^\s*\{/.test(raw)) {
+      try { parsed = JSON.parse(raw); } catch (e) { parsed = null; }
+      var ok = parsed && typeof parsed === 'object' && !(parsed instanceof Array) &&
+        Object.keys(parsed).every(function (k) { return typeof parsed[k] === 'string'; });
+      return ok ? { raw: raw, map: parsed } : { raw: raw, map: map, broken: true };
+    }
     var f = primaryFile(scene);
     if (f) map[f.id] = raw;
     return { raw: raw, map: map, bare: true };
+  }
+
+  // `archivedNames` for a task, saying what it cannot be sure of. The field is the user's
+  // to edit, so this is a trust boundary: a broken value is left as it is and the scene
+  // skipped (null), never read as a name nor written over; a bare one on a scene with more
+  // than one file is read as the primary file's, which it may not have been.
+  function namesOf(run, scene, field) {
+    var names = archivedNames(scene, field), n = filesOf(scene).length;
+    if (names.broken) {
+      run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] is skipped: "' + field + '" opens with ' +
+        '"{" but is not names by file id, so it is left for you to correct or delete.');
+      return null;
+    }
+    if (names.bare && n > 1) {
+      run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] holds the older bare name "' + names.raw +
+        '", read as its primary file\'s; with ' + n + ' files it may have been another\'s.');
+    }
+    return names;
   }
 
   // `map` with every file of the scene that is missing from it, under its name now.
@@ -995,7 +1031,8 @@
       // What a job keeps of its scene: enough to name it in the log and to write it.
       var slim = { id: scene.id, title: sceneName(scene) };
       if (!run.autoTokens.length) files = files.slice(0, 1);
-      var names = archivedNames(scene, field), archive = null, jobs = [];
+      var names = namesOf(run, scene, field), archive = null, jobs = [];
+      if (!names) return null;
       files.forEach(function (f) {
         var who = sceneName(scene) + ' [' + scene.id + ']' +
           (filesOf(scene).length > 1 ? ', file "' + f.basename + '",' : '');
@@ -1152,10 +1189,13 @@
         if (typeof at === 'string' && /^m\d+$/.test(at)) own[at] = e.message;
         else general = (e && e.message) || 'the request failed';
       });
-      var data = json.data || {};
+      // `moveFiles` is `Boolean!`, so one alias's error nulls the whole `data` though every
+      // other alias ran: with no `data` and every error an alias's own, the rest landed.
+      var data = json.data || {}, nulled = json.data == null && !general && Object.keys(own).length > 0;
       return parts.map(function (p, i) {
         var k = 'm' + i;
         if (own[k]) return own[k];
+        if (nulled) return null;
         if (data[k] == null || data[k] === false) return general || 'the server did not confirm it';
         return null;
       });
@@ -1234,8 +1274,8 @@
         return Promise.resolve();
       },
       plan: function (scene, field, run) {
-        var c = carried(move, scene, field), now = archivedNames(scene, field);
-        if (!c.added.length) return null;
+        var c = carried(move, scene, field), now = namesOf(run, scene, field);
+        if (!now || !c.added.length) return null;
         var value = archiveValue(c.map);
         if (value === now.raw) return null;
         if (now.raw != null && run.locked) {
@@ -1339,6 +1379,7 @@
     this.filter = { off: {}, cut: false, find: '' };
     this.jobs = [];       // what the scan found to do
     this.changes = [];    // what Proceed wrote, newest last, for Undo
+    this.entriesIn = {};  // Undo History entries per 'run:scene', -1 once Undo recorded some itself
     this.scanned = 0;
     this.total = 0;
     this.noFile = 0;
@@ -1763,16 +1804,24 @@
     if (this.state !== 'listing' || this.stale) return;
     var self = this, task = this.task, field = this.field, jobs = this.pending();
     if (!jobs.length) return;
+    // A new pass: a Stop pressed in the last one is spent, even where no archive is left
+    // to write and `runJobs` would not clear it before the renames.
+    this.stopped = false;
     this.setState('writing');
-    var pass = journalPass(task.title), steps = [];
-    this.archiveFirst(jobs).then(function () {
-      // The archives written ahead of the renames are changes of their own.
-      jobs.forEach(function (j) {
+    var pass = journalPass(task.title), runId = pass ? pass.id : null;
+    this.archiveFirst(jobs).then(function (wrote) {
+      // The archives this pass wrote ahead of the renames are changes of their own; one an
+      // earlier pass wrote is that pass's.
+      if (pass) {
+        pass.entries(wrote.map(function (st) { return journalEntry(st, field, false); }));
+        wrote.forEach(function (st) { self.recorded(runId, st); });
+      }
+      // Only a file whose name is archived is renamed: a step a Stop left unsent waits
+      // for the next Proceed.
+      jobs = jobs.filter(function (j) {
         var step = task.before ? task.before(j) : null;
-        if (step && step.done && steps.indexOf(step) === -1) steps.push(step);
+        return !j.failed && (!step || step.done);
       });
-      if (pass) pass.entries(steps.map(function (st) { return journalEntry(st, field, false); }));
-      jobs = jobs.filter(function (j) { return !j.failed; });
       if (self.stopped) return null;
       return self.runJobs(jobs, task.op, PLUGIN_SHORT_NAME + ': ' + task.title,
         function (job) { return task.write(job, field); },
@@ -1786,7 +1835,11 @@
             self.changes.push(job);
             self.written++;
             self.sceneLine(doneKind(task), job, task.tail(job, field));
-            if (pass) pass.entries([journalEntry(job, field, false)]);
+            if (pass) {
+              pass.entries([journalEntry(job, field, false)]);
+              job.run = runId;
+              self.recorded(runId, job);
+            }
           }
         });
     }).then(function () {
@@ -1801,23 +1854,24 @@
   // job's own write: Rename archives the names it is about to change. A job whose step
   // fails is failed, and its own write is never sent. Not undone: an archived name is
   // true whatever happens to the file.
-  // Jobs of one scene share one step, written once.
+  // Jobs of one scene share one step, written once. Resolves to the steps it wrote.
   Run.prototype.archiveFirst = function (jobs) {
     var self = this, task = this.task, field = this.field;
-    if (!task.before) return Promise.resolve();
+    if (!task.before) return Promise.resolve([]);
     var need = [];
     jobs.forEach(function (j) {
       var step = task.before(j);
       if (step && !step.done && !step.queued) { step.queued = true; need.push(step); }
     });
-    if (!need.length) return Promise.resolve();
+    if (!need.length) return Promise.resolve([]);
     return this.runJobs(need, 'SFMArchive', PLUGIN_SHORT_NAME + ': ' + task.title,
       function (step) { return ARCHIVE_TASK.write(step, field); },
       function (step, err) {
-        step.queued = false;
         if (err) step.error = err;
         else step.done = true;
       }).then(function () {
+      // A step a Stop left unsent is asked for again by the next Proceed.
+      need.forEach(function (step) { step.queued = false; });
       jobs.forEach(function (j) {
         var step = task.before(j);
         if (!step || !step.error) return;
@@ -1826,6 +1880,7 @@
         self.sceneLine('ERROR', j, ': the filename could not be archived, so the file ' +
           'is not renamed: ' + step.error);
       });
+      return need.filter(function (step) { return step.done; });
     });
   };
 
@@ -1852,10 +1907,15 @@
     });
   };
 
+  Run.prototype.recorded = function (runId, job) {
+    var k = runId + ':' + job.scene.id;
+    if (this.entriesIn[k] !== -1) this.entriesIn[k] = (this.entriesIn[k] || 0) + 1;
+  };
+
   Run.prototype.undoWrites = function () {
     var self = this, task = this.task, field = this.field;
     var jobs = this.changes.slice().reverse();
-    var pass = journalPass(task.title + ', undone');
+    var pass = journalPass(task.title + ', undone'), undone = {};
     this.setState('undoing');
     this.runJobs(jobs, task.op + 'Undo', PLUGIN_SHORT_NAME + ': ' + task.title + ' (undo)',
       function (job) { return task.undo(job, field); },
@@ -1871,8 +1931,25 @@
         job.written = false;
         self.written--;
         self.sceneLine('UNDO', job, task.tail(job, field));
-        if (pass) pass.entries([journalEntry(job, field, true)]);
+        if (!pass) return;
+        if (!job.run) { pass.entries([journalEntry(job, field, true)]); return; }
+        var k = job.run + ':' + job.scene.id;
+        (undone[k] = undone[k] || []).push(job);
       }).then(function () {
+      // Where this Undo put back everything a scene has in a run, Core reverses that run's
+      // entries from the history and marks them undone there. Where it did not - the
+      // archive a rename wrote first stays, or a Stop split the scene - the reversal is
+      // recorded here, and that scene of that run stays so.
+      Object.keys(undone).forEach(function (k) {
+        var list = undone[k];
+        if (self.entriesIn[k] === list.length && typeof pass.reverse === 'function') {
+          pass.reverse(list[0].run, 'scenes', list[0].scene.id);
+          delete self.entriesIn[k];
+        } else {
+          pass.entries(list.map(function (j) { return journalEntry(j, field, true); }));
+          self.entriesIn[k] = -1;
+        }
+      });
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.changes.length, self.task.unit || 'scene') +
         ' still written.');
       if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
@@ -2328,6 +2405,9 @@
       // "the name is over 200 bytes" read as a claim about that.
       warn.push('The name would be ' + (utf8Length(r.stem) + utf8Length(r.cut) + 4) + ' bytes with ' +
         'its extension, over ' + this.nameBytes + ', so "' + r.cut + '" is cut and \u2026 put in its place.');
+    }
+    if (r.reserved) {
+      warn.push('"' + r.reserved + '" is a name Windows keeps for a device, so an underscore follows it.');
     }
     if (!r.stem) warn.push('The name is empty, so a scene given it is skipped.');
     warn.forEach(function (w) { self.warnEl.appendChild(el('div', null, w)); });

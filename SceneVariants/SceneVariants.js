@@ -1,7 +1,7 @@
 // Scene Variants
 //
-// Requires Stash 0.28.0 or newer: the scene page's `ScenePage.Tabs` and
-// `ScenePage.TabContent` patch points are what this plugin is built on.
+// Requires Stash 0.31.0 or newer, the floor ᝯㄝₓ Core sets. The scene page's
+// `ScenePage.Tabs` and `ScenePage.TabContent` patch points are what this plugin is built on.
 //
 // A scene is often in the library twice: the whole thing, and a cut out of it. Stash
 // has no first-class relation for "these two files are the same work", so the Variants
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '2.0.3';
+  var PLUGIN_VERSION = '2.3.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -157,6 +157,7 @@
     c4CheckCoverMismatch: false,
     // `c5` was `c2` before it moved beside the title settings; the old key is read where the new one is unanswered.
     c5PropagateTitleOnSave: false,
+    f1AlwaysOpenFullDuration: false,
     e1PartialPostfix: '',
     e2FirstIndex: '',
     e3BaseNameField: '',
@@ -496,6 +497,7 @@
     e2FirstIndex: FIRST_INDEX_DEFAULT,
     e3BaseNameField: BASE_FIELD_DEFAULT,
     e4NoRenameField: SKIP_FIELD_DEFAULT,
+    f1AlwaysOpenFullDuration: false,
   };
 
   // Shown on Stash's settings page from its first paint, by the same rule (Core's
@@ -870,7 +872,7 @@
       // named differently on this Stash looks exactly like a scene with no variants,
       // and only one of those is worth reporting.
       console.warn('[svr] variant lookup failed for scene ' + scene.id + ': ' + err.message);
-      return { rows: [], why: 'The variant query failed: ' + err.message };
+      return { rows: [], failed: true, why: 'The variant query failed: ' + err.message };
     });
   }
   // ── Classifying a variant ─────────────────────────────────────────────────
@@ -1594,6 +1596,9 @@
           plural(self.sets.length, 'variant set') + ' still listed.'
         : 'Organized scenes included again: ' + plural(self.sets.length, 'variant set') +
           ' listed.');
+      // A plan already listed stops pushing to what is now left out: its lines to an
+      // organized scene are withdrawn, their boxes unticked and locked.
+      if (self.excludeOrganized) self.dropOrganizedJobs();
       self.syncFooter();
     });
     this.organizedBox = orgBox;
@@ -1616,6 +1621,23 @@
     mem.appendChild(box);
     mem.appendChild(el('span', null, 'Remember'));
     this.weightBar.appendChild(mem);
+  };
+
+  Run.prototype.dropOrganizedJobs = function () {
+    var org = {}, self = this;
+    (this.allSets || []).forEach(function (b) {
+      b.scenes.forEach(function (sc) { if (sc.organized) org[String(sc.id)] = true; });
+    });
+    var kept = this.jobs.filter(function (j) {
+      if (!org[String(j.id)] || self.changes.indexOf(j) !== -1) return true;
+      if (j.box) { j.box.checked = false; j.box.disabled = true; }
+      if (j.items) j.items.forEach(function (it) { if (it.box) { it.box.checked = false; it.box.disabled = true; } });
+      return false;
+    });
+    if (kept.length === this.jobs.length) return;
+    this.msg('INFO', plural(this.jobs.length - kept.length, 'line') + ' to an organized scene withdrawn.');
+    this.jobs = kept;
+    this.buildAllBar();
   };
 
   // Written whole, per the rule `configurePlugin` forces: it replaces the plugin's
@@ -1816,6 +1838,7 @@
       var nmg = self.matchers ? namingOf(set.scenes, self.matchers, self.naming, self.source.id)
         : { base: { base: '', from: null }, expected: null };
       self.expected = nmg.expected;
+      self.titleSkipped = nmg.skipped || null;
       self.base = nmg.base;
       self.ruledTitles = 0;
       others.forEach(function (sc) { planSyncScene(self, self.source, sc, self.skip); });
@@ -2409,14 +2432,11 @@
     this.msg('WARN', 'Stopping after the request in flight…');
   };
 
-  // A rescan starts a *pass*, not a session: the log is the record of what this dialog
-  // has already done, and `changes` is what Undo can still reverse - converging on an
-  // empty plan must not cost either. Everything a pass builds goes: the jobs, the
-  // candidates, the sets and the source picked among them, and the counters.
-  //
-  // The old plan's lines stay on screen, because the log does; their boxes are locked
-  // so that a listing nobody can act on cannot be ticked, which is the same thing
-  // `planSet` does when it moves to a new set.
+  // A rescan starts a *pass*, not a session: `changes` is what Undo can still reverse -
+  // converging on an empty plan must not cost it. Everything a pass builds goes: the
+  // jobs, the candidates, the sets and the source picked among them, the counters, and
+  // the log, which starts afresh as the siblings' do. The old plan's boxes are locked
+  // first, the same thing `planSet` does when it moves to a new set.
   Run.prototype.rescan = function () {
     if (this.state !== 'listing') return;
     this.jobs.forEach(function (j) {
@@ -2452,6 +2472,7 @@
     this.written = 0;
     this.failed = 0;
     this.scanFailed = false;
+    this.ruledTitles = 0;
     // A rescan starts a fresh log, as the siblings' do: what it lists is all that holds.
     while (this.logEl.firstChild) this.logEl.removeChild(this.logEl.firstChild);
     this.logText = [];
@@ -2489,18 +2510,28 @@
     return b && !b.disabled && !hasClass(b, 'svr-hidden') ? b : null;
   }
 
+  // One press closes one dialog: the topmost of this plugin's dialogs on screen, never
+  // every one listening. A hidden run (a save's, still deciding) is not on screen.
+  var _escapeStack = [];
   function wireEscape(run) {
     run._onEscape = function (ev) {
       if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
+      var shown = _escapeStack.filter(function (r) {
+        return !(r.backdrop && hasClass(r.backdrop, 'svr-hidden'));
+      });
+      if (shown[shown.length - 1] !== run) return;
       var b = escapeButton(run);
       if (!b) return;
       if (ev.preventDefault) ev.preventDefault();
       b.click();
     };
+    _escapeStack.push(run);
     document.addEventListener('keydown', run._onEscape);
   }
 
   function unwireEscape(run) {
+    var i = _escapeStack.indexOf(run);
+    if (i !== -1) _escapeStack.splice(i, 1);
     if (run._onEscape && document.removeEventListener) {
       document.removeEventListener('keydown', run._onEscape);
     }
@@ -2535,6 +2566,9 @@
         self.setState('listing');
         self.msg('ERROR', 'The scan failed: ' + (err && err.message ? err.message : String(err)));
         self.progress(self.progressText());
+        // A save's run is built hidden; left hidden, it would hold `_active` with nothing
+        // on screen to close.
+        if (self.auto) self.reveal();
       });
   };
 
@@ -2757,6 +2791,22 @@
           if (job.kind === 'set' && job.input === 'title') {
             var was = job.had == null ? '' : String(job.had), now = job.value == null ? '' : String(job.value);
             (self.renamed = self.renamed || []).push({ id: job.id, from: forward ? was : now, to: forward ? now : was });
+            // The renumber box re-plans from the last scan: it has to start from the
+            // title this write left, not the one the scan read. By id through an index
+            // built once per scan: a search of every set per write was quadratic, 18
+            // minutes for Rename Variants on the memory tool's library.
+            if (self.scannedSets) {
+              if (self.scannedIndexOf !== self.scannedSets) {
+                self.scannedIndexOf = self.scannedSets;
+                self.scannedIndex = {};
+                self.scannedSets.forEach(function (set) {
+                  set.scenes.forEach(function (sc) {
+                    (self.scannedIndex[String(sc.id)] = self.scannedIndex[String(sc.id)] || []).push(sc);
+                  });
+                });
+              }
+              (self.scannedIndex[String(job.id)] || []).forEach(function (sc) { sc.title = forward ? now : was; });
+            }
           }
           self.msg('INFO', job.title + ' [' + job.id + ']: ' + verb + '.');
         }, function (e) {
@@ -3616,6 +3666,9 @@
       // A title goes by the naming rule where the set has one: a partial-duration
       // variant is offered its expected title under the base, never this scene's title
       // verbatim, and a partial's own title is never pushed onto a full-duration one.
+      // A partial the rule leaves alone is offered no title at all - the pane marks the
+      // same pair "Title (ignored)".
+      if (a.key === 'title' && run.titleSkipped && run.titleSkipped[String(target.id)]) return;
       if (a.key === 'title' && run.expected) {
         if (hasOwn(run.expected, String(target.id))) sv = val = run.expected[String(target.id)];
         else if (hasOwn(run.expected, String(source.id))) return;
@@ -3829,6 +3882,7 @@
         var others = found.rows.map(function (r) { return r.scene; });
         var nmg = namingOf([found.self].concat(others), m, naming(s), found.self.id);
         run.expected = nmg.expected;
+        run.titleSkipped = nmg.skipped;
         run.base = nmg.base;
         return gatherCovers(run, s, found.self, others)
           .then(function (covers) {
@@ -4188,7 +4242,8 @@
       var probes = gone.map(function (e) { return probeSet(input.id, field, [e]); });
       probes.push(flagged ? probeSet(input.id, field, input.stash_ids || [], keep) : { rows: [] });   // what still binds this scene
       return Promise.all(probes).then(function (r) {
-        var still = r.pop().rows.length;
+        // A failed lookup is "not alone", as for the survivor: the flag stays on.
+        var own = r.pop(), still = own.rows.length, stillUnknown = !!own.failed;
         var sets = r.map(function (ans, i) {
           var left = ans.rows;
           var survivor = left.length === 1 && flagId &&
@@ -4217,7 +4272,8 @@
           });
           var plan = { gone: gone, field: field, keep: keep, flagId: flagId,
             flagName: flagTagName(s), cfChanged: keep.length !== lines.length, cfLocked: cfLocked,
-            unflagSelf: flagged && !still, still: flagged ? still : 0,
+            unflagSelf: flagged && !still && !stillUnknown, still: flagged ? still : 0,
+            stillUnknown: flagged && stillUnknown,
             sets: sets, lone: lone };
           return plan.cfChanged || plan.unflagSelf || plan.lone.length ? plan : null;
         });
@@ -4238,6 +4294,7 @@
         var vals = variantValues(full.stash_ids).concat(splitValues(customField(full, field)));
         return findVariants({ id: String(sc.id), stash_ids: full.stash_ids || [],
           custom_fields: full.custom_fields || {} }).then(function (r) {
+          if (r.failed) return false;
           var others = r.rows.filter(function (row) { return String(row.scene.id) !== String(input.id); });
           var withMe = mine.some(function (v) { return vals.indexOf(v) !== -1; });
           return !others.length && !withMe;
@@ -4265,6 +4322,9 @@
     } else if (p.still) {
       out.push('Keep the tag "' + p.flagName + '" on this scene: it still shares a variant ' +
         'stash-id with ' + plural(p.still, 'other scene') + '.');
+    } else if (p.stillUnknown) {
+      out.push('Keep the tag "' + p.flagName + '" on this scene: whether another scene still ' +
+        'shares what it carries could not be read.');
     }
     var named = {};
     p.sets.forEach(function (st) {
@@ -4306,11 +4366,20 @@
     return after;
   }
 
+  // Recorded in Undo History like any other write here: the one bulk input, which Core
+  // turns into a delta per scene.
   function unflagAfterSave(ids, flagId) {
     if (!ids.length) return;
     var lease = acquireLease('Variant cleanup');
-    gqlRequest(BULK_TAG_MUTATION, { input: { ids: ids, tag_ids: { ids: [flagId], mode: 'REMOVE' } } })
-      .then(function () { lease.release(); }, function (err) {
+    var input = { ids: ids, tag_ids: { ids: [flagId], mode: 'REMOVE' } };
+    gqlRequest(BULK_TAG_MUTATION, { input: input })
+      .then(function () {
+        lease.release();
+        var pass = journalPass('Variant cleanup');
+        if (!pass) return;
+        pass.add('scenes', ids[0], '', input, { ids: ids, tag_ids: { ids: [flagId], mode: 'ADD' } });
+        pass.finish();
+      }, function (err) {
         lease.release();
         console.warn('[svr] the flag tag could not be removed from scene ' + ids.join(', ') +
           ': ' + err.message);
@@ -4338,7 +4407,7 @@
       var ok = button('OK'), cancel = button(info ? 'Close' : 'Cancel');
       paintButton(ok, PLUGIN_BTN_VARIANT);
       if (info) ok.className += ' svr-hidden';
-      var stub = { closeBtn: cancel };
+      var stub = { closeBtn: cancel, backdrop: backdrop };
       function done(v) {
         unwireEscape(stub);
         if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
@@ -4642,13 +4711,14 @@
   // 3; "01" counts 01, 02 ... 99, 100; "A" counts A ... Z, AA, AB; "AA" starts at AA
   // and runs to ZZ, then AAA. Digits count in base ten, letters in the bijective base
   // twenty-six a spreadsheet names its columns in, padded to the first index's length
-  // and growing past it rather than stopping. Anything else counts as "1".
+  // and growing past it rather than stopping. Anything else - "#1", "A1", "Aa" - counts
+  // as "1": `start` is where such a spelling counts from, since it has no value of its own.
   function indexAlphabet(first) {
     if (!first) return null;   // no index at all
     if (/^[0-9]+$/.test(first)) return { kind: 'digits', width: first.length };
     if (/^[A-Z]+$/.test(first)) return { kind: 'upper', width: first.length };
     if (/^[a-z]+$/.test(first)) return { kind: 'lower', width: first.length };
-    return { kind: 'digits', width: 1 };
+    return { kind: 'digits', width: 1, start: 1 };
   }
   function indexValue(str, alpha) {
     if (alpha.kind === 'digits') return parseInt(str, 10);
@@ -4768,8 +4838,7 @@
     var alpha = indexAlphabet(naming.first);
     var partials = members.filter(function (m) { return m.role === 'pl'; }).sort(partialOrder);
     var out = partials.map(function (m) {
-      var skip = m.custom_fields && m.custom_fields[naming.skipField];
-      return { member: m, expected: m.title, kept: false, skipped: !!skip || !!m.excluded };
+      return { member: m, expected: m.title, kept: false, skipped: renameSkipped(m, naming) };
     });
     var live = out.filter(function (o) { return !o.skipped; });
     if (!base) return out;
@@ -4788,7 +4857,7 @@
         o.expected = base + naming.postfix + m[1];
       });
     }
-    var n = indexValue(naming.first, alpha);
+    var n = alpha.start || indexValue(naming.first, alpha);
     live.forEach(function (o) {
       if (o.kept) return;
       while (taken[n]) n++;
@@ -4798,6 +4867,11 @@
     return out;
   }
 
+
+  // A member the naming rule leaves alone: the no-rename field, or the no-rename tag.
+  function renameSkipped(m, naming) {
+    return !!(m.custom_fields && m.custom_fields[naming.skipField]) || !!m.excluded;
+  }
 
   // One member per scene, in the shape the naming functions read.
   function memberOf(sc, m) {
@@ -4812,17 +4886,21 @@
   // over its partials, or null where the set has no base or no partial to rule on -
   // the tags unset, or a set of full-duration scenes - and the title is scored the way
   // it always was. `expectedMap` is what the review scores a title against.
+  // `skipped`: { id: true } for every partial the rule leaves alone, which a sync never
+  // offers a title, base or none.
   function namingOf(scenes, m, nm, leadId) {
     var members = scenes.map(function (sc) { return memberOf(sc, m); });
+    var skipped = {};
+    members.forEach(function (x) { if (x.role === 'pl' && renameSkipped(x, nm)) skipped[x.id] = true; });
     var b = baseOf(members, nm, leadId);
-    if (!b.base) return { base: b, expected: null };
+    if (!b.base) return { base: b, expected: null, skipped: skipped };
     var out = {}, any = false;
     expectedTitles(members, nm, b.base, nm.renumber).forEach(function (p) {
       if (p.skipped) return;
       out[p.member.id] = p.expected;
       any = true;
     });
-    return { base: b, expected: any ? out : null };
+    return { base: b, expected: any ? out : null, skipped: skipped };
   }
   function expectedMap(scenes, m, nm) { return namingOf(scenes, m, nm).expected; }
 
@@ -5761,7 +5839,7 @@
     // overlap, down to the hex values. They are separate strings because the plugins
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
-    // `tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
+    // `.tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
     // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
     '.svr-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
@@ -5967,6 +6045,9 @@
     // focus and the active tab are named because Bootstrap sets each of them separately.
     '.nav-tabs .svr-tab-link,.nav-tabs .svr-tab-link:hover,' +
     '.nav-tabs .svr-tab-link:focus,.nav-tabs .svr-tab-link.active{color:#ffb648;}' +
+    // The full-duration button: centred in the tab row, and bold so it reads as the way out.
+    '.svr-full-item{display:flex;align-items:center;margin-left:.5rem;}' +
+    '.svr-full-btn{font-weight:600;white-space:nowrap;}' +
     // ── The tab's pane ──────────────────────────────────────────────────────
     //
     // Not the shared dialog chrome: the pane is not a dialog, so a backdrop, a log
@@ -6078,7 +6159,7 @@
     // `title` opens below-right of the pointer, exactly where the arrow sits, so its
     // first line arrives half covered, and its size cannot be reached from CSS.
     //
-    // These rules are shared with every sibling plugin and `tests/style.test.js`
+    // These rules are shared with every sibling plugin and `.tests/style.test.js`
     // compares them with the prefix stripped: keep them byte-identical, or change all
     // of them together.
     '.svr-tipped{position:relative;}' +
@@ -6322,21 +6403,45 @@
     return api && api.patch && typeof api.patch.after === 'function' ? api : null;
   }
 
-  // The tab is always present, even on the scenes - most of them, today - with no
-  // stash-id and so no possible variant. A tab that came and went as a query landed
-  // would move the strip under the pointer, and the empty cases are the ones worth
-  // explaining: "this scene carries no stash-id" is a fact about the library the user
-  // can act on, and a tab that hid itself would be the one place it could never appear.
+  // The tab is there only when there is something in it: at least one other variant,
+  // captioned with the count - `N Variants`, `1 Variant` - or a lookup that failed, as the
+  // bare word, so the failure in the pane stays reachable. While the lookup runs, and
+  // on a scene with no other variant - no evidence at all included - nothing is rendered,
+  // not even an empty `Nav.Item`. The count comes from the same `variantsOnce` the pane
+  // and the full-duration button read, so the three ask once.
   //
-  // The caption carries no count, which is the price of that: the strip and the pane are
-  // two separate patches rendering two separate components, so a count in the caption
-  // would need the query's answer to be shared between them - a module-level cache and a
-  // subscription, to save the user one click. The pane counts its own rows in its first
-  // line instead.
-  function TabLink(React, Nav) {
-    return React.createElement(Nav.Item, { key: TAB_KEY },
-      React.createElement(Nav.Link, { eventKey: TAB_KEY, className: 'svr-tab-link' }, TAB_LABEL));
+  // Stash's `activeTabKey` is a plain `useState`: a tab that goes while it is the open one
+  // (its last variant detached by a save) leaves its pane open, which says why it is empty,
+  // until another tab is picked.
+  function VariantsTab(React, Nav) {
+    return function (props) {
+      var scene = (props && props.scene) || {};
+      var st = React.useState(null);
+      var caption = st[0], setCaption = st[1];
+      var tagKey = (scene.tags || []).map(function (t) { return t.id; }).join(',');
+      var evidence = variantValues(scene.stash_ids).join('\n') + '|' +
+        (customField(scene, fieldName()) || '');
+      React.useEffect(function () {
+        var live = true;
+        setCaption(null);
+        variantsOnce(scene, 0).then(function (found) {
+          if (!live || !found) return;
+          var n = found.rows.length;
+          setCaption(found.failed ? TAB_LABEL
+            : n ? n + ' ' + (n === 1 ? 'Variant' : 'Variants') : null);
+        });
+        return function () { live = false; };
+      }, [scene.id, evidence, tagKey]);
+      if (!caption) return null;
+      return React.createElement(Nav.Item, null,
+        React.createElement(Nav.Link, { eventKey: TAB_KEY, className: 'svr-tab-link' }, caption));
+    };
   }
+
+  function TabLink(React, Tab, scene) {
+    return React.createElement(Tab, { key: TAB_KEY, scene: scene });
+  }
+
 
   // One row. `row.cls.label` is empty for an unclassified scene and the span is then not
   // rendered at all, rather than rendered blank - an untagged variant is listed as
@@ -6384,7 +6489,12 @@
   // head of the second line rather than after the title, which is what keeps a column of
   // them scannable - titles vary in length, so a value trailing one starts at a different
   // place on every row, and the eye has to hunt for it.
-  function VariantRow(React, row, coverDiffers) {
+  // `fromId`, the scene the pane belongs to: a link to a partial carries it as `svrFrom`,
+  // so Always Open the Full-Duration Variant can tell the partial was reached from its
+  // variant even in a new tab, or after the full reload a same-tab plain link is.
+  function VariantRow(React, row, coverDiffers, fromId) {
+    var href = '/scenes/' + row.scene.id +
+      (row.cls.role === 'pl' && fromId != null ? '?svrFrom=' + fromId : '');
     var facts = [];
     if (row.cls.label) {
       facts.push(React.createElement('span', {
@@ -6427,7 +6537,7 @@
         '\ud83d\uddbc\u2260')));
     }
     var line = [React.createElement('a', {
-      key: 'title', className: 'svr-variant-title', href: '/scenes/' + row.scene.id,
+      key: 'title', className: 'svr-variant-title', href: href,
       // A new tab by default, like every other link these plugins draw - the scene
       // being read is the one the pane belongs to, and following a variant out of it
       // is what loses the comparison. ᝯㄝₓ Core's own setting is what moves both of
@@ -6452,7 +6562,7 @@
       if (row.scene.organized) over.push(React.createElement('span',
         { key: 'org', className: 'svr-organized', title: 'Organized' }, '\ud83d\udce6'));
       kids.unshift(React.createElement('a',
-        { key: 'thumblink', className: 'svr-thumb-link', href: '/scenes/' + row.scene.id,
+        { key: 'thumblink', className: 'svr-thumb-link', href: href,
           target: linkTarget() }, over));
     }
     // On the row rather than on any one thing in it, so anywhere in the row answers it -
@@ -6543,7 +6653,7 @@
         var live = true;
         setFound(null);
         setCoverBy(null);
-        findVariants(scene).then(function (result) { if (live) setFound(result); });
+        variantsOnce(scene, stamp).then(function (result) { if (live) setFound(result); });
         return function () { live = false; };
       }, [scene.id, evidence, stamp]);
 
@@ -6676,9 +6786,172 @@
       var mine = coverBy && found.self ? coverBy[String(found.self.id)] : null;
       found.rows.forEach(function (row) {
         var theirs = coverBy ? coverBy[String(row.scene.id)] : null;
-        kids.push(VariantRow(React, row, !!(mine && theirs && theirs !== mine)));
+        kids.push(VariantRow(React, row, !!(mine && theirs && theirs !== mine), scene.id));
       });
       return React.createElement('div', { className: 'svr-tabpane' }, kids);
+    };
+  }
+
+  // ── The full-duration button ──────────────────────────────────────────────
+  //
+  // A partial-duration scene's way to the whole work, drawn at the end of the tab strip
+  // so it moves nothing when it lands. The strip and the pane both mount on the same
+  // render and ask the same question, so they share one lookup; a few seconds of reuse is
+  // that and no more - a later visit to the scene asks again.
+  var LOOKUP_SHARE_MS = 5000;
+  var _lookup = { key: null, at: 0, p: null };
+
+  function variantsOnce(scene, stamp) {
+    var key = scene.id + '|' + variantValues(scene.stash_ids).join('\n') + '|' +
+      (customField(scene, fieldName()) || '') + '|' +
+      (scene.tags || []).map(function (t) { return t.id; }).join(',') + '|' + (stamp || 0);
+    if (_lookup.key !== key || Date.now() - _lookup.at > LOOKUP_SHARE_MS) {
+      _lookup = { key: key, at: Date.now(), p: findVariants(scene) };
+    }
+    return _lookup.p;
+  }
+
+  function editDistance(a, b) {
+    var prev = [], cur, i, j;
+    for (j = 0; j <= b.length; j++) prev[j] = j;
+    for (i = 1; i <= a.length; i++) {
+      cur = [i];
+      for (j = 1; j <= b.length; j++) {
+        cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1,
+          prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      }
+      prev = cur;
+    }
+    return prev[b.length];
+  }
+
+  function looseTitle(t) { return trim(String(t || '').toLowerCase().replace(/\s+/g, ' ')); }
+
+  // Which full-duration variant a partial-duration scene opens, or null where the scene is
+  // not a partial or the set has no full-duration member. Several are ranked: the title
+  // closest to the set's base name (the base-name field, read off this scene first, then
+  // the full-duration members, then any), then the shortest title, the highest
+  // resolution, the shortest running time, and the lowest scene id.
+  function fullDurationOf(scene, found) {
+    if (!found || !found.matchers || !found.naming) return null;
+    var self = found.self || scene;
+    if (classify(self, found.matchers).role !== 'pl') return null;
+    var others = found.rows.map(function (r) { return r.scene; });
+    var fulls = found.rows.filter(function (r) { return r.cls.role === 'fl'; })
+      .map(function (r) { return r.scene; });
+    if (!fulls.length) return null;
+    var field = found.naming.baseField;
+    var base = [self].concat(fulls, others).map(function (sc) {
+      var v = sc.custom_fields && sc.custom_fields[field];
+      return typeof v === 'string' ? trim(v) : '';
+    }).filter(function (v) { return !!v; })[0] || '';
+    var rank = function (sc) {
+      var f = bestFile(sc) || {};
+      return [base ? editDistance(looseTitle(sc.title), looseTitle(base)) : 0,
+        (sc.title || '').length, -((f.width || 0) * (f.height || 0)), f.duration || 0,
+        Number(sc.id) || 0];
+    };
+    var best = fulls.map(function (sc) { return { sc: sc, r: rank(sc) }; })
+      .sort(function (a, b) {
+        for (var i = 0; i < a.r.length; i++) if (a.r[i] !== b.r[i]) return a.r[i] - b.r[i];
+        return 0;
+      })[0].sc;
+    return { scene: best, of: fulls.length, base: base };
+  }
+
+  var ALWAYS_FULL_LABEL = 'Always Open the Full-Duration Variant';
+  var TOAST_MS = 10000;
+  // The scene the strip showed last, so a partial reached *from* its own full-duration
+  // variant in the app - the notice's link back, a same-tab router move - is not bounced
+  // straight back to it. A Variants-tab row is a plain link, a new tab or a full reload
+  // where this is lost, so it names its origin in the URL instead (`svrFrom`).
+  var _lastSceneId = null;
+  function cameFromUrl() {
+    var m = /[?&]svrFrom=(\d+)/.exec(String((window.location || {}).search || ''));
+    return m ? m[1] : null;
+  }
+
+  function sceneLabel(sc) { return '“' + (sc.title || 'Scene ' + sc.id) + '” [' + sc.id + ']'; }
+
+  function FullDurationButton(React, Nav, api) {
+    var router = (api.libraries || {}).ReactRouterDOM;
+    var useHistory = router && router.useHistory;
+    var useToast = api.hooks && api.hooks.useToast;
+    return function (props) {
+      var scene = (props && props.scene) || {};
+      // Both hooks exist or not for the whole session, so the hook order is fixed.
+      var history = useHistory ? useHistory() : null;
+      var toast = useToast ? useToast() : null;
+      var st = React.useState(null);
+      var pick = st[0], setPick = st[1];
+      // The scene this mounted strip last looked at, a box that never re-renders.
+      var seen = React.useState({})[0];
+      var tagKey = (scene.tags || []).map(function (t) { return t.id; }).join(',');
+      var evidence = variantValues(scene.stash_ids).join('\n') + '|' +
+        (customField(scene, fieldName()) || '');
+
+      React.useEffect(function () {
+        // The same scene again - its tags or evidence moved, a save after "Back to the
+        // partial" - is never redirected: only arriving on a scene is.
+        var live = true, arrived = seen.id !== String(scene.id);
+        var cameFrom = cameFromUrl() || _lastSceneId;
+        seen.id = _lastSceneId = String(scene.id);
+        setPick(null);
+        Promise.all([variantsOnce(scene, 0), settingsReady()]).then(function (both) {
+          if (!live) return;
+          var p = fullDurationOf(scene, both[0]);
+          setPick(p);
+          // Not while a queue plays: the full-duration scene is not in it.
+          if (!p || !arrived || !both[1].f1AlwaysOpenFullDuration || !history ||
+              String(p.scene.id) === cameFrom ||
+              (props.queueScenes && props.queueScenes.length)) return;
+          var partial = both[0].self || scene;
+          history.replace('/scenes/' + p.scene.id);
+          logToConsole('scene ' + scene.id + ' is partial-duration; opened ' + p.scene.id + ' instead');
+          if (!toast) return;
+          toast.toast({ delay: TOAST_MS, content: React.createElement('span', null,
+            'Opened the full-duration variant ' + sceneLabel(p.scene) +
+              ' in place of the partial ' + sceneLabel(partial) + '. This is the ',
+            React.createElement('b', { key: 'b' }, ALWAYS_FULL_LABEL),
+            ' setting of ' + PLUGIN_SHORT_NAME + '. ',
+            React.createElement('a', {
+              key: 'stay', href: '/scenes/' + partial.id,
+              title: 'Go back to the partial-duration scene. Coming from its ' +
+                'full-duration variant, it is not replaced again.',
+              // The toast opens its text in a dialog when clicked; the link is not that.
+              onClick: function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                history.replace('/scenes/' + partial.id);
+              },
+            }, 'Back to the partial')) });
+        });
+        return function () { live = false; };
+      }, [scene.id, evidence, tagKey]);
+
+      if (!pick) return null;
+      var href = '/scenes/' + pick.scene.id;
+      return React.createElement(Nav.Item, { className: 'svr-full-item' },
+        React.createElement('a', {
+          className: 'btn btn-sm btn-info svr-full-btn', role: 'button',
+          href: href, target: linkTarget(),
+          title: 'Open ' + sceneLabel(pick.scene) + ', the full-duration variant of this ' +
+            'partial-duration scene.' + (pick.of > 1
+              ? ' Picked from ' + pick.of + ' full-duration variants: ' +
+                (pick.base ? 'the title closest to the base name “' + pick.base +
+                  '”, then ' : '') +
+                'the shortest title, the highest resolution, the shortest running time, ' +
+                'the lowest scene id.'
+              : '') +
+            '\n' + ALWAYS_FULL_LABEL + ' in this plugin’s settings opens it by itself.',
+          // In the same tab, the router moves the page rather than reloading Stash.
+          onClick: function (e) {
+            if (!history || linkTarget() || e.button || e.ctrlKey || e.metaKey ||
+                e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            history.push(href);
+          },
+        }, '▶ Open Full-Duration'));
     };
   }
 
@@ -6689,7 +6962,7 @@
     var api = pluginApi();
     if (!api) {
       gateLogOnce('patch', 'PluginApi component patching is unavailable - no Variants tab. ' +
-        'This plugin needs Stash 0.28.0 or newer.');
+        'This plugin needs Stash 0.31.0 or newer.');
       return false;
     }
     var React = api.React;
@@ -6701,9 +6974,18 @@
       return false;
     }
     var Pane = VariantsPane(React);
-    api.patch.after('ScenePage.Tabs', function () {
+    var FullBtn = FullDurationButton(React, Nav, api);
+    var VTab = VariantsTab(React, Nav);
+    api.patch.after('ScenePage.Tabs', function (props) {
       return safeAppend(React, arguments,
-        function () { return TabLink(React, Nav); }, BEFORE_TAB_KEY);
+        function () { return TabLink(React, VTab, props.scene); }, BEFORE_TAB_KEY);
+    });
+    // Last in the strip, so nothing moves when it lands.
+    api.patch.after('ScenePage.Tabs', function (props) {
+      return safeAppend(React, arguments, function () {
+        return React.createElement(FullBtn, { key: 'svr-full', scene: props.scene,
+          queueScenes: props.queueScenes });
+      });
     });
     api.patch.after('ScenePage.TabContent', function (props) {
       return safeAppend(React, arguments, function () {

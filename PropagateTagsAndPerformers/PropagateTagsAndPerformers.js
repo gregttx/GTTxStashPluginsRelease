@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.3.1';
+  var PLUGIN_VERSION = '5.3.3';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -145,6 +145,7 @@
   var PAGE_SIZE      = 500;    // targets per page while walking the library
   var CHUNK_SIZE     = 100;    // target ids per bulk mutation
   var LOG_RENDER_CAP = 1000;   // log lines kept in the DOM; all of them stay in memory
+  var PICK_RENDER_CAP = 1000;  // pick dialog lines drawn; the rest are set by the bulk buttons
   var LOG_FLUSH_MS   = 100;
   var PROGRESS_TIP =
     'Each segment is one pass: the entity type it walks, then the pipeline stage it ' +
@@ -1858,7 +1859,7 @@
     // first line arrives half covered. This one opens above the row in a readable
     // size, and - the part `title` could never do - on keyboard focus as well.
     //
-    // These rules are shared with both sibling plugins and `tests/style.test.js`
+    // These rules are shared with both sibling plugins and `.tests/style.test.js`
     // compares them with the prefix stripped: keep them byte-identical, or change
     // all three together.
     '.ptp2re-tipped{position:relative;}' +
@@ -3905,7 +3906,7 @@
     var lease = acquireLease(leaseLabel);
     var i = 0;
     var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
-      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, true);
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, !self.scope);
     var recorded = function () {
       self.journalRun = null;
       if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
@@ -4164,11 +4165,15 @@
       if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
       // Two dialogs can be on the page at once - the path editor opens over the run -
       // and both listen on `document`, so without this the key would close both. The
-      // editor is always the one on top while it is open.
-      if (_paths && _paths !== run) return;
-      if (_buttons && _buttons !== run) return;
-      if (_auto && _auto !== run) return;
-      if (_pick && _pick !== run) return;
+      // editor is always the one on top while it is open - unless a pick dialog is:
+      // a reaction opens one over whatever is on screen.
+      if (_pick) {
+        if (_pick !== run) return;
+      } else {
+        if (_paths && _paths !== run) return;
+        if (_buttons && _buttons !== run) return;
+        if (_auto && _auto !== run) return;
+      }
       var b = escapeButton(run);
       if (!b) return;
       if (ev.preventDefault) ev.preventDefault();
@@ -4921,7 +4926,7 @@
     head.appendChild(el('div', 'ptp2re-warn',
       'A path switched on here is one the task covers, one a manual button appears ' +
       'for, and - if either automatic mode is on - one that is written along whenever ' +
-      'Stash saves an entity, with no dialog and no undo. Off is what a path does ' +
+      'Stash saves an entity, with no dialog if Silent Auto-propagation is on. Off is what a path does ' +
       'until you say otherwise.'));
     head.appendChild(el('div', 'ptp2re-legend',
       'Every path only ever adds; nothing is removed from the source or the target. ' +
@@ -5250,7 +5255,7 @@
       'them and press Save yourself. On - or on a Stash that cannot stage - a click opens a ' +
       'dialog listing every change first, and nothing is written until you press Proceed. ' +
       'Only the Edit-tab buttons: a button on a source\'s own page always reviews, and the ' +
-      'automatic modes always save.';
+      'automatic modes ask in a dialog of their own unless Silent Auto-propagation is on.';
     var note = el('div', 'ptp2re-optnote', 'Off, an Edit-tab button stages what it would ' +
       'add in the form for Stash\'s own Save; on, it opens the review dialog. A button on ' +
       'the source\'s own page always opens the dialog.');
@@ -5458,9 +5463,11 @@
     var head = el('div', 'ptp2re-head');
     head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
     head.appendChild(el('div', 'ptp2re-warn',
-      'Both modes react to Stash\'s own saves immediately, with no dialog, no review ' +
-      'and no undo. They only ever add - but they add the moment Stash saves, so try the ' +
-      'task first.'));
+      'Both modes react to Stash\'s own saves. Unless Silent Auto-propagation is on, a ' +
+      'reaction lists what it would add and writes only what you leave ticked; with Silent ' +
+      'on it writes the moment Stash saves, with no dialog. The Depropagate assist removes ' +
+      'only what you tick. Every write is recorded in ᝯㄝₓ Core\'s Undo History - but try ' +
+      'the task first.'));
     head.appendChild(el('div', 'ptp2re-legend',
       'Every enabled path is written along, and every exclusion filter applies. An ' +
       'entity this plugin has just written to is left alone for a few seconds, which is ' +
@@ -5606,7 +5613,10 @@
 
     var body = el('div', 'ptp2re-pathsbody');
     var list = el('div', 'ptp2re-pick');
-    this.lines.forEach(function (line) {
+    this.lines.forEach(function (line, i) {
+      // Past the cap a line has a box nobody sees, so Select All, Unselect All and OK
+      // still cover it.
+      if (i >= PICK_RENDER_CAP) { self.boxes.push({ key: line.key, el: { checked: self.ticked } }); return; }
       var row = el('label', 'ptp2re-pick-row');
       var box = el('input', null);
       box.type = 'checkbox';
@@ -5619,6 +5629,11 @@
       list.appendChild(row);
       self.boxes.push({ key: line.key, el: box });
     });
+    if (this.lines.length > PICK_RENDER_CAP) {
+      list.appendChild(el('div', 'ptp2re-note', '+' + (this.lines.length - PICK_RENDER_CAP) +
+        ' more, not shown - ' + (this.ticked ? 'ticked' : 'unticked') +
+        ', and set by Select All and Unselect All with the rest.'));
+    }
     body.appendChild(list);
     this.modal.appendChild(body);
 
@@ -5706,7 +5721,7 @@
 
   // ── Auto mode ─────────────────────────────────────────────────────────────
   //
-  // A reaction to a save Stash made, with no dialog and no undo. It shares the task's
+  // A reaction to a save Stash made, reviewed in a pick dialog unless Silent is on. It shares the task's
   // planner rather than carrying a second one - see `AutoRun` below - so what a
   // reaction decides to add is by construction what the task would have decided.
   //
@@ -6312,16 +6327,18 @@
   function depropQuery(paths) {
     var parts = [TARGETS.scene.fields, 'tags { id name }'];
     paths.forEach(function (p) {
-      var sel = (SOURCES[p.sourceType].fields) + ' tags { id name }';
+      var sel = (SOURCES[p.sourceType].fields) + (p.markerTags ? ' primary_tag { id }' : '') + ' tags { id name }';
       for (var i = p.walk.length - 1; i >= 0; i--) sel = p.walk[i] + ' { ' + sel + ' }';
       parts.push(sel);
     });
     return 'query PTP_deprop_findScene($id: ID!) { findScene(id: $id) { ' + parts.join(' ') + ' } }';
   }
 
+  // Every active tag path into scenes backs a tag, markers' included: a tag a marker
+  // still carries is not offered, or target auto would put it back on the next save.
   function depropPaths(s) {
     return enabledPaths(s).filter(function (p) {
-      return p.target === 'scene' && p.kind === 'tags' && p.walk && !p.markerTags;
+      return p.target === 'scene' && p.kind === 'tags' && p.walk;
     });
   }
 
@@ -6404,6 +6421,12 @@
           return gqlRequest(bulkMutation('scene'),
             { input: { ids: [b.id], tag_ids: { ids: keys, mode: 'REMOVE' } } }).then(function () {
             lease.release();
+            var pass = journalPass('Depropagate assist', false);
+            if (pass) {
+              pass.entries([{ type: 'scenes', id: String(b.id), name: displayName(ent) || '', field: 'tag_ids',
+                before: keys.slice().sort(), after: [] }]);
+              pass.finish();
+            }
             markWritten('scene', b.id);
             var wrote = { scene: {} };
             wrote.scene[b.id] = true;
@@ -6739,7 +6762,7 @@
   // description exactly as it did before, instead of showing a raw marker.
   //
   // The reasoning in full is in §6 of NormalizeParentTags' AGENTS.md; this is the
-  // third copy of one design, and `tests/style.test.js` pins the CSS across all
+  // third copy of one design, and `.tests/style.test.js` pins the CSS across all
   // three.
   var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
 
@@ -8545,7 +8568,7 @@
     // `querySelector('h3')` answers with whichever plugin is listed first. A plugin
     // declaring a task by the same name as ours was therefore hijacked whenever we
     // happened to be above it, which is the one thing the heading check exists to
-    // stop. Found by the tasks-page check in `tests/placement.test.js`.
+    // stop. Found by the tasks-page check in `.tests/placement.test.js`.
     //
     // A group's first h3 is its heading: PluginTasks renders it in the header, above
     // the per-task `Setting` rows that each carry an h3 of their own - which is also
@@ -8625,7 +8648,9 @@
     var hit = targetOfMutation(q);
     // The one case the save waits for us: the assist needs the scene as it was.
     // Forwarded whatever the read does, so a failure there is never a failed save.
-    var before = hit && !hit.bulk ? depropBefore(hit.target, v.input) : null;
+    // Not under a lease: a sibling's bulk write (Scene Variants' synchronize) is not a
+    // removal the user made by hand.
+    var before = hit && !hit.bulk && !autoSuppressed() ? depropBefore(hit.target, v.input) : null;
     var p = before ? before.then(forward, forward) : forward();
 
     try {

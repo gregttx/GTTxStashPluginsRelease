@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.3.1';
+  var PLUGIN_VERSION = '3.3.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -354,7 +354,7 @@
     // overlap, down to the hex values. They are separate strings because the plugins
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
-    // `tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
+    // `.tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
     // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
     '.fretc-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
@@ -1667,8 +1667,8 @@
     this.attrOn = {};
     // A `while` over the live collection, never `childNodes.slice(1).forEach`. In a real
     // browser `childNodes` is a **NodeList**, which has none of Array's methods - it looked
-    // right, and the fake DOM in `tests/` hands back a plain Array, so every suite passed
-    // while the search threw on the first click in a live Stash. `tests/style.test.js` now
+    // right, and the fake DOM in `.tests/` hands back a plain Array, so every suite passed
+    // while the search threw on the first click in a live Stash. `.tests/style.test.js` now
     // fails on any array method reached through `childNodes` or `children`.
     // The label span is childNodes[0] and stays.
     while (this.attrRow.childNodes.length > 1) {

@@ -38,15 +38,16 @@ page, in the **Automatic mode per entity type** row, with every type that is not
 
 Either direction can also be kept up **automatically**, per entity type, applying as Stash saves
 each entity rather than to the whole library at once — see [Automatic mode](#automatic-mode). That
-path has no dialog and no undo, and every type is off by default.
+path has no dialog — only ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history) can take
+its writes back — and every type is off by default.
 
 
 ## Prune and Roll Up on a single entity
 
 Turn on **Show Prune and Roll Up Buttons on an Entity** and the edit form of a scene, image,
-gallery, performer, studio or group carries up to two extra buttons — **Prune Tags** when the
-entity holds a tag that a more specific tag on it already implies, and **Roll Up Tags** when it is
-missing a parent its own tags imply. A scene marker has no page of its own and gets none.
+gallery, performer, studio or group carries two extra buttons — **Prune Tags**, live when the
+entity holds a tag that a more specific tag on it already implies, and **Roll Up Tags**, live when
+it is missing a parent its own tags imply. A scene marker has no page of its own and gets none.
 
 **Both are always there once the edit form is open, and each is enabled only when it would
 actually change something**: prune everything a scene has to prune and its Prune button greys out,
@@ -60,8 +61,8 @@ commits it**, exactly as if you had picked the tags from the dropdown yourself. 
 without saving and nothing happened. That is why the captions have no trailing "...": in these
 plugins the dots mean *this click opens a dialog first*, and a staging button is its own plan.
 
-**The buttons follow the box, not the server.** Stage a roll-up and the Roll Up button goes; take
-a redundant tag out by hand and Prune's count drops with it. A button says how many tags it would
+**The buttons follow the box, not the server.** Stage a roll-up and the Roll Up button greys out;
+take a redundant tag out by hand and Prune's count drops with it. A button says how many tags it would
 move in its tooltip, and the count is what is in the box right now.
 
 On a Stash too old to let a plugin reach the tag box, the click opens the scoped review dialog
@@ -72,8 +73,8 @@ Every exclusion filter still applies, exactly as in a full run. The automatic mo
 question: a button is offered whether or not this plugin does that direction on its own, because
 what happens automatically on a save and what you can ask for by hand are two different choices.
 
-The buttons are off by default, and they appear on the scene's **Edit** tab, where its own Save and
-Delete are.
+The buttons are off by default, and they appear on the entity's edit form — for a scene, its
+**Edit** tab — where its own Save and Delete are.
 
 ## Why
 
@@ -359,12 +360,14 @@ another plugin, an older release — is read forgivingly: any order, any case, t
 (`SCENE=PRUNE`), `ROLL UP` for `ROLLUP`, and whatever separators you like between the pairs.
 Whatever it understood is written back in the canonical form above.
 
-> ### ⚠ There is no dialog and no undo out here
+> ### ⚠ There is no dialog out here
 >
 > The task shows you a plan and waits for **Proceed**. Automatic mode does not: it writes the
 > moment you press Save. **A type set to PRUNE has tag assignments deleted**, silently, one save at
-> a time, and the only record is a line in your browser's developer console (F12). If it is
-> misconfigured you will find out from your library, not from a log you can still read.
+> a time. Every save's writes are recorded in ᝯㄝₓ Core's
+> [Undo History](../GTTxCore/README.md#undo-history), which is the only way to take them back, and
+> it lives in this browser. If it is misconfigured you will find out from your library, not from a
+> plan you read first.
 >
 > Run the task manually at least once, with that type set to Prune, and read what it plans, before
 > you set it here.
@@ -523,6 +526,26 @@ withdraws the choice and says why: pressing Stash's **Save** is what this plugin
 decision is already being made on every save and choosing differently for one paste would not
 survive it.
 
+### If you also use the Propagate Tags and Performers plugin
+
+Its **Skip tags Normalize Parent Tags would prune again** filter asks this plugin which of the tags
+it would copy an automatic Prune here would take off again, so your
+[exclusion filters](#exclusion-filters) apply there too; that needs **ᝯㄝₓ Normalize Parent Tags
+3.2.0 or newer**. Its task dialog also warns when an entity type is set to PRUNE or ROLLUP here.
+
+### If you also use the Scene Variants plugin
+
+Its **Skip Tags the Hierarchy Makes Redundant** asks this plugin which of a scene's tags another tag
+on it already implies, before offering them to the other variants — whatever the automatic modes
+here are set to. It needs 3.2.0 or newer; without it that plugin says so instead of filtering.
+
+### Every plugin that writes in bulk
+
+[Automatic mode](#automatic-mode) stands down while any plugin holds the
+[bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease) — a task, a dialog's Proceed or Undo,
+an undo in ᝯㄝₓ Core's Undo History — not only the Merge Performer Tags To Scenes task above, so a
+bulk write is never re-normalized entity by entity as it lands.
+
 ### Plugins outside this repo
 
 This only covers plugins running in your browser. A plugin with server-side **hooks** — the
@@ -560,7 +583,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Normalize Parent Tags | 3818 MB | 4147 MB | 4042 MB |
+| Normalize Parent Tags | 3818 MB | 4183 MB | 4080 MB |
 | Auto Mode Settings | 0 MB | — | — |
 | Show Tag Hierarchy | 15 MB | — | — |
 

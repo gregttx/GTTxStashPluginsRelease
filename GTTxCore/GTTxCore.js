@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '3.3.0';
+  var PLUGIN_VERSION = '3.3.3';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -332,9 +332,8 @@
   // The line a copy opens with when the oldest lines are gone, or ''.
   function droppedLine(dropped, kind) {
     if (!dropped) return '';
-    return '[' + (kind || 'INFO') + '] The first ' + dropped + ' lines of this log are not ' +
-      'kept, so this copy begins after them. The last ' + logKeep() + ' are here - ' +
-      'ᝯㄝₓ Core\'s Maximum Log Lines Kept setting says how many.';
+    return '[' + (kind || 'INFO') + '] The first ' + dropped + ' lines of this log were dropped to keep it ' +
+      'within ᝯㄝₓ Core\'s Maximum Log Lines Kept, so this copy begins after them.';
   }
 
   function copyToClipboard(text, done) {
@@ -578,7 +577,7 @@
   // plugins that have different things to say there: which alias matched, that several
   // tags answer to the name, or that this one is found by a mark rather than by the name
   // in the box. Keep this and `tipText`/`tagTipNames` byte-identical across the
-  // plugins, like the CSS; `tests/style.test.js` pins them.
+  // plugins, like the CSS; `.tests/style.test.js` pins them.
   // Shared by the tag tooltip and the custom-field mark: both are about a native
   // `title`, which is why neither this nor `tipText` wears a `tag` in its name.
   var TIP_DESC_CHARS = 240;   // characters of a description an excerpt carries
@@ -642,7 +641,7 @@
   // keeps the card it had; the alternative is a query per hover, and this is a hover.
   //
   // Keep this block byte-identical across the plugins, like the CSS and `tagLinkTitle`;
-  // `tests/style.test.js` pins it.
+  // `.tests/style.test.js` pins it.
   function entityTipStars(r) { return r == null ? null : Math.round(r / 20) + '/5'; }
 
   // What to call an entity that has no title of its own. Stash's own lists fall back to
@@ -921,7 +920,7 @@
   // `coop().api`, answered from a store it has already read; an absent or older sibling
   // simply contributes no line, which is the same degradation `describeField` has. That
   // plugin calls its own entry here rather than reaching inside itself, so this block
-  // stays byte-identical in all five - pinned by `tests/style.test.js`, like the CSS.
+  // stays byte-identical in all five - pinned by `.tests/style.test.js`, like the CSS.
   //
   // **Ten carriers in total, not ten per type.** Seventy names in a native `title` is a
   // wall nobody reads, and the count says the rest. Each is named with its type, because
@@ -1588,7 +1587,7 @@
   // brackets after it, on the details view and the edit form of every entity that has
   // one - and the same for `Performers (3)` and `Custom Fields (5)`.
   //
-  // Three shapes, read off Stash's source (docs/stash-reference.md):
+  // Three shapes, read off Stash's source (.docs/stash-reference.md):
   //   Scene, Gallery, Image details    `<h6>Tags</h6>` with the `.tag-item` badges as
   //                                    its following siblings; `<h6>Performers</h6>` with
   //                                    a `.row` of `.performer-card`s after it
@@ -1915,7 +1914,8 @@
 
   // Oldest first, while a run is past the age limit, older than the last backup where
   // only what came after it is kept, or the whole is past the size limit. An imported run
-  // is kept past the age limit: it was brought back on purpose, to be undone.
+  // is kept past the age limit and the backup: it was brought back on purpose, to be
+  // undone, so the trim steps past it to the newer runs rather than stopping there.
   function journalTrim() {
     var limits = journalLimits(), cutoff = Date.now() - limits.days * DAY_MS;
     return journalDb().then(function (db) {
@@ -1924,10 +1924,12 @@
         var total = 0, drop = [];
         runs.forEach(function (r) { total += r.bytes; });
         for (var i = 0; i < runs.length; i++) {
-          var old = limits.days && runs[i].at < cutoff && !runs[i].imported;
-          if (!old && !(limits.since && runs[i].at < limits.since) && total <= limits.bytes) break;
-          drop.push(runs[i].id);
-          total -= runs[i].bytes;
+          var r = runs[i], full = total > limits.bytes;
+          var old = (limits.days && r.at < cutoff) || (limits.since && r.at < limits.since);
+          if (!old && !full) break;
+          if (r.imported && !full) continue;
+          drop.push(r.id);
+          total -= r.bytes;
         }
         return drop.length ? journalDropRuns(db, drop) : 0;
       });
@@ -2344,14 +2346,15 @@
       finish: function () {
         // A browser with no IndexedDB has no history to add to, so there is nothing to say.
         if (!window.indexedDB) { buf = []; return Promise.resolve(''); }
+        // A pass not recorded whole is not recorded at all: the chunks it did write go.
+        var drop = function (why) {
+          return journalDb().then(function (db) { return journalDropRuns(db, [head.id]); })
+            .then(null, function () {}).then(function () { return 'Not recorded in Undo History: ' + why; });
+        };
         return flush().then(reverseAll).then(function () {
-          if (failed) return 'Not recorded in Undo History: ' + (failed.message || String(failed)) + '.';
+          if (failed) return drop((failed.message || String(failed)) + '.');
           if (over) {
-            var dropped = head ? journalDb().then(function (db) { return journalDropRuns(db, [head.id]); }) : Promise.resolve();
-            return dropped.then(function () {
-              return 'Not recorded in Undo History: this pass is more than half its size limit. ' +
-                'Its Undo here still works while this dialog is open.';
-            });
+            return drop('this pass is more than half its size limit. Its Undo here still works while this dialog is open.');
           }
           if (!written) return '';
           journalChanged();
@@ -2361,7 +2364,7 @@
               (head.note ? ' (' + head.note + ')' : '') + '.';
           });
         }).then(null, function (e) {
-          return 'Not recorded in Undo History: ' + (e && e.message ? e.message : String(e)) + '.';
+          return drop((e && e.message ? e.message : String(e)) + '.');
         });
       },
     };
@@ -2445,7 +2448,7 @@
     if (!saves.length) return send(input, init);
     var removal = saves.some(function (sv) { return sv.spec.mode === 'destroy' || sv.spec.mode === 'merge'; });
     return loadSettings(false).then(function (s) {
-      return truthy(s.c4JournalHandEdits) && (!removal || truthy(s.c7JournalDeletes));
+      return truthy(removal ? s.c7JournalDeletes : s.c4JournalHandEdits);
     }, function () { return true; }).then(function (on) {
       if (!on) return send(input, init);
       if (removal) return journalCaptureRemoval(send, input, init, saves);
@@ -2500,7 +2503,7 @@
         saves.forEach(function (sv, i) {
           if (!lists[i].length) return;
           journalRecord({ source: 'hand', label: journalLabel(sv),
-            note: sv.skipped.length ? 'not recorded: ' + sv.skipped.join(', ') : '' }, lists[i]);
+            note: sv.skipped.length ? 'not recorded: ' + sv.skipped.join(', ') : '' }, lists[i]).then(null, function () {});
         });
       });
     }).then(null, function (e) { journalGap(saves, e); });
@@ -2512,7 +2515,7 @@
       var ids = sv.ids.length ? sv.ids : ['?'];
       journalRecord({ source: 'hand', label: journalLabel(sv),
         note: 'not recorded: ' + (e && e.message ? e.message : String(e)) },
-        ids.map(function (id) { return { type: sv.type, id: id, action: 'gap' }; }));
+        ids.map(function (id) { return { type: sv.type, id: id, action: 'gap' }; })).then(null, function () {});
     });
   }
 
@@ -2692,8 +2695,8 @@
             var gone = list.filter(function (e) { return !now[e.id]; });
             if (!gone.length) return;
             if (into) gone.forEach(function (e) { e.merge = into; });
-            journalRecord({ source: 'hand', label: journalLabel(sv) }, gone);
-          });
+            return journalRecord({ source: 'hand', label: journalLabel(sv) }, gone);
+          }).then(null, function (e) { journalGap([sv], e); });
         });
       }, function () {});
       return p;
@@ -2754,11 +2757,11 @@
         return p.then(function () {
           var parts = key.split('.'), ct = parts[0], field = parts[1];
           var ids = e.carriers[key].map(function (x) { return x; });
-          return journalReattach(ct, field, ids, made, e.type, w.remap).then(function () {
+          return journalReattach(ct, field, ids, made, e.type, w.remap, w.renew).then(function () {
             if (!into || field === 'groups') return;
             var had = (before[key] || []).map(String);
             var only = ids.map(function (x) { return w.remap(ct, String(x)); }).filter(function (x) { return had.indexOf(x) === -1; });
-            return journalDetach(ct, field, only, w.intoId);
+            return journalDetach(ct, field, only, w.intoId, w.renew);
           });
         });
       }, Promise.resolve()).then(function () { return made; });
@@ -2769,18 +2772,22 @@
     galleries: ['bulkGalleryUpdate', 'BulkGalleryUpdateInput'], performers: ['bulkPerformerUpdate', 'BulkPerformerUpdateInput'],
     groups: ['bulkGroupUpdate', 'BulkGroupUpdateInput'] };
 
-  function journalChunks(ids, fn) {
+  // `renew` is the undo's lease, renewed before each chunk.
+  function journalChunks(ids, fn, renew) {
     var chunks = [];
     for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
-    return chunks.reduce(function (p, ch) { return p.then(function () { return fn(ch); }); }, Promise.resolve());
+    return chunks.reduce(function (p, ch) {
+      return p.then(function () { if (renew) renew(); return fn(ch); });
+    }, Promise.resolve());
   }
 
   // Each carrier still there gets the recreated entity back. A relation list goes back in
   // bulk; a studio's tags, a studio's parent and a scene's place in a group are one update
   // each, since those carry more than an id.
-  function journalReattach(ct, field, list, made, type, remap) {
+  function journalReattach(ct, field, list, made, type, remap, renew) {
     var ids = list.map(function (x) { return remap(ct, String(Array.isArray(x) ? x[0] : x)); });
     var one = function (id, input) {
+      if (renew) renew();
       input.id = id;
       return gqlRequest('mutation GTTxUndoAttach($input: ' + JOURNAL_TYPES[ct].input + '!) { ' + JOURNAL_TYPES[ct].update +
         '(input: $input) { id } }', { input: input }).then(null, function () {});
@@ -2821,10 +2828,10 @@
           });
         }, Promise.resolve());
       });
-    });
+    }, renew);
   }
 
-  function journalDetach(ct, field, ids, dest) {
+  function journalDetach(ct, field, ids, dest, renew) {
     if (!ids.length || !dest || !BULK[ct] || field === 'studio_id') return Promise.resolve();
     var b = BULK[ct];
     return journalChunks(ids, function (ch) {
@@ -2832,7 +2839,7 @@
       input[field] = { ids: [dest], mode: 'REMOVE' };
       return gqlRequest('mutation GTTxUndoDetach($input: ' + b[1] + '!) { ' + b[0] + '(input: $input) { id } }', { input: input })
         .then(null, function () {});
-    });
+    }, renew);
   }
 
   // One wrapper per page, installed once; a newer evaluation replaces only the handler
@@ -2900,7 +2907,7 @@
   // An entry as it reads now: an entity put back since under a new id, and the related
   // ids in a relation, followed to that id. A copy, so the stored entry is left as it was.
   var REMAP_REL = { tag_ids: 'tags', parent_ids: 'tags', child_ids: 'tags', performer_ids: 'performers',
-    gallery_ids: 'galleries', scene_ids: 'scenes' };
+    gallery_ids: 'galleries', scene_ids: 'scenes', studio_id: 'studios', parent_id: 'studios' };
   function journalRemapped(e, remap) {
     var r = {}, k;
     for (k in e) if (hasOwn(e, k)) r[k] = e[k];
@@ -2908,7 +2915,9 @@
     r.eid = remap(e.type, e.eid);
     r.entity = e.type + ':' + r.eid;
     if (hasOwn(REMAP_REL, e.field)) {
-      var rt = REMAP_REL[e.field], m = function (v) { return Array.isArray(v) ? v.map(function (x) { return remap(rt, x); }) : v; };
+      var rt = REMAP_REL[e.field], m = function (v) {
+        return Array.isArray(v) ? v.map(function (x) { return remap(rt, x); }) : v == null ? v : remap(rt, v);
+      };
       r.before = m(e.before);
       r.after = m(e.after);
     }
@@ -2937,6 +2946,9 @@
           return { entry: e, status: 'cancelled', reason: 'undone and undone again in what is ticked, so nothing changes' };
         }).concat(plan.items);
         plan.cancelled = cancelled;
+        // What `journalUndo` checks again once the deletes in it are put back.
+        plan.entries = rest;
+        plan.remap = remap;
         return plan;
       });
     });
@@ -2988,10 +3000,12 @@
       return journalRead(send, t, gone[t], [], false).then(function (m) { return [t, m]; });
     }))]).then(function (both) {
       var locks = both[0], now = {}, exists = {};
+      var since = removals.length ? 'changed since - checked again once what was deleted is back' : 'changed since';
       both[1].forEach(function (pair) { now[pair[0]] = pair[1]; });
       both[2].forEach(function (pair) { exists[pair[0]] = pair[1]; });
       var writes = [];
-      // Put back first, so whatever follows in the same undo finds them there.
+      // Put back first, so whatever follows in the same undo finds them there - and what
+      // follows is checked again then (`journalUndo`), against the new ids.
       removals.forEach(function (e) {
         if (exists[e.type][e.eid]) { items.push({ entry: e, status: 'undone', reason: 'it exists again' }); return; }
         items.push({ entry: e, status: 'ok', reason: e.action === 'merge' ? 'put back, and split off the tag it was merged into'
@@ -3024,7 +3038,7 @@
             var d = journalDelta(e), now = state[e.field] || [];
             var intact = d.added.every(function (x) { return now.indexOf(x) !== -1; }) &&
               d.removed.every(function (x) { return now.indexOf(x) === -1; });
-            if (!intact) { items.push({ entry: e, status: 'changed', reason: 'changed since' }); return; }
+            if (!intact) { items.push({ entry: e, status: 'changed', reason: since }); return; }
             state[e.field] = now.filter(function (x) { return d.added.indexOf(x) === -1; })
               .concat(d.removed).sort();
             if (touched.indexOf(e.field) === -1) touched.push(e.field);
@@ -3033,7 +3047,7 @@
             return;
           }
           if (!journalSame(state[e.field], entryAfter(e))) {
-            items.push({ entry: e, status: 'changed', reason: 'changed since' });
+            items.push({ entry: e, status: 'changed', reason: since });
             return;
           }
           if (e.field.indexOf('custom_fields.') === 0) {
@@ -3087,18 +3101,30 @@
   function journalUndo(plan, line, opts) {
     line = line || function () {};
     var c = coop();
-    var lease = { owner: PLUGIN_ID, label: 'Undo History', until: Date.now() + 60000 };
-    c.leases.push(lease);
-    var written = [], failed = 0;
-    return plan.writes.reduce(function (p, w) {
+    var lease = { owner: PLUGIN_ID, label: 'Undo History', until: 0 };
+    // Renewed per write and per re-attach chunk, and put back when a respecter has
+    // dropped it as expired: undoing the delete of a tag on 30,000 scenes outlives 60 s.
+    var renew = function () {
+      lease.until = Date.now() + 60000;
+      if (c.leases.indexOf(lease) === -1) c.leases.push(lease);
+    };
+    var release = function () {
+      var i = c.leases.indexOf(lease);
+      if (i !== -1) c.leases.splice(i, 1);
+    };
+    renew();
+    var written = [], failed = 0, made = {};
+    var write = function (p, w) {
       return p.then(function () {
-        lease.until = Date.now() + 60000;
+        renew();
         var t = JOURNAL_TYPES[w.type], q, vars;
         if (w.recreate) {
-          return journalRecreate(w).then(function (made) {
-            w.made = made;
+          w.renew = renew;
+          return journalRecreate(w).then(function (id) {
+            w.made = id;
+            (made[w.type] = made[w.type] || {})[w.id] = id;
             written.push(w);
-            line('UNDO', 'put back as ' + t.label.toLowerCase() + ' ' + made, w);
+            line('UNDO', 'put back as ' + t.label.toLowerCase() + ' ' + id, w);
           }, function (e) {
             failed++;
             line('ERROR', 'it could not be put back: ' + (e && e.message ? e.message : e), w);
@@ -3127,9 +3153,25 @@
           line('ERROR', 'the undo failed: ' + (e && e.message ? e.message : e), w);
         });
       });
-    }, Promise.resolve()).then(function () {
-      var i = c.leases.indexOf(lease);
-      if (i !== -1) c.leases.splice(i, 1);
+    };
+    var puts = plan.writes.filter(function (w) { return w.recreate; });
+    var rest = plan.writes.filter(function (w) { return !w.recreate; });
+    // The deletes go back first. The rest was checked before they were back, so a tag
+    // added and then deleted read as "changed since", and a studio changed and then
+    // deleted would be written back as the dead id: it is checked again now, with the
+    // new ids followed. A check that fails keeps the plan as reviewed.
+    return puts.reduce(write, Promise.resolve()).then(function () {
+      if (!Object.keys(made).length || !plan.entries) return rest;
+      var remap = function (type, id) {
+        var r = plan.remap(type, id);
+        return made[type] && hasOwn(made[type], r) ? made[type][r] : r;
+      };
+      var again = plan.entries.filter(function (e) { return e.action !== 'delete' && e.action !== 'merge'; });
+      return journalPlanNow(again.map(function (e) { return journalRemapped(e, remap); }), remap)
+        .then(function (p) { return p.writes; }, function () { return rest; });
+    }).then(function (writes) {
+      return writes.reduce(write, Promise.resolve());
+    }).then(release, function (e) { release(); throw e; }).then(function () {
       var entries = [], undid = [], remap = null;
       written.forEach(function (w) {
         if (w.recreate) {
@@ -3680,9 +3722,6 @@
   function historyChange(e) {
     if (e.action === 'create') return 'created';
     if (e.action === 'delete') return 'deleted' + (e.lost ? ' (' + LOST_REASON[e.lost] + ')' : '');
-    if (e.action === 'merge') return 'merged into "' + ((e.merge && e.merge.name) || '') + '"' +
-      (e.lost ? ' (' + LOST_REASON[e.lost] + ')' : '');
-    if (e.action === 'split') return 'split back out of "' + ((e.merge && e.merge.name) || '') + '"';
     if (e.action === 'gap') return 'not recorded';
     if (hasOwn(JOURNAL_RELATIONS, e.field)) {
       var d = journalDelta(e);
@@ -3793,6 +3832,13 @@
       span.appendChild(historyCfName(e.field.slice(14)));
       span.appendChild(el('span', null, ': ' + historyValue(e.before, e.beforeAbsent) + ' → ' +
         historyValue(e.after, e.afterAbsent)));
+      return span;
+    }
+    // The destination drawn like the entity itself: named, with its id, a link and its card.
+    if (e.action === 'merge' || e.action === 'split') {
+      span.appendChild(el('span', null, e.action === 'merge' ? 'merged into ' : 'split back out of '));
+      span.appendChild(historyEntity({ type: e.type, name: e.merge && e.merge.name, eid: (e.merge && e.merge.into) || '?' }));
+      if (e.action === 'merge' && e.lost) span.appendChild(el('span', null, ' (' + LOST_REASON[e.lost] + ')'));
       return span;
     }
     var type = hasOwn(HISTORY_REL_TYPES, e.field) && e.action !== 'create' && e.action !== 'delete' &&
@@ -4033,6 +4079,11 @@
       if (typeof window.BroadcastChannel === 'function') {
         H.channel = new window.BroadcastChannel(JOURNAL_DB);
         H.channel.onmessage = function () {
+          // The runs read so far may have changed there; a ticked change stays ticked.
+          var keep = {};
+          Object.keys(H.selEntries).forEach(function (id) { if (H.byId[id]) keep[id] = H.byId[id]; });
+          H.entries = {};
+          H.byId = keep;
           historyStats(H);
           if (H.mode === 'list' && !H.busy) historyDraw(H, true);
         };
@@ -4654,7 +4705,7 @@
     tipSettings();
     ensureStaleNotice(group);     // before the early return: the link outlives it
     if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'gttxcore-readme', 'NormalizeParentTags/README.md');
+    var link = el('a', 'gttxcore-readme', 'GTTxCore/README.md');
     link.id = README_LINK_ID;
     link.href = README_URL;
     link.target = linkTarget();
@@ -4866,7 +4917,7 @@
     //
     // **Taken from a sibling's stylesheet rather than written**, which is what these
     // rules were missing for one release: this plugin sat outside the comparison in
-    // `tests/style.test.js`, so hand-written approximations of them drifted with
+    // `.tests/style.test.js`, so hand-written approximations of them drifted with
     // nothing to notice - and **Show more** came out with the browser's default button
     // chrome, a white box, because the rule lacked `padding:0;border:0;background:none`.
     // It is in that comparison now, against all eight.

@@ -241,8 +241,11 @@ under **Settings → Plugins**, and so do the two options below.
 reaction plans what the save calls for and opens a small dialog: one line per addition — the
 entity, the tag or performer, and where it came from — each with a box, all ticked. Untick what
 you do not want and press **OK**, which is unavailable while nothing is ticked; **Select All** and **Unselect All** set every box, each unavailable when every box already is; **Cancel** and
-Escape write nothing. On, a reaction writes the moment Stash saves, with no dialog, no review and
-no undo. The switch is greyed out while neither mode is on. When another plugin is waiting for
+Escape write nothing. The dialog draws the first thousand lines and says how many more there are;
+those start as the drawn lines do, and **Select All**, **Unselect All** and **OK** cover them too. It
+opens over whatever is on screen, so Escape closes it first. On, a reaction writes the moment Stash
+saves, with no dialog and no review. Either way every write is recorded in ᝯㄝₓ Core's
+[Undo History](../GTTxCore/README.md#undo-history), where it can be undone later. The switch is greyed out while neither mode is on. When another plugin is waiting for
 your answer before it reads the scene — Scene Variants does, for its own propagate offer — the
 dialog says so, with the time it has left; if that runs out while the dialog is open, a warning
 replaces it, because what you add here will then not be in that plugin's offer.
@@ -252,7 +255,11 @@ save removes a performer, studio or group from a scene, and the path from that e
 scenes is on, the scene is read once *before* the save goes out — the save waits for that one
 small read — and once after it lands. The tags the removed entity brought that the scene still
 carries, and that no other related entity of the scene carries, are listed in the same dialog,
-**unticked**. Tick the ones to remove and press OK, which stays unavailable until something is ticked; nothing else is touched. Only a scene's own
+**unticked**. Tick the ones to remove and press OK, which stays unavailable until something is ticked; nothing else is touched, and
+the removal is recorded in Undo History. A tag a marker of the scene still carries, as its primary
+tag or one of its tags, is not offered while the marker path is on. A save made while another
+plugin holds its bulk-edit lease — Scene Variants synchronizing its variants, say — is not asked
+about. Only a scene's own
 save is watched: a marker deleted, an image taken out of a gallery or a scene taken out of a
 group is a save of something else, and is not offered.
 
@@ -630,7 +637,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1779 MB | 1821 MB | 1804 MB |
+| Propagate All | 1794 MB | 1836 MB | 1819 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

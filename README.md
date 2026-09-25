@@ -1,16 +1,16 @@
 # ᝯㄝₓ Stash Plugins
 
-Nine client-side plugins for [Stash](https://github.com/stashapp/stash) — eight that each do
+Ten client-side plugins for [Stash](https://github.com/stashapp/stash) — nine that each do
 something Stash's own UI cannot (bulk-edit a custom field, copy tags along a relationship, rename
 one thing and fix every mention of it, find text anywhere in the library), and **ᝯㄝₓ Core**, which
-all eight require.
+all nine require.
 
 They are written to be installed **together**. They share one namespace, one visual language and a
 handful of cooperation protocols, so two of their buttons in the same row agree on order and
 spacing, a bulk run takes a lease its siblings stand down for while it writes, and one plugin asks another
 for an answer rather than reimplementing it.
 
-Requires **Stash 0.31.0 or newer** (Scene Variants: 0.28.0).
+Requires **Stash 0.31.0 or newer**.
 
 ---
 
@@ -18,7 +18,7 @@ Requires **Stash 0.31.0 or newer** (Scene Variants: 0.28.0).
 
 | Plugin | What it does |
 |---|---|
-| [ᝯㄝₓ Core](GTTxCore/README.md) | **Required by all of the others.** The shared half: the hover cards, the tooltips, the Reload UI button, the button-placement rules. Plus the three features that belong to no single plugin — emphasising the Scene Tagger's duration mismatch, a right-click **Paste** in the Tags and Performers boxes, and the developer switches. |
+| [ᝯㄝₓ Core](GTTxCore/README.md) | **Required by all of the others.** The shared half: the hover cards, the tooltips, the Reload UI button, the button-placement rules. Plus the features that belong to no single plugin — above all **Undo History**, which records what every plugin writes and what you save in Stash's own pages so it can be undone later; and opening links in the same tab, counts on headings, the log size, emphasising the Scene Tagger's duration mismatch, a right-click **Paste** in the Tags, Performers and Groups boxes, and the developer switches. |
 | [ᝯㄝₓ Custom Fields Bulk Editor](CustomFieldsBulkEditor/README.md) | View and bulk edit custom fields across a whole selection, or across the whole library — the seven entity types that carry them. Stash's API supports this; its UI does not expose it. |
 | [ᝯㄝₓ Entity Name Maintainer](EntityNameMaintainer/README.md) | Rename a performer, studio, tag or scene, and it finds every *other* place in the library that mentioned the old name and offers to bring them along. |
 | [ᝯㄝₓ Find & Replace Entities by Text Content](FindEntitiesByTextContent/README.md) | One box: which entities mention this text? Searches every text field of every type, then optionally replaces it. |
@@ -43,11 +43,11 @@ plugin finds its sibling at load, and says in its log when one it would have ask
 | Every plugin that writes | **all the others** | a shared **bulk-edit lease** while it writes, so the automatic modes stand down instead of reacting to every entity of a library-wide run | the automatic modes react to another plugin's bulk run, each possibly undoing part of the other |
 | **Entity Name Maintainer**, **Find & Replace**, **Scene Filename Manager**, **Scene Variants** | **Custom Fields Bulk Editor** | which custom fields are **locked**: a locked field's name, value and presence are left alone, and no Undo removes one | nothing is locked, and each says so in its log. With that plugin present but unable to answer, no custom field is written at all |
 | **Entity Name Maintainer** | **Custom Fields Bulk Editor** | the **field descriptions** it keeps, so a rename can carry into the prose you wrote about a field | descriptions are not listed and nothing else changes |
-| **Scene Filename Manager**, **Scene Variants**, **Propagate**, **Find & Replace** | **Custom Fields Bulk Editor** | a **description filed** for the custom field they create, shown wherever that plugin shows a field | the field carries no description |
+| **Scene Filename Manager**, **Scene Variants**, **Propagate** | **Custom Fields Bulk Editor** | a **description filed** for the custom field they create, shown wherever that plugin shows a field | the field carries no description |
 | **Scene Filename Manager** | **Scene Variants** | the **base title** and **partial postfix** of a variant set for the `basetitle` and `variantpostfix` tokens, and a scene's **stash-id** for `stashid` | `basetitle` is the scene's title, `variantpostfix` and `stashid` are empty, and the log says so |
 | **Scene Variants**, **Propagate**, **Tag Bundle Clipboard** | **Normalize Parent Tags** | whether a tag is **redundant** under the hierarchy, so none of them copies a parent a more specific tag already implies | every tag is copied, and the sibling would prune it again afterwards |
 | **Scene Variants** | **Entity Name Maintainer** | to **carry a renamed title** into everything that mentioned the old one, for every title it writes | the rename stands on its own |
-| **Propagate**, **Merge Performer Tags**, **Scene Variants** | **each other** | a registry of the **relationship paths** each performs, so an overlap is noted in the log | overlapping paths are not pointed out |
+| **Propagate** ↔ **Merge Performer Tags** | **each other** | a registry of the **relationship paths** each performs, so an overlap is noted in the log | overlapping paths are not pointed out |
 | Every plugin that writes | **ᝯㄝₓ Core** | its **Undo History**: each pass and each automatic write is recorded, so it can be undone after the dialog has closed, in this browser | only the dialog's own Undo, while it is open (Core is always installed; a browser with no IndexedDB has no history) |
 | **Merge Performer Tags** ↔ **Normalize Parent Tags** | each other | the lease above, in both directions: auto-merge stands down while the other applies, and the library-wide merge takes a lease of its own | each reacts to the other's writes, merging back what was just pruned |
 
@@ -82,8 +82,9 @@ plugin scripts by their declared dependencies but does not object when one is mi
 - **Amber means a control of ours writes; teal means it only reads.** Stash's own buttons are grey
   and blue, so the colour is also how you tell one of these plugins' controls from Stash's.
 - **An id in brackets is Stash's own database id** — the number in the URL — never a stash-id.
-- **Back up your database before the first library-wide run.** Undo reaches only what the open
-  dialog wrote, and Stash has no undo of its own.
+- **Back up your database before the first library-wide run.** A dialog's Undo reaches only what
+  it wrote while open, and Undo History keeps the rest in this browser only - neither is a backup,
+  and Stash has no undo of its own.
 - **How much memory a task takes** in your browser tab, against 100,000 scenes and 1,000,000
   images, is in [MEMORY.md](MEMORY.md), measured again for every release.
 
@@ -94,21 +95,21 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
-| SceneFilenameManager | Archive Original Filenames | 111 MB | 151 MB | 144 MB |
-| SceneFilenameManager | Restore Original Filenames | 52 MB | 74 MB | 74 MB |
-| SceneFilenameManager | Rename Files From Metadata | 191 MB | 251 MB | 239 MB |
-| SceneVariants | Migrate Variant Stash-IDs | 58 MB | 91 MB | 91 MB |
-| SceneVariants | Flag Variants | 46 MB | 86 MB | 81 MB |
+| SceneFilenameManager | Archive Original Filenames | 114 MB | 158 MB | 157 MB |
+| SceneFilenameManager | Restore Original Filenames | 56 MB | 82 MB | 82 MB |
+| SceneFilenameManager | Rename Files From Metadata | 194 MB | 253 MB | 253 MB |
+| SceneVariants | Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
+| SceneVariants | Flag Variants | 46 MB | 88 MB | 81 MB |
 | SceneVariants | Review Variant Sets | 1949 MB | — | — |
-| SceneVariants | Rename Variants | 635 MB | 646 MB | 646 MB |
-| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1149 MB | 1148 MB |
-| CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 267 MB | 267 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1734 MB | 1524 MB |
-| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4147 MB | 4042 MB |
+| SceneVariants | Rename Variants | 635 MB | 664 MB | 664 MB |
+| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1150 MB | 1150 MB |
+| CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 311 MB | 311 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1731 MB | 1524 MB |
+| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4183 MB | 4080 MB |
 | NormalizeParentTags | Auto Mode Settings | 0 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
-| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 293 MB | 282 MB |
-| PropagateTagsAndPerformers | Propagate All | 1779 MB | 1821 MB | 1804 MB |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 295 MB | 283 MB |
+| PropagateTagsAndPerformers | Propagate All | 1794 MB | 1836 MB | 1819 MB |
 
 A task gives all of it back when its dialog is closed.
 <!-- memory:end -->
@@ -119,37 +120,36 @@ A task gives all of it back when its dialog is closed.
 |---|---|
 | `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `AGENTS.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
 | `GTTxCore/` | the shared half every other plugin binds at load, and requires |
-| `tests/` | `node tests/run.js` (or `npm test`). See [tests/README.md](tests/README.md) |
-| `tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See [tools/README.md](tools/README.md) |
+| `.tests/` | `node .tests/run.js` (or `npm test --prefix .tests`). See [.tests/README.md](.tests/README.md) |
+| `.tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See [.tools/README.md](.tools/README.md) |
 | `RELEASES.md` | every release of every plugin, one row per commit. **Generated** |
-| `MEMORY.md` | what every task holds in memory against 100,000 scenes and 1,000,000 images. **Generated** by `node tools/memory-watermark.js`; a release waits for it |
+| `MEMORY.md` | what every task holds in memory against 100,000 scenes and 1,000,000 images. **Generated** by `node .tools/memory-watermark.js`; a release waits for it |
 | `AGENTS.md` | the rules, one table per kind — the onboarding document |
-| `docs/` | the reasoning behind each rule (`decisions/`), and dated readings of Stash's source (`stash-reference.md`) |
+| `.docs/` | the reasoning behind each rule (`decisions/`), and dated readings of Stash's source (`stash-reference.md`) |
 
 ## Contributing
 
-- **`node tests/run.js`** runs all suites. Most need no install; the `placement` suite needs
-  `jsdom` and skips itself without it, so `npm install` enables it. `package.json` exists only for
+- **`node .tests/run.js`** runs all suites. Most need no install; the `placement` suite needs
+  `jsdom` and skips itself without it, so `npm install --prefix .tests` enables it. `.tests/package.json` exists only for
   that and is part of no plugin.
 - **A new plugin starts at `version: 0.0.1`.** The major digit says the thing has been run in a real
   Stash, not that the code is finished.
 - **Bump the version in three places in one edit**: the `.yml`, the `manifest` (including its
   `date:`, read off the clock), and `PLUGIN_VERSION` in the `.js`.
 - **`RELEASES.md` is generated, never written.** A release *is* a commit that moved a `version:`, so
-  run `node tools/gen-releases.js` in the commit *after* the one that shipped it — a release row
+  run `node .tools/gen-releases.js` in the commit *after* the one that shipped it — a release row
   cannot name the commit that adds it.
 - **READMEs and source describe the plugin, not its history.** No "since 1.2.0" in either; that
   argument belongs in the plugin's own `NOTES.md`, which does not ship.
 - **Read [AGENTS.md](AGENTS.md) before adding a button, a dialog or a shared block.** Nearly every
   rule in it exists because something here guessed about Stash's markup and was wrong.
-- **Releasing to the public mirror goes through `node tools/release-drop.js`**, which
+- **Releasing to the public mirror goes through `node .tools/release-drop.js`**, which
   copies an allowlist - never a denylist - and scans every staged file before it writes
-  anything. See [`tools/README.md`](tools/README.md).
-- **The repo enforces some of this after every turn**, through the Stop hooks in
-  the repo's own Stop hooks: a plugin's docs left behind by a change to its
-  source, a script changed without its version moving, a release missing from `RELEASES.md`, a new
-  plugin starting above `0.0.1`. They are tracked; the `settings.local.json` that calls them is not,
-  so a fresh clone has to wire them once. A git pre-commit hook in `.githooks/` refuses a commit
+  anything. See [`.tools/README.md`](.tools/README.md).
+- **The source repo enforces some of this after every turn**, through Claude Code Stop hooks that
+  are not part of a release: a plugin's docs left behind by a change to its source, a script
+  changed without its version moving, a release missing from `RELEASES.md`, a new plugin starting
+  above `0.0.1`. A git pre-commit hook in `.githooks/` refuses a commit
   that stages a plugin's script without moving its version, before the commit exists; wire it with
   `git config core.hooksPath .githooks`.
 

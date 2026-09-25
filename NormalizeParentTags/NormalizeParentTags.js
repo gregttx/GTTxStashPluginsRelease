@@ -64,7 +64,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.6.1';
+  var PLUGIN_VERSION = '5.6.3';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1276,11 +1276,12 @@
 
   // Undo History, where ᝯㄝₓ Core keeps one: a batch landed is, per entity, the tags it
   // added or took away - recorded as that delta, which is what an undo checks is still
-  // true and what it reverses, whatever else the entity gained since.
-  function journalPass(label) {
+  // true and what it reverses, whatever else the entity gained since. Library-wide only
+  // for the unscoped task: a save's reaction and a button's scoped run keep their images.
+  function journalPass(label, libraryWide) {
     var j = coop().journal;
     return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
   }
 
   function journalBatch(run, batch, mode) {
@@ -1297,6 +1298,7 @@
     }).then(function () {
       // Recorded only once the server has taken it, so Undo can never try to
       // reverse a write that never landed.
+      batch.run = run.journalRun ? run.journalRun.id : null;
       run.undoable.push(batch);
       journalBatch(run, batch, batch.mode);
       batch.entries.forEach(function (entry) {
@@ -1332,7 +1334,13 @@
       // exactly the batches that are still applied.
       var at = run.undoable.indexOf(batch);
       if (at !== -1) run.undoable.splice(at, 1);
-      journalBatch(run, batch, mode);
+      // Recorded from the pass that wrote it, reversed, so that run reads as undone in
+      // the history rather than staying live beside a second run that cancels it.
+      if (run.journalRun && batch.run) {
+        batch.entries.forEach(function (entry) {
+          run.journalRun.reverse(batch.run, batch.type.key, String(entry.id));
+        });
+      }
       batch.entries.forEach(function (entry) {
         batch.tagIds.forEach(function (tid) {
           // No "due to" clause: the reason explained why the tag was written, and
@@ -2523,7 +2531,7 @@
     var lease = acquireLease(leaseLabel);
     var i = 0;
     var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
-      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel);
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, !self.scope);
     function done() {
       self.journalRun = null;
       if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
@@ -2760,7 +2768,7 @@
   // It writes a setting, not the library, so it carries no backup instruction: there
   // is nothing here for an Undo to reverse. What it does carry is the warning the two
   // "Auto ..." booleans used to - a type set to Prune or Roll Up here is rewritten
-  // silently on every save, with no dialog, no review and no undo.
+  // silently on every save, with no dialog and no review; only Undo History reverses it.
   function ModesDialog(taskName) {
     this.taskName = taskName;
     this.modes = {};
@@ -2793,7 +2801,8 @@
     head.appendChild(el('div', 'npt-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
     head.appendChild(el('div', 'npt-warn',
       'A type set to Prune or Roll Up here is rewritten whenever Stash saves one - ' +
-      'immediately, with no dialog, no review and no undo. Off is what a type does ' +
+      'immediately, with no dialog and no review; only ᝯㄝₓ Core\'s Undo History can ' +
+      'take it back. Off is what a type does ' +
       'until you say otherwise; the tasks are unaffected either way, since the run ' +
       'dialog asks again every time.'));
     head.appendChild(el('div', 'npt-legend',
@@ -3566,9 +3575,10 @@
   //
   // That is a deliberate departure from everything else in this plugin, where
   // nothing is written without a plan on screen and a Proceed. Auto Prune deletes
-  // tag assignments silently, one save at a time, and the console lines it writes
-  // are the only record - there is no Undo out here, because there is no dialog to
-  // hang one on. The setting descriptions say so; do not soften them.
+  // tag assignments silently, one save at a time, and there is no dialog Undo out
+  // here, because there is no dialog to hang one on - each save's writes are one run
+  // in ᝯㄝₓ Core's Undo History, and that is the only way back. The setting
+  // descriptions say so; do not soften them.
   //
   // Which entity types are covered, and in which direction, is the one auto-mode
   // string - so a type is off, pruned or rolled up on its own. The all-off default
@@ -4939,7 +4949,7 @@
     // `querySelector('h3')` answers with whichever plugin is listed first. A plugin
     // declaring a task by the same name as ours was therefore hijacked whenever we
     // happened to be above it, which is the one thing the heading check exists to
-    // stop. Found by the tasks-page check in `tests/placement.test.js`.
+    // stop. Found by the tasks-page check in `.tests/placement.test.js`.
     //
     // A group's first h3 is its heading: PluginTasks renders it in the header, above
     // the per-task `Setting` rows that each carry an h3 of their own - which is also

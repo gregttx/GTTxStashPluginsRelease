@@ -381,13 +381,25 @@ form is not stopped by it. Names are matched exactly, case included.
 ## Relationship to the other plugins in this repo
 
 While it writes, this plugin takes a [bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease),
-so `ᝯㄝₓ Merge Performer Tags To Scenes` and `ᝯㄝₓ Normalize Parent Tags` stand their automatic
-modes down until it finishes rather than reacting to every entity it touches. If one of *them* holds
+so every plugin here that reacts to saves stands down until it finishes rather than reacting to
+every entity it touches. If one of *them* holds
 a lease when you open the dialog, the head says so — advisory, not a lock; you started this by hand
 and it will not refuse.
 
-Nothing else overlaps: no other plugin here touches custom fields, and none of them puts anything in
-the list-view menu.
+Several of them work with custom fields, and this plugin is where they look:
+
+- **Locked Custom Fields** is asked through ᝯㄝₓ Core before any of them writes a custom field.
+  `ᝯㄝₓ Scene Filename Manager`, `ᝯㄝₓ Scene Variants`, `ᝯㄝₓ Entity Name Maintainer`,
+  `ᝯㄝₓ Find & Replace Entities by Text Content` and Core's own Undo History never change or remove
+  a locked field.
+- **Descriptions**: `ᝯㄝₓ Scene Filename Manager`, `ᝯㄝₓ Scene Variants` and
+  `ᝯㄝₓ Propagate Tags and Performers to Related Entities` file a description for the fields they use in this plugin's
+  store, never over one you wrote. The grey ⓘ Core puts beside a setting naming a custom field reads
+  its description from here.
+- **Exclusion filters** in `ᝯㄝₓ Merge Performer Tags To Scenes`, `ᝯㄝₓ Normalize Parent Tags` and
+  `ᝯㄝₓ Propagate Tags and Performers to Related Entities` read a tag's custom fields; they never write them.
+
+None of them puts anything in the list-view menu.
 
 ## What a run costs in memory
 
@@ -396,8 +408,8 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Edit Custom Fields Across the Whole Library | 551 MB | 1149 MB | 1148 MB |
-| Manage Custom Field Descriptions and Locks | 214 MB | 267 MB | 267 MB |
+| Edit Custom Fields Across the Whole Library | 551 MB | 1150 MB | 1150 MB |
+| Manage Custom Field Descriptions and Locks | 214 MB | 311 MB | 311 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

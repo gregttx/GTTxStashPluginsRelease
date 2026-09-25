@@ -1,7 +1,7 @@
 # ᝯㄝₓ Scene Variants
 
-Requires Stash 0.28.0 or newer and [ᝯㄝₓ Core](../GTTxCore/README.md), installed and enabled
-alongside it. A source index installs Core for you; a hand copy must copy the `GTTxCore` folder too.
+Requires Stash 0.31.0 or newer, the floor [ᝯㄝₓ Core](../GTTxCore/README.md) sets, and Core itself,
+installed and enabled alongside it. A source index installs Core for you; a hand copy must copy the `GTTxCore` folder too.
 
 A scene is often in your library twice: the whole thing, and a cut out of it. Stash has no way to
 say the two are the same work — [the request to link scenes to each other](https://github.com/stashapp/stash/issues/3201)
@@ -20,11 +20,12 @@ told apart by two tags you name in the settings.
 
 ### The Variants tab
 
-Open a scene. Beside **Details**, **File Info** and **Edit** there is now a **Variants** tab:
+Open a scene that has other variants. Beside **Details**, **File Info** and **Edit** there is a
+**Variants** tab, captioned with how many there are - **2 Variants**, **1 Variant**:
 
 ```
-Details   Queue   Markers   Filter   File Info   History   Variants   Edit
-──────────────────────────────────────────────────────────┴────────────────
+Details   Queue   Markers   Filter   File Info   History   2 Variants   Edit
+────────────────────────────────────────────────────────────┴────────────────
 2 other variants of this scene. Matched on 1 stash-id.
   ┌────────┐  Cool Shoot
   │ cover  │  Full-duration · 1920×1080 · 41:12
@@ -35,8 +36,9 @@ Details   Queue   Markers   Filter   File Info   History   Variants   Edit
 ```
 
 The tab sits just before **Edit**, which stays last, and is amber — the one tab in the tab strip
-Stash did not put there. It is always there, including on scenes with no variants to show, and its
-first line says which of the reasons applies.
+Stash did not put there. It appears once the variants have been looked up, and only where there is
+at least one: a scene with no other variant — most often one with no stash-id — has no tab. Where
+the lookup failed, the tab reads just **Variants**, and its first line says what went wrong.
 
 Under that line, a scene with variants shows its set's **drift score** — the same number the
 [Review Variant Sets](#finding-the-sets-worth-synchronizing) listing sorts by, counted the same
@@ -70,6 +72,30 @@ The tab itself writes nothing: it is two read queries and a list of links. Its o
 [Synchronizing a variant set](#synchronizing-a-variant-set) — amber because pressing through it
 leads to writes. While any of this plugin's dialogs is open the button is unavailable, and its
 tooltip says so; close that dialog first.
+
+### Opening the full-duration variant
+
+On a partial-duration scene whose set has a full-duration member, a teal **▶ Open Full-Duration**
+button sits at the end of the tab strip, after Edit. It opens that variant, in a new tab unless
+ᝯㄝₓ Core's Open Links in the Same Tab is on. Its tooltip names the scene it opens. Where the set has
+several full-duration variants, the button picks one, and the tooltip says how:
+
+1. The title closest to the set's base name, the value of the **Variant Base Name Custom Field**
+   (`ᱜ╦╦🞮_Variant_Base_Name`). The field is read off this scene first, then off the full-duration
+   variants, then off any other variant. Case and runs of spaces are ignored.
+2. Then the shortest title.
+3. Then the highest resolution.
+4. Then the shortest running time.
+5. Then the lowest scene id.
+
+With no base name anywhere in the set, the list starts at step 2.
+
+Turn on **Always Open the Full-Duration Variant** and a partial-duration scene is replaced by that
+same variant as soon as it opens. A notice at the top right says which scene replaced which, and
+names the setting. It stays for 10 seconds and has a **Back to the partial** link. A partial you
+reach from its own full-duration variant is not replaced again, so the Variants tab — in a new tab
+or the same one — and that link still get you there, and neither is a partial you are on when you
+save it. Nothing is replaced while a queue is playing.
 
 ### What a variant's card tells you
 
@@ -137,7 +163,7 @@ be undone after the dialog has closed.
 no longer shows: the dialog keeps the last thousand lines on screen so a library-sized migration
 cannot bog the page down, and says how many it is hiding.
 
-**Close** (or Escape) ends the scan at any point — nothing has been written, so there is nothing to
+**Close** (or Escape, which closes only the topmost of this plugin's dialogs) ends the scan at any point — nothing has been written, so there is nothing to
 leave half-done, and reopening the task starts a fresh one. It turns green once nothing is left to
 write: the scan found nothing, or everything it listed has been written, whether or not you take
 Undo up on its offer. Once a write is under way that exit is
@@ -227,7 +253,8 @@ remembered weights are also what the Variants tab prices its own drift score by.
 
 Tick **Exclude Organized** and every scene marked Organized is left out of the listing: out of its
 set's drift score, out of the scenes you can pick, and out of what Synchronize Set from Selected pushes to. A set
-left with a single scene is not listed. It is off by default and kept with the weights under
+left with a single scene is not listed. Ticked after a set has been listed for synchronizing, it
+withdraws the lines aimed at organized scenes, and the log says how many. It is off by default and kept with the weights under
 **Remember** - and remembered, the Variants tab's own drift score leaves organized scenes out too, so
 the two numbers stay the same.
 
@@ -321,11 +348,11 @@ by the base you write into the **Variant Base Name** custom field: a base you ha
 scene of the set wins over the titles, which is how a set the rule reads wrong is settled once. A
 scene carrying anything in the **Variant No-Rename** custom field is left alone, and so is one
 carrying the tag named in **Exclude Scenes Carrying This Tag From Renaming**, or any tag filed
-under it. When ᝯㄝₓ Custom Fields Bulk Editor is installed, both fields are described in its store.
+under it - by the synchronize dialogs too, which offer such a partial no title at all. When ᝯㄝₓ Custom Fields Bulk Editor is installed, both fields are described in its store.
 
 Indexes count from the **First Partial Index** setting, whose spelling is the rule: `1` counts 1,
-2, 3; `01` pads to two digits; `A` counts A to Z and then AA; `AA` runs to ZZ and then AAA. Empty
-it, and no index is ever added: every partial wears the postfix alone, however many there are. They
+2, 3; `01` pads to two digits; `A` counts A to Z and then AA; `AA` runs to ZZ and then AAA. Any
+other spelling — `#1`, `A1`, `Aa` — counts like `1`. Empty it, and no index is ever added: every partial wears the postfix alone, however many there are. They
 are handed out longest scene first — the order the Variants tab lists them in — with the bigger
 file breaking a tie, and a partial whose title already carries an index in the expected shape keeps
 it — doubled or non-breaking spaces included, which the rename then makes single and marks
@@ -495,9 +522,13 @@ follow, with **OK** and **Cancel**:
   another set, in which case the dialog says it keeps its tag. Several ids deleted in one save are
   each looked at as their own set, and the dialog names the set each survivor is left in.
 
+Where a lookup behind one of these fails, the flag it would have taken off stays, and for this
+scene the dialog says so: a flag left on is Flag Variants' to take off later, a flag taken off
+wrongly is a lost mark.
+
 **OK** folds the first two into the save itself — the form posts the whole tag list and the whole
 custom-field map, so a tag or line taken off separately would have been put straight back — and
-removes the survivor's tag right after the save lands. **Cancel** lets the save through with the
+removes the survivor's tag right after the save lands, recorded in Undo History. **Cancel** lets the save through with the
 stash-id put back into it, so every other edit you made still lands and the id stays; Escape is
 Cancel. A deletion with nothing to tidy — no field line, no flag on the scene, no lone survivor —
 is not asked about at all, and neither is a save that keeps its ids. The question does not depend
@@ -537,6 +568,7 @@ switches the tab runs on:
 | Offer to Propagate Edits to Variants | on | Open the [propagate dialog](#propagating-an-edit-when-you-save) when a save changed something the variants do not have. |
 | Skip Tags the Hierarchy Makes Redundant | on | Leave out a tag another tag on the same scene already implies, as [ᝯㄝₓ Normalize Parent Tags](#relationship-to-the-other-plugins-in-this-repo) decides — see [the rules](#synchronizing-a-variant-set). |
 | Compare Cover Images | off | Also compare the variants' cover images and offer this scene's where they differ — see [the rules](#synchronizing-a-variant-set) and [the set listing](#finding-the-sets-worth-synchronizing). |
+| Always Open the Full-Duration Variant | off | Open a partial-duration scene's [full-duration variant](#opening-the-full-duration-variant) in its place, with a 10-second notice at the top right and a link back. |
 
 In the **Variants Title...** dialog - every line explains itself on hover, and nothing is written
 until you press **Save**, which writes them all at once and puts them in force at once:
@@ -616,9 +648,10 @@ The things that write — the three tasks, the Synchronize Variants dialog the t
 the dialog a save raises and the stash-id question — all show their whole plan before anything
 moves, and only the last two open by themselves.
 
-**The tab is always there**, including on the scenes that have no variants to show, and its first
-line says which of the reasons applies — "this scene carries no stash-id" is the usual one. It
-carries no count in its caption; the pane counts its own rows in its first line instead.
+**The tab shows only when there is something in it**: at least one other variant, counted in its
+caption, or a lookup that failed, when it reads just **Variants** and says what went wrong. A scene
+with no other variant has no tab at all, and neither does any scene while its variants are being
+looked up.
 
 **Rows say Full-duration and Partial-duration** rather than echoing your tag names back; the tag that
 decided a row is on the row's tooltip.
@@ -638,10 +671,10 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Migrate Variant Stash-IDs | 58 MB | 91 MB | 91 MB |
-| Flag Variants | 46 MB | 86 MB | 81 MB |
+| Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
+| Flag Variants | 46 MB | 88 MB | 81 MB |
 | Review Variant Sets | 1949 MB | — | — |
-| Rename Variants | 635 MB | 646 MB | 646 MB |
+| Rename Variants | 635 MB | 664 MB | 664 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->
@@ -653,7 +686,12 @@ and what Undo takes back are all whole.
 
 ## Troubleshooting
 
-**No Variants tab at all.** Either Stash is not 0.28.0 or newer, or the browser is running an older
+**No Variants tab on a scene you know has variants.** A scene with no other variant has no tab, so
+check the scene has a stash-id at all (**Edit → Stash IDs**), or the variant stash-id custom field if
+it has been migrated, and that its variants carry the same one. A failed query shows the tab as just
+**Variants**, and is always reported to the console, whatever the settings say.
+
+**No Variants tab on any scene.** Either Stash is not 0.31.0 or newer, or the browser is running an older
 copy of the script. The console says which, once, at load, and the settings page shows a
 stale-script banner when it can tell. A red **Reload UI** button beside Stash's own **Reload
 plugins**, and in every dialog's own stale banner, reloads the page, which is the whole fix — see
@@ -669,11 +707,6 @@ updating.
 
 A JS change needs **no plugin reload** — Stash reads the file on every request, so overwriting it
 and reloading the page is enough. Reload plugins only when the `.yml` changes.
-
-**The tab is empty on a scene you know has variants.** The tab tells you why in its first line.
-Check the scene has a stash-id at all (**Edit → Stash IDs**), or the variant stash-id custom field if
-it has been migrated, and that its variants carry the same one. A failed query is always reported
-to the console, whatever the settings say.
 
 **Every row is unclassified.** The two tag names in the settings match no tag at all — neither a
 name nor an alias. Copy the name from the tag's own page rather than retyping it. If the tag list
@@ -692,7 +725,7 @@ suspect, and the console line at load is where it will show.
 
 Copy the `SceneVariants` folder — and `GTTxCore` beside it — into your Stash plugins directory,
 then **Settings → Plugins → Reload plugins**. There is no build step and nothing to install. Without
-Stash 0.28.0 or newer there is no tab at all and one line in the browser console saying why —
+Stash 0.31.0 or newer there is no tab at all and one line in the browser console saying why —
 there is no hand-built imitation of a tab to fall back to.
 
 ## Licence

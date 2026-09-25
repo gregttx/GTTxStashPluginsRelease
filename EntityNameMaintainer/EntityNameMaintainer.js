@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.5.2';
+  var PLUGIN_VERSION = '2.5.4';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -493,7 +493,7 @@
     // overlap, down to the hex values. They are separate strings because the plugins
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
-    // `tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
+    // `.tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
     // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
     '.enm-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
@@ -2004,11 +2004,12 @@
   // Undo History, where ᝯㄝₓ Core keeps one: an entity's text rewritten is recorded from
   // the input sent and the one that puts it back. A job with a writer of its own - the
   // custom field descriptions, which live in another plugin's store - is not an entity
-  // write, and is left to that store.
-  function journalPass(label) {
+  // write, and is left to that store. Library-wide for the replacement and its Undo; a
+  // cancelled rename is one entity, whose image entry is kept.
+  function journalPass(label, one) {
     var j = coop().journal;
     return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !one }) : null;
   }
 
   function journalJob(pass, job, name, forward, back) {
@@ -2132,7 +2133,7 @@
       // So the write's own error is carried along and only used if the read agrees.
       return sendJob({ spec: self.spec }, input, 'ENM_Cancel')
         .then(function () {
-          var pass = journalPass('Rename cancelled');
+          var pass = journalPass('Rename cancelled', true);
           var back = { id: self.id };
           back[self.spec.nameField] = self.newName;
           journalJob(pass, { spec: self.spec }, self.oldName, input, back);
@@ -2387,21 +2388,25 @@
   // `scanEntity`. The name alone when the shapes cannot be read, so a rename is still
   // seen; null when the entity cannot be read at all.
   function snapshotBefore(spec, id) {
-    return describeFields().then(function (shapes) {
-      var sel = ['id', spec.nameField];
-      (shapes[spec.key] || []).forEach(function (f) {
-        if (sel.indexOf(f.name) === -1) sel.push(f.name);
-      });
-      return gqlRequest('query ENM_Before($id: ID!) { ' + spec.one + '(id: $id) { ' +
-        sel.join(' ') + ' } }', { id: id }).then(function (data) { return data[spec.one] || null; });
-    }, function () {
+    function nameOnly() {
       return currentName(spec, id).then(function (name) {
         if (name == null) return null;
         var e = {};
         e[spec.nameField] = name;
         return e;
       });
-    }).then(null, function () { return null; });
+    }
+    return describeFields().then(function (shapes) {
+      var sel = ['id', spec.nameField];
+      (shapes[spec.key] || []).forEach(function (f) {
+        if (sel.indexOf(f.name) === -1) sel.push(f.name);
+      });
+      // A field the shapes named that the query then refuses is the same case as shapes
+      // that could not be read: the name alone still sees the rename.
+      return gqlRequest('query ENM_Before($id: ID!) { ' + spec.one + '(id: $id) { ' +
+        sel.join(' ') + ' } }', { id: id })
+        .then(function (data) { return data[spec.one] || null; }, nameOnly);
+    }, nameOnly).then(null, function () { return null; });
   }
 
   // `held` is the lease that was already being held **when the mutation was posted**, not

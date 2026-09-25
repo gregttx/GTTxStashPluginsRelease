@@ -33,8 +33,8 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 
 ## What you actually see
 
-Five things, and all of them are off until you turn them on — and [Undo History](#undo-history),
-which is on.
+Six things: five are off until you turn them on, and one is a number with a default — and
+[Undo History](#undo-history), which is on.
 
 ### The Scene Tagger's duration mismatch
 
@@ -225,7 +225,8 @@ beside Settings.
   *Undo* — what, and how many changes. Click a row for its changes: the entity, with its hover card,
   the field, and the value before and after; a custom field is named in teal, with the box its
   name opens elsewhere. Tags, performers, studios, groups and the other related
-  entities are named with their id — `+Blonde (105)` — each a link with its hover card. The list
+  entities are named with their id — `+Blonde (105)` — each a link with its hover card, and so is
+  the tag a merge went into: `merged into Tag "Blonde" [105]`. The list
   says what the change did; the review and the undo's result say what the undo does, so the same
   change reads `−Blonde (105)` there. Filter by text, type, who, and a range of days.
 - **Undo Selected...** — tick runs or single changes, then press it. Every ticked change is checked
@@ -270,10 +271,10 @@ goes through and the history shows a gap there.
 
 | Setting | Default | |
 |---|---|---|
-| Keep For (Days) | 90 | 1 to 999, or Forever |
+| Keep For (Days) | 90 | 1 to 999, or Forever. A run you imported is kept past it |
 | Size Limit (MB) | 256 | 16 to 4096. A single run over half of it is not recorded, and its dialog's own Undo still covers it |
-| Only Since the Last Backup | off | keeps only what came after the last backup this browser saw |
-| Record Edits Made in Stash's Pages | on | |
+| Only Since the Last Backup | off | keeps only what came after the last backup this browser saw; a run you imported is kept |
+| Record Edits Made in Stash's Pages | on | deletes and merges have a switch of their own |
 | Record Library-Wide Image Writes | off | a pass over a million images would crowd everything else out |
 | Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
 | Record Deletes and Merges | on | keeps what a delete or a tag merge takes away, so it can be put back; a delete of something large reads a lot first |

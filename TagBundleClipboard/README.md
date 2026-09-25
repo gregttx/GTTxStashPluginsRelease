@@ -163,7 +163,7 @@ rather than whichever loaded first.
 
 ## Notes and limitations
 
-**Tags** and **Scene Markers**, and both absences are deliberate:
+Neither button is drawn on **Tags** or **Scene Markers**, and both absences are deliberate:
 
 - A **Tag** carries parent and child tags rather than tags of its own, so a bundle of tags has
   nowhere to land on one.

@@ -29,7 +29,9 @@ Writes the names of each scene's files, **without their extensions**, into the c
 Every file's name is stored by file id, as JSON: `{"88":"cam-a","89":"cam-b"}`, so a name follows
 its file whichever scene or primary slot it ends up in. A value holding a bare name, as older
 releases wrote for a scene's only file, is read as the primary file's name, and Archive rewrites it by
-file id the next time it runs, the name unchanged. A file added to a scene that is already
+file id the next time it runs, the name unchanged; on a scene that has more than one file by now, a
+WARN line says so, since the name may have been another file's. A value that opens with `{` but is
+not names by file id is left as it is, and the scene skipped with a WARN line, by every task. A file added to a scene that is already
 archived is added to its value.
 
 A name already archived is **never overwritten**: the field keeps the first name the plugin saw.
@@ -118,13 +120,15 @@ run; `origfilename` is the archived one, and gives the same name each time.
 An unknown token, a rating scale outside 5–100, or a tag no tag or alias is named stops the scan and
 is named. `/` and `\` are dropped; the other characters a filename cannot hold become look-alikes it
 can — `:` becomes `∶`, `?` `？`, `*` `∗`, `"` `＂`, `<` `‹`, `>` `›`, `|` `∣`. Spaces are collapsed, a
-trailing dot or space trimmed, and the name capped at the **Maximum Filename Length**, and its full
+trailing dot or space trimmed, a name Windows keeps for a device — `CON`, `PRN`, `AUX`, `NUL`,
+`COM1`–`COM9`, `LPT1`–`LPT9`, in any case, alone or before a dot — given an underscore after the
+word (`Con_.mp4`), and the name capped at the **Maximum Filename Length**, and its full
 path at the **Maximum Full Path Length**; a name cut for the path is also a WARN line, saying how
 much room its folder left. A scene whose template gives an
-empty name is skipped.
+empty name is skipped, and so is one whose folder leaves too little room for any name.
 
 **Names already taken.** A name another file in the same folder has now, or that an earlier file in
-the plan was given — compared ignoring case — is not given twice. Without an index the later file is
+the plan was given — compared ignoring case, and however an accent is composed — is not given twice. Without an index the later file is
 skipped with a warning. With one, `{ (|autoindex|)}` gives it the lowest free index — `Song (2)`,
 `Song (3)` — and a file already named that way keeps its name, so a second run changes nothing. A
 name cut to fit either limit is cut before the index, never through it, and ends in `…`. What
@@ -172,10 +176,12 @@ field back as the move left it. A locked field that already holds a value is not
 
 ### Proceed, Stop, Undo
 
-Nothing is written until you press **Proceed**. **Stop** ends a write after the scene in flight.
+Nothing is written until you press **Proceed**. **Stop** ends a write after the request in flight, which carries up to 100 scenes; Proceed
+again writes what it left, archives first.
 **Undo** reverses what this dialog wrote — the fields put back as they were, the files renamed back —
 for as long as the dialog stays open. Every pass is also kept in ᝯㄝₓ Core's
-[Undo History](../GTTxCore/README.md#undo-history), where it can be undone later — a file renamed back in its folder. **Copy log** puts the counters and every line on the clipboard.
+[Undo History](../GTTxCore/README.md#undo-history), where it can be undone later — a file renamed back in its folder — and what the dialog's Undo puts
+back is marked undone there. **Copy log** puts the counters and every line on the clipboard.
 
 A run over a whole library writes far more lines than the dialog shows, so a bar over the log
 filters what is drawn: a box per kind of line — PLAN, SAME, EDIT (RENAME in Rename Files From Metadata), UNDO, INFO,
@@ -202,7 +208,7 @@ remove a locked field. A file Rename cannot archive for that reason is not renam
 
 | Setting | Default | What it does |
 |---|---|---|
-| **Original Filename Custom Field** | `ᱜ╦╦🞮_Original_Filename` | The custom field the tasks archive into and restore from: a file's name, or every file's by id. Written into the box the first time the plugin loads; clearing the box goes back to the default. Renaming it does not move what is already written. |
+| **Original Filename Custom Field** | `ᱜ╦╦🞮_Original_Filename` | The custom field the tasks archive into and restore from: every file's name, by file id. Written into the box the first time the plugin loads; clearing the box goes back to the default. Renaming it does not move what is already written. |
 | **Rename Template** | `{[\|studio\|] }{\|basetitle\|}{\|!basetitle\|{\|origfilename\|}}{ (\|year\|)}{ \|variantpostfix\|}{ [\|performers\|]}{ by \|director\|}{ \|autoindex2\|}` | The name Rename Files From Metadata builds, before the extension. Seeded like the field; clearing it goes back to the default. **Edit** opens the template editor. |
 | **Max Performers In Filename** | 3 | How many performers the `performers` token names — the ones with the most scenes, ties by name. The rest are counted as `+N`. **0 names none**, so the token writes nothing; `performercount` gives the number on its own. |
 | **List Performers Alphabetically** | off | Off: the kept performers by scene count, most first. On: the same performers alphabetically. |
@@ -238,9 +244,9 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 111 MB | 151 MB | 144 MB |
-| Restore Original Filenames | 52 MB | 74 MB | 74 MB |
-| Rename Files From Metadata | 191 MB | 251 MB | 239 MB |
+| Archive Original Filenames | 114 MB | 158 MB | 157 MB |
+| Restore Original Filenames | 56 MB | 82 MB | 82 MB |
+| Rename Files From Metadata | 194 MB | 253 MB | 253 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

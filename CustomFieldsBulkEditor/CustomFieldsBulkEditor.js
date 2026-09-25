@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.5.5';
+  var PLUGIN_VERSION = '3.5.7';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -645,7 +645,7 @@
     // the dialogs overlap, down to the hex values. They are separate strings because
     // the plugins share no module, not because they are meant to look different -
     // and two of them did drift, from #202b33 to #30404d, because nothing compared
-    // them. `tests/style.test.js` pins the overlap now. #202b33 is Blueprint's
+    // them. `.tests/style.test.js` pins the overlap now. #202b33 is Blueprint's
     // dark-gray2, the step Stash's own page uses; every dim grey in these dialogs was
     // chosen against it.
     '.cfbe-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
@@ -705,7 +705,7 @@
     'background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
     'font-family:monospace;font-size:.8rem;line-height:1.9;padding:.35rem .5rem;}' +
     // A modifier on the shared `.cfbe-log`, not an edit to it: that rule is pinned
-    // byte-identical across the four dialogs (`tests/style.test.js`) and its 14rem
+    // byte-identical across the four dialogs (`.tests/style.test.js`) and its 14rem
     // floor is right for a plain log. This box holds the whole session - listings and
     // messages together - so a floor tall enough to push the modal past its own
     // max-height on a short window costs the dialog more than it buys the list.
@@ -781,7 +781,7 @@
     // ── The manage-descriptions dialog ──────────────────────────────────────
     //
     // Two panes over one log. None of these selectors exists in a sibling, so
-    // `tests/style.test.js` correctly leaves them alone - the pinning is for rules two
+    // `.tests/style.test.js` correctly leaves them alone - the pinning is for rules two
     // dialogs both draw, and no other dialog here has a second pane.
     '.cfbe-panes{display:flex;gap:.5rem;padding:.5rem 1rem;flex:2 1 auto;min-height:0;}' +
     '.cfbe-names{flex:0 0 20rem;overflow:auto;min-height:8rem;background:#1f2b33;' +
@@ -834,7 +834,7 @@
     // The same modifier trick `.cfbe-listwrap` is: the shared `.cfbe-log` claims the
     // column with `flex:1 1 auto`, and in this dialog the panes above it are what the
     // room belongs to. Editing the shared rule for a local need is what the pinning in
-    // `tests/style.test.js` exists to stop.
+    // `.tests/style.test.js` exists to stop.
     '.cfbe-logshort{flex:1 1 10rem;min-height:5rem;}' +
     // The handle between the panes and the log. A textarea gets its grip from
     // `resize:vertical` for free; a flex row between two boxes has no such thing, so
@@ -2577,7 +2577,7 @@
     while (block.firstChild) block.removeChild(block.firstChild);
     // **`_cfbeText`, not `_text`.** A plain property on the node, like `_coopOwner` in
     // the siblings - but the name has to be one nothing else uses, and `_text` is what
-    // `tests/npt-harness.js` stores an element's own text in. Every `appendChild` after
+    // `.tests/npt-harness.js` stores an element's own text in. Every `appendChild` after
     // the assignment nulled it there, so `copyLog` silently fell back to reading the
     // DOM: the uncapped text this line exists for was never once exercised by a suite,
     // while the checks about Copy log all passed off the fallback.
@@ -3279,13 +3279,11 @@
   // slice at a time, each written before the next is built, so a pass over the whole
   // library never holds its entries all at once.
   var JOURNAL_SLICE = 2000;
-  // `shape` turns a slice's items into changes, for a caller whose list is not one yet.
-  function journalSlices(pass, changes, keep, reversed, shape) {
+  function journalSlices(pass, changes, keep, reversed) {
     var at = 0;
     function next() {
       if (at >= changes.length) return pass.finish();
       var slice = changes.slice(at, at + JOURNAL_SLICE).filter(keep);
-      if (shape) slice = slice.map(shape);
       at += JOURNAL_SLICE;
       pass.entries(journalEntries(slice, reversed));
       return pass.drain().then(next);
@@ -4501,13 +4499,16 @@
         // Recorded as the rename it is on each entity: `from` going, `to` arriving.
         var pass = journalPass(reversed ? label + ', undone' : label, true);
         if (pass) {
-          // As a rename on each entity - `from` going, `to` arriving - in slices.
-          journalSlices(pass, m.entities, function (e) {
-            return e.fields[from] !== undefined && hasOwn(written, e.spec.key + ':' + e.id);
-          }, false, function (e) {
-            return { spec: e.spec, id: e.id, display: e.display || e.label || '', name: from, to: to,
-              before: e.fields[from] };
-          })
+          // As a rename on each entity - `from` going, `to` arriving - in slices. Every
+          // change is built here, ahead of the move below: a slice built after it would
+          // find `from` gone from every entity and record nothing.
+          var renamed = [];
+          m.entities.forEach(function (e) {
+            if (e.fields[from] === undefined || !hasOwn(written, e.spec.key + ':' + e.id)) return;
+            renamed.push({ spec: e.spec, id: e.id, display: e.display || e.label || '', name: from, to: to,
+              before: e.fields[from] });
+          });
+          journalSlices(pass, renamed, function () { return true; }, false)
             .then(function (line) { if (line) self.msg('INFO', line); });
         }
         m.done = !reversed;
@@ -4552,6 +4553,13 @@
     write.then(function () {
       lease.release();
       if (back) {
+        // Recorded like the Apply it reverses: the store tag's name and description.
+        var pass = journalPass('Custom field descriptions, undone', false);
+        if (pass) {
+          pass.add('tags', self.tag.id, back.name, { id: self.tag.id, name: back.name, description: back.description },
+            { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
+          pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        }
         var parsed = parseStore(back.description);
         self.base = {};
         self.desc = {};

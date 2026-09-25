@@ -69,7 +69,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '2.2.4';
+  var PLUGIN_VERSION = '2.2.6';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -595,7 +595,7 @@
     // overlap, down to the hex values. They are separate strings because the plugins
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
-    // `tests/style.test.js` pins the overlap now, across all four. #202b33 is
+    // `.tests/style.test.js` pins the overlap now, across all four. #202b33 is
     // Blueprint's dark-gray2, the step Stash's own page uses; every dim grey in these
     // dialogs was chosen against it - the log's #a7b6c2 and #7d8f9c - and they separate
     // better on it than on the lighter #30404d.
@@ -744,7 +744,7 @@
     // `title` opens below-right of the pointer, exactly where the arrow sits, so its
     // first line arrives half covered, and its size cannot be reached from CSS.
     //
-    // These rules are shared with all three sibling plugins and `tests/style.test.js`
+    // These rules are shared with all three sibling plugins and `.tests/style.test.js`
     // compares them with the prefix stripped: keep them byte-identical, or change all
     // four together.
     '.tbc-tipped{position:relative;}' +
@@ -1721,7 +1721,7 @@
   // because Settings - Tasks heads *its* group with the same name and decorating it
   // would destroy the task button. This plugin declares no `tasks:`, so there is no
   // such group for the heading match to find; adding one means adding the guard, and
-  // `tests/tagclip.test.js` pins the pair together.
+  // `.tests/tagclip.test.js` pins the pair together.
   function ownSettingGroup() {
     var node = null, d;
     for (var key in DEFAULTS) {
@@ -2214,7 +2214,10 @@
   // after a save put the first tag on: the page re-renders, the bus fires, the tick
   // asks. The interval tick never asks, so a page nobody touches costs nothing. A read
   // that fails counts as tagged: the button shows and its click says what went wrong.
-  // The answer lives per entity, not on the button, since the button may not exist.
+  // The answer lives per entity, not on the button, since the button may not exist, and
+  // it stands while a re-probe is in flight - dropping it for the round trip drew the
+  // button into the row and took it out again every two seconds during playback. Only a
+  // page with somewhere to draw the button asks at all.
   var PROBE_MIN_MS = 2000;
   var _copyState = {};   // `type:id` -> { empty, at, probing }
 
@@ -2238,7 +2241,7 @@
 
   function copyEmpty(rt) {
     var st = _copyState[rt.type + ':' + rt.id];
-    return !!st && !st.probing && st.empty;
+    return !!st && st.empty;
   }
 
   function pasteTitle() {
@@ -2265,7 +2268,7 @@
     // The copy button, on the detail view.
     var copyBox = findCopyContainer();
     var copy = document.getElementById(COPY_BTN_ID);
-    probeCopy(rt, fromDom);
+    if (copyBox) probeCopy(rt, fromDom);
     if (copyBox && copyEmpty(rt)) {
       gateLogOnce('copy', ENTITIES[rt.type].label + ' ' + rt.id + ' carries no tags - "⮺ Tags" not shown');
       if (copy && copy.parentNode) copy.parentNode.removeChild(copy);

@@ -76,7 +76,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.2.0';
+  var PLUGIN_VERSION      = '4.2.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -600,8 +600,10 @@
 
   // Resolves to true when the scene's tags were updated, false when it was skipped
   // (excluded by a filter, or already carrying every performer tag).
-  function mergeTagsIntoScene(sceneId) {
-    return guarded(function () { return runMergeTagsIntoScene(sceneId); });
+  // `pass`, when given, is a run in Undo History the merge adds to and leaves open - a
+  // bulk edit's scenes are one run, finished by the caller once the last one is done.
+  function mergeTagsIntoScene(sceneId, pass) {
+    return guarded(function () { return runMergeTagsIntoScene(sceneId, pass); });
   }
 
   // Everything between "here is a scene" and "here is what it needs", extracted so
@@ -662,7 +664,7 @@
       ' tags { id } performers { tags { ' + tagFields() + ' } }';
   }
 
-  function runMergeTagsIntoScene(sceneId) {
+  function runMergeTagsIntoScene(sceneId, shared) {
     return resolveExclusionTagId().then(function (exclTagId) {
       return gqlRequest(
         'query FindScene($id: ID!) {' +
@@ -675,10 +677,10 @@
         if (!plan) return false;
         return updateSceneTags(sceneId, plan.existingIds.concat(plan.missing)).then(function () {
           logMerges(plan.missing.map(function (id) { return plan.tagById[id]; }), scene, sceneId, 'saved');
-          var pass = journalPass('Tags merged into one scene');
+          var pass = shared || journalPass('Tags merged into one scene');
           if (pass) {
             pass.entries([journalTags({ id: sceneId, title: scene.title, files: scene.files }, plan.missing, false)]);
-            pass.finish();
+            if (!shared) pass.finish();
           }
           return true;
         });
@@ -926,7 +928,7 @@
   // table rather than the three hand-kept lists this replaced - the unpacking below,
   // the tooltip list, and the pair of keys `ownSettingGroup` anchored on - because a
   // key missing from any one of them failed silently: no tooltip, or an anchor that a
-  // rename could quietly break. `tests/version.test.js` fails if the `.yml` declares a
+  // rename could quietly break. `.tests/version.test.js` fails if the `.yml` declares a
   // key this does not name.
   //
   // The a1/b2/d1 prefixes on the manifest keys are what orders the settings page:
@@ -1059,7 +1061,7 @@
     // first line arrives half covered. This one opens above the row in a readable
     // size, and - the part `title` could never do - on keyboard focus as well.
     //
-    // These rules are shared with NormalizeParentTags and `tests/style.test.js`
+    // These rules are shared with NormalizeParentTags and `.tests/style.test.js`
     // compares them with the prefix stripped: keep them byte-identical to that
     // plugin's, or change both together.
     '.cpt2s-tipped{position:relative;}' +
@@ -1091,8 +1093,8 @@
     // ── Colour-coded toggles ────────────────────────────────────────────────
     //
     // Amber for the switches that make this plugin write on its own - the two auto
-    // modes, which merge with no dialog and no undo, and the one that turns the
-    // scene button from staging tags for review into saving them - and teal for the
+    // modes, which merge with no dialog (only Undo History reverses them), and the one
+    // that turns the scene button from staging tags for review into saving them - and teal for the
     // one that only talks to the console. Every other setting keeps Stash's blue:
     // this marks the ones that are not like the rest, and marking everything would
     // mark nothing.
@@ -2332,7 +2334,8 @@
       // Recorded only once the server has taken it, so Undo can never try to reverse
       // a write that never landed. Only the tags this run added are kept: the scene's
       // own tags are none of Undo's business.
-      self.undoable.push({ scene: entry.scene, tagIds: entry.tagIds.slice() });
+      self.undoable.push({ scene: entry.scene, tagIds: entry.tagIds.slice(),
+        run: self.journalRun ? self.journalRun.id : null });
       if (self.journalRun) self.journalRun.entries([journalTags(entry.scene, entry.tagIds, false)]);
       self.wroteScenes[entry.scene.id] = true;
       self.scenesUpdated++;
@@ -2474,7 +2477,11 @@
         // exactly the scenes that still carry what this run added.
         var at = self.undoable.indexOf(entry);
         if (at !== -1) self.undoable.splice(at, 1);
-        if (self.journalRun) self.journalRun.entries([journalTags(entry.scene, entry.tagIds, true)]);
+        // Recorded from the pass that wrote it, reversed, so that run reads as undone in
+        // the history rather than staying live beside a second run that cancels it.
+        if (self.journalRun && entry.run) {
+          self.journalRun.reverse(entry.run, 'scenes', String(entry.scene.id));
+        }
         self.wroteScenes[entry.scene.id] = true;
         entry.tagIds.forEach(function (id) {
           self.undoneTagCounts[id] = (hasOwn(self.undoneTagCounts, id) ? self.undoneTagCounts[id] : 0) + 1;
@@ -2659,7 +2666,7 @@
     // `querySelector('h3')` answers with whichever plugin is listed first. A plugin
     // declaring a task by the same name as ours was therefore hijacked whenever we
     // happened to be above it, which is the one thing the heading check exists to
-    // stop. Found by the tasks-page check in `tests/placement.test.js`.
+    // stop. Found by the tasks-page check in `.tests/placement.test.js`.
     //
     // A group's first h3 is its heading: PluginTasks renders it in the header, above
     // the per-task `Setting` rows that each carry an h3 of their own - which is also
@@ -2764,13 +2771,15 @@
           mutationSucceeded(p).then(function (ok) {
             if (!ok) return;
             var i = 0;
+            var pass = journalPass('Tags merged into bulk-edited scenes');
             function nextScene() {
               if (i >= bulkSceneIds.length) {
+                if (pass) pass.finish();
                 refreshSceneList();
                 return;
               }
               var sid = String(bulkSceneIds[i++]);
-              mergeTagsIntoScene(sid)
+              mergeTagsIntoScene(sid, pass)
                 .catch(function (e) { console.error('[cpt2s] auto-merge bulk scene:', e); })
                 .then(nextScene);
             }

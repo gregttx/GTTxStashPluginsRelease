@@ -221,7 +221,7 @@ box empty until you change it.
 |---|---|---|
 | **Show Manual Buttons** | off | Draws the two [manual buttons](#usage), on the performer detail view and the scene Edit tab. |
 | **Save Immediately** | off | Makes the scene button review in a dialog instead of [staging into the form](#review-before-saving-in-scene-edit-tab-manual-merge). |
-| **Auto Merge when the Scene is Saved** | off | Whenever a scene is saved, its performers' tags are merged in, with no dialog and no undo. |
+| **Auto Merge when the Scene is Saved** | off | Whenever a scene is saved, its performers' tags are merged in, with no dialog; only ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history) can take it back. |
 | **Auto Merge when the Performer is Saved** | off | Whenever a performer is saved, their tags are merged into all of their scenes, the same way. |
 | **Exclude scenes carrying this tag** | empty | A scene carrying this tag is skipped — see [Exclusion filters](#exclusion-filters). |
 | **Exclude scenes marked as Organized** | off | A scene with Stash's Organized flag set is skipped. |
@@ -361,7 +361,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Merge Performer Tags into All Their Scenes | 271 MB | 293 MB | 282 MB |
+| Merge Performer Tags into All Their Scenes | 271 MB | 295 MB | 283 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->
