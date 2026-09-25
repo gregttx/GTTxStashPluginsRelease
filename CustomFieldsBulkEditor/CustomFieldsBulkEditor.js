@@ -14,7 +14,7 @@
 // nothing that runs on its own.
 //
 // The design notes, and the reasoning behind the parts that look arbitrary, are in
-// CLAUDE.md next to this file.
+// AGENTS.md next to this file.
 (function () {
   'use strict';
 
@@ -36,7 +36,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
+  var showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth,
     tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
@@ -55,7 +55,7 @@
   // The name the dialog head wears. The same string here, because this name already
   // fits in a title that goes on to name an entity type and a count - the constant
   // exists so that every head in the repo reads from one expression, not because
-  // every plugin has to shorten. See the repo-root CLAUDE.md, "one name prefix".
+  // every plugin has to shorten. See the repo-root AGENTS.md, "one name prefix".
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Custom Fields Bulk Editor';
 
   // The one version that proves anything. The settings page reads the manifest over
@@ -63,7 +63,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.5.4';
+  var PLUGIN_VERSION = '3.5.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -86,7 +86,7 @@
   // The one control this plugin draws into Stash's own UI, and the button that
   // writes, in amber. Stash's own menu items and row actions are neutral, and these
   // are not the same kind of thing: this one reaches out and rewrites every entity in
-  // a selection. See "one colour for a plugin wrote this" in the repo-root CLAUDE.md.
+  // a selection. See "one colour for a plugin wrote this" in the repo-root AGENTS.md.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
 
   var CHUNK_SIZE   = 100;   // entity ids per read alias batch and per bulk mutation
@@ -358,7 +358,7 @@
 
   // A bulk run announces itself for the duration of its writes, so a reactive plugin
   // in the same tab stands down rather than reacting to every entity we touch.
-  // Advisory, always expiring, per tab - see the repo-root CLAUDE.md.
+  // Advisory, always expiring, per tab - see the repo-root AGENTS.md.
   function acquireLease(label, ttl) {
     var c = coop();
     var ms = ttl || LEASE_TTL_MS;
@@ -447,6 +447,18 @@
     gqlRequest('mutation CFBE_SeedSettings($id: ID!, $input: Map!) ' +
       '{ configurePlugin(plugin_id: $id, input: $input) }',
     { id: PLUGIN_ID, input: input }).then(null, function () { _seeded = false; });
+  }
+
+  // Shown on Stash's settings page from its first paint, by the same rule (Core's
+  // `showDefaults`); the seed above is what writes them.
+  if (typeof showDefaults === 'function') {
+    showDefaults(PLUGIN_ID, function () {
+      var out = {};
+      for (var k in DEFAULTS) {
+        if (hasOwn(DEFAULTS, k) && typeof DEFAULTS[k] !== 'boolean' && DEFAULTS[k] !== '') out[k] = DEFAULTS[k];
+      }
+      return out;
+    });
   }
 
   // The effective value of one setting, out of the raw map: the same "absent means the
@@ -4613,7 +4625,7 @@
   // `plugin-<id>-<key>` element ids Stash builds from the plugin id and a setting
   // key - ours by construction - and keeps a heading match only as a fallback,
   // because two of them shipped broken twice on heading text (§6 of
-  // PropagateTagsAndPerformers' CLAUDE.md). A plugin that declares no settings has no
+  // PropagateTagsAndPerformers' AGENTS.md). A plugin that declares no settings has no
   // such ids to anchor on. So this is the fallback promoted to the only route, and it
   // is why `headingIsOurs` compares *exactly* rather than by prefix.
   function headingIsOurs(text) {
@@ -4731,7 +4743,7 @@
   //
   // Copied from the siblings, function for function, because there is no module
   // between these plugins - see the shared-dialog-chrome note in the repo-root
-  // CLAUDE.md. The summary stays on the row and everything after the first blank line
+  // AGENTS.md. The summary stays on the row and everything after the first blank line
   // goes into a box opened from the ⓘ, the summary or the setting's own name.
   var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
 
@@ -4996,7 +5008,7 @@
   // All six types rather than tags alone, for the reason the feature exists at all: a
   // plumbing entity is plumbing whatever its type.
   //
-  // **This is what made the plugin wrap `window.fetch`**, which §7 of its CLAUDE.md
+  // **This is what made the plugin wrap `window.fetch`**, which §7 of its AGENTS.md
   // said it never would. It still registers no `respecters` entry: it filters what a
   // *read* answers, and never reacts to anyone's write, so there is nothing for it to
   // stand down from while a sibling holds a lease.

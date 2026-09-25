@@ -19,7 +19,7 @@
 // filter type's own OR chain of INCLUDES criteria if a large library makes this slow.
 //
 // The design notes, and the reasoning behind the parts that look arbitrary, are in
-// CLAUDE.md next to this file.
+// AGENTS.md next to this file.
 (function () {
   'use strict';
 

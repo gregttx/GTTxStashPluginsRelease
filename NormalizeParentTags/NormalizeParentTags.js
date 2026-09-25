@@ -8,7 +8,7 @@
 // job could only fail), and a dialog runs the work over /graphql instead.
 //
 // The design notes, and the reasoning behind the parts that look arbitrary, are in
-// CLAUDE.md next to this file.
+// AGENTS.md next to this file.
 (function () {
   'use strict';
 
@@ -201,7 +201,7 @@
 
   // ── Cross-plugin cooperation ──────────────────────────────────────────────
   //
-  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root CLAUDE.md.
+  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root AGENTS.md.
   // A lease asks reactive plugins in this tab to stand down while we write. It is
   // advisory and always expires, so a crash cannot disable anyone permanently.
 
@@ -544,7 +544,7 @@
   // the same shape, copied from here. `CustomFieldsBulkEditor` had known it all along
   // and said so beside `followHideRename`; the knowledge stayed in one plugin
   // while two others copied the broken shape, which is why the rule is now in the
-  // repo-root CLAUDE.md rather than in a comment.
+  // repo-root AGENTS.md rather than in a comment.
   //
   // So: read the stored map, apply the patch to a copy, send the whole thing. The read
   // is per write rather than off the settings cache - a value another tab changed is a
@@ -2023,7 +2023,7 @@
     this.modesPanel = modesPanel(this.modes, function () { self.onModeChange(); });
     // Hidden for a scoped run rather than disabled: these selectors choose what a
     // *library* pass covers, and this pass covers one entity in the direction the button
-    // named. See "a control that steers a run" in the repo-root CLAUDE.md.
+    // named. See "a control that steers a run" in the repo-root AGENTS.md.
     if (!this.scope) head.appendChild(this.modesPanel.el);
     var line = el('div', 'npt-persist-line');
     line.appendChild(this.buildPersist());
@@ -4872,7 +4872,7 @@
   // A MutationObserver now, which this plugin did without for its whole life: a banner in
   // a settings panel can arrive a second late, and a button in the row the user is
   // already looking at cannot. Through the shared bus rather than an observer of its own -
-  // see "one MutationObserver" in the repo-root CLAUDE.md.
+  // see "one MutationObserver" in the repo-root AGENTS.md.
   var _busPending = null;
   function onMutation() {
     if (_busPending) return;

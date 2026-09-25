@@ -20,7 +20,7 @@
 //     metadata, archiving first; the template has its own editor on the settings page.
 //
 // All list what they would touch before anything is written, and Undo reverses what
-// the dialog wrote while it stays open. The design notes are in CLAUDE.md and NOTES.md
+// the dialog wrote while it stays open. The design notes are in AGENTS.md and NOTES.md
 // next to this file.
 (function () {
   'use strict';
@@ -37,7 +37,7 @@
     }
     return;
   }
-  var coop = C.coop, plural = C.plural, el = C.el, hasClass = C.hasClass, hasOwn = C.hasOwn,
+  var showDefaults = C.showDefaults, coop = C.coop, plural = C.plural, el = C.el, hasClass = C.hasClass, hasOwn = C.hasOwn,
     byClass = C.byClass, gqlRequest = C.gqlRequest, coreSettingElement = C.settingElement,
     coreSettingRow = C.settingRow, linkTarget = C.linkTarget, entityTip = C.entityTip,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, cfTipTick = C.cfTipTick,
@@ -51,7 +51,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '1.5.1';
+  var PLUGIN_VERSION = '1.5.2';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -154,6 +154,10 @@
     b4MaxNameBytes: NAME_BYTES_DEFAULT,
     b5MaxPathLength: PATH_AUTO,
   };
+
+  // Shown on Stash's settings page from its first paint, by the same rule (Core's
+  // `showDefaults`); `seedDefaults` below is what writes them.
+  if (typeof showDefaults === 'function') showDefaults(PLUGIN_ID, function () { return SEED_DEFAULTS; });
 
   // **Absent is seeded, present is answered** - even an empty box, which means the
   // default anyway. A saved template naming `base` or `postfix` is promoted to their new

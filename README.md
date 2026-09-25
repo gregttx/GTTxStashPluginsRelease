@@ -95,20 +95,20 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
 | SceneFilenameManager | Archive Original Filenames | 111 MB | 151 MB | 144 MB |
-| SceneFilenameManager | Restore Original Filenames | 53 MB | 74 MB | 74 MB |
-| SceneFilenameManager | Rename Files From Metadata | 191 MB | 248 MB | 239 MB |
-| SceneVariants | Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
-| SceneVariants | Flag Variants | 46 MB | 88 MB | 81 MB |
-| SceneVariants | Review Variant Sets | 1948 MB | — | — |
+| SceneFilenameManager | Restore Original Filenames | 52 MB | 74 MB | 74 MB |
+| SceneFilenameManager | Rename Files From Metadata | 191 MB | 251 MB | 239 MB |
+| SceneVariants | Migrate Variant Stash-IDs | 58 MB | 91 MB | 91 MB |
+| SceneVariants | Flag Variants | 46 MB | 86 MB | 81 MB |
+| SceneVariants | Review Variant Sets | 1949 MB | — | — |
 | SceneVariants | Rename Variants | 635 MB | 646 MB | 646 MB |
 | CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1149 MB | 1148 MB |
 | CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 267 MB | 267 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1737 MB | 1524 MB |
-| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4144 MB | 4042 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 769 MB | 1734 MB | 1524 MB |
+| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4147 MB | 4042 MB |
 | NormalizeParentTags | Auto Mode Settings | 0 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
-| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 268 MB | 293 MB | 282 MB |
-| PropagateTagsAndPerformers | Propagate All | 1757 MB | 1800 MB | 1782 MB |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 293 MB | 282 MB |
+| PropagateTagsAndPerformers | Propagate All | 1779 MB | 1821 MB | 1804 MB |
 
 A task gives all of it back when its dialog is closed.
 <!-- memory:end -->
@@ -117,13 +117,13 @@ A task gives all of it back when its dialog is closed.
 
 | | |
 |---|---|
-| `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `CLAUDE.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
+| `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `AGENTS.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
 | `GTTxCore/` | the shared half every other plugin binds at load, and requires |
 | `tests/` | `node tests/run.js` (or `npm test`). See [tests/README.md](tests/README.md) |
 | `tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See [tools/README.md](tools/README.md) |
 | `RELEASES.md` | every release of every plugin, one row per commit. **Generated** |
 | `MEMORY.md` | what every task holds in memory against 100,000 scenes and 1,000,000 images. **Generated** by `node tools/memory-watermark.js`; a release waits for it |
-| `CLAUDE.md` | the rules, one table per kind — the onboarding document |
+| `AGENTS.md` | the rules, one table per kind — the onboarding document |
 | `docs/` | the reasoning behind each rule (`decisions/`), and dated readings of Stash's source (`stash-reference.md`) |
 
 ## Contributing
@@ -140,7 +140,7 @@ A task gives all of it back when its dialog is closed.
   cannot name the commit that adds it.
 - **READMEs and source describe the plugin, not its history.** No "since 1.2.0" in either; that
   argument belongs in the plugin's own `NOTES.md`, which does not ship.
-- **Read [CLAUDE.md](CLAUDE.md) before adding a button, a dialog or a shared block.** Nearly every
+- **Read [AGENTS.md](AGENTS.md) before adding a button, a dialog or a shared block.** Nearly every
   rule in it exists because something here guessed about Stash's markup and was wrong.
 - **Releasing to the public mirror goes through `node tools/release-drop.js`**, which
   copies an allowlist - never a denylist - and scans every staged file before it writes

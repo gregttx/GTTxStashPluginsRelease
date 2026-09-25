@@ -223,13 +223,21 @@ beside Settings.
 
 - **The list** shows the history newest first, a run a row: when, who — *Your edit*, a plugin, or an
   *Undo* — what, and how many changes. Click a row for its changes: the entity, with its hover card,
-  the field, and the value before and after. Tags, performers, studios, groups and the other related
+  the field, and the value before and after; a custom field is named in teal, with the box its
+  name opens elsewhere. Tags, performers, studios, groups and the other related
   entities are named with their id — `+Blonde (105)` — each a link with its hover card. The list
   says what the change did; the review and the undo's result say what the undo does, so the same
   change reads `−Blonde (105)` there. Filter by text, type, who, and a range of days.
 - **Undo Selected...** — tick runs or single changes, then press it. Every ticked change is checked
   against what your library holds now, and the list says which can be undone and which are skipped,
-  before anything is written. **Proceed** writes it.
+  before anything is written. **Proceed** writes it. **back to here**, at the end of a run's row,
+  ticks that run and every newer one, to take the library back to before it.
+- **Take it out of the history**, ticked in the review before Proceed, makes the undo a *pop*: what
+  it undoes leaves the history instead of an undo run joining it, so the history reads as it did
+  before those changes. It cannot then be redone from here. A change and the undo of it, both
+  ticked, cancel out: nothing is written, and a pop takes both out.
+- **Delete Selected...** takes the ticked runs and changes out of the history — test runs, say —
+  without touching your library. It asks twice.
 - **A change is undone only while its field still holds what was written.** Anything else — a later
   edit by hand, in another browser, by a Stash task — makes it *changed since*, and it is skipped
   rather than overwritten. A later edit to a *different* field of the same entity does not stop it.
@@ -250,8 +258,8 @@ What is recorded and what is not:
 |---|---|
 | every write a ᝯㄝₓ plugin makes, as it lands | edits made in another browser or on another device |
 | edits you save in Stash's own pages in this browser — edit forms and bulk edits of scenes, images, galleries, performers, studios, groups and tags, and creating one | Stash's own tasks: Scan, Identify, Auto Tag, Clean |
-| | scripts using Stash's API |
-| | deletes and merges (they cannot be undone yet) |
+| deleting a tag, performer, studio, group or scene, and merging tags — undone by creating it again under a new id and putting it back on what still carries it; older changes naming the old id follow it to the new one | scripts using Stash's API |
+| deleting an image or a gallery, or a scene with its files, and merging scenes — recorded, not undone: the review says why | a scene's play history and O-count, markers and pictures, which a delete takes for good |
 | | a cover image, a picture or a stash-id in a save — the run says so |
 
 To record an edit of yours, the entity is read just before Stash saves it and again just after, so
@@ -268,6 +276,7 @@ goes through and the history shows a gap there.
 | Record Edits Made in Stash's Pages | on | |
 | Record Library-Wide Image Writes | off | a pass over a million images would crowd everything else out |
 | Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
+| Record Deletes and Merges | on | keeps what a delete or a tag merge takes away, so it can be put back; a delete of something large reads a lot first |
 
 The history lives in this browser's own storage, per browser and per device, and goes if you clear
 this site's data. The dialog says how much it holds, how old the oldest run is, whether the browser

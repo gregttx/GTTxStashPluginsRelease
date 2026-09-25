@@ -284,10 +284,12 @@ listed.` A set's score is worked out again as soon as a write or an Undo in its 
 Open a set and pick the scene whose values are right — that one radio picks the set *and* the
 source, because they are one decision — then press **Synchronize Set from Selected...**, which sits
 before Proceed. One set is open at a time: opening one closes the others and sorts the list again
-by score. A set opens with its first scene picked, and a set you opened before comes back with the
+by score. **Next Set**, after Proceed, opens the set below the open one — the first where none is
+open, and the first again after the last. A set opens with its first scene picked, and a set you opened before comes back with the
 scene you last picked in it. What follows is exactly
 the plan the tab's own button produces: one checkbox line per difference, adds and replaces, the
-All boxes, the ▸ pickers, and nothing written until **Proceed**. Each press of **Synchronize
+All boxes, the ▸ pickers, every tag, performer, group and studio named with its hover card, and
+nothing written until **Proceed**. Each press of **Synchronize
 Set from Selected...** re-reads that set's scenes first, so a second source picked out of a set you have just
 written to is planned from what the library holds now rather than from what the scan saw. The
 set's drift score and counts are restated on the line they are already drawn on — **the listing does not
@@ -636,9 +638,9 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
-| Flag Variants | 46 MB | 88 MB | 81 MB |
-| Review Variant Sets | 1948 MB | — | — |
+| Migrate Variant Stash-IDs | 58 MB | 91 MB | 91 MB |
+| Flag Variants | 46 MB | 86 MB | 81 MB |
+| Review Variant Sets | 1949 MB | — | — |
 | Rename Variants | 635 MB | 646 MB | 646 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.

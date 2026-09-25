@@ -239,8 +239,8 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Archive Original Filenames | 111 MB | 151 MB | 144 MB |
-| Restore Original Filenames | 53 MB | 74 MB | 74 MB |
-| Rename Files From Metadata | 191 MB | 248 MB | 239 MB |
+| Restore Original Filenames | 52 MB | 74 MB | 74 MB |
+| Rename Files From Metadata | 191 MB | 251 MB | 239 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

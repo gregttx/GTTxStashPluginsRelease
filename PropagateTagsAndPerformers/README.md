@@ -630,7 +630,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1757 MB | 1800 MB | 1782 MB |
+| Propagate All | 1779 MB | 1821 MB | 1804 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

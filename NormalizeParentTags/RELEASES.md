@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.6.1 (`c86266d`) | 2026-09-24 | Live-check fixes across Core, Scene Variants, Filename Manager, CFBE and NPT |
 | 5.6.0 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |
 | 5.5.6 (`021a16c`) | 2026-09-22 | Core 2.6.0 and eight plugins: Log Lines Kept, and the memory figures in the READMEs |
 | 5.5.5 (`69afdae`) | 2026-09-22 | Core 2.5.0 and seven plugins: a run's log is bounded |

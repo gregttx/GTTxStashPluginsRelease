@@ -23,7 +23,7 @@
 // filter type's own OR chain of INCLUDES criteria if a large library makes this slow.
 //
 // The design notes, and the reasoning behind the parts that look arbitrary, are in
-// CLAUDE.md next to this file.
+// AGENTS.md next to this file.
 (function () {
   'use strict';
 
@@ -45,7 +45,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
+  var showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.5.1';
+  var PLUGIN_VERSION = '2.5.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -97,7 +97,7 @@
   var STALE_ID       = 'enm-stale-notice';
 
   // Amber for the buttons that write, and for the filter toggles while they are on.
-  // See "one colour for a plugin wrote this" in the repo-root CLAUDE.md.
+  // See "one colour for a plugin wrote this" in the repo-root AGENTS.md.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
 
   var READ_PAGE    = 500;    // entities per page of the scan
@@ -376,7 +376,7 @@
 
   // A bulk run announces itself for the duration of its writes, so a reactive plugin in
   // the same tab stands down rather than reacting to every entity we touch. Advisory,
-  // always expiring, per tab - see the repo-root CLAUDE.md.
+  // always expiring, per tab - see the repo-root AGENTS.md.
   function acquireLease(label, ttl) {
     var c = coop();
     var ms = ttl || LEASE_TTL_MS;
@@ -453,7 +453,7 @@
   //
   // The **whole** map goes back, not just the keys being seeded: `configurePlugin`
   // replaces a plugin's configuration rather than merging into it (§`configurePlugin`
-  // in the repo-root CLAUDE.md), so a partial input deletes every setting it does not
+  // in the repo-root AGENTS.md), so a partial input deletes every setting it does not
   // name. Silent on failure - a settings write nobody asked for must not put an error
   // in front of someone who came here to rename a tag.
   var _seeded = false;
@@ -474,6 +474,16 @@
     gqlRequest('mutation ENM_SeedSettings($id: ID!, $input: Map!) ' +
       '{ configurePlugin(plugin_id: $id, input: $input) }',
     { id: PLUGIN_ID, input: input }).then(null, function () { _seeded = false; });
+  }
+
+  // Shown on Stash's settings page from its first paint, by the same rule (Core's
+  // `showDefaults`); the seed above is what writes them.
+  if (typeof showDefaults === 'function') {
+    showDefaults(PLUGIN_ID, function () {
+      var out = {};
+      for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k) && typeof DEFAULTS[k] !== 'boolean') out[k] = DEFAULTS[k];
+      return out;
+    });
   }
 
   // ── Styles ────────────────────────────────────────────────────────────────

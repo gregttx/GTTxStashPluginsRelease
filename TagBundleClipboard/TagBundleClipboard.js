@@ -13,7 +13,7 @@
 // undo, no lease to take and nothing to stand a reactive plugin down for.
 //
 // The design notes, and the reasoning behind the parts that look arbitrary, are in
-// CLAUDE.md next to this file.
+// AGENTS.md next to this file.
 (function () {
   'use strict';
 
@@ -2020,7 +2020,7 @@
   // ── Where a button goes ───────────────────────────────────────────────────
   //
   // All of this is ported from PropagateTagsAndPerformers, which spent six releases
-  // getting it right against a live Stash. The reasoning is in the repo-root CLAUDE.md
+  // getting it right against a live Stash. The reasoning is in the repo-root AGENTS.md
   // under "Placing a manual button near Stash's own actions" and "deterministic button
   // ordering"; what follows is a copy, not a redesign, and the comments kept here are
   // the ones that would otherwise invite one.

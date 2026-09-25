@@ -8,6 +8,9 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.5.4 (`c86266d`) | 2026-09-24 | Live-check fixes across Core, Scene Variants, Filename Manager, CFBE and NPT |
+| 3.5.3 (`dd42885`) | 2026-09-23 | CustomFieldsBulkEditor 3.5.3: the field rename's history built a slice at a time |
+| 3.5.2 (`6d0c32c`) | 2026-09-23 | Undo History: a dialog's Undo is recorded from the history; no copies kept |
 | 3.5.1 (`af8d8e3`) | 2026-09-23 | Undo History, step 2: every writing plugin records; the memory tool counts it |
 | 3.5.0 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |
 | 3.4.6 (`8b7048d`) | 2026-09-23 | Revert the Apollo-client change; Locked Custom Fields is display-only |

@@ -158,7 +158,7 @@
 
   // ── Cross-plugin cooperation ──────────────────────────────────────────────
   //
-  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root CLAUDE.md.
+  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root AGENTS.md.
   // This plugin is on both sides of the protocol.
   //
   // Reactive: another plugin rewriting many entities on purpose (NormalizeParentTags)
@@ -240,7 +240,7 @@
   // via its buttons at minimum, whatever its auto-merge settings say. `declares` is
   // the N-way registry `PropagateTagsAndPerformers` (a later, generalised sibling
   // that implements the same path among thirteen) reads to warn about redundant
-  // work - see the repo-root CLAUDE.md. The id matches its own path table exactly,
+  // work - see the repo-root AGENTS.md. The id matches its own path table exactly,
   // by agreement rather than by any shared code: the two plugins carry no shared
   // module, so the string `'tags:performer>scene'` is the entire contract.
   coop().declares[PLUGIN_ID] = ['tags:performer>scene'];
@@ -1209,7 +1209,7 @@
   // Stash orders tags by COALESCE(sort_name, name) under its NATURAL_CI collation:
   // case-insensitive, with numeric runs compared as numbers so "Volume 2" precedes
   // "Volume 10". Same rule as NormalizeParentTags' summary line - see §3 of its
-  // CLAUDE.md. Intl.Collator is the browser's nearest equivalent; without Intl this
+  // AGENTS.md. Intl.Collator is the browser's nearest equivalent; without Intl this
   // degrades to a case-insensitive compare, and the id tie-break keeps the order
   // total either way.
   var taskCollate = (function () {
@@ -1394,7 +1394,7 @@
   // runs the one before it — and every version Stash renders comes from that
   // manifest. Comparing the
   // two is the only way the script can notice it is the stale one. The sibling has
-  // the same check; see its §5 for the reasoning, and the repo-root CLAUDE.md for
+  // the same check; see its §5 for the reasoning, and the repo-root AGENTS.md for
   // why the two are separate implementations.
   //
   // Resolves to null wherever the answer is unknown - a Stash too old for the field,
@@ -3338,7 +3338,7 @@
   // setting key - `plugin-MergePerformerTagsToScenes-a1ShowManualMergeButtons` - so
   // it is ours by construction, with no heading text to match and nothing formatted
   // for display. Finding one is also what says the plugins settings page is showing.
-  // See §2 of NormalizeParentTags' CLAUDE.md: matching the heading instead shipped
+  // See §2 of NormalizeParentTags' AGENTS.md: matching the heading instead shipped
   // broken twice over there.
   function ownSettingGroup() {
     var node = null, d, key;
@@ -3472,7 +3472,7 @@
   // ── Settings verbosity: a summary on the page, the rest on hover ──────────
   //
   // A description written as "summary\n\ndetail" shows only its first paragraph,
-  // with the rest moved into a tooltip. The sibling plugin's CLAUDE.md §6 carries
+  // with the rest moved into a tooltip. The sibling plugin's AGENTS.md §6 carries
   // the full reasoning; the parts that matter here:
   //
   // Stash's own Setting renders `<h3 title={tooltip}>` (Inputs.tsx), but

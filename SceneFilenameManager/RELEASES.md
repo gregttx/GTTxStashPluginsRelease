@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 1.5.1 (`c86266d`) | 2026-09-24 | Live-check fixes across Core, Scene Variants, Filename Manager, CFBE and NPT |
 | 1.4.0 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |
 | 1.3.1 (`3ddf739`) | 2026-09-23 | SceneFilenameManager 1.3.1: Rescan clears the log |
 | 1.3.0 (`abac2e3`) | 2026-09-23 | SceneFilenameManager 1.3.0: files already named are listed as SAME, with a filter box |

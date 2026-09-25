@@ -11,7 +11,7 @@
 // the task dialog's Undo, taking back what that same dialog wrote.
 //
 // The design notes, and the reasoning behind the parts that look arbitrary, are in
-// CLAUDE.md next to this file.
+// AGENTS.md next to this file.
 (function () {
   'use strict';
 
@@ -33,7 +33,7 @@
     }
     return;
   }
-  var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
+  var showDefaults = C.showDefaults, stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
     coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.3.0';
+  var PLUGIN_VERSION = '5.3.1';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -263,7 +263,7 @@
   //   target    a TARGETS key - the entity written to
   //   sourceType  what the walk lands on. Where it is itself a TARGETS key, an
   //             earlier stage may have *planned* additions to it that this stage
-  //             must see - see `plannedFor` and the cascade note in CLAUDE.md.
+  //             must see - see `plannedFor` and the cascade note in AGENTS.md.
   //   walk      field names from the target down to whatever carries the payload.
   //             Steps may be objects or arrays (`studio` is one, `performers` is
   //             many) and the walk handles both rather than annotating which.
@@ -338,7 +338,7 @@
 
     // Stage 6 - the reverses, distributing what the stages above gathered. Both
     // close a cycle with a path already in the table, which is why the per-entity
-    // cooldown above exists; see CLAUDE.md.
+    // cooldown above exists; see AGENTS.md.
     { id: 'tags:group>scene', kind: 'tags', stage: 6, hops: 1,
       target: 'scene', sourceType: 'group',
       source: 'Groups', button: 'Add all Tags from all Groups',
@@ -1239,7 +1239,7 @@
 
   // ── Cross-plugin cooperation ──────────────────────────────────────────────
   //
-  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root CLAUDE.md.
+  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root AGENTS.md.
   // A lease asks reactive plugins in this tab to stand down while we write. It is
   // advisory and always expires, so a crash cannot disable anyone permanently.
   //
@@ -1522,6 +1522,18 @@
     // field is the sibling's, and documenting ours while theirs is configured would file
     // a sentence against a field nothing here reads.
     if (s[F4_KEY] === F4_DEFAULT) describeExclusionField();
+  }
+
+  // Shown on Stash's settings page from its first paint, by the same rule (Core's
+  // `showDefaults`); `saveInitialSettings` is what writes them. The sibling's exclusion filters win, as they do there.
+  if (typeof showDefaults === 'function') {
+    showDefaults(PLUGIN_ID, function (raw, all) {
+      var out = {}, k;
+      out[F4_KEY] = F4_DEFAULT;
+      var adopted = importSiblingExclusions({}, raw, all[MPTTS_ID]) || {};
+      for (k in adopted) if (hasOwn(adopted, k)) out[k] = adopted[k];
+      return out;
+    });
   }
 
   // Feature-detected, never version-checked: the number on the entry is for a log line,
@@ -6726,7 +6738,7 @@
   // a .js that was never copied into the plugin folder - Stash renders the whole
   // description exactly as it did before, instead of showing a raw marker.
   //
-  // The reasoning in full is in §6 of NormalizeParentTags' CLAUDE.md; this is the
+  // The reasoning in full is in §6 of NormalizeParentTags' AGENTS.md; this is the
   // third copy of one design, and `tests/style.test.js` pins the CSS across all
   // three.
   var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
@@ -7894,7 +7906,7 @@
   // tags in". This is the other direction: a button on the *source's* own page -
   // "push my tags out to every scene/group/etc. I reach" - matching MergePerformerTagsToScenes'
   // own performer-page button rather than the selection-menu alternative discussed
-  // and deferred (see CLAUDE.md). Eleven of the thirteen paths qualify: the two
+  // and deferred (see AGENTS.md). Eleven of the thirteen paths qualify: the two
   // marker paths are deliberately absent, because a SceneMarker has no detail page of
   // its own to put a button on - it lives inside a scene's Markers tab.
   //
@@ -7981,7 +7993,7 @@
   // MergePerformerTagsToScenes' own performer button already depends on exactly this
   // container. Confirmed live only for Group (via the edit-container fallback's own
   // rejected half) and, through that plugin's precedent, for Performer; Studio,
-  // Scene, Gallery and Image are the same guess, unverified - see CLAUDE.md.
+  // Scene, Gallery and Image are the same guess, unverified - see AGENTS.md.
   function findDetailContainer() {
     var candidates = document.querySelectorAll('.details-edit');
     for (var i = 0; i < candidates.length; i++) {
@@ -8350,7 +8362,7 @@
   //     auto-mode settings**: these caches decide whether a button appears, and a scene
   //     that just gained a performer has to gain its button whether or not auto mode is
   //     also configured to react. `MergePerformerTagsToScenes` learned this one first
-  //     and its CLAUDE.md §3 says the same thing about not tidying it into the auto
+  //     and its AGENTS.md §3 says the same thing about not tidying it into the auto
   //     conditions.
   //   - `runAutoTargets`, because an auto reaction writes *after* the save that
   //     triggered it. Invalidating only at the mutation would re-probe against the

@@ -10,6 +10,10 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SFM | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-24 | 3.5.4 (`c86266d`) |  |  | 3.0.0 (`c86266d`) |  | 5.6.1 (`c86266d`) |  | 1.5.1 (`c86266d`) | 2.0.0 (`c86266d`) |  | Live-check fixes across Core, Scene Variants, Filename Manager, CFBE and NPT |
+| 2026-09-23 | 3.5.3 (`dd42885`) |  |  |  |  |  |  |  |  |  | CustomFieldsBulkEditor 3.5.3: the field rename's history built a slice at a time |
+| 2026-09-23 | 3.5.2 (`6d0c32c`) | 2.5.1 (`6d0c32c`) | 3.3.1 (`6d0c32c`) | 2.10.6 (`6d0c32c`) |  |  |  |  |  |  | Undo History: a dialog's Undo is recorded from the history; no copies kept |
+| 2026-09-23 |  |  |  | 2.10.5 (`bdd2e48`) |  |  |  |  |  |  | Core 2.10.5: a pass is written in chunks as it goes |
 | 2026-09-23 | 3.5.1 (`af8d8e3`) | 2.5.0 (`af8d8e3`) |  | 2.10.4 (`af8d8e3`) |  |  | 5.3.0 (`af8d8e3`) |  | 1.22.0 (`af8d8e3`) |  | Undo History, step 2: every writing plugin records; the memory tool counts it |
 | 2026-09-23 | 3.5.0 (`7ee2847`) |  | 3.3.0 (`7ee2847`) | 2.10.3 (`7ee2847`) | 4.2.0 (`7ee2847`) | 5.6.0 (`7ee2847`) |  | 1.4.0 (`7ee2847`) |  |  | Undo History, step 2: five plugins record their writes |
 | 2026-09-23 |  |  |  | 2.10.2 (`527582f`) |  |  |  |  |  |  | Core 2.10.2: the Undo History dialog, its Tasks entry and top-bar button |

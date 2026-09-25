@@ -21,7 +21,7 @@
 // Synchronize Variants button, and the offer that follows a save in the scene's edit
 // form. Every write takes a lease and is undoable while its dialog stays open.
 //
-// The rules this file follows are in CLAUDE.md next to it; the reasoning behind the
+// The rules this file follows are in AGENTS.md next to it; the reasoning behind the
 // parts that look arbitrary is in NOTES.md.
 (function () {
   'use strict';
@@ -44,7 +44,7 @@
     }
     return;
   }
-  var coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
+  var showDefaults = C.showDefaults, coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
     entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick, cfTipMark = C.cfTipMark,
@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '2.0.0';
+  var PLUGIN_VERSION = '2.0.3';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -101,7 +101,7 @@
   var SETTINGS_TTL_MS = 10000;   // settings are re-read at most this often
 
   // The migration task writes, so it takes a lease for the duration - see the repo-root
-  // CLAUDE.md. Sized to the work: a library-wide pass over every tagged scene is minutes,
+  // AGENTS.md. Sized to the work: a library-wide pass over every tagged scene is minutes,
   // and the lease is renewed per batch rather than taken once for all of it.
   var LEASE_TTL_MS = 120000;
   var READ_PAGE  = 500;          // scenes per scan query
@@ -369,7 +369,7 @@
 
   // A bulk run announces itself for the duration of its writes, so a reactive plugin in
   // the same tab stands down rather than reacting to every entity we touch. Advisory,
-  // always expiring, per tab - see the repo-root CLAUDE.md.
+  // always expiring, per tab - see the repo-root AGENTS.md.
   function acquireLease(label, ttl) {
     var c = coop();
     var ms = ttl || LEASE_TTL_MS;
@@ -475,7 +475,7 @@
   // **The whole stored map goes back.** `configurePlugin` replaces `plugins.<id>` rather
   // than merging into it, so a mutation naming one key deletes every other setting the
   // plugin has - which is what cost this repo two users' configurations before the rule
-  // was written down in the root `CLAUDE.md`.
+  // was written down in the root `AGENTS.md`.
   //
   // **Its own operation name**, so a plugin watching for its own settings change can tell
   // this apart from one: what it writes is what `loadSettings` has already returned.
@@ -497,6 +497,10 @@
     e3BaseNameField: BASE_FIELD_DEFAULT,
     e4NoRenameField: SKIP_FIELD_DEFAULT,
   };
+
+  // Shown on Stash's settings page from its first paint, by the same rule (Core's
+  // `showDefaults`); `seedFieldDefault` below is what writes them.
+  if (typeof showDefaults === 'function') showDefaults(PLUGIN_ID, function () { return SEED_DEFAULTS; });
 
   function seedFieldDefault(raw, s) {
     if (_seededField) return;
@@ -1347,6 +1351,9 @@
     this.syncSetBtn.className =
       this.syncSetBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.closeBtn = button('Close', 'svr-close');
+    // Reads nothing and writes nothing: it opens the set below the open one.
+    this.nextSetBtn = button('Next Set', 'svr-nextset svr-hidden');
+    this.nextSetBtn.className = this.nextSetBtn.className.replace('btn-secondary', 'btn-info');
     this.copyBtn = button('Copy log', 'svr-copy');
     // Grey: it reads the library again and writes nothing. Hidden while anything is
     // in flight, like Stop's mirror image - a second scan started over a running one
@@ -1362,6 +1369,7 @@
     this.groupBtn.addEventListener('click', function () { self.actCandidates(true); });
     this.untagBtn.addEventListener('click', function () { self.actCandidates(false); });
     this.syncSetBtn.addEventListener('click', function () { self.planSet(); });
+    this.nextSetBtn.addEventListener('click', function () { self.nextSet(); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
@@ -1379,7 +1387,7 @@
     this.unselAllBtn.title = 'Untick every [GROUP?] line still open.';
     this.selAllBtn.addEventListener('click', function () { self.tickCandidates(true); });
     this.unselAllBtn.addEventListener('click', function () { self.tickCandidates(false); });
-    [this.syncSetBtn, this.goBtn, this.stopBtn, this.candLabel, this.groupBtn, this.untagBtn,
+    [this.syncSetBtn, this.goBtn, this.stopBtn, this.nextSetBtn, this.candLabel, this.groupBtn, this.untagBtn,
       this.candSep, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn,
       this.selAllBtn, this.unselAllBtn]
       .forEach(function (b) { foot.appendChild(b); });
@@ -1688,6 +1696,7 @@
       this.sourceSet = back ? opened : null;
     }
     this.setsEl.textContent = '';
+    this.setOrder = order;
     order.forEach(function (set) {
       var head = el('div', 'svr-line svr-set');
       var isOpen = set === opened;
@@ -1989,10 +1998,30 @@
             ? 'This set is already listed below.'
             : '';
     this.syncSetBtn.disabled = !!why;
+    this.show(this.nextSetBtn, true);
+    var nextWhy = busy ? 'Let the pass finish, or stop it, before moving on.'
+      : this.sets.length < 2 && this.openKey ? 'This is the only set.' : '';
+    this.nextSetBtn.disabled = !!nextWhy;
+    this.nextSetBtn.title = nextWhy || (this.openKey
+      ? 'Close this set and open the one below it in the list, the first after the last.'
+      : 'Open the first set in the list.');
     this.syncSetBtn.title = why || ('List what would be pushed from the selected scene, "' +
       (this.source.title || ('Scene ' + this.source.id)) + '", to the ' +
       plural(this.sourceSet.scenes.length - 1, 'other scene') + ' in its set. The selection ' +
       'then moves to the next scene in the set.');
+  };
+
+  // The set below the open one in the list as it is drawn, the first after the last, or
+  // the first where none is open - opened as its ▸ would, with its scene picked.
+  Run.prototype.nextSet = function () {
+    if (this.state !== 'listing' || !this.setOrder || !this.setOrder.length) return;
+    var order = this.setOrder, at = -1, self = this;
+    order.forEach(function (set, i) { if (set.key === self.openKey) at = i; });
+    var next = order[(at + 1) % order.length];
+    this.openKey = next.key;
+    this.renderSets(false);
+    this.syncFooter();
+    if (next.headEl && next.headEl.scrollIntoView) next.headEl.scrollIntoView({ block: 'nearest' });
   };
 
   Run.prototype.syncCandidates = function () {
@@ -2089,7 +2118,8 @@
       var tailEl = el('span', null);
       var text = '';
       parts.forEach(function (part) {
-        tailEl.appendChild(el('span', part[1] || null, part[0]));
+        // A part naming entities (`part[2]`) draws each name with its hover card.
+        tailEl.appendChild(part[2] ? entityNames(part[2], part[1]) : el('span', part[1] || null, part[0]));
         text += part[0];
       });
       tail = text;
@@ -2109,6 +2139,24 @@
     this.appendLine(line, head + name + tail, sub);
     this.jobs.push(job);
   };
+
+  // `[{ type, id, name }]` as one span of names, each with the hover card every name in
+  // these dialogs carries.
+  function entityNames(list, cls) {
+    var span = el('span', cls || null);
+    list.forEach(function (x, i) {
+      if (i) span.appendChild(el('span', null, ', '));
+      var n = el('span', 'svr-ename', x.name);
+      if (x.id != null) entityTip(n, x.type, String(x.id));
+      span.appendChild(n);
+    });
+    return span;
+  }
+  // A part of a line's tail that names entities: the text Copy log keeps, and the list.
+  function namesPart(list, cls) {
+    var sorted = list.slice().sort(function (a, b) { return String(a.name) < String(b.name) ? -1 : String(a.name) > String(b.name) ? 1 : 0; });
+    return [sorted.map(function (x) { return x.name; }).join(', '), cls, sorted];
+  }
 
   // The click-open sub-list on an additive line: one checkbox per tag or performer,
   // so a press can push some of what a variant is missing without pushing all of it.
@@ -2134,11 +2182,13 @@
     // an add line or a remove line, so which one is the job's verb.
     function tailPaint() {
       var t = tailText(), at = t.indexOf(': ');
-      tailEl.textContent = '';
+      while (tailEl.firstChild) tailEl.removeChild(tailEl.firstChild);
       if (at === -1) { tailEl.appendChild(el('span', null, t)); return; }
       tailEl.appendChild(el('span', null, t.slice(0, at + 2)));
-      tailEl.appendChild(el('span',
-        job.verb === 'Remove' ? 'svr-del' : 'svr-add', t.slice(at + 2)));
+      var names = namesPart(pickedItems(job).map(function (it) {
+        return { type: job.tipType, id: it.id, name: it.name };
+      }))[2];
+      tailEl.appendChild(entityNames(names, job.verb === 'Remove' ? 'svr-del' : 'svr-add'));
     }
 
     toggle.addEventListener('click', function () {
@@ -2390,6 +2440,7 @@
     this.show(this.weightBar, false);
     this.show(this.allBar, false);
     this.show(this.syncSetBtn, false);
+    this.show(this.nextSetBtn, false);
     this.show(this.candLabel, false);
     this.show(this.groupBtn, false);
     this.show(this.untagBtn, false);
@@ -3571,7 +3622,13 @@
       }
       if (String(sv == null ? '' : sv) === String(tv == null ? '' : tv)) return;
       if (a.key === 'title' && run.expected && hasOwn(run.expected, String(target.id))) run.ruledTitles = (run.ruledTitles || 0) + 1;
-      var ops = valueDiffOps(tv, sv);
+      // A studio is a name with a card, never a diff of two names.
+      var studioOf = function (sc) { return sc.studio ? [{ type: 'studios', id: String(sc.studio.id), name: sc.studio.name || ('id ' + sc.studio.id) }] : null; };
+      var ops = a.key === 'studio' ? null : valueDiffOps(tv, sv);
+      var studioParts = a.key === 'studio'
+        ? [studioOf(target) ? namesPart(studioOf(target), 'svr-del') : [syncValShow(tv), 'svr-del'], [' \u2192 ', 'svr-mod'],
+          studioOf(source) ? namesPart(studioOf(source), 'svr-add') : [syncValShow(sv), 'svr-add']]
+        : null;
       // Unticked, every one of them: an add only ever adds, while a replace
       // overwrites the variant's own value, so a replace is opted into rather than
       // out of. The All boxes are what keep that from costing a click per line.
@@ -3589,9 +3646,9 @@
       // one opening sentence are identical and say nothing about the edit. The
       // tooltip is the same diff unelided, so hovering says what changed rather than
       // handing back two paragraphs to compare.
-      [['  ' + a.label + ': ', null]].concat(ops ? valueDiffParts(ops)
+      [['  ' + a.label + ': ', null]].concat(studioParts || (ops ? valueDiffParts(ops)
         : [[syncValShow(tv), 'svr-del'], [' \u2192 ', 'svr-mod'],
-          [syncValShow(sv), 'svr-add']]),
+          [syncValShow(sv), 'svr-add']])),
       run.auto ? a.key !== 'title' : false,
       ops ? [['  ' + a.label + ': ', null]].concat(valueDiffFullParts(ops))
         // The same arrow the line uses, so a value short enough to be shown whole
@@ -3696,23 +3753,22 @@
         var keptG = tg.filter(function (g) {
           return goneGroups.indexOf(String(g.group.id)) === -1;
         });
+        var named = function (g) { return { type: 'groups', id: String(g.group.id), name: g.group.name || ('id ' + g.group.id) }; };
         var goneNames = tg.filter(function (g) {
           return goneGroups.indexOf(String(g.group.id)) !== -1;
-        }).map(function (g) { return g.group.name || ('id ' + g.group.id); }).sort();
-        var addNames = missingGroups.map(function (g) {
-          return g.group.name || ('id ' + g.group.id);
-        }).sort();
+        }).map(named);
+        var addNames = missingGroups.map(named);
         run.tickLine({
           id: String(target.id), title: title, kind: 'groups', group: 'Groups',
           value: groupInput(keptG).concat(groupInput(missingGroups)),
           had: groupInput(tg),
         }, goneGroups.length ? 'svr-op-set' : 'svr-op-add', '[SYNC]    ',
         goneGroups.length
-          ? [['  Update groups: remove ', null], [goneNames.join(', '), 'svr-del']]
+          ? [['  Update groups: remove ', null], namesPart(goneNames, 'svr-del')]
             .concat(addNames.length
-              ? [['; add ', null], [addNames.join(', '), 'svr-add']] : [])
+              ? [['; add ', null], namesPart(addNames, 'svr-add')] : [])
           : [['  Add ' + plural(addNames.length, 'group') + ': ', null],
-            [addNames.join(', '), 'svr-add']],
+            namesPart(addNames, 'svr-add')],
         true);
       }
     }
@@ -5900,7 +5956,7 @@
     // only reads, and this plugin only reads. The distinction the split exists to draw
     // has no second member here - there is no other plugin tab to be told apart from this
     // one - while the distinction it is standing in for, Stash's tabs against ours, has
-    // nothing else to carry it. See CLAUDE.md for why that is the reading rather than a
+    // nothing else to carry it. See AGENTS.md for why that is the reading rather than a
     // contradiction of the rule.
     //
     // A colour, not a Bootstrap variant, because a `Nav.Link` has none to borrow - the

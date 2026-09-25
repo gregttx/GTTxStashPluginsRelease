@@ -11,7 +11,7 @@
 // `ui: requires:` in a plugin's `.yml` is topologically sorted by `plugins.tsx`, and
 // `useScript` sets `script.async = false`, so this script has finished running before
 // any plugin that names it begins. See "Reference: a UI plugin can depend on another"
-// in the repo-root CLAUDE.md.
+// in the repo-root AGENTS.md.
 //
 // It also carries the features that belong to no single plugin: the Scene Tagger's
 // duration mismatch, and the developer switches.
@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '3.0.0';
+  var PLUGIN_VERSION = '3.3.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -42,7 +42,7 @@
   // ── Installed once, replaceable by a newer evaluation ─────────────────────
   //
   // A second evaluation of this script into one page is not something Stash's Reload
-  // plugins does - measured, and recorded in the repo-root CLAUDE.md - but the suites do
+  // plugins does - measured, and recorded in the repo-root AGENTS.md - but the suites do
   // it on purpose, and a library that latched would leave every caller bound to the
   // previous release's closures while the console reported the new version. So the newest
   // evaluation always wins: it overwrites the export, and the older one stops here rather
@@ -1142,7 +1142,7 @@
     cfTipArm(node, row);
     // At the end of Stash's own `.value`, so the mark is on the same line as the name it
     // describes and to the left of the Edit button - the placement the reference note in
-    // the repo-root CLAUDE.md settles for every one of these.
+    // the repo-root AGENTS.md settles for every one of these.
     var host = byClass(row, 'value') || row;
     if (node.parentNode !== host) host.appendChild(node);
   }
@@ -1852,7 +1852,7 @@
     return { id: at.toString(36) + '-' + Math.random().toString(36).slice(2, 8), at: at, seq: ++_journalSeq,
       source: run.source === 'hand' || run.source === 'undo' ? run.source : 'plugin',
       plugin: run.plugin || null, label: String(run.label || ''), note: String(run.note || ''),
-      count: 0, bytes: 0 };
+      count: 0, bytes: 0, remap: run.remap || null };
   }
 
   function journalRow(id, at, i, x) {
@@ -1867,6 +1867,11 @@
     };
     if (x.undoes) row.undoes = String(x.undoes);
     if (x.folder != null) row.folder = String(x.folder);
+    // A delete or a merge keeps what it takes to put the entity back (`journalSnapshot`).
+    if (x.snapshot) row.snapshot = x.snapshot;
+    if (x.carriers) row.carriers = x.carriers;
+    if (x.merge) row.merge = x.merge;
+    if (x.lost) row.lost = String(x.lost);
     // A custom field that was, or is, not there at all - distinct from one holding null.
     if (x.before === undefined && x.action !== 'create') row.beforeAbsent = true;
     if (x.after === undefined && x.action !== 'create') row.afterAbsent = true;
@@ -1938,6 +1943,36 @@
       keys.onsuccess = function () { keys.result.forEach(function (k) { entries.delete(k); }); };
     });
     return idbDone(tx).then(function () { journalChanged(); return ids.length; });
+  }
+
+  // Takes whole runs and single changes out of the history; nothing in the library changes.
+  // A run left with no changes goes with them, and one left with some is recounted.
+  function journalRemove(runIds, entries) {
+    return journalDb().then(function (db) {
+      var tx = db.transaction(['runs', 'entries'], 'readwrite');
+      var runs = tx.objectStore('runs'), store = tx.objectStore('entries'), touched = {};
+      runIds.forEach(function (id) {
+        runs.delete(id);
+        var keys = store.index('run').getAllKeys(id);
+        keys.onsuccess = function () { keys.result.forEach(function (k) { store.delete(k); }); };
+      });
+      entries.forEach(function (e) {
+        e = e._orig || e;
+        store.delete(e.id);
+        if (runIds.indexOf(e.run) === -1) touched[e.run] = true;
+      });
+      Object.keys(touched).forEach(function (rid) {
+        var g = runs.get(rid), left = store.index('run').getAll(rid);
+        left.onsuccess = function () {
+          if (!g.result) return;
+          if (!left.result.length) { runs.delete(rid); return; }
+          g.result.count = left.result.length;
+          g.result.bytes = left.result.reduce(function (n, x) { return n + (x.bytes || 0); }, 0);
+          runs.put(g.result);
+        };
+      });
+      return idbDone(tx);
+    }).then(journalChanged);
   }
 
   // Newest first, which is the order the history lists them in.
@@ -2346,7 +2381,11 @@
     JOURNAL_OPS['Bulk' + t[0] + 'Update'] = { type: t[1], mode: 'bulk' };
     JOURNAL_OPS[t[2] + 'Update'] = { type: t[1], mode: 'many' };
     JOURNAL_OPS[t[0] + 'Create'] = { type: t[1], mode: 'create', field: t[0].charAt(0).toLowerCase() + t[0].slice(1) + 'Create' };
+    JOURNAL_OPS[t[0] + 'Destroy'] = { type: t[1], mode: 'destroy' };
+    JOURNAL_OPS[t[2] + 'Destroy'] = { type: t[1], mode: 'destroy' };
   });
+  JOURNAL_OPS.TagsMerge = { type: 'tags', mode: 'merge' };
+  JOURNAL_OPS.SceneMerge = { type: 'scenes', mode: 'merge' };
 
   // The saves in one request body, as { op, type, mode, inputs, ids, fields, customFields }.
   function journalSaves(init) {
@@ -2358,6 +2397,18 @@
     ops.forEach(function (o) {
       var spec = o && o.operationName && hasOwn(JOURNAL_OPS, o.operationName) ? JOURNAL_OPS[o.operationName] : null;
       var input = spec && o.variables ? o.variables.input : null;
+      // A delete names its ids as the input or, for the bulk ones, as bare variables; a
+      // merge its sources and its destination either way.
+      if (spec && (spec.mode === 'destroy' || spec.mode === 'merge')) {
+        var v = (o.variables && (o.variables.input || o.variables)) || {};
+        var gone = spec.mode === 'merge' ? [].concat(v.source || [])
+          : v.ids ? [].concat(v.ids) : v.id != null ? [v.id] : [];
+        if (!gone.length) return;
+        out.push({ op: o.operationName, spec: spec, type: spec.type, ids: gone.map(String), fields: [],
+          skipped: [], customFields: false, into: spec.mode === 'merge' ? String(v.destination) : null,
+          filesGone: !!v.delete_file });
+        return;
+      }
       if (!input) return;
       var inputs = spec.mode === 'many' ? [].concat(input) : [input];
       var ids = spec.mode === 'bulk' ? (input.ids || []).map(String)
@@ -2380,6 +2431,8 @@
   function journalLabel(save) {
     var t = JOURNAL_TYPES[save.type];
     if (save.spec.mode === 'create') return t.label + ' created';
+    if (save.spec.mode === 'destroy') return (save.ids.length > 1 ? t.labels : t.label) + ' deleted';
+    if (save.spec.mode === 'merge') return t.labels + ' merged';
     if (save.spec.mode === 'bulk') return t.labels + ' edited in bulk';
     return (save.ids.length > 1 ? t.labels : t.label) + ' edited';
   }
@@ -2390,13 +2443,23 @@
   function journalCapture(send, input, init) {
     var saves = journalSaves(init);
     if (!saves.length) return send(input, init);
-    return loadSettings(false).then(function (s) { return truthy(s.c4JournalHandEdits); },
-      function () { return true; }).then(function (on) {
+    var removal = saves.some(function (sv) { return sv.spec.mode === 'destroy' || sv.spec.mode === 'merge'; });
+    return loadSettings(false).then(function (s) {
+      return truthy(s.c4JournalHandEdits) && (!removal || truthy(s.c7JournalDeletes));
+    }, function () { return true; }).then(function (on) {
       if (!on) return send(input, init);
+      if (removal) return journalCaptureRemoval(send, input, init, saves);
+      // Stash's upload link aborts its request once it has read the answer, which also
+      // cuts off the copy a create's new id is read from - so a create goes without it.
+      var sendInit = init;
+      if (init.signal && saves.some(function (sv) { return sv.spec.mode === 'create'; })) {
+        sendInit = {};
+        for (var k in init) if (k !== 'signal') sendInit[k] = init[k];
+      }
       return Promise.all(saves.map(function (sv) {
         return sv.ids.length ? journalRead(send, sv.type, sv.ids, sv.fields, sv.customFields) : {};
       })).then(function (befores) {
-        var p = send(input, init);
+        var p = send(input, sendInit);
         p.then(function (resp) { journalAfterSave(send, saves, befores, resp); }, function () {});
         return p;
       }, function (e) {
@@ -2413,7 +2476,7 @@
     // of it, which leaves Stash's own read of the body untouched. The one body this
     // capture reads; every update is judged by reading the entity again instead.
     var created = saves.some(function (sv) { return sv.spec.mode === 'create'; })
-      ? resp.clone().json().then(function (j) { return j && !j.errors ? j.data || {} : null; }, function () { return null; })
+      ? resp.clone().json().then(function (j) { return j && !j.errors ? j.data || {} : null; })
       : Promise.resolve(null);
     created.then(function (data) {
       return Promise.all(saves.map(function (sv, i) {
@@ -2450,6 +2513,325 @@
       journalRecord({ source: 'hand', label: journalLabel(sv),
         note: 'not recorded: ' + (e && e.message ? e.message : String(e)) },
         ids.map(function (id) { return { type: sv.type, id: id, action: 'gap' }; }));
+    });
+  }
+
+  // ── Undo History: deletes and merges ──────────────────────────────────────
+  //
+  // A delete takes the entity away, so what brings it back is read just before: every
+  // field its create input takes - asked of the schema, so a field this Stash lacks is
+  // not asked for - and the ids of everything carrying it. The undo creates it again,
+  // under a new id, reattaches what still exists of those carriers, and maps the old id
+  // to the new one for every older entry that names it (`remap` on the undo's run).
+  //
+  // A merge is a delete of each source plus what the destination gained: the undo puts
+  // each source back and takes the destination off what carried only a source. Images
+  // and galleries come back by rescanning their files, a scene deleted with its files
+  // cannot come back, and a scene merge moves files between scenes - all three are
+  // recorded, and the review says why they are not undone.
+  var JOURNAL_CREATE = {
+    tags: { type: 'Tag', input: 'TagCreateInput', create: 'tagCreate' },
+    performers: { type: 'Performer', input: 'PerformerCreateInput', create: 'performerCreate' },
+    studios: { type: 'Studio', input: 'StudioCreateInput', create: 'studioCreate' },
+    groups: { type: 'Group', input: 'GroupCreateInput', create: 'groupCreate' },
+    scenes: { type: 'Scene', input: 'SceneCreateInput', create: 'sceneCreate' },
+  };
+  // Where a create input's relation is read from, and how it is written back.
+  var SNAP_RELS = {
+    tag_ids: 'tags { id }', performer_ids: 'performers { id }', gallery_ids: 'galleries { id }',
+    parent_ids: 'parents { id }', child_ids: 'children { id }', file_ids: 'files { id }',
+    studio_id: 'studio { id }', parent_id: 'parent_studio { id }',
+    groups: 'groups { group { id } scene_index }', stash_ids: 'stash_ids { endpoint stash_id }',
+    containing_groups: 'containing_groups { group { id } description }',
+    sub_groups: 'sub_groups { group { id } description }', custom_fields: 'custom_fields',
+  };
+  var SNAP_READ = {
+    tag_ids: 'tags', performer_ids: 'performers', gallery_ids: 'galleries', parent_ids: 'parents',
+    child_ids: 'children', file_ids: 'files',
+  };
+  // What carries an entity of each type: the list, its filter, and the field that names it.
+  var JOURNAL_CARRIERS = {
+    tags: [['scenes', 'findScenes', 'scene_filter', 'tags', 'tag_ids'], ['images', 'findImages', 'image_filter', 'tags', 'tag_ids'],
+      ['galleries', 'findGalleries', 'gallery_filter', 'tags', 'tag_ids'], ['performers', 'findPerformers', 'performer_filter', 'tags', 'tag_ids'],
+      ['groups', 'findGroups', 'group_filter', 'tags', 'tag_ids'], ['studios', 'findStudios', 'studio_filter', 'tags', 'tag_ids']],
+    performers: [['scenes', 'findScenes', 'scene_filter', 'performers', 'performer_ids'],
+      ['images', 'findImages', 'image_filter', 'performers', 'performer_ids'],
+      ['galleries', 'findGalleries', 'gallery_filter', 'performers', 'performer_ids']],
+    studios: [['scenes', 'findScenes', 'scene_filter', 'studios', 'studio_id'], ['images', 'findImages', 'image_filter', 'studios', 'studio_id'],
+      ['galleries', 'findGalleries', 'gallery_filter', 'studios', 'studio_id'], ['groups', 'findGroups', 'group_filter', 'studios', 'studio_id'],
+      ['studios', 'findStudios', 'studio_filter', 'parents', 'parent_id']],
+    groups: [['scenes', 'findScenes', 'scene_filter', 'groups', 'groups']],
+  };
+  var _snapFields = {};
+
+  function unwrapKind(t) {
+    while (t && (t.kind === 'NON_NULL' || t.kind === 'LIST') && t.ofType) t = t.ofType;
+    return t ? t.kind : null;
+  }
+
+  // The selection that reads back everything the type's create input takes, from the
+  // schema, once a page: { sel, fields }.
+  function journalSnapFields(type) {
+    var c = JOURNAL_CREATE[type];
+    if (_snapFields[type]) return _snapFields[type];
+    var shape = '{ name kind ofType { name kind ofType { name kind ofType { name kind } } } }';
+    _snapFields[type] = gqlRequest('query GTTxSnapSchema { i: __type(name: "' + c.input + '") { inputFields { name type ' +
+      shape + ' } } o: __type(name: "' + c.type + '") { fields { name type ' + shape + ' } } }', null).then(function (d) {
+      var has = {};
+      ((d.o || {}).fields || []).forEach(function (f) { has[f.name] = unwrapKind(f.type); });
+      var sel = ['id'], fields = [];
+      ((d.i || {}).inputFields || []).forEach(function (f) {
+        if (hasOwn(SNAP_RELS, f.name)) {
+          var root = SNAP_RELS[f.name].split(' ')[0];
+          if (!hasOwn(has, root)) return;
+          sel.push(SNAP_RELS[f.name]);
+          fields.push(f.name);
+        } else if (has[f.name] === 'SCALAR' || has[f.name] === 'ENUM') {
+          sel.push(f.name);
+          fields.push(f.name);
+        }
+      });
+      return { sel: sel.join(' '), fields: fields };
+    }, function (e) { delete _snapFields[type]; throw e; });
+    return _snapFields[type];
+  }
+
+  function snapIds(list) { return (list || []).map(function (x) { return String(x.id); }); }
+
+  // The create input a snapshot gives back.
+  function journalSnapInput(fields, o) {
+    var input = {};
+    fields.forEach(function (f) {
+      if (hasOwn(SNAP_READ, f)) { input[f] = snapIds(o[SNAP_READ[f]]); return; }
+      if (f === 'studio_id') { if (o.studio) input.studio_id = String(o.studio.id); return; }
+      if (f === 'parent_id') { if (o.parent_studio) input.parent_id = String(o.parent_studio.id); return; }
+      if (f === 'groups') {
+        input.groups = (o.groups || []).map(function (g) { return { group_id: String(g.group.id), scene_index: g.scene_index }; });
+        return;
+      }
+      if (f === 'containing_groups' || f === 'sub_groups') {
+        input[f] = (o[f] || []).map(function (g) { return { group_id: String(g.group.id), description: g.description }; });
+        return;
+      }
+      if (o[f] !== undefined && o[f] !== null) input[f] = o[f];
+    });
+    return input;
+  }
+
+  function journalCarriersOf(type, id) {
+    var out = {};
+    return (JOURNAL_CARRIERS[type] || []).reduce(function (p, c) {
+      return p.then(function () {
+        var list = c[1].replace(/^find/, '').replace(/^./, function (x) { return x.toLowerCase(); });
+        var crit = c[3] === 'performers' || c[3] === 'parents' ? '{ value: [' + JSON.stringify(id) + '], modifier: INCLUDES }'
+          : '{ value: [' + JSON.stringify(id) + '], modifier: INCLUDES, depth: 0 }';
+        var sel = c[4] === 'groups' ? 'id groups { group { id } scene_index }' : 'id';
+        return gqlRequest('query GTTxCarriers { r: ' + c[1] + '(' + c[2] + ': { ' + c[3] + ': ' + crit + ' }, ' +
+          'filter: { per_page: -1 }) { ' + list + ' { ' + sel + ' } } }', null).then(function (d) {
+          var rows = ((d.r || {})[list]) || [];
+          if (!rows.length) return;
+          out[c[0] + '.' + c[4]] = rows.map(function (r) {
+            if (c[4] !== 'groups') return String(r.id);
+            var g = (r.groups || []).filter(function (x) { return String(x.group.id) === String(id); })[0];
+            return [String(r.id), g ? g.scene_index : null];
+          });
+        });
+      });
+    }, Promise.resolve()).then(function () { return out; });
+  }
+
+  // One entry a removed entity, with what brings it back.
+  function journalSnapshot(save, id) {
+    var t = JOURNAL_TYPES[save.type];
+    var base = { type: save.type, id: id, action: save.spec.mode === 'merge' ? 'merge' : 'delete' };
+    if (!hasOwn(JOURNAL_CREATE, save.type)) {
+      return journalRead(function (i, o) { return window.fetch(i, o); }, save.type, [id], [], false).then(function (m) {
+        base.name = ((m[id] || {})[t.name]) || '';
+        base.lost = save.type === 'scenes' ? 'scene' : 'rescan';
+        return base;
+      });
+    }
+    return journalSnapFields(save.type).then(function (sf) {
+      return gqlRequest('query GTTxSnapshot { o: ' + t.one + '(id: ' + JSON.stringify(id) + ') { ' + sf.sel + ' ' + t.name + ' } }', null)
+        .then(function (d) {
+          var o = d.o;
+          if (!o) return null;
+          base.name = o[t.name] || '';
+          base.snapshot = { fields: sf.fields, o: o };
+          if (save.type === 'scenes' && (save.filesGone || save.spec.mode === 'merge')) {
+            base.lost = save.spec.mode === 'merge' ? 'scene-merge' : 'files';
+            return base;
+          }
+          return journalCarriersOf(save.type, id).then(function (cr) { base.carriers = cr; return base; });
+        });
+    });
+  }
+
+  function journalCaptureRemoval(send, input, init, saves) {
+    return Promise.all(saves.map(function (sv) {
+      var reads = sv.ids.map(function (id) { return journalSnapshot(sv, id); });
+      // A merge also notes what carried the destination, and its aliases, before.
+      if (sv.into) {
+        reads.push(journalCarriersOf(sv.type, sv.into).then(function (cr) {
+          return gqlRequest('query GTTxMergeInto { o: ' + JOURNAL_TYPES[sv.type].one + '(id: ' + JSON.stringify(sv.into) + ') { ' +
+            (sv.type === 'tags' ? 'aliases ' : '') + JOURNAL_TYPES[sv.type].name + ' } }', null).then(function (d) {
+            return { into: sv.into, carriers: cr, aliases: d.o && d.o.aliases, name: d.o ? d.o[JOURNAL_TYPES[sv.type].name] : '' };
+          });
+        }));
+      }
+      return Promise.all(reads);
+    })).then(function (all) {
+      var p = send(input, init);
+      p.then(function (resp) {
+        if (!resp || !resp.ok) return;
+        saves.forEach(function (sv, i) {
+          var list = all[i].slice(0, sv.ids.length).filter(Boolean);
+          var into = sv.into ? all[i][sv.ids.length] : null;
+          // Recorded only once the entity is really gone: a refused delete leaves no line.
+          journalRead(function (a, b) { return send(a, b); }, sv.type, sv.ids, [], false).then(function (now) {
+            var gone = list.filter(function (e) { return !now[e.id]; });
+            if (!gone.length) return;
+            if (into) gone.forEach(function (e) { e.merge = into; });
+            journalRecord({ source: 'hand', label: journalLabel(sv) }, gone);
+          });
+        });
+      }, function () {});
+      return p;
+    }, function (e) {
+      var p = send(input, init);
+      p.then(function () { journalGap(saves, e); }, function () {});
+      return p;
+    });
+  }
+
+  // Old id to new, per type, off every undo that recreated something; followed through
+  // a chain, so an entity deleted, put back, deleted and put back again resolves to now.
+  function journalRemaps() {
+    return journalRuns().then(function (runs) {
+      var m = {};
+      runs.slice().sort(function (a, b) { return a.at - b.at; }).forEach(function (r) {
+        Object.keys(r.remap || {}).forEach(function (t) {
+          m[t] = m[t] || {};
+          Object.keys(r.remap[t]).forEach(function (old) { m[t][old] = String(r.remap[t][old]); });
+        });
+      });
+      return function (type, id) {
+        var seen = 0, cur = String(id), t = m[type] || {};
+        while (hasOwn(t, cur) && seen++ < 50) cur = t[cur];
+        return cur;
+      };
+    }, function () { return function (type, id) { return String(id); }; });
+  }
+
+  var LOST_REASON = {
+    rescan: 'an image or gallery comes back by rescanning its files',
+    files: 'its files were deleted with it',
+    scene: 'this Stash cannot create a scene from here',
+    'scene-merge': 'a scene merge moved its files, and is not undone here',
+  };
+
+  // Puts a removed entity back: create, reattach, and for a merge take the destination
+  // off what only a source carried. Resolves to the new id.
+  function journalRecreate(w) {
+    var e = w.entries[0], c = JOURNAL_CREATE[e.type], snap = e.snapshot;
+    var into = e.merge, t = JOURNAL_TYPES[e.type];
+    var first = into && into.aliases && e.type === 'tags'
+      ? gqlRequest('mutation GTTxUndoAliases($input: TagUpdateInput!) { tagUpdate(input: $input) { id } }',
+        { input: { id: w.intoId, aliases: into.aliases } }).then(null, function () {})
+      : Promise.resolve();
+    return first.then(function () {
+      var input = journalSnapInput(snap.fields, snap.o);
+      if (w.remap) Object.keys(input).forEach(function (k) {
+        if (k === 'tag_ids' || k === 'parent_ids' || k === 'child_ids') input[k] = input[k].map(function (x) { return w.remap('tags', x); });
+        if (k === 'performer_ids') input[k] = input[k].map(function (x) { return w.remap('performers', x); });
+        if (k === 'studio_id' || k === 'parent_id') input[k] = w.remap('studios', input[k]);
+      });
+      return gqlRequest('mutation GTTxUndoCreate($input: ' + c.input + '!) { ' + c.create + '(input: $input) { id } }', { input: input });
+    }).then(function (d) {
+      var made = String(((d || {})[c.create] || {}).id);
+      var before = into ? into.carriers || {} : {};
+      return Object.keys(e.carriers || {}).reduce(function (p, key) {
+        return p.then(function () {
+          var parts = key.split('.'), ct = parts[0], field = parts[1];
+          var ids = e.carriers[key].map(function (x) { return x; });
+          return journalReattach(ct, field, ids, made, e.type, w.remap).then(function () {
+            if (!into || field === 'groups') return;
+            var had = (before[key] || []).map(String);
+            var only = ids.map(function (x) { return w.remap(ct, String(x)); }).filter(function (x) { return had.indexOf(x) === -1; });
+            return journalDetach(ct, field, only, w.intoId);
+          });
+        });
+      }, Promise.resolve()).then(function () { return made; });
+    });
+  }
+
+  var BULK = { scenes: ['bulkSceneUpdate', 'BulkSceneUpdateInput'], images: ['bulkImageUpdate', 'BulkImageUpdateInput'],
+    galleries: ['bulkGalleryUpdate', 'BulkGalleryUpdateInput'], performers: ['bulkPerformerUpdate', 'BulkPerformerUpdateInput'],
+    groups: ['bulkGroupUpdate', 'BulkGroupUpdateInput'] };
+
+  function journalChunks(ids, fn) {
+    var chunks = [];
+    for (var i = 0; i < ids.length; i += 100) chunks.push(ids.slice(i, i + 100));
+    return chunks.reduce(function (p, ch) { return p.then(function () { return fn(ch); }); }, Promise.resolve());
+  }
+
+  // Each carrier still there gets the recreated entity back. A relation list goes back in
+  // bulk; a studio's tags, a studio's parent and a scene's place in a group are one update
+  // each, since those carry more than an id.
+  function journalReattach(ct, field, list, made, type, remap) {
+    var ids = list.map(function (x) { return remap(ct, String(Array.isArray(x) ? x[0] : x)); });
+    var one = function (id, input) {
+      input.id = id;
+      return gqlRequest('mutation GTTxUndoAttach($input: ' + JOURNAL_TYPES[ct].input + '!) { ' + JOURNAL_TYPES[ct].update +
+        '(input: $input) { id } }', { input: input }).then(null, function () {});
+    };
+    if (field === 'groups') {
+      return list.reduce(function (p, x, k) {
+        return p.then(function () {
+          return journalRead(function (i, o) { return window.fetch(i, o); }, 'scenes', [ids[k]], ['groups'], false).then(function (m) {
+            if (!m[ids[k]]) return;
+            var g = journalField('groups').read(m[ids[k]]).concat([{ group_id: made, scene_index: x[1] }]);
+            return one(ids[k], { groups: g });
+          });
+        });
+      }, Promise.resolve());
+    }
+    if (ct === 'studios') {
+      return ids.reduce(function (p, id) {
+        return p.then(function () {
+          if (field === 'parent_id') return one(id, { parent_id: made });
+          return journalRead(function (i, o) { return window.fetch(i, o); }, 'studios', [id], ['tag_ids'], false).then(function (m) {
+            if (m[id]) return one(id, { tag_ids: journalField('tag_ids').read(m[id]).concat([made]) });
+          });
+        });
+      }, Promise.resolve());
+    }
+    var b = BULK[ct];
+    return journalChunks(ids, function (ch) {
+      var input = { ids: ch };
+      input[field] = field === 'studio_id' ? made : { ids: [made], mode: 'ADD' };
+      var q = 'mutation GTTxUndoBulk($input: ' + b[1] + '!) { ' + b[0] + '(input: $input) { id } }';
+      // A carrier deleted since fails the whole request, so the chunk goes one by one then.
+      return gqlRequest(q, { input: input }).then(null, function () {
+        return ch.reduce(function (p, id) {
+          return p.then(function () {
+            var solo = { ids: [id] };
+            solo[field] = input[field];
+            return gqlRequest(q, { input: solo }).then(null, function () {});
+          });
+        }, Promise.resolve());
+      });
+    });
+  }
+
+  function journalDetach(ct, field, ids, dest) {
+    if (!ids.length || !dest || !BULK[ct] || field === 'studio_id') return Promise.resolve();
+    var b = BULK[ct];
+    return journalChunks(ids, function (ch) {
+      var input = { ids: ch };
+      input[field] = { ids: [dest], mode: 'REMOVE' };
+      return gqlRequest('mutation GTTxUndoDetach($input: ' + b[1] + '!) { ' + b[0] + '(input: $input) { id } }', { input: input })
+        .then(null, function () {});
     });
   }
 
@@ -2515,13 +2897,66 @@
   // Resolves to { items: [{ entry, status, reason }], writes: [{ type, id, input } |
   // { type, id, destroy: true }] }. Status is 'ok', 'changed', 'gone', 'undone',
   // 'locked' or 'unrecorded'.
+  // An entry as it reads now: an entity put back since under a new id, and the related
+  // ids in a relation, followed to that id. A copy, so the stored entry is left as it was.
+  var REMAP_REL = { tag_ids: 'tags', parent_ids: 'tags', child_ids: 'tags', performer_ids: 'performers',
+    gallery_ids: 'galleries', scene_ids: 'scenes' };
+  function journalRemapped(e, remap) {
+    var r = {}, k;
+    for (k in e) if (hasOwn(e, k)) r[k] = e[k];
+    r._orig = e;
+    r.eid = remap(e.type, e.eid);
+    r.entity = e.type + ':' + r.eid;
+    if (hasOwn(REMAP_REL, e.field)) {
+      var rt = REMAP_REL[e.field], m = function (v) { return Array.isArray(v) ? v.map(function (x) { return remap(rt, x); }) : v; };
+      r.before = m(e.before);
+      r.after = m(e.after);
+    }
+    return r;
+  }
+
+  // An undo ticked with the change it undid cancels out: the two leave the library as it
+  // was before either, so neither is written - which is what undoing the history back to
+  // a point needs, where a change and its undo are both newer than the point.
   function journalPlan(entries) {
-    var items = [], groups = {}, order = [];
+    return journalRemaps().then(function (remap) {
+      var picked = {}, gone = {}, cancelled = [];
+      entries.forEach(function (e) { picked[e.id] = e; });
+      entries.forEach(function (e) {
+        var o = e.undoes && picked[e.undoes];
+        if (!o || o.undone !== e.run) return;
+        gone[e.id] = gone[o.id] = true;
+      });
+      var rest = entries.filter(function (e) {
+        if (!gone[e.id]) return true;
+        cancelled.push(e);
+        return false;
+      });
+      return journalPlanNow(rest.map(function (e) { return journalRemapped(e, remap); }), remap).then(function (plan) {
+        plan.items = cancelled.map(function (e) {
+          return { entry: e, status: 'cancelled', reason: 'undone and undone again in what is ticked, so nothing changes' };
+        }).concat(plan.items);
+        plan.cancelled = cancelled;
+        return plan;
+      });
+    });
+  }
+
+  function journalPlanNow(entries, remap) {
+    var items = [], groups = {}, order = [], removals = [];
     entries.forEach(function (e) {
       if (e.undone) { items.push({ entry: e, status: 'undone', reason: 'already undone' }); return; }
       if (e.action === 'gap') { items.push({ entry: e, status: 'unrecorded', reason: 'this save was not recorded' }); return; }
       if (!hasOwn(JOURNAL_TYPES, e.type)) {
         items.push({ entry: e, status: 'unrecorded', reason: 'this kind of entity cannot be undone here yet' });
+        return;
+      }
+      if (e.action === 'delete' || e.action === 'merge') {
+        if (e.lost || !e.snapshot) {
+          items.push({ entry: e, status: 'unrecorded', reason: LOST_REASON[e.lost] || 'nothing was kept to put it back' });
+        } else {
+          removals.push(e);
+        }
         return;
       }
       if (e.action !== 'update' && e.action !== 'create') {
@@ -2544,13 +2979,26 @@
       });
     });
     var send = function (i, o) { return window.fetch(i, o); };
+    var gone = {};
+    removals.forEach(function (e) { (gone[e.type] = gone[e.type] || []).push(e.eid); });
     return Promise.all([fieldLocks(), Promise.all(Object.keys(byType).map(function (t) {
       return journalRead(send, t, byType[t].ids, byType[t].fields, byType[t].custom, byType[t].files)
         .then(function (m) { return [t, m]; });
+    })), Promise.all(Object.keys(gone).map(function (t) {
+      return journalRead(send, t, gone[t], [], false).then(function (m) { return [t, m]; });
     }))]).then(function (both) {
-      var locks = both[0], now = {};
+      var locks = both[0], now = {}, exists = {};
       both[1].forEach(function (pair) { now[pair[0]] = pair[1]; });
+      both[2].forEach(function (pair) { exists[pair[0]] = pair[1]; });
       var writes = [];
+      // Put back first, so whatever follows in the same undo finds them there.
+      removals.forEach(function (e) {
+        if (exists[e.type][e.eid]) { items.push({ entry: e, status: 'undone', reason: 'it exists again' }); return; }
+        items.push({ entry: e, status: 'ok', reason: e.action === 'merge' ? 'put back, and split off the tag it was merged into'
+          : 'created again under a new id, and put back on what still carries it' });
+        writes.push({ type: e.type, id: e.eid, name: e.name || '', recreate: true, entries: [e], remap: remap,
+          intoId: e.merge ? remap(e.type, e.merge.into) : null });
+      });
       order.forEach(function (key) {
         var g = groups[key].sort(entryNewestFirst), t = g[0].type, id = g[0].eid;
         var cur = now[t][id];
@@ -2636,7 +3084,7 @@
   // Writes a plan, one mutation an entity, under a lease; `line(kind, text, write)` hears
   // each. The undo is recorded as a run of its own - so it can itself be undone, which is
   // redo - and the entries it undid are marked. Resolves to { written, failed, run }.
-  function journalUndo(plan, line) {
+  function journalUndo(plan, line, opts) {
     line = line || function () {};
     var c = coop();
     var lease = { owner: PLUGIN_ID, label: 'Undo History', until: Date.now() + 60000 };
@@ -2646,6 +3094,16 @@
       return p.then(function () {
         lease.until = Date.now() + 60000;
         var t = JOURNAL_TYPES[w.type], q, vars;
+        if (w.recreate) {
+          return journalRecreate(w).then(function (made) {
+            w.made = made;
+            written.push(w);
+            line('UNDO', 'put back as ' + t.label.toLowerCase() + ' ' + made, w);
+          }, function (e) {
+            failed++;
+            line('ERROR', 'it could not be put back: ' + (e && e.message ? e.message : e), w);
+          });
+        }
         if (w.move) {
           q = 'mutation GTTxUndoMove($input: MoveFilesInput!) { moveFiles(input: $input) }';
           vars = { input: w.move };
@@ -2672,8 +3130,16 @@
     }, Promise.resolve()).then(function () {
       var i = c.leases.indexOf(lease);
       if (i !== -1) c.leases.splice(i, 1);
-      var entries = [], undid = [];
+      var entries = [], undid = [], remap = null;
       written.forEach(function (w) {
+        if (w.recreate) {
+          var e = w.entries[0];
+          undid.push(e);
+          remap = remap || {};
+          (remap[w.type] = remap[w.type] || {})[e.eid] = w.made;
+          entries.push({ type: w.type, id: w.made, name: w.name, action: 'create', undoes: e.id });
+          return;
+        }
         w.entries.forEach(function (e) {
           undid.push(e);
           entries.push({ type: e.type, id: e.eid, name: w.name || e.name, field: e.field,
@@ -2682,8 +3148,15 @@
             updatedAt: w.updatedAt, undoes: e.id, folder: e.folder });
         });
       });
+      if (opts && opts.pop) {
+        var out = undid.concat(plan.cancelled || []);
+        if (!out.length) return { written: 0, failed: failed, run: null, popped: 0 };
+        return journalPop(out, remap).then(function () {
+          return { written: written.length, failed: failed, run: null, popped: out.length };
+        });
+      }
       if (!entries.length) return { written: 0, failed: failed, run: null };
-      return journalRecord({ source: 'undo', label: 'Undo of ' + plural(undid.length, 'change') }, entries)
+      return journalRecord({ source: 'undo', label: 'Undo of ' + plural(undid.length, 'change'), remap: remap }, entries)
         .then(function (res) {
           return journalMark(undid, res.run).then(function () {
             return { written: written.length, failed: failed, run: res.run };
@@ -2692,12 +3165,46 @@
     });
   }
 
+  // A pop: what was undone leaves the history instead of an undo joining it. An undo
+  // popped puts the changes it had undone back in play, as a redo does; and a delete put
+  // back under a new id hands its remap to the newest run still here, which is where older
+  // entries naming the old id find it.
+  // ponytail: that run is the remap's only holder, so deleting it by hand loses the remap.
+  function journalPop(undid, remap) {
+    var redone = undid.filter(function (e) { return (e._orig || e).undoes; });
+    if (!redone.length && !remap) return journalRemove([], undid);
+    return journalRemove([], undid).then(journalDb).then(function (db) {
+      var tx = db.transaction(['runs', 'entries'], 'readwrite');
+      var runs = tx.objectStore('runs'), store = tx.objectStore('entries');
+      redone.forEach(function (e) {
+        e = e._orig || e;
+        var g = store.get(e.undoes);
+        g.onsuccess = function () { if (g.result) { delete g.result.undone; store.put(g.result); } };
+      });
+      if (remap) {
+        var all = runs.getAll();
+        all.onsuccess = function () {
+          var newest = all.result.sort(journalOrder).pop();
+          if (!newest) return;
+          newest.remap = newest.remap || {};
+          Object.keys(remap).forEach(function (t) {
+            newest.remap[t] = newest.remap[t] || {};
+            Object.keys(remap[t]).forEach(function (old) { newest.remap[t][old] = remap[t][old]; });
+          });
+          runs.put(newest);
+        };
+      }
+      return idbDone(tx);
+    }).then(journalChanged);
+  }
+
   // An undone entry is marked with the run that undid it; undoing that undo - a redo -
   // clears the mark on the entry it had undone, so it can be undone again.
   function journalMark(undid, runId) {
     return journalDb().then(function (db) {
       var tx = db.transaction('entries', 'readwrite'), store = tx.objectStore('entries');
       undid.forEach(function (e) {
+        e = e._orig || e;
         e.undone = runId || true;
         store.put(e);
         if (e.undoes) {
@@ -2727,6 +3234,7 @@
     c4JournalHandEdits: true,
     c5JournalImageRuns: false,
     c6JournalProtect: true,
+    c7JournalDeletes: true,
   };
   var _settings = null;
   var _settingsAt = 0;
@@ -2792,6 +3300,53 @@
   // `configurePlugin` replaces it; the settings page reads through Stash's Apollo cache,
   // so the cached root field is evicted for it to show the seeded values.
   var _seeded = false;
+
+  // **Stash's settings page copies the stored settings once, when it opens, and never
+  // again** (`initialRef` in its Settings context). So a default seeded while it is open
+  // shows only on the next visit, and the next switch flipped there saves the page's copy
+  // - without it. So every read of Apollo's cached `configuration` also carries, for each
+  // plugin registered here, the defaults its stored map lacks: `fill(raw, all)` returns
+  // them by that plugin's own seed rules, and only absent keys are taken. Plugins load
+  // before Stash draws a page (`PluginsLoader`), so the page draws what is in force from
+  // its first paint, and its first save writes it. Nothing is sent for this.
+  function showDefaults(pluginId, fill) {
+    var ns = window.__GTTx__;
+    ns.shownDefaults = ns.shownDefaults || {};
+    ns.shownDefaults[pluginId] = fill;
+    ns.shownRev = (ns.shownRev || 0) + 1;
+    var cache = window.__APOLLO_CLIENT__ && window.__APOLLO_CLIENT__.cache;
+    if (!cache || !cache.policies || !cache.policies.addTypePolicies) return;
+    try {
+      if (!ns.shownPolicy) {
+        ns.shownPolicy = true;
+        var memo = {};
+        cache.policies.addTypePolicies({ Query: { fields: { configuration: { read: function (c) {
+          if (!c || !c.plugins) return c;
+          if (memo.c === c && memo.rev === ns.shownRev) return memo.out;
+          var plugins = {}, id, k, changed = false;
+          for (id in c.plugins) if (hasOwn(c.plugins, id)) plugins[id] = c.plugins[id];
+          for (id in ns.shownDefaults) {
+            if (!hasOwn(ns.shownDefaults, id)) continue;
+            var raw = plugins[id] || {}, add = null, merged = null;
+            try { add = ns.shownDefaults[id](raw, c.plugins); } catch (e) { add = null; }
+            for (k in add || {}) {
+              if (!hasOwn(add, k) || hasOwn(raw, k)) continue;
+              if (!merged) { merged = {}; for (var r in raw) if (hasOwn(raw, r)) merged[r] = raw[r]; }
+              merged[k] = add[k];
+            }
+            if (merged) { plugins[id] = merged; changed = true; }
+          }
+          var out = c;
+          if (changed) { out = {}; for (k in c) if (hasOwn(c, k)) out[k] = c[k]; out.plugins = plugins; }
+          memo = { c: c, rev: ns.shownRev, out: out };
+          return out;
+        } } } } });
+      }
+      // A read Apollo already answered is kept as it was; this makes the next one ask.
+      if (cache.gc) cache.gc({ resetResultCache: true });
+    } catch (e) { /* the page shows the stored map, as Stash alone would */ }
+  }
+
   function onPluginsTab() {
     var l = window.location;
     return !!l && /^\/settings\b/.test(String(l.pathname || '')) &&
@@ -2809,7 +3364,17 @@
     c4JournalHandEdits: true,
     c5JournalImageRuns: false,
     c6JournalProtect: true,
+    c7JournalDeletes: true,
   };
+  // What each absent key is seeded with: its default, but the heading-counts switch on
+  // where either old key was, as `loadSettings` reads it. `showDefaults` shows the same.
+  function seedValues(raw) {
+    var out = {}, k;
+    for (k in SEEDS) if (hasOwn(SEEDS, k)) out[k] = SEEDS[k];
+    if (raw.a4TagCount || raw.a5PerformerCount) out.a4HeadingCounts = true;
+    return out;
+  }
+
   function seedSettings(raw, out) {
     if (_seeded || !onPluginsTab()) return;
     var missing = Object.keys(SEEDS).filter(function (k) { return !hasOwn(raw, k); });
@@ -2818,7 +3383,8 @@
     var input = {}, k;
     for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
     // A switch takes what `out` already reads, which is the migrated heading-counts value.
-    missing.forEach(function (key) { input[key] = out[key] = out[key] === '' ? SEEDS[key] : out[key]; });
+    var seeds = seedValues(raw);
+    missing.forEach(function (key) { input[key] = out[key] = seeds[key]; });
     gqlRequest('mutation GTTxCoreSeedSettings($plugin_id: ID!, $input: Map!) { ' +
       'configurePlugin(plugin_id: $plugin_id, input: $input) }',
       { plugin_id: PLUGIN_ID, input: input }).then(function () {
@@ -2832,7 +3398,7 @@
   }
 
   // **`configurePlugin` replaces a plugin's settings; it never merges.** So the stored map
-  // is read per write and sent back whole - see the repo-root CLAUDE.md. Read from the
+  // is read per write and sent back whole - see the repo-root AGENTS.md. Read from the
   // server rather than from the cache above, because a value another tab changed is a
   // value this write would otherwise put back.
   function writeOwnSettings(patch) {
@@ -3113,7 +3679,10 @@
 
   function historyChange(e) {
     if (e.action === 'create') return 'created';
-    if (e.action === 'delete') return 'deleted';
+    if (e.action === 'delete') return 'deleted' + (e.lost ? ' (' + LOST_REASON[e.lost] + ')' : '');
+    if (e.action === 'merge') return 'merged into "' + ((e.merge && e.merge.name) || '') + '"' +
+      (e.lost ? ' (' + LOST_REASON[e.lost] + ')' : '');
+    if (e.action === 'split') return 'split back out of "' + ((e.merge && e.merge.name) || '') + '"';
     if (e.action === 'gap') return 'not recorded';
     if (hasOwn(JOURNAL_RELATIONS, e.field)) {
       var d = journalDelta(e);
@@ -3187,6 +3756,21 @@
     return a;
   }
 
+  // A custom field's name, teal, carrying the box every custom field named here opens:
+  // its description where Custom Fields Bulk Editor keeps one, and what carries it.
+  function historyCfName(field) {
+    var node = el('span', 'gttx-cftipped');
+    var name = el('span', 'gttxcore-hcfname', field);
+    name.tabIndex = 0;
+    node.appendChild(name);
+    node._gttxCfMark = name;
+    node._gttxCfBox = el('span', 'gttx-cftipbox', 'Custom field "' + field + '"');
+    node.appendChild(node._gttxCfBox);
+    node._gttxCfField = field;
+    cfTipArm(node, null);
+    return node;
+  }
+
   // The change an undo makes: the recorded one turned round, so the review and its result
   // say what is about to happen - `−Blonde` for a tag the change added - while the history
   // itself says what happened.
@@ -3197,12 +3781,20 @@
     r.beforeAbsent = e.afterAbsent; r.afterAbsent = e.beforeAbsent;
     if (e.action === 'create') r.action = 'delete';
     else if (e.action === 'delete') r.action = 'create';
+    else if (e.action === 'merge') r.action = 'split';
     return r;
   }
 
   // What a change says, drawn: related entities as named links, the rest as text.
   function historyChangeNode(e) {
     var span = el('span', null, '');
+    if (/^custom_fields\./.test(e.field || '') && e.action !== 'gap') {
+      span.appendChild(el('span', null, 'custom field '));
+      span.appendChild(historyCfName(e.field.slice(14)));
+      span.appendChild(el('span', null, ': ' + historyValue(e.before, e.beforeAbsent) + ' → ' +
+        historyValue(e.after, e.afterAbsent)));
+      return span;
+    }
     var type = hasOwn(HISTORY_REL_TYPES, e.field) && e.action !== 'create' && e.action !== 'delete' &&
       e.action !== 'gap' ? HISTORY_REL_TYPES[e.field] : null;
     if (!type) { span.textContent = historyChange(e); return span; }
@@ -3266,7 +3858,8 @@
       'can still be undone before anything is written: a change is undone only while the ' +
       'field still holds what was written, so a later edit is never overwritten. Not recorded: ' +
       'edits made in another browser or on another device, Stash’s own tasks (Scan, ' +
-      'Identify, Auto Tag, Clean) and scripts. A delete or a merge cannot be undone yet. ' +
+      'Identify, Auto Tag, Clean) and scripts. A deleted tag, performer, studio, group or scene ' +
+      'comes back under a new id; a deleted image or gallery comes back by rescanning. ' +
       'Tags, performers and other related entities are shown by name and id, each with its hover card.'));
     modal.appendChild(head);
 
@@ -3319,6 +3912,16 @@
     var foot = el('div', 'gttxcore-foot');
     var amber = function (b) { b.className = b.className.replace('btn-secondary', 'btn-warning'); return b; };
     H.undoBtn = amber(button('Undo Selected...', 'gttxcore-hundo'));
+    H.deleteBtn = button('Delete Selected...', 'gttxcore-hdelete');
+    H.popLabel = el('label', 'gttxcore-hpop gttxcore-hidden');
+    H.popBox = el('input', 'gttxcore-hbox');
+    H.popBox.type = 'checkbox';
+    H.popLabel.appendChild(H.popBox);
+    H.popLabel.appendChild(el('span', null, ' Take it out of the history'));
+    H.popLabel.title = 'Ticked, what is undone leaves the history instead of an undo joining it - the ' +
+      'history goes back to where it was, as a stack does. It cannot then be redone from here. ' +
+      'Unticked, the undo is recorded and can be undone in turn.';
+    H.popBox.addEventListener('change', function () { historyFoot(H); });
     H.proceedBtn = amber(button('Proceed', 'gttxcore-hproceed gttxcore-hidden'));
     H.backBtn = button('Back', 'gttxcore-hback gttxcore-hidden');
     H.exportBtn = button('Export', 'gttxcore-hexport');
@@ -3329,6 +3932,9 @@
     H.closeBtn = button('Close', 'gttxcore-close');
     H.undoBtn.title = 'Work out what the ticked runs and changes can still undo, and list it. ' +
       'Nothing is written until Proceed.';
+    H.deleteBtn.title = 'Delete the ticked runs and changes from this browser’s history - test runs, ' +
+      'say. Nothing in your library changes, and what is deleted can no longer be undone from here. ' +
+      'Asks for a second press.';
     H.exportBtn.title = 'Save the whole history to a file, which Import... can bring back here or ' +
       'into another browser.';
     H.importBtn.title = 'Bring back histories saved with Export. Changes already here are not doubled.';
@@ -3342,7 +3948,7 @@
     H.proceedBtn.title = 'Undo the changes listed above. The undo is recorded, so it can be undone in turn.';
     H.backBtn.title = 'Back to the history, with nothing written.';
     H.closeBtn.title = 'Close Undo History.';
-    [H.undoBtn, H.proceedBtn, H.backBtn, H.exportBtn, H.importBtn, H.backupBtn, H.dropBtn,
+    [H.undoBtn, H.deleteBtn, H.popLabel, H.proceedBtn, H.backBtn, H.exportBtn, H.importBtn, H.backupBtn, H.dropBtn,
       H.clearBtn, H.closeBtn].forEach(function (b) { foot.appendChild(b); });
     modal.appendChild(foot);
 
@@ -3404,6 +4010,17 @@
       return journalDropBefore(H.backupAt || 0).then(function (n) {
         H.progressEl.textContent = 'Dropped ' + plural(n, 'run') + ' from before the backup.';
         historyShow(H.dropBtn, false);
+      });
+    }, H);
+    historyConfirm(H.deleteBtn, 'Press again to delete', function () {
+      var runs = Object.keys(H.selRuns), n = historySelected(H);
+      var entries = Object.keys(H.selEntries).map(function (id) { return H.byId[id]; }).filter(Boolean);
+      return journalRemove(runs, entries).then(function () {
+        H.selRuns = {};
+        H.selEntries = {};
+        H.entries = {};
+        H.progressEl.textContent = 'Deleted ' + plural(n, 'ticked run or change', 'ticked runs and changes') +
+          ' from the history. Nothing in your library changed.';
       });
     }, H);
     historyConfirm(H.clearBtn, 'Press again to clear', function () {
@@ -3478,10 +4095,15 @@
   function historyFoot(H) {
     var list = H.mode === 'list', review = H.mode === 'review', done = H.mode === 'done';
     historyShow(H.undoBtn, list);
+    historyShow(H.deleteBtn, list);
+    historyShow(H.popLabel, review);
     historyShow(H.proceedBtn, review);
     historyShow(H.backBtn, !list);
-    H.undoBtn.disabled = !!H.busy || !historySelected(H);
-    H.proceedBtn.disabled = !!H.busy || !(H.plan && H.plan.writes.length);
+    H.undoBtn.disabled = H.deleteBtn.disabled = !!H.busy || !historySelected(H);
+    H.popBox.disabled = !!H.busy;
+    // A pop has work to do even where nothing is written: what cancels out leaves the history.
+    H.proceedBtn.disabled = !!H.busy || !(H.plan && (H.plan.writes.length ||
+      (H.popBox.checked && H.plan.cancelled && H.plan.cancelled.length)));
     H.backBtn.disabled = !!H.busy;
     // With nothing recorded there is nothing to save or clear; Import is how one arrives.
     var empty = H.recorded === 0;
@@ -3492,7 +4114,7 @@
       b.title = none ? 'Nothing is recorded yet. ' + b._tip : b._tip;
     });
     H.closeBtn.disabled = !!H.busy && H.mode === 'writing';
-    var clean = (review && H.plan && !H.plan.writes.length) || (done && !H.failed);
+    var clean = (review && H.plan && H.proceedBtn.disabled && !H.busy) || (done && !H.failed);
     H.closeBtn.className = H.closeBtn.className.replace(/\bbtn-(secondary|success)\b/, clean ? 'btn-success' : 'btn-secondary');
   }
 
@@ -3598,8 +4220,25 @@
         if (H.open[r.id]) delete H.open[r.id]; else H.open[r.id] = true;
         historyDraw(H, true);
       });
+      var back = el('a', 'gttxcore-hbackto', 'back to here');
+      back.href = '#';
+      back.title = 'Tick this run and every newer one, whatever the filter shows, so Undo Selected... ' +
+        'takes the history back to before this run.';
+      back.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        journalRuns().then(function (all) {
+          H.selRuns = {};
+          H.selEntries = {};
+          for (var k = 0; k < all.length; k++) {
+            H.selRuns[all[k].id] = true;
+            if (all[k].id === r.id) break;
+          }
+          historyDraw(H, true);
+        });
+      });
       row.appendChild(box);
       row.appendChild(toggle);
+      row.appendChild(back);
       block.appendChild(row);
       if (H.open[r.id]) {
         var inner = el('div', 'gttxcore-hentries', 'Reading…');
@@ -3672,8 +4311,10 @@
         if (i.status === 'ok') ok++;
         historyLine(H, i.status === 'ok' ? 'PLAN' : 'SKIP', i.entry, i.reason);
       });
+      var gone = (plan.cancelled || []).length;
       H.progressEl.textContent = plural(ok, 'change') + ' can be undone' +
-        (plan.items.length > ok ? ', and ' + plural(plan.items.length - ok, 'change') + ' will be skipped' : '') +
+        (plan.items.length - gone > ok ? ', and ' + plural(plan.items.length - gone - ok, 'change') + ' will be skipped' : '') +
+        (gone ? '; ' + plural(gone, 'change') + ' cancel out, undone and undone again in what is ticked' : '') +
         '. Nothing has been written.';
     }, function (e) {
       H.progressEl.textContent = 'The check failed: ' + (e && e.message ? e.message : e);
@@ -3681,10 +4322,10 @@
   }
 
   function historyProceed(H) {
-    if (H.busy || !H.plan || !H.plan.writes.length) return;
+    if (H.busy || !H.plan || H.proceedBtn.disabled) return;
     H.mode = 'writing';
     historyBusy(H, true);
-    var list = H.listEl;
+    var list = H.listEl, pop = !!H.popBox.checked;
     while (list.firstChild) list.removeChild(list.firstChild);
     journalUndo(H.plan, function (kind, text, w) {
       var line = el('div', 'gttxcore-line gttxcore-h' + kind);
@@ -3699,10 +4340,12 @@
         });
       }
       list.appendChild(line);
-    }).then(function (res) {
+    }, { pop: pop }).then(function (res) {
       H.failed = res.failed;
       H.progressEl.textContent = 'Undone: ' + plural(res.written, 'entity', 'entities') + ' written' +
-        (res.failed ? ', ' + plural(res.failed, 'failure') : '') + '. The undo is in the history, where it can be undone in turn.';
+        (res.failed ? ', ' + plural(res.failed, 'failure') : '') + '. ' + (pop
+        ? plural(res.popped, 'change') + ' taken out of the history; what was skipped or failed is still there.'
+        : 'The undo is in the history, where it can be undone in turn.');
     }, function (e) {
       H.failed = 1;
       H.progressEl.textContent = 'The undo failed: ' + (e && e.message ? e.message : e);
@@ -3711,6 +4354,7 @@
       H.selRuns = {};
       H.selEntries = {};
       H.entries = {};
+      H.popBox.checked = false;
       H.mode = 'done';
       historyBusy(H, false);
       historyStats(H);
@@ -4312,6 +4956,9 @@
     '.gttxcore-hrun{padding:.15rem 0;border-bottom:1px solid #2b3a45;}' +
     '.gttxcore-hhead{display:flex;gap:.4rem;align-items:flex-start;}' +
     '.gttxcore-hplus{color:#84d68a;font-weight:600;}.gttxcore-hminus{color:#ff7b72;font-weight:600;}' +
+    '.gttxcore-hcfname{color:#17a2b8;cursor:help;}' +
+    '.gttxcore-hbackto{margin-left:.75rem;font-size:.8rem;color:#a7b6c2;}' +
+    '.gttxcore-hpop{margin:0 .5rem;align-self:center;cursor:pointer;}' +
     '.gttxcore-htoggle{cursor:pointer;white-space:pre-wrap;word-break:break-word;}' +
     '.gttxcore-hentries{padding:.1rem 0 .25rem 1.6rem;color:#a7b6c2;}' +
     '.gttxcore-hentry{display:flex;gap:.4rem;align-items:flex-start;white-space:pre-wrap;word-break:break-word;}' +
@@ -4453,6 +5100,7 @@
     nonZeroLength: nonZeroLength, stashButtonMargins: stashButtonMargins, fillNeighbourGaps: fillNeighbourGaps,
     ensureRowSpacing: ensureRowSpacing, applyButtonSpacing: applyButtonSpacing, insertOrdered: insertOrdered,
     insertBeforeImportantAction: insertBeforeImportantAction, findEditContainer: findEditContainer,
+    showDefaults: showDefaults,
     // What a caller prints when it finds no core at all. Written once here, even
     // though by definition the caller that needs it cannot read it from here.
     missingMessage: PLUGIN_NAME + ' is not installed or is disabled. Install it from '
@@ -4484,11 +5132,12 @@
   coop().journal = {
     record: journalRecord, runs: journalRuns, entries: journalEntries,
     stats: journalStats, trim: journalTrim, clear: journalClear,
-    plan: journalPlan, undo: journalUndo, open: openHistory, fromInputs: journalFromInputs,
+    plan: journalPlan, undo: journalUndo, remove: journalRemove, open: openHistory, fromInputs: journalFromInputs,
     pass: journalPass,
     exportAll: journalExport, importTexts: journalImport,
   };
   installJournalCapture();
+  showDefaults(PLUGIN_ID, seedValues);
 
   var _timer = null;
   function start() {

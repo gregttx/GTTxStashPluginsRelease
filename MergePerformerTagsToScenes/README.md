@@ -361,7 +361,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Merge Performer Tags into All Their Scenes | 268 MB | 293 MB | 282 MB |
+| Merge Performer Tags into All Their Scenes | 271 MB | 293 MB | 282 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

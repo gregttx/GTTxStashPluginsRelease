@@ -8,6 +8,9 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.0.0 (`c86266d`) | 2026-09-24 | Live-check fixes across Core, Scene Variants, Filename Manager, CFBE and NPT |
+| 2.10.6 (`6d0c32c`) | 2026-09-23 | Undo History: a dialog's Undo is recorded from the history; no copies kept |
+| 2.10.5 (`bdd2e48`) | 2026-09-23 | Core 2.10.5: a pass is written in chunks as it goes |
 | 2.10.4 (`af8d8e3`) | 2026-09-23 | Undo History, step 2: every writing plugin records; the memory tool counts it |
 | 2.10.3 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |
 | 2.10.2 (`527582f`) | 2026-09-23 | Core 2.10.2: the Undo History dialog, its Tasks entry and top-bar button |
