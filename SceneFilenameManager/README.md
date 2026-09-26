@@ -244,7 +244,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 114 MB | 158 MB | 157 MB |
+| Archive Original Filenames | 114 MB | 157 MB | 157 MB |
 | Restore Original Filenames | 56 MB | 82 MB | 82 MB |
 | Rename Files From Metadata | 194 MB | 253 MB | 253 MB |
 

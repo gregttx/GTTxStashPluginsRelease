@@ -8,6 +8,14 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.8.2 (`d87ae96`) | 2026-09-25 | Unselect All and Select All close the footer, in that order, in Undo History, Entity Name Maintainer and Scene Variants |
+| 2.8.1 (`7be61c5`) | 2026-09-25 | A long list line flows as text: no more overlap in Find & Replace and Entity Name Maintainer, no more columns in Undo History |
+| 2.8.0 (`620b055`) | 2026-09-25 | Entity Name Maintainer 2.8.0: the Case-sensitive box starts from Core's setting, and folds with Core's fold |
+| 2.7.2 (`b1b1db2`) | 2026-09-25 | Entity Name Maintainer 2.7.2: İ folds to i, so a field holding it is searched; a skipped field's line has its card and a tooltip |
+| 2.7.1 (`f6174d5`) | 2026-09-25 | Entity Name Maintainer 2.7.1: the Case-sensitive box says it lasts for the dialog, and a test pins that it leaves the setting alone |
+| 2.7.0 (`b59af5d`) | 2026-09-25 | Entity Name Maintainer 2.7.0: case differs marked and unticked, a Case-sensitive box and setting, and Rescan |
+| 2.6.0 (`4adb10b`) | 2026-09-25 | Entity Name Maintainer 2.6.0: a skipped field is named with its entity, and Select All and Unselect All |
+| 2.5.5 (`2e791c2`) | 2026-09-25 | Checkbox lists in four more dialogs are laid out in whole pixels, so every box draws the same size |
 | 2.5.4 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 2.5.3 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 2.5.2 (`67095e1`) | 2026-09-24 | Core 3.2.0: Stash's settings page shows every seeded default from its first paint |

@@ -82,7 +82,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.3.3';
+  var PLUGIN_VERSION = '5.3.4';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1726,10 +1726,10 @@
     // Between the settings dialogs' width and the run dialog's: a line here names an
     // entity, a tag and where it came from, and a few of them should not wrap.
     '.ptp2re-modal.ptp2re-mid{width:min(76rem,94vw);}' +
-    '.ptp2re-pick{display:flex;flex-direction:column;gap:.15rem;min-height:8rem;}' +
-    '.ptp2re-pick-row{display:flex;align-items:flex-start;gap:.45rem;margin:0;' +
-    'font-family:monospace;font-size:.8rem;line-height:1.35;cursor:pointer;}' +
-    '.ptp2re-pick-row input{accent-color:#ffc107;margin-top:.15rem;flex:0 0 auto;}' +
+    '.ptp2re-pick{display:flex;flex-direction:column;gap:2px;min-height:8rem;}' +
+    '.ptp2re-pick-row{display:flex;align-items:flex-start;gap:7px;margin:0;' +
+    'font-family:monospace;font-size:.8rem;line-height:18px;cursor:pointer;}' +
+    '.ptp2re-pick-row input{accent-color:#ffc107;width:13px;height:13px;margin:3px 0 0;flex:0 0 auto;}' +
     // ── The diagram view ────────────────────────────────────────────────────
     //
     // Everything on the canvas is absolutely placed from `diagramGeometry`, in the

@@ -8,6 +8,8 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.3.0 (`1c3e190`) | 2026-09-25 | Tag Bundle Clipboard 2.3.0: Unselect All and Select All in the paste dialog |
+| 2.2.7 (`2e791c2`) | 2026-09-25 | Checkbox lists in four more dialogs are laid out in whole pixels, so every box draws the same size |
 | 2.2.6 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 2.2.5 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 2.2.4 (`c1422c6`) | 2026-09-18 | GTTxCore 2.1.0: holdWidth keeps every button its size through a temporary caption |

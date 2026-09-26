@@ -68,7 +68,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '2.3.1';
+  var PLUGIN_VERSION = '2.6.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -152,6 +152,7 @@
     a3VariantStashIdField: '',
     a4VariantFlagTag: '',
     b1LogToConsole: false,
+    c0ShowCardCount: false,
     c1PropagateOnSave: false,
     c3SkipRedundantTags: false,
     c4CheckCoverMismatch: false,
@@ -491,6 +492,7 @@
   var SEED_DEFAULTS = {
     a3VariantStashIdField: FIELD_DEFAULT,
     a4VariantFlagTag: FLAG_DEFAULT,
+    c0ShowCardCount: true,
     c1PropagateOnSave: true,
     c3SkipRedundantTags: true,
     e1PartialPostfix: POSTFIX_DEFAULT,
@@ -1391,7 +1393,7 @@
     this.unselAllBtn.addEventListener('click', function () { self.tickCandidates(false); });
     [this.syncSetBtn, this.goBtn, this.stopBtn, this.nextSetBtn, this.candLabel, this.groupBtn, this.untagBtn,
       this.candSep, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn,
-      this.selAllBtn, this.unselAllBtn]
+      this.unselAllBtn, this.selAllBtn]
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -1460,25 +1462,33 @@
     // Jobs with a checkbox lock while anything is in flight - the selection is read at
     // press time, so a live box mid-write would steer nothing - and stay settled once
     // written, until an Undo takes them back out of `changes`.
-    var open = 0, selected = 0;
+    // `whole` counts the open lines ticked with every item under them, which is what
+    // Select All leaves behind.
+    var open = 0, selected = 0, whole = 0, picks = false;
     this.jobs.forEach(function (j) {
       var lock = busy || self.changes.indexOf(j) !== -1;
       if (j.box) j.box.disabled = lock;
-      if (j.box && !lock) { open++; if (j.box.checked) selected++; }
+      if (j.box && !lock) {
+        open++;
+        if (j.box.checked) selected++;
+        if (j.box.checked && pickedItems(j).length === (j.items || []).length) whole++;
+        if (j.repaint) picks = true;
+      }
       // The individual item boxes steer the write exactly like the line's own box, so
       // they lock with it. The expander stays live: opening a list changes only what
       // the screen shows.
       if (j.items) j.items.forEach(function (it) { if (it.box) it.box.disabled = lock; });
     });
-    // The same pair the [GROUP?] candidates get, over the lines of a task that lists
-    // one group and starts every line unticked; held back where pressing one would
-    // change nothing.
+    // The same pair the [GROUP?] candidates get, over the ticked lines of a task that
+    // asks for it; held back where pressing one would change nothing.
     if (this.task.selectAll && !this.candidates.length) {
       this.show(this.selAllBtn, open > 0);
       this.show(this.unselAllBtn, open > 0);
-      this.selAllBtn.title = 'Tick every line still open.';
-      this.unselAllBtn.title = 'Untick every line still open.';
-      this.selAllBtn.disabled = busy || selected === open;
+      this.selAllBtn.title = 'Tick every line still open' +
+        (picks ? ', and every tag and performer under it.' : '.');
+      this.unselAllBtn.title = 'Untick every line still open' +
+        (picks ? ', and every tag and performer under it.' : '.');
+      this.selAllBtn.disabled = busy || whole === open;
       this.unselAllBtn.disabled = busy || !selected;
     }
     // Undo stands beside Proceed rather than replacing it: a rescan leaves a fresh
@@ -2243,6 +2253,7 @@
     });
 
     tailPaint();
+    job.repaint = tailPaint;
     line.appendChild(toggle);
     line.appendChild(tailEl);
     return sub;
@@ -2258,7 +2269,15 @@
   // A box already settled by a write stays as it is, like the hand leaves it.
   Run.prototype.tickCandidates = function (on) {
     var boxes = this.candidates.length ? this.candidates : this.jobs;
-    boxes.forEach(function (c) { if (c.box && !c.box.disabled) c.box.checked = on; });
+    boxes.forEach(function (c) {
+      if (!c.box || c.box.disabled) return;
+      c.box.checked = on;
+      // A line's picker goes with it, so Select All means every name, not the few
+      // left ticked the last time the arrow was opened.
+      if (!c.repaint) return;
+      c.items.forEach(function (it) { it.box.checked = on; });
+      c.repaint();
+    });
     this.syncFooter();
   };
 
@@ -3968,6 +3987,7 @@
       'dialog wrote, and only while it stays open.',
     verb: 'synchronized',
     pickCaption: true,
+    selectAll: true,
     begin: syncBegin,
     writeInput: function (job) {
       if (job.kind === 'tag_ids_remove' || job.kind === 'performer_ids_remove') {
@@ -5789,6 +5809,7 @@
       'dialog wrote, and only while it stays open.',
     verb: 'synchronized',
     pickCaption: true,
+    selectAll: true,
     begin: reviewBegin,
     writeInput: SYNC_TASK.writeInput,
     undoInput: SYNC_TASK.undoInput,
@@ -5854,6 +5875,9 @@
     'white-space:pre-wrap;}' +
     '.svr-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
+    // This dialog's log holds a checkbox per line, and a box drawn at a fractional offset
+    // snaps a pixel taller: 1.35 of .8rem is 17.28px, so the lines here are a whole 18.
+    '.svr-modal .svr-log{line-height:18px;}' +
     '.svr-line{white-space:pre-wrap;word-break:break-word;}' +
     // An entity named in the log is a link to it. The same blue the siblings' result
     // lines use, underlined only on hover so a log full of them does not read as a
@@ -5867,7 +5891,7 @@
     '.svr-foot button{margin-right:.5rem;}' +
     '.svr-foot-label{color:#7d8f9c;}' +
     '.svr-foot-sep{color:#7d8f9c;padding:0 .75rem;}' +
-    '.svr-selall{margin-left:auto;}' +
+    '.svr-unselall{margin-left:auto;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
     // one of these rules is a single class, so the last one written wins - and this one
     // is written before the strips and rows that set their own `display`. A `-hidden` on
@@ -5891,7 +5915,7 @@
     // A [GROUP?] candidate is a question rather than a plan, so it wears the log's own
     // link blue - neither the green of a write going on nor the amber of one coming off.
     '.svr-op-cand{color:#7cc4ff;}' +
-    '.svr-cand-box{margin-right:.5rem;vertical-align:middle;}' +
+    '.svr-cand-box{width:13px;height:13px;margin:3px 8px 2px 0;vertical-align:top;}' +
     // The synchronize listing colours the *change*, not the line. One vocabulary
     // across every dialog here, explained in each head's legend: what a variant loses
     // is red, what it gains green, a value replaced blue, and everything around them -
@@ -5958,8 +5982,8 @@
     // A size up from the log's .8rem monospace, from live feedback - at the log's own
     // size the arrow reads as punctuation, and it is the click target. The padding
     // widens that target a little without moving the text beside it.
-    '.svr-expand{cursor:pointer;color:#7cc4ff;font-size:1.35em;line-height:1;' +
-    'padding:0 .15rem;}' +
+    '.svr-expand{cursor:pointer;color:#7cc4ff;font-size:1.35em;line-height:18px;' +
+    'vertical-align:top;padding:0 2px;}' +
     '.svr-expand:hover{text-decoration:underline;}' +
     '.svr-sub{margin-left:3.5rem;}' +
     // The review listing: the set lines scroll on their own above the log, so a
@@ -5968,7 +5992,7 @@
     // The divider under this block is `.svr-splitbar`, a full-width drag bar of our
     // own - `resize:vertical`'s corner grip was tedious to keep re-finding as the log
     // grew, per live use. The min/max-height here still clamp whatever the drag sets.
-    // The minimum is six lines (.8rem at 1.5 line-height): a log that grows through a
+    // The minimum is six of its 19px lines: a log that grows through a
     // long pass takes the listing's height first, and below six lines a set list
     // reads as a scrollbar with a caption.
     //
@@ -5979,9 +6003,9 @@
     // took an ever larger share of the listing's height. The log's factor makes it give
     // up everything above its own minimum first. `color-scheme:dark` keeps the box's own scrollbar
     // in the dialog's colours - CustomFieldsBulkEditor's lesson.
-    '.svr-sets{flex:0 1 auto;overflow:auto;height:22vh;min-height:7.2rem;' +
+    '.svr-sets{flex:0 1 auto;overflow:auto;height:22vh;min-height:114px;' +
     'max-height:46vh;color-scheme:dark;padding:0 1rem;font-family:ui-monospace,' +
-    'SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;line-height:1.5;}' +
+    'SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;line-height:19px;}' +
     '.svr-splitbar{flex:0 0 auto;height:8px;margin:.15rem 1rem .35rem;' +
     'cursor:ns-resize;background:#2b3a45;border-radius:4px;}' +
     '.svr-splitbar:hover{background:#425a6b;}' +
@@ -5996,7 +6020,7 @@
     '.svr-score-low{color:#ffe066;}' +
     '.svr-score-mid{color:#ffb648;}' +
     '.svr-score-high{color:#ff7b72;}' +
-    '.svr-src-box{margin-right:.4rem;vertical-align:middle;}' +
+    '.svr-src-box{width:13px;height:13px;margin:3px 6px 3px 0;vertical-align:top;}' +
     // The weights: a number box narrow enough that four of them and the label fit one
     // line, and wide enough for three digits.
     '.svr-weight{display:inline-flex;align-items:center;gap:.35rem;margin:0;' +
@@ -6020,7 +6044,10 @@
     '.svr-field-box[type=checkbox]{accent-color:#ffc107;margin:0;}' +
     '.svr-field-note{flex:1 0 100%;color:#7d8f9c;font-size:.8rem;}' +
     '.svr-all-label{color:#7d8f9c;}' +
-    '.svr-item-box{margin-right:.4rem;vertical-align:middle;}' +
+    '.svr-item-box{width:13px;height:13px;margin:3px 6px 2px 0;vertical-align:top;}' +
+    // A box that is settled by a write, or locked while one runs, is dimmed well past the
+    // browser's own disabled grey, which on this dark modal reads almost as live.
+    '.svr-modal input:disabled{opacity:.3;}' +
     // The partner count inside a [FLAG] line: blue where there is exactly one other
     // scene, amber where there is a real choice. The blue is the log's own link blue,
     // so nothing new is introduced.
@@ -6059,6 +6086,12 @@
     // `.svr-tabpane`, not `.svr-pane`: TagBundleClipboard already has a `.pane` and it
     // is a different thing - a scrolling column inside a two-column dialog. A class two
     // plugins share has to mean the same thing in both, and a *tab* pane is not that.
+    // A scene card's variant count, amber - mark and number - and the mark spaced like
+    // Stash's own icons beside theirs. The selector outranks Stash's `.btn.minimal`.
+    '.card-popovers .svr-vcount .btn.minimal{color:#ffc107;}' +
+    '.svr-vcount-mark{margin-right:7px;}' +
+    // The same mark in its setting's name, amber like on the card it switches.
+    '.svr-amber-mark{color:#ffc107;}' +
     '.svr-tabpane{padding:1rem;}' +
     '.svr-summary{color:#7d8f9c;margin-bottom:.5rem;}' +
     '.svr-drift{color:#7d8f9c;margin-bottom:.5rem;}' +
@@ -6955,6 +6988,179 @@
     };
   }
 
+  // ── The variant count on a scene card ─────────────────────────────────────
+  //
+  // Beside the tag, performer and group counters on every scene card: ⸎ and the number of
+  // other variants, where there is at least one. The same evidence the Variants tab
+  // matches on - a shared stash-id, or a shared line of the variant stash-id field - but
+  // asked for a whole page of cards at once: the cards mounting together join one batch,
+  // and a batch is three queries whatever its size, where a lookup per card would be two
+  // queries a card. An answer is kept a short while, so paging back and forth asks again
+  // only once it is stale.
+  var CARD_FIELDS = 'id title stash_ids { endpoint stash_id } custom_fields';
+  var CARD_SCENES_QUERY = 'query SVRCardScenes($ids: [ID!]) { findScenes(ids: $ids, ' +
+    'filter: { per_page: -1 }) { scenes { ' + CARD_FIELDS + ' } } }';
+  var CARD_BY_IDS_QUERY = 'query SVRCardVariants($ids: [String!]) { findScenes(' +
+    'scene_filter: { stash_ids_endpoint: { stash_ids: $ids, modifier: EQUALS } }, ' +
+    'filter: { per_page: -1 }) { scenes { ' + CARD_FIELDS + ' } } }';
+  var CARD_BY_FIELD_QUERY = 'query SVRCardFieldMatch($field: String!, $values: [Any!]) { findScenes(' +
+    'scene_filter: { custom_fields: [{ field: $field, value: $values, modifier: MATCHES_REGEX }] }, ' +
+    'filter: { per_page: -1 }) { scenes { ' + CARD_FIELDS + ' } } }';
+  var COUNT_SHARE_MS = 30000;
+  var COUNT_BATCH_MS = 50;
+  var COUNT_TIP_NAMES = 10;
+  var _vcount = {};
+  var _vbatch = null;
+
+  function uniq(list) { return list.filter(function (v, i) { return list.indexOf(v) === i; }); }
+
+  // One scene's evidence: its raw stash-ids, and every line it can be matched on - its
+  // stash-ids as the field stores them, and whatever the field holds.
+  function cardEvidence(sc, field) {
+    return {
+      id: String(sc.id), title: sc.title || '',
+      raw: uniq((sc.stash_ids || []).map(function (e) { return e && e.stash_id; })
+        .filter(function (v) { return !!v; })),
+      values: uniq(variantValues(sc.stash_ids).concat(splitValues(customField(sc, field)))),
+      lines: splitValues(customField(sc, field)),
+    };
+  }
+
+  // What the tab's two queries would find, for every card in `ids` at once: another scene
+  // is a variant of a card when it carries one of the card's stash-ids, or its field holds
+  // one of the card's lines. `{ id: { count, titles } }`; a failure is an empty map.
+  function countVariants(ids) {
+    return settingsReady().then(function (s) {
+      var field = fieldName(s);
+      return gqlRequest(CARD_SCENES_QUERY, { ids: ids }).then(function (data) {
+        var cards = ((((data || {}).findScenes) || {}).scenes || []).map(function (sc) {
+          return cardEvidence(sc, field);
+        });
+        var raw = uniq([].concat.apply([], cards.map(function (c) { return c.raw; })));
+        var values = uniq([].concat.apply([], cards.map(function (c) { return c.values; })));
+        return Promise.all([
+          raw.length ? gqlRequest(CARD_BY_IDS_QUERY, { ids: raw }) : null,
+          values.length ? gqlRequest(CARD_BY_FIELD_QUERY, { field: field, values: [fieldRegex(values)] })
+            .then(null, function (err) {
+              console.warn('[svr] the "' + field + '" custom-field lookup failed for the scene ' +
+                'cards, so only stash-id matches are counted: ' + err.message);
+              return null;
+            }) : null,
+        ]).then(function (answers) {
+          var pool = [], seen = {};
+          answers.forEach(function (d) {
+            ((((d || {}).findScenes) || {}).scenes || []).forEach(function (sc) {
+              if (hasOwn(seen, String(sc.id))) return;
+              seen[String(sc.id)] = true;
+              pool.push(cardEvidence(sc, field));
+            });
+          });
+          var out = {};
+          cards.forEach(function (c) {
+            var others = pool.filter(function (o) {
+              return o.id !== c.id && (o.raw.some(function (v) { return c.raw.indexOf(v) !== -1; }) ||
+                o.lines.some(function (v) { return c.values.indexOf(v) !== -1; }));
+            });
+            out[c.id] = { count: others.length, titles: others.map(function (o) { return o.title; }) };
+          });
+          return out;
+        });
+      });
+    }).then(null, function (err) {
+      console.warn('[svr] the variant counts on the scene cards could not be read: ' + err.message);
+      return {};
+    });
+  }
+
+  // One card's answer, from the batch it joined.
+  function variantCount(id) {
+    var hit = _vcount[id];
+    if (hit && Date.now() - hit.at < COUNT_SHARE_MS) return hit.p;
+    if (!_vbatch) {
+      var batch = _vbatch = { ids: [] };
+      batch.p = new Promise(function (done) { setTimeout(done, COUNT_BATCH_MS); })
+        .then(function () { _vbatch = null; return countVariants(batch.ids); });
+    }
+    _vbatch.ids.push(id);
+    var p = _vbatch.p.then(function (map) { return map[id] || null; });
+    _vcount[id] = { at: Date.now(), p: p };
+    return p;
+  }
+
+  function countTip(found) {
+    var names = found.titles.map(function (t) { return t || '(untitled)'; }).sort();
+    var more = names.length - COUNT_TIP_NAMES;
+    return plural(found.count, 'other variant') + ' of this scene:\n' +
+      names.slice(0, COUNT_TIP_NAMES).join('\n') + (more > 0 ? '\n...and ' + more + ' more' : '') +
+      '\n\nOpen the scene\'s Variants tab to compare them.';
+  }
+
+  // The counter, drawn like Stash's own: a minimal button in a wrapper div, the mark
+  // where their icon is. `own` draws the rule and the group too, for a card Stash drew
+  // none on - one with no tags, performers, groups or anything else to count.
+  function VariantCount(React, Bootstrap) {
+    return function (props) {
+      var st = React.useState(null);
+      var found = st[0], setFound = st[1];
+      React.useEffect(function () {
+        var live = true;
+        // Display Variant Count on Scene Cards off: nothing drawn, and nothing asked.
+        settingsReady().then(function (s) {
+          return s && s.c0ShowCardCount ? variantCount(props.id) : null;
+        }).then(function (f) { if (live) setFound(f); });
+        return function () { live = false; };
+      }, [props.id]);
+      if (!found || !found.count) return null;
+      var counter = React.createElement('div', { key: 'svr-vcount', className: 'svr-vcount', title: countTip(found) },
+        React.createElement(Bootstrap.Button, { className: 'minimal' },
+          React.createElement('span', { className: 'svr-vcount-mark' }, '⸎'),
+          React.createElement('span', null, String(found.count))));
+      if (!props.own) return counter;
+      return React.createElement(React.Fragment, null, React.createElement('hr', { key: 'svr-vcount-hr' }),
+        React.createElement(Bootstrap.ButtonGroup, { key: 'svr-vcount-group', className: 'card-popovers' }, counter));
+    };
+  }
+
+  // The card's `card-popovers` group, found in what Stash rendered and rebuilt with
+  // `extra` as its last child; null where the card has no such group.
+  function intoPopovers(React, el, extra) {
+    if (!React.isValidElement(el)) return null;
+    var kids = el.props && el.props.children;
+    if (/(^|\s)card-popovers(\s|$)/.test(String((el.props && el.props.className) || ''))) {
+      return React.cloneElement(el, null, React.Children.toArray(kids).concat([extra]));
+    }
+    if (kids == null) return null;
+    var arr = React.Children.toArray(kids);
+    for (var i = 0; i < arr.length; i++) {
+      var placed = intoPopovers(React, arr[i], extra);
+      if (placed) { arr[i] = placed; return React.cloneElement(el, null, arr); }
+    }
+    return null;
+  }
+
+  function installCardCount(api, React, Bootstrap) {
+    if (!Bootstrap.Button || !Bootstrap.ButtonGroup || !React.cloneElement) {
+      gateLogOnce('card', 'react-bootstrap has no Button or ButtonGroup here - no variant ' +
+        'count on the scene cards.');
+      return;
+    }
+    var Count = VariantCount(React, Bootstrap);
+    api.patch.after('SceneCard.Popovers', function (props) {
+      var result = arguments[arguments.length - 1];
+      try {
+        // A compact card draws no counters of its own, so it gets none of ours either.
+        if (!props || !props.scene || props.compact) return result;
+        var id = String(props.scene.id);
+        var placed = intoPopovers(React, result, React.createElement(Count, { key: 'svr-vcount', id: id }));
+        return placed || React.createElement(React.Fragment, null, result,
+          React.createElement(Count, { key: 'svr-vcount', id: id, own: true }));
+      } catch (e) {
+        console.warn('[svr] the variant count could not be put on a scene card: ' + e.message);
+        return result;
+      }
+    });
+  }
+
   var _patched = false;
 
   function installTabs() {
@@ -6993,6 +7199,7 @@
           React.createElement(Pane, { scene: props.scene }));
       });
     });
+    installCardCount(api, React, Bootstrap);
     _patched = true;
     gateLogOnce('patch', 'the Variants tab is registered on the scene page');
     // The pane's own CSS has to be on the page before React first renders it, and there
@@ -7187,6 +7394,19 @@
     }
   }
 
+  // The ⸎ in Display Variant Count on Scene Cards' name, amber as on the cards. Stash
+  // puts the name back on a re-render, so this runs on every tick and is idempotent.
+  function amberMarkSetting() {
+    var row = settingRow('c0ShowCardCount');
+    var h3 = row && row.querySelector ? row.querySelector('h3') : null;
+    if (!h3 || byClass(h3, 'svr-amber-mark')) return;
+    var t = String(h3.textContent == null ? '' : h3.textContent), at = t.indexOf('⸎');
+    if (at === -1) return;
+    h3.textContent = t.slice(0, at);
+    h3.appendChild(el('span', 'svr-amber-mark', '⸎'));
+    h3.appendChild(el('span', null, t.slice(at + 1)));
+  }
+
   // The group description is in the group *header*, which is outside the <Collapse> -
   // so it stays on screen at full height whether the group is expanded or not, and
   // per-plugin collapse does not shorten it. Hiding all but the first paragraph is the
@@ -7288,6 +7508,7 @@
     splitDescription(group);
     collapseDescription(group);   // after the split: it counts the .svr-p divs
     tipSettings();
+    amberMarkSetting();
     ensureStaleNotice(group);     // before the early return: the link outlives it
     ensureTitleRow(group);
     if (document.getElementById(README_LINK_ID)) return;

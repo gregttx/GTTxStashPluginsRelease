@@ -8,6 +8,17 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.8.2 (`d87ae96`) | 2026-09-25 | Unselect All and Select All close the footer, in that order, in Undo History, Entity Name Maintainer and Scene Variants |
+| 3.8.1 (`7be61c5`) | 2026-09-25 | A long list line flows as text: no more overlap in Find & Replace and Entity Name Maintainer, no more columns in Undo History |
+| 3.8.0 (`cbc87d0`) | 2026-09-25 | Core 3.8.0: one Case-Sensitive Matching setting for every plugin with a Case-sensitive box, and the shared fold |
+| 3.7.0 (`393b18e`) | 2026-09-25 | Core 3.7.0: Undo History gets Unselect All and Select All |
+| 3.6.3 (`039cce5`) | 2026-09-25 | Core 3.6.3: Undo History's list is laid out in whole pixels, so every checkbox draws the same size |
+| 3.6.2 (`a5e11ab`) | 2026-09-25 | Core 3.6.2: Undo History's checkboxes stay one size, and an undone change dims its words, not its box |
+| 3.6.1 (`0d9fa8f`) | 2026-09-25 | Core 3.6.1: the undo review reads Undo Takes It Out of the History fresh |
+| 3.6.0 (`52e6438`) | 2026-09-25 | Core 3.6.0: a setting says where the review's Take it out of the history box starts |
+| 3.5.0 (`903745e`) | 2026-09-25 | Core 3.5.0: Shift-click ticks a range of checkboxes in every ᝯㄝₓ dialog |
+| 3.4.0 (`dac2059`) | 2026-09-25 | Core 3.4.0: Clear History warns before clearing runs no export holds |
+| 3.3.4 (`583d66a`) | 2026-09-25 | Core 3.3.4: the top bar's Undo History button has amber ink, and brings its own CSS |
 | 3.3.3 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 3.3.2 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 3.3.1 (`0964c6c`) | 2026-09-24 | Core 3.3.1: a merge in Undo History names the tag it went into with its id, as a link |

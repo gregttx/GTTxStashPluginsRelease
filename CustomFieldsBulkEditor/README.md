@@ -408,7 +408,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Edit Custom Fields Across the Whole Library | 551 MB | 1150 MB | 1150 MB |
+| Edit Custom Fields Across the Whole Library | 551 MB | 1149 MB | 1149 MB |
 | Manage Custom Field Descriptions and Locks | 214 MB | 311 MB | 311 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.

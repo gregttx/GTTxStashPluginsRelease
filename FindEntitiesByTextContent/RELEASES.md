@@ -8,6 +8,12 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.6.1 (`7be61c5`) | 2026-09-25 | A long list line flows as text: no more overlap in Find & Replace and Entity Name Maintainer, no more columns in Undo History |
+| 3.6.0 (`9655cbe`) | 2026-09-25 | Find & Replace 3.6.0: a match in another case is marked case differs in amber, and counted in the log |
+| 3.5.0 (`6b6d338`) | 2026-09-25 | Find & Replace 3.5.0: the Case-sensitive box starts from Core's setting; no settings of its own again |
+| 3.4.2 (`bacdfc7`) | 2026-09-25 | Find & Replace 3.4.2: İ folds to i, so a field holding it is searched and replaced in place |
+| 3.4.1 (`e3695bf`) | 2026-09-25 | Find & Replace 3.4.1: the Case-sensitive box says it lasts for the dialog, and a test pins that it leaves the setting alone |
+| 3.4.0 (`35f8d25`) | 2026-09-25 | Find & Replace 3.4.0: Case-sensitive starts from a Case-Sensitive Matching setting |
 | 3.3.2 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 3.3.1 (`6d0c32c`) | 2026-09-23 | Undo History: a dialog's Undo is recorded from the history; no copies kept |
 | 3.3.0 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |

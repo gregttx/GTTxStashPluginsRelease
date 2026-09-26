@@ -10,6 +10,32 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SFM | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-25 |  |  |  |  |  |  |  |  | 2.6.0 (`02916c8`) |  | Scene Variants 2.6.0: Display Variant Count ⸎ on Scene Cards, on by default, and the count in amber |
+| 2026-09-25 |  |  |  |  |  |  |  |  | 2.5.0 (`1909bf7`) |  | Scene Variants 2.5.0: every scene card counts its other variants, ⸎ last among its counters |
+| 2026-09-25 |  | 2.8.2 (`d87ae96`) |  | 3.8.2 (`d87ae96`) |  |  |  |  | 2.4.1 (`d87ae96`) |  | Unselect All and Select All close the footer, in that order, in Undo History, Entity Name Maintainer and Scene Variants |
+| 2026-09-25 |  | 2.8.1 (`7be61c5`) | 3.6.1 (`7be61c5`) | 3.8.1 (`7be61c5`) |  |  |  |  |  |  | A long list line flows as text: no more overlap in Find & Replace and Entity Name Maintainer, no more columns in Undo History |
+| 2026-09-25 |  |  | 3.6.0 (`9655cbe`) |  |  |  |  |  |  |  | Find & Replace 3.6.0: a match in another case is marked case differs in amber, and counted in the log |
+| 2026-09-25 |  |  | 3.5.0 (`6b6d338`) |  |  |  |  |  |  |  | Find & Replace 3.5.0: the Case-sensitive box starts from Core's setting; no settings of its own again |
+| 2026-09-25 |  | 2.8.0 (`620b055`) |  |  |  |  |  |  |  |  | Entity Name Maintainer 2.8.0: the Case-sensitive box starts from Core's setting, and folds with Core's fold |
+| 2026-09-25 |  |  |  | 3.8.0 (`cbc87d0`) |  |  |  |  |  |  | Core 3.8.0: one Case-Sensitive Matching setting for every plugin with a Case-sensitive box, and the shared fold |
+| 2026-09-25 |  |  | 3.4.2 (`bacdfc7`) |  |  |  |  |  |  |  | Find & Replace 3.4.2: İ folds to i, so a field holding it is searched and replaced in place |
+| 2026-09-25 |  | 2.7.2 (`b1b1db2`) |  |  |  |  |  |  |  |  | Entity Name Maintainer 2.7.2: İ folds to i, so a field holding it is searched; a skipped field's line has its card and a tooltip |
+| 2026-09-25 |  |  | 3.4.1 (`e3695bf`) |  |  |  |  |  |  |  | Find & Replace 3.4.1: the Case-sensitive box says it lasts for the dialog, and a test pins that it leaves the setting alone |
+| 2026-09-25 |  | 2.7.1 (`f6174d5`) |  |  |  |  |  |  |  |  | Entity Name Maintainer 2.7.1: the Case-sensitive box says it lasts for the dialog, and a test pins that it leaves the setting alone |
+| 2026-09-25 |  |  | 3.4.0 (`35f8d25`) |  |  |  |  |  |  |  | Find & Replace 3.4.0: Case-sensitive starts from a Case-Sensitive Matching setting |
+| 2026-09-25 |  | 2.7.0 (`b59af5d`) |  |  |  |  |  |  |  |  | Entity Name Maintainer 2.7.0: case differs marked and unticked, a Case-sensitive box and setting, and Rescan |
+| 2026-09-25 |  |  |  |  |  |  |  |  | 2.4.0 (`fedcb97`) |  | Scene Variants 2.4.0: Select All and Unselect All in the synchronize listing, and disabled boxes dimmed |
+| 2026-09-25 |  |  |  | 3.7.0 (`393b18e`) |  |  |  |  |  |  | Core 3.7.0: Undo History gets Unselect All and Select All |
+| 2026-09-25 |  | 2.6.0 (`4adb10b`) |  |  |  |  |  |  |  |  | Entity Name Maintainer 2.6.0: a skipped field is named with its entity, and Select All and Unselect All |
+| 2026-09-25 |  |  |  |  |  |  |  |  |  | 2.3.0 (`1c3e190`) | Tag Bundle Clipboard 2.3.0: Unselect All and Select All in the paste dialog |
+| 2026-09-25 |  | 2.5.5 (`2e791c2`) |  |  |  |  | 5.3.4 (`2e791c2`) |  | 2.3.2 (`2e791c2`) | 2.2.7 (`2e791c2`) | Checkbox lists in four more dialogs are laid out in whole pixels, so every box draws the same size |
+| 2026-09-25 |  |  |  | 3.6.3 (`039cce5`) |  |  |  |  |  |  | Core 3.6.3: Undo History's list is laid out in whole pixels, so every checkbox draws the same size |
+| 2026-09-25 |  |  |  | 3.6.2 (`a5e11ab`) |  |  |  |  |  |  | Core 3.6.2: Undo History's checkboxes stay one size, and an undone change dims its words, not its box |
+| 2026-09-25 |  |  |  | 3.6.1 (`0d9fa8f`) |  |  |  |  |  |  | Core 3.6.1: the undo review reads Undo Takes It Out of the History fresh |
+| 2026-09-25 |  |  |  | 3.6.0 (`52e6438`) |  |  |  |  |  |  | Core 3.6.0: a setting says where the review's Take it out of the history box starts |
+| 2026-09-25 |  |  |  | 3.5.0 (`903745e`) |  |  |  |  |  |  | Core 3.5.0: Shift-click ticks a range of checkboxes in every ᝯㄝₓ dialog |
+| 2026-09-25 |  |  |  | 3.4.0 (`dac2059`) |  |  |  |  |  |  | Core 3.4.0: Clear History warns before clearing runs no export holds |
+| 2026-09-25 |  |  |  | 3.3.4 (`583d66a`) |  |  |  |  |  |  | Core 3.3.4: the top bar's Undo History button has amber ink, and brings its own CSS |
 | 2026-09-25 |  |  |  |  |  |  |  |  | 2.3.1 (`18525d7`) |  | Scene Variants 2.3.1: a title written updates the scanned sets by id, not by a search per write; package.json moves into .tests |
 | 2026-09-25 | 3.5.7 (`5804c87`) | 2.5.4 (`5804c87`) |  | 3.3.3 (`5804c87`) | 4.2.2 (`5804c87`) | 5.6.3 (`5804c87`) | 5.3.3 (`5804c87`) | 1.5.4 (`5804c87`) | 2.3.0 (`5804c87`) | 2.2.6 (`5804c87`) | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 2026-09-25 |  |  |  |  |  |  |  |  | 2.2.0 (`0200a51`) |  | Scene Variants 2.2.0: the Variants tab counts the other variants, "N Variants" or "1 Variant" |

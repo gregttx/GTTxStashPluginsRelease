@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.3.4 (`2e791c2`) | 2026-09-25 | Checkbox lists in four more dialogs are laid out in whole pixels, so every box draws the same size |
 | 5.3.3 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 5.3.2 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 5.3.1 (`67095e1`) | 2026-09-24 | Core 3.2.0: Stash's settings page shows every seeded default from its first paint |

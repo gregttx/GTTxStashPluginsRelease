@@ -45,7 +45,7 @@
     }
     return;
   }
-  var showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
+  var showDefaults = C.showDefaults, caseSensitive = C.caseSensitive, fold = C.fold, coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
@@ -75,7 +75,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.5.4';
+  var PLUGIN_VERSION = '2.8.2';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -441,7 +441,9 @@
           : (hasOwn(raw, k) && raw[k] != null ? String(raw[k]) : DEFAULTS[k]);
       }
       seedDefaults(raw);
-      return s;
+      // Where the dialog's Case-sensitive box starts is one setting for every ᝯㄝₓ
+      // plugin with such a box, and it is Core's.
+      return caseSensitive().then(function (cs) { s.caseSensitive = cs; return s; });
     });
   }
 
@@ -455,7 +457,8 @@
   // replaces a plugin's configuration rather than merging into it (§`configurePlugin`
   // in the repo-root AGENTS.md), so a partial input deletes every setting it does not
   // name. Silent on failure - a settings write nobody asked for must not put an error
-  // in front of someone who came here to rename a tag.
+  // in front of someone who came here to rename a tag. The switches are seeded too, off:
+  // an unset switch and an off one draw alike, but only a stored one says it was decided.
   var _seeded = false;
   function seedDefaults(raw) {
     if (_seeded) return;
@@ -464,7 +467,7 @@
     var k;
     for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
     for (k in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, k) || typeof DEFAULTS[k] === 'boolean') continue;
+      if (!hasOwn(DEFAULTS, k)) continue;
       if (hasOwn(raw, k) && raw[k] != null) continue;
       input[k] = DEFAULTS[k];
       missing++;
@@ -481,7 +484,7 @@
   if (typeof showDefaults === 'function') {
     showDefaults(PLUGIN_ID, function () {
       var out = {};
-      for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k) && typeof DEFAULTS[k] !== 'boolean') out[k] = DEFAULTS[k];
+      for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) out[k] = DEFAULTS[k];
       return out;
     });
   }
@@ -508,6 +511,9 @@
     'white-space:pre-wrap;}' +
     '.enm-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
+    // This dialog's log holds a checkbox per line, and a box drawn at a fractional offset
+    // snaps a pixel taller: 1.35 of .8rem is 17.28px, so the lines here are a whole 18.
+    '.enm-modal .enm-log{line-height:18px;}' +
     '.enm-line{white-space:pre-wrap;word-break:break-word;}' +
     '.enm-spin{color:#a7b6c2;}' +
     '.enm-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
@@ -526,6 +532,12 @@
     '.enm-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
     '.enm-label{color:#a7b6c2;font-size:.85rem;white-space:nowrap;}' +
+    '.enm-check{display:flex;align-items:center;gap:.35rem;color:#a7b6c2;font-size:.85rem;' +
+    'white-space:nowrap;cursor:pointer;margin:0;}' +
+    // A checkbox carries browser margins that put it off the row's centre line.
+    '.enm-check input{margin:0;}' +
+    // Amber: the one thing on a hit line that asks for a second look before ticking.
+    '.enm-casediff{color:#ffc107;white-space:nowrap;}' +
     // `.enm-textbox` rather than `.enm-input`: `CustomFieldsBulkEditor` already defines
     // `.cfbe-input`, and a class name two plugins share has to mean the same thing in
     // both - its box is a filter that flexes with three others beside it, this one is
@@ -559,20 +571,21 @@
     // One hit per line. `.enm-hitrow` rather than `.enm-row`: `NormalizeParentTags`
     // already has a `.npt-row` and it is a row of its hierarchy tree, which is not this -
     // a class name two plugins share has to mean the same thing in both.
-    // The checkbox is the one child that must not shrink when a long context string
-    // releases the row's own min-width floor.
-    '.enm-hitrow{display:flex;align-items:baseline;gap:.5rem;padding:.1rem .25rem;margin:0;' +
-    'cursor:pointer;}' +
-    '.enm-hitrow>*{min-width:0;}' +
-    '.enm-hitrow input{flex:0 0 auto;}' +
+    // Text that flows, not flex columns: as columns a long name either ran over the
+    // attribute beside it or wrapped inside a column of its own. The box is inline, its
+    // margins summing to the 18px line, and a hanging indent starts every wrapped line
+    // after it.
+    '.enm-hitrow{padding:2px 4px 2px 25px;text-indent:-21px;margin:0;cursor:pointer;' +
+    'overflow-wrap:anywhere;}' +
+    '.enm-hitrow>*{margin-right:8px;}' +
+    '.enm-hitrow input{width:13px;height:13px;margin:3px 8px 2px 0;vertical-align:top;}' +
     '.enm-hitrow:hover{background:#3c4f5d;}' +
     '.enm-hitrow-off{color:#7d8f9c;}' +
-    '.enm-ent{color:#7cc4ff;text-decoration:none;white-space:nowrap;}' +
+    '.enm-ent{color:#7cc4ff;text-decoration:none;}' +
     '.enm-ent:hover{text-decoration:underline;}' +
-    '.enm-attr{color:#a7b6c2;white-space:nowrap;}' +
-    // The context string is the one part of the line that is allowed to be long, so it
-    // is the one that takes the remaining room and breaks mid-word if it has to.
-    '.enm-ctx{flex:1 1 auto;overflow-wrap:anywhere;word-break:break-word;}' +
+    '.enm-attr{color:#a7b6c2;}' +
+    // The context string breaks mid-word if it has to.
+    '.enm-ctx{overflow-wrap:anywhere;word-break:break-word;}' +
     // The occurrence itself, inside its surroundings. Green rather than amber: it marks
     // what is there now, not what is about to change.
     '.enm-mark{background:#3f6b46;border-radius:2px;padding:0 .1rem;}' +
@@ -789,24 +802,22 @@
   // "Anna"); the context on every line and the per-line tick are what that relies on.
   // A word-boundary mode is the upgrade if short names turn out to be common.
   //
-  // **A field whose case does not fold in place is refused rather than searched.**
-  // `toLowerCase()` is not length-preserving - 'İ' folds to two units - so a position
-  // recorded against the folded string does not point at the same character in the
-  // original, and everything downstream slices the *original* at those offsets: the
-  // context on a hit line, and the splice `replaceAt` writes back. There is no
-  // length-preserving fold in ES5, so the choice is a field not searched or a field
-  // rewritten with the new name in the wrong place, and this plugin's whole job is not
-  // to be the second one. The comparison costs nothing: the fold had to happen anyway.
-  var _foldSkips = 0;
-  function foldSkips() { return _foldSkips; }
-
-  function occurrences(text, needle) {
+  // Case is folded by Core's `fold`, which keeps the length - 'İ' is taken to 'i' before
+  // `toLowerCase()`, which would make it two units. **A field whose fold still changes
+  // length is refused rather than searched**: a position recorded against the folded
+  // string would not point at the same character in the original, and everything
+  // downstream slices the *original* at those offsets - the context on a hit line, and
+  // the splice `replaceAt` writes back. A field not searched is survivable; a field
+  // rewritten with the new name in the wrong place is what this plugin exists not to do.
+  // A refused field comes back empty and marked `refused`, so the scan can say which.
+  // `matchCase` compares the text as it is, which folds nothing and so refuses nothing.
+  function occurrences(text, needle, matchCase) {
     var out = [];
     if (!needle) return out;
     var raw = String(text);
-    var hay = raw.toLowerCase();
-    if (hay.length !== raw.length) { _foldSkips++; return out; }
-    var n = needle.toLowerCase();
+    var hay = matchCase ? raw : fold(raw);
+    if (hay.length !== raw.length) { out.refused = true; return out; }
+    var n = matchCase ? needle : fold(needle);
     var i = 0;
     while ((i = hay.indexOf(n, i)) !== -1) {
       out.push(i);
@@ -854,9 +865,20 @@
       spec.list + ' { ' + sel.join(' ') + ' } } }';
   }
 
+  // A match written in another case than the old name - "jane doe" for "Jane Doe" - is
+  // as likely a different use of the words as a mention, so it starts unticked and its
+  // line says why.
+  function caseCheck(hit, needle, source) {
+    if (String(source).substr(hit.pos, needle.length) !== needle) {
+      hit.caseDiffers = true;
+      hit.checked = false;
+    }
+    return hit;
+  }
+
   // Every hit in one entity, in field order and then in occurrence order, which is the
   // order the sequence numbers on the lines are handed out in.
-  function scanEntity(spec, shapes, ent, needle, self) {
+  function scanEntity(spec, shapes, ent, needle, self, matchCase) {
     var hits = [];
     // The entity that was just renamed is not a mention of its old name in someone
     // else's text, and its own name field is the one field the rename has already
@@ -883,13 +905,20 @@
     }
     function norm(x) { return x == null ? '' : String(x); }
     var seq = {};
+    // The fields refused rather than searched, by label: `noteFolds` names them.
+    hits.refused = [];
+    function find(label, text) {
+      var found = occurrences(text, needle, matchCase);
+      if (found.refused && hits.refused.indexOf(label) === -1) hits.refused.push(label);
+      return found;
+    }
     function add(label, field, kind, slot, source, pos) {
       var n = (seq[label] = (seq[label] || 0) + 1);
-      hits.push({
+      hits.push(caseCheck({
         typeKey: spec.key, entId: String(ent.id), entName: displayName(ent) || '',
         label: label, field: field, kind: kind, slot: slot,
         pos: pos, seq: n, ctx: context(source, pos, needle.length),
-      });
+      }, needle, source));
     }
     shapes.forEach(function (f) {
       if (f.name === ownName) return;
@@ -897,7 +926,7 @@
       if (f.kind === 'string') {
         if (typeof v !== 'string') return;
         if (stale && norm(stale[f.name]) !== v) return;   // typed in this save
-        occurrences(v, needle).forEach(function (p) {
+        find(FIELD_LABEL[f.name] || f.name, v).forEach(function (p) {
           add(FIELD_LABEL[f.name] || f.name, f.name, 'string', null, v, p);
         });
         return;
@@ -907,7 +936,7 @@
         v.forEach(function (str, idx) {
           if (typeof str !== 'string') return;
           if (stale && (stale[f.name] || []).indexOf(str) === -1) return;   // added in this save
-          occurrences(str, needle).forEach(function (p) {
+          find(FIELD_LABEL[f.name] || f.name, str).forEach(function (p) {
             add(FIELD_LABEL[f.name] || f.name, f.name, 'list', idx, str, p);
           });
         });
@@ -920,14 +949,14 @@
       var wasMap = stale && stale[f.name] && typeof stale[f.name] === 'object' ? stale[f.name] : null;
       Object.keys(v).forEach(function (key) {
         if (stale && !(wasMap && hasOwn(wasMap, key))) return;   // a field added in this save
-        occurrences(key, needle).forEach(function (p) {
+        find(CF_NAME_LABEL + ' "' + key + '"', key).forEach(function (p) {
           add(CF_NAME_LABEL, 'custom_fields', 'cfname', key, key, p);
         });
         // Only strings. A custom field can hold a number or an object, and neither is
         // text a rename has any business rewriting.
         if (typeof v[key] !== 'string') return;
         if (stale && wasMap[key] !== v[key]) return;   // a value typed in this save
-        occurrences(v[key], needle).forEach(function (p) {
+        find(CF_VALUE_LABEL + ' "' + key + '"', v[key]).forEach(function (p) {
           add(CF_VALUE_LABEL, 'custom_fields', 'cfvalue', key, v[key], p);
         });
       });
@@ -984,6 +1013,9 @@
     this.settings = settings || DEFAULTS;
     this.warnAbove = numSetting(this.settings, 'b1WarnAbove');
     this.stopAbove = numSetting(this.settings, 'c1StopAbove');
+    // Where the dialog's Case-sensitive box starts - Core's Case-Sensitive Matching - and
+    // the box then decides, and rescans.
+    this.matchCase = !!this.settings.caseSensitive;
     // Every occurrence found, in scan order. `checked` is the user's own answer and is
     // never touched by a filter - see `enabled`.
     this.hits = [];
@@ -1020,9 +1052,8 @@
     this.loadingWhat = '';
     // Every line the log holds, as plain text - what Copy log copies. Built beside the
     // nodes rather than read back off them.
-    // Where the fold-skip counter stood when this run began, so a warning names what
-    // *this* scan refused rather than everything the page ever has.
-    this.foldMark = foldSkips();
+    // The entities with a field refused rather than searched - see `occurrences`.
+    this.folds = [];
     this.logText = [];
     this.state = 'scanning';
     this.build();
@@ -1053,7 +1084,8 @@
       'One line per occurrence: the entity it is in, with its id in brackets, then the ' +
       'attribute - numbered where that attribute holds more than one - then the text ' +
       'around it. Click the entity to open it. Untick a line to leave it ' +
-      'alone. A filter turned off hides its lines and leaves them alone too, without ' +
+      'alone; a match written in another case is marked case differs and starts ' +
+      'unticked. A filter turned off hides its lines and leaves them alone too, without ' +
       'changing any tick you have already made.'));
     head.appendChild(legend);
     this.noteEl = el('div', 'enm-note', '');
@@ -1076,6 +1108,23 @@
     this.newInput.value = this.newName;
     this.newInput.addEventListener('input', function () { self.syncFooter(); });
     names.appendChild(this.newInput);
+    // Pressing it rescans: what matches is decided by the scan, and a box that waited for
+    // the next rename would look like it had done nothing.
+    var cs = el('label', 'enm-check');
+    this.caseBox = el('input');
+    this.caseBox.type = 'checkbox';
+    this.caseBox.checked = this.matchCase;
+    this.caseBox.addEventListener('change', function () {
+      self.matchCase = !!self.caseBox.checked;
+      self.rescan();
+    });
+    cs.appendChild(this.caseBox);
+    cs.appendChild(el('span', null, 'Case-sensitive'));
+    cs.title = 'Match the old name exactly as written, capitals included, and scan again. ' +
+      'Off, "jane doe" is listed for "Jane Doe" too, marked case differs and unticked. ' +
+      'It starts as ᝯㄝₓ Core\'s Case-Sensitive Matching setting says; changing it here ' +
+      'lasts for this dialog and leaves the setting as it is.';
+    names.appendChild(cs);
     this.modal.appendChild(names);
 
     this.filtersEl = el('div', 'enm-filters enm-hidden');
@@ -1106,6 +1155,8 @@
     this.copyBtn = button('Copy log', 'enm-copy');
     this.copyBtn.title = 'Copy the counters, the messages and every line of the listing as ' +
       'plain text.';
+    this.rescanBtn = button('Rescan', 'enm-rescan');
+    this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.allOnBtn = button('All On', 'enm-allon enm-filterbtn');
     this.allOffBtn = button('All Off', 'enm-alloff enm-filterbtn');
     [this.allOnBtn, this.allOffBtn].forEach(function (b) {
@@ -1114,6 +1165,14 @@
         'shown and what will be replaced; it never changes a tick.';
     });
 
+    // Grey: they write nothing, and set only the lines the filters show.
+    this.unselAllBtn = button('Unselect All', 'enm-unselall');
+    this.unselAllBtn.title = 'Untick every line shown in the listing.';
+    this.selAllBtn = button('Select All', 'enm-selall');
+    this.selAllBtn.title = 'Tick every line shown in the listing.';
+    this.unselAllBtn.addEventListener('click', function () { self.tickAll(false); });
+    this.selAllBtn.addEventListener('click', function () { self.tickAll(true); });
+
     this.goBtn.addEventListener('click', function () { self.go(); });
     this.cancelBtn.addEventListener('click', function () { self.cancelRename(); });
     this.closeBtn.addEventListener('click', function () { self.requestClose(); });
@@ -1121,10 +1180,14 @@
     this.allOnBtn.addEventListener('click', function () { self.setAllFilters(true); });
     this.allOffBtn.addEventListener('click', function () { self.setAllFilters(false); });
 
-    [this.goBtn, this.cancelBtn, this.closeBtn, this.copyBtn].forEach(function (b) { foot.appendChild(b); });
+    [this.goBtn, this.cancelBtn, this.closeBtn, this.copyBtn, this.rescanBtn]
+      .forEach(function (b) { foot.appendChild(b); });
     foot.appendChild(el('div', 'enm-spacer'));
     foot.appendChild(this.allOnBtn);
     foot.appendChild(this.allOffBtn);
+    // The selection pair last, at the right end, where every sibling's dialog has it.
+    foot.appendChild(this.unselAllBtn);
+    foot.appendChild(this.selAllBtn);
     this.modal.appendChild(foot);
 
     wireEscape(this);
@@ -1178,6 +1241,19 @@
   // Proceed until a write has landed, Undo afterwards, and the reason it is disabled
   // said out loud rather than left to be guessed at.
   Run.prototype.syncFooter = function () {
+    // Each held back where pressing it would change nothing.
+    var open = this.openHits();
+    this.selAllBtn.disabled = this.state !== 'listing' ||
+      open.every(function (h) { return h.checked !== false; });
+    this.unselAllBtn.disabled = this.state !== 'listing' ||
+      open.every(function (h) { return h.checked === false; });
+    // A fresh scan describes the library as it is, and after a write that is a library
+    // this dialog has changed - so not until Undo has taken the write back.
+    var noScan = this.state !== 'listing' ? 'Still working.'
+      : this.changes.length ? 'Undo first: a scan now would list what this dialog wrote.' : '';
+    this.rescanBtn.disabled = this.caseBox.disabled = !!noScan;
+    this.rescanBtn.title = noScan || 'Search the library again from the start - after ' +
+      'fixing a field by hand, say. Every tick starts over.';
     var undo = this.changes.length > 0;
     // Cancel reverses exactly one write - the rename this dialog opened for - so it is
     // offered only while that is the only write there is. Once Proceed has run, putting
@@ -1275,15 +1351,51 @@
     this.progressEl.textContent = text;
   };
 
+  var FOLDS_SHOWN = 50;
+
   // Said once per scan, and only where a field was actually refused. Silence would put
   // this in the same position as a wrong field name: "no mentions" and "not searched"
   // reading identically.
   Run.prototype.noteFolds = function () {
-    var n = foldSkips() - this.foldMark;
-    if (n <= 0) return;
-    this.msg('WARN', plural(n, 'field') + ' could not be searched: the text holds a ' +
-      'character whose lower case is longer than itself, so a position in it would not ' +
-      'point at the same character and a replacement would land in the wrong place.');
+    var folds = this.folds;
+    if (!folds.length) return;
+    var n = folds.reduce(function (t, f) { return t + f.labels.length; }, 0);
+    this.msg('WARN', plural(n, 'field') + ' on ' + plural(folds.length, 'entity', 'entities') +
+      ' could not be searched: the text holds a character whose lower case is longer than ' +
+      'itself (such as İ), so a position in it would not point at the same character and a ' +
+      'replacement would land in the wrong place. Tick Case-sensitive to search them as ' +
+      'written, or check these by hand:');
+    // ponytail: the first FOLDS_SHOWN only, so a library full of them cannot bury the log.
+    for (var i = 0; i < folds.length && i < FOLDS_SHOWN; i++) {
+      var f = folds[i], route = ENTITIES[f.typeKey].route;
+      var who = this.entityLabel(f.typeKey, f.entId, f.entName);
+      var line = this.msg('WARN', '  ' + who + ': ' + f.labels.join(', '));
+      var tip = plural(f.labels.length, 'field') + ' here - ' + f.labels.join(', ') +
+        ' - ' + (f.labels.length === 1 ? 'was' : 'were') + ' not searched for "' +
+        this.oldName + '", so a mention in ' + (f.labels.length === 1 ? 'it' : 'them') +
+        ' is neither listed nor replaced. Tick Case-sensitive to search ' +
+        (f.labels.length === 1 ? 'it' : 'them') + ' as written, or check by hand.';
+      if (!route) { line.title = tip; continue; }
+      // Linked, with the entity's hover card, so the one to check is recognised and opens
+      // in one click. The explanation is on the text either side rather than the line: an
+      // ancestor's title would show under the card.
+      var link = el('a', 'enm-ent', who);
+      link.href = route + f.entId;
+      link.target = linkTarget();
+      link.rel = 'noopener noreferrer';
+      entityTip(link, f.typeKey, f.entId);
+      line.textContent = '';
+      var head = el('span', null, '[WARN]   ');
+      var rest = el('span', null, ': ' + f.labels.join(', '));
+      head.title = rest.title = tip;
+      line.appendChild(head);
+      line.appendChild(link);
+      line.appendChild(rest);
+    }
+    if (folds.length > FOLDS_SHOWN) {
+      this.msg('WARN', '  ...and ' + plural(folds.length - FOLDS_SHOWN, 'more entity',
+        'more entities') + '.');
+    }
   };
 
   // Custom Fields Bulk Editor's Locked Custom Fields, through Core's `fieldLocks`: null
@@ -1301,7 +1413,7 @@
     if (h.kind !== 'cfname' && h.kind !== 'cfvalue') return false;   // descriptions: `scanDescriptions`
     if (this.fieldLocked(h.slot)) return true;
     return h.kind === 'cfname' && this.fieldLocked(replaceAt(h.slot,
-      occurrences(h.slot, this.oldName), this.oldName.length, this.newName));
+      occurrences(h.slot, this.oldName, this.matchCase), this.oldName.length, this.newName));
   };
 
   Run.prototype.begin = function () {
@@ -1310,6 +1422,10 @@
     this.msg('INFO', 'Looking for "' + this.oldName + '" in every text field of every ' +
       'entity, after ' + this.spec.label + ' ' + this.id + ' was renamed to "' +
       this.newName + '".');
+    if (this.matchCase) {
+      this.msg('INFO', 'Case-sensitive: only "' + this.oldName + '" written exactly so is ' +
+        'looked for.');
+    }
     if (this.settings.a1SkipImages) {
       this.msg('INFO', 'Images are left out of this scan: "Skip Images" is on in this ' +
         'plugin\'s settings.');
@@ -1330,7 +1446,8 @@
       self.buildFilters();
       self.renderHits();
       self.summarise();
-      if (self.handed() && !self.hits.length) {
+      // A rescan finding nothing is an answer in a dialog already open, not one to hide.
+      if (self.handed() && !self.hits.length && !self.rescanned) {
         trace(self.spec.label + ' ' + self.id + ': nothing mentions "' + self.oldName +
           '", so the handed-over rename opens no dialog.');
         self.close();
@@ -1384,7 +1501,11 @@
             rows.forEach(function (ent) {
               self.scanned++;
               if (isPluginStore(ent)) { self.skipped++; return; }
-              var found = scanEntity(spec, fields, ent, self.oldName, self.origin);
+              var found = scanEntity(spec, fields, ent, self.oldName, self.origin, self.matchCase);
+              if (found.refused.length) {
+                self.folds.push({ typeKey: spec.key, entId: String(ent.id),
+                  entName: displayName(ent) || '', labels: found.refused });
+              }
               for (var h = 0; h < found.length; h++) {
                 if (found[h].kind === 'cfname' || found[h].kind === 'cfvalue') self.cfSeen++;
                 if (self.lockedHit(found[h])) { self.lockedOut++; continue; }
@@ -1427,17 +1548,20 @@
       names.forEach(function (name) {
         var text = map[name];
         if (typeof text !== 'string' || !text) return;
-        var found = occurrences(text, self.oldName);
+        var found = occurrences(text, self.oldName, self.matchCase);
+        if (found.refused) {
+          self.folds.push({ typeKey: DESC_KEY, entId: name, entName: name, labels: [DESC_LABEL] });
+        }
         // A locked field's description is locked with it; its owner refuses the write
         // anyway, so the mention is not offered.
         if (found.length && self.fieldLocked(name)) { self.lockedOut += found.length; return; }
         found.forEach(function (pos, i) {
-          self.hits.push({
+          self.hits.push(caseCheck({
             typeKey: DESC_KEY, entId: name, entName: name,
             label: DESC_LABEL, field: 'description', kind: 'cfbedesc', slot: name,
             pos: pos, seq: i + 1, total: found.length,
             ctx: context(text, pos, self.oldName.length),
-          });
+          }, self.oldName, text));
         });
       });
       if (names.length) {
@@ -1519,6 +1643,12 @@
       this.msg('INFO', 'Nothing else in your library mentions "' + this.oldName +
         '". The rename is complete on its own.');
       return;
+    }
+    var differ = this.hits.filter(function (h) { return h.caseDiffers; }).length;
+    if (differ) {
+      this.msg('INFO', plural(differ, 'occurrence') + ' written in another case than "' +
+        this.oldName + '" ' + (differ === 1 ? 'is' : 'are') + ' marked case differs and ' +
+        'left unticked. Tick one to replace it too.');
     }
     if (this.hits.length > this.warnAbove) {
       this.note('Proceed with caution: ' + plural(this.hits.length, 'occurrence') +
@@ -1658,6 +1788,18 @@
     return this.hits.filter(function (h) { return h.checked !== false && self.visible(h); });
   };
 
+  // The lines Select All and Unselect All act on: shown, and not yet written.
+  Run.prototype.openHits = function () {
+    var self = this;
+    return this.hits.filter(function (h) { return !h.done && self.visible(h); });
+  };
+
+  Run.prototype.tickAll = function (on) {
+    if (this.state !== 'listing') return;
+    this.openHits().forEach(function (h) { h.checked = on; });
+    this.renderHits();
+  };
+
   // ── The listing ───────────────────────────────────────────────────────────
 
   Run.prototype.renderHits = function () {
@@ -1736,6 +1878,12 @@
     row.appendChild(el('span', 'enm-attr', ENTITIES[h.typeKey].label + ' \u00b7 ' + h.label +
       (h.total > 1 ? ' (' + h.seq + ')' : '') +
       (h.kind === 'cfname' || h.kind === 'cfvalue' ? ' [' + h.slot + ']' : '')));
+    if (h.caseDiffers) {
+      var diff = el('span', 'enm-casediff', 'case differs');
+      diff.title = 'Written "' + h.ctx.hit + '" here, where the old name is "' + this.oldName +
+        '". Left unticked, since it may be other words; tick it to replace it too.';
+      row.appendChild(diff);
+    }
 
     var ctx = el('span', 'enm-ctx');
     ctx.appendChild(el('span', null, h.ctx.pre));
@@ -1753,7 +1901,8 @@
       lines.push((h.checked !== false ? '[x] ' : '[ ] ') +
         self.entityLabel(h.typeKey, h.entId, h.entName) + ' · ' + h.label +
         (h.total > 1 ? ' (' + h.seq + ')' : '') +
-        (h.kind === 'cfname' || h.kind === 'cfvalue' ? ' [' + h.slot + ']' : '') + ': ' +
+        (h.kind === 'cfname' || h.kind === 'cfvalue' ? ' [' + h.slot + ']' : '') +
+        (h.caseDiffers ? ' (case differs)' : '') + ': ' +
         h.ctx.pre + h.ctx.hit + h.ctx.post);
     });
     lines.push('');
@@ -1980,14 +2129,14 @@
   // The occurrence positions the scan recorded, checked against the string as it is
   // now. Cheap, exact, and the whole of this plugin's answer to "what if it moved".
   Run.prototype.stillThere = function (text, positions, len) {
-    var needle = this.oldName.toLowerCase();
+    var needle = this.matchCase ? this.oldName : fold(this.oldName);
     var raw = String(text);
-    var s = raw.toLowerCase();
+    var s = this.matchCase ? raw : fold(raw);
     // The same refusal as `occurrences`, restated because this is the gate the *write*
     // goes through: a value that has grown such a character since the scan is one whose
     // recorded positions no longer point at the same characters, so it is treated as
     // changed underneath us - which is exactly what it is.
-    if (s.length !== raw.length) { _foldSkips++; return false; }
+    if (s.length !== raw.length) return false;
     for (var i = 0; i < positions.length; i++) {
       if (s.substr(positions[i], len) !== needle) return false;
     }
@@ -2209,6 +2358,30 @@
   // is armed closes. Nothing to dismiss and nothing to undo if the user simply walks
   // away - the countdown disarms itself. Only when something was found: an empty
   // listing is nothing to lose.
+  // The same scan from the start: every count, filter, tick and message goes, and the
+  // renamed entity's save is read as it was, so its own edits still are not listed.
+  Run.prototype.rescan = function () {
+    if (this.state !== 'listing' || this.changes.length) return;
+    this.hits = [];
+    this.typeOn = {};
+    this.attrOn = {};
+    this.written = this.failed = this.skipped = this.scanned = 0;
+    this.scannedPer = {};
+    this.totals = {};
+    this.types = [];
+    this.stopped = false;
+    this.descriptionsRead = null;
+    this.folds = [];
+    this.noteEl.textContent = '';
+    while (this.logEl.firstChild) this.logEl.removeChild(this.logEl.firstChild);
+    this.listEl = null;
+    this.logText = [];
+    this.logDropped = 0;
+    this.rescanned = true;
+    this.caseBox.checked = this.matchCase;
+    this.begin();
+  };
+
   Run.prototype.requestClose = function () {
     // Nothing found is nothing to lose, and neither is a listing that has been *acted
     // on*: after Proceed the replacements are in the library and the listing has done

@@ -65,6 +65,9 @@ The list is ordered the same way: what you can still change first (on, then off)
 decided for you, with the tags the entity already has last. Within each group it sorts the way Stash
 sorts tags anywhere else.
 
+**Unselect All** and **Select All**, at the right of the footer, untick or tick every tag you can
+decide on at once; the tags the entity already has stay as they are.
+
 A paste only ever adds what is missing, so pressing Add twice does nothing the second time. What
 counts as "already there" is read from **the form in front of you**, not from the server — so a tag
 you have just added or removed by hand, without saving, is taken into account, and it is re-read at

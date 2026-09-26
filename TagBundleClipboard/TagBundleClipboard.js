@@ -69,7 +69,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '2.2.6';
+  var PLUGIN_VERSION = '2.3.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -622,6 +622,7 @@
     '.tbc-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.tbc-foot button{margin-right:.5rem;}' +
+    '.tbc-selall{margin-left:auto;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
     // one of these rules is a single class, so the last one written wins - and this one
     // is written before the strips and rows that set their own `display`. A `-hidden` on
@@ -665,7 +666,7 @@
     'font-size:.9rem;line-height:1;}' +
     '.tbc-bundle-drop:hover{color:#ff7373;}' +
     // `break-inside:avoid` is what keeps a row from being split across two columns.
-    '.tbc-tagrow{display:flex;align-items:baseline;gap:.5rem;padding:.2rem .25rem;margin:0;' +
+    '.tbc-tagrow{display:flex;align-items:flex-start;gap:8px;padding:3px 4px;margin:0;line-height:20px;' +
     'cursor:pointer;break-inside:avoid;-webkit-column-break-inside:avoid;}' +
     // A long tag name with no space in it overran its column and printed over the
     // next one. Two rules are needed and neither works alone: a flex item will not
@@ -682,7 +683,7 @@
     // ...but the checkbox is the one child that must not shrink with it: releasing
     // its floor without pinning its basis lets a narrow column squash the box itself.
     '.tbc-tagrow>*{min-width:0;}' +
-    '.tbc-tagrow input{flex:0 0 auto;}' +
+    '.tbc-tagrow input{flex:0 0 auto;width:13px;height:13px;margin:4px 0 0;}' +
     '.tbc-tagrow:hover{background:#3c4f5d;}' +
     '.tbc-tagrow-fixed{cursor:default;color:#7d8f9c;}' +
     '.tbc-tagrow-fixed:hover{background:none;}' +
@@ -1217,6 +1218,17 @@
     foot.appendChild(this.copyBtn);
     foot.appendChild(this.undoBtn);
     foot.appendChild(this.closeBtn);
+    // At the row's right end, as in the siblings' pick lists. Grey: they only move the
+    // ticks, and Add is still the press that changes the form.
+    this.unselAllBtn = button('Unselect All');
+    this.unselAllBtn.className += ' tbc-selall';
+    this.unselAllBtn.title = 'Untick every tag in the bundle that is not already on this entity.';
+    this.unselAllBtn.addEventListener('click', function () { self.tickAll(false); });
+    this.selAllBtn = button('Select All');
+    this.selAllBtn.title = 'Tick every tag in the bundle that is not already on this entity.';
+    this.selAllBtn.addEventListener('click', function () { self.tickAll(true); });
+    foot.appendChild(this.unselAllBtn);
+    foot.appendChild(this.selAllBtn);
     this.modal.appendChild(foot);
 
     this.backdrop.appendChild(this.modal);
@@ -1403,6 +1415,11 @@
       this._rows.forEach(function (r) { self.tagsEl.appendChild(self.tagRow(r)); });
     }
 
+    // Each is held back when it would change nothing: every box already ticked, or none.
+    var own = this.ownRows();
+    this.selAllBtn.disabled = own.every(function (r) { return self.checked[r.key] !== false; });
+    this.unselAllBtn.disabled = own.every(function (r) { return self.checked[r.key] === false; });
+
     this.modeSel.value = _mode;
     // Hidden rather than disabled where the sibling is absent: a one-option select is
     // noise, and the log line below is what answers "where did Prune go".
@@ -1563,6 +1580,21 @@
     var mark = this.stateMark(r.state);
     if (mark) row.appendChild(el('span', 'tbc-have-mark', mark));
     return row;
+  };
+
+  // The bundle's own tags the user decides on: not the ones the entity already has, and
+  // not the ancestors Roll Up brings, which follow their descendants' ticks. A pruned
+  // tag is one of them - its tick still says whether it is wanted.
+  PasteRun.prototype.ownRows = function () {
+    return (this._rows || []).filter(function (r) {
+      return r.state === 'add' || r.state === 'off' || r.state === 'pruned';
+    });
+  };
+
+  PasteRun.prototype.tickAll = function (on) {
+    var self = this;
+    this.ownRows().forEach(function (r) { self.checked[r.key] = on; });
+    this.render();
   };
 
   // What Add would put in the box: the live ticks and the tags Roll Up brings with

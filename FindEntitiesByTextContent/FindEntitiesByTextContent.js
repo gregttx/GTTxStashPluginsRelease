@@ -41,7 +41,7 @@
     }
     return;
   }
-  var coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
+  var caseSensitive = C.caseSensitive, fold = C.fold, coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
     tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
@@ -72,7 +72,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '3.3.2';
+  var PLUGIN_VERSION = '3.6.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -241,7 +241,8 @@
   // inside the dialog, where the user already is, and answered on the spot. A console
   // switch was the one setting it had; it duplicated Copy log, which hands over the same
   // lines plus every result, and reached the console of a page the user only opens to
-  // read a list on screen.
+  // read a list on screen. Where the Case-sensitive box starts is ᝯㄝₓ Core's setting,
+  // shared by every plugin with such a box.
   //
   // Two consequences worth knowing, because both are load-bearing:
   //
@@ -433,17 +434,21 @@
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
     'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
-    '.fretc-ent{color:#7cc4ff;text-decoration:none;white-space:nowrap;}' +
+    '.fretc-ent{color:#7cc4ff;text-decoration:none;}' +
     '.fretc-ent:hover{text-decoration:underline;}' +
-    '.fretc-attr{color:#a7b6c2;white-space:nowrap;}' +
-    '.fretc-ctx{flex:1 1 auto;overflow-wrap:anywhere;word-break:break-word;}' +
+    '.fretc-attr{color:#a7b6c2;}' +
+    // Amber: the one thing on a result line that asks for a second look before Replace.
+    '.fretc-casediff{color:#ffc107;white-space:nowrap;}' +
+    '.fretc-ctx{overflow-wrap:anywhere;word-break:break-word;}' +
     '.fretc-mark{background:#3f6b46;border-radius:2px;padding:0 .1rem;}' +
     '.fretc-spacer{flex:1 1 auto;}' +
     // One entity per line. Not `.fretc-hitrow`: `EntityNameMaintainer`'s row is a decision
     // with a checkbox in it, and this one is a link - a class two plugins share has to
     // mean the same thing in both.
-    '.fretc-result{display:flex;align-items:baseline;gap:.5rem;padding:.1rem .25rem;}' +
-    '.fretc-result>*{min-width:0;}' +
+    // Text that flows, not flex columns: as columns a long name ran over the attributes
+    // beside it. A hanging indent sets every wrapped line in from the first.
+    '.fretc-result{padding:.1rem .25rem .1rem 1.25rem;text-indent:-1rem;overflow-wrap:anywhere;}' +
+    '.fretc-result>*{margin-right:.5rem;}' +
     '.fretc-result:hover{background:#3c4f5d;}' +
     // The two remembering controls, grouped so that they line up with each other and
     // sit a clear step away from the search box rather than at the row's own gap.
@@ -472,11 +477,11 @@
     '.fretc-own-group .sub-heading .fretc-p{margin:0 0 .35em;}' +
     '.fretc-own-group .sub-heading .fretc-p:last-child{margin-bottom:0;}' +
     '.fretc-desc-collapsed .fretc-p:not(:first-child){display:none;}' +
+    '.fretc-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
+    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
     // **No per-setting hover box and no colour-coded toggle**, because this plugin
     // declares no settings: both would style rows Stash never renders for it. The teal is
     // not lost - it is on the task button, which `paintTaskButtons` sets.
-    '.fretc-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}';
 
   function injectStyle() {
@@ -674,14 +679,13 @@
   // replacement reads the same captured value rather than what the checkbox says now.
   // A default of false keeps every existing call site meaning what it meant.
   //
-  // **A field whose case does not fold in place is refused rather than searched.**
-  // `toLowerCase()` is not length-preserving - 'İ' folds to two units - so a position
-  // recorded against the folded string does not point at the same character in the
-  // original, and everything downstream slices the *original* at those offsets: the
-  // context on a result line, and the splice a Replace writes back. There is no
-  // length-preserving fold in ES5, so the choice is a field not searched or a field
-  // rewritten with the replacement in the wrong place, and only one of those two is
-  // survivable. The comparison costs nothing: the fold had to happen anyway.
+  // Case is folded by Core's `fold`, which keeps the length - 'İ' is taken to 'i' before
+  // `toLowerCase()`, which would make it two units. **A field whose fold still changes
+  // length is refused rather than searched**: a position recorded against the folded
+  // string would not point at the same character in the original, and everything
+  // downstream slices the *original* at those offsets - the context on a result line,
+  // and the splice a Replace writes back. A field not searched is survivable; one
+  // rewritten with the replacement in the wrong place is not.
   var _foldSkips = 0;
   function foldSkips() { return _foldSkips; }
 
@@ -689,9 +693,9 @@
     var out = [];
     if (!needle) return out;
     var raw = String(text);
-    var hay = cased ? raw : raw.toLowerCase();
+    var hay = cased ? raw : fold(raw);
     if (hay.length !== raw.length) { _foldSkips++; return out; }
-    var n = cased ? String(needle) : String(needle).toLowerCase();
+    var n = cased ? String(needle) : fold(needle);
     var i = 0;
     while ((i = hay.indexOf(n, i)) !== -1) {
       out.push(i);
@@ -708,12 +712,12 @@
   // is the user's literal text - `.` and `(` in a box are characters, not syntax.
   function replaceAllIn(text, needle, to, cased) {
     var str = String(text);
-    var hay = cased ? str : str.toLowerCase();
+    var hay = cased ? str : fold(str);
     // The same refusal as `occurrences`, and it has to be restated here rather than
     // inferred: this is the half that writes, and a field the scan refused must not be
     // rewritten from offsets nothing computed.
     if (hay.length !== str.length) { _foldSkips++; return str; }
-    var n = cased ? String(needle) : String(needle).toLowerCase();
+    var n = cased ? String(needle) : fold(needle);
     if (!n) return str;
     var out = '';
     var i = 0;
@@ -782,12 +786,17 @@
     // One context per *attribute*, rather than one for the whole result. The line shows
     // the surroundings of the first match in the first attribute still showing, so a
     // filter that hides Title cannot leave a line quoting the title it just hid.
+    // `differs` counts the matches written in another case than the text searched for -
+    // "Beach" for "beach" - which a line marks, since a replacement rewrites them too.
     function add(label, source, pos) {
       if (!hasOwn(index, label)) {
-        index[label] = { label: label, count: 0, ctx: context(source, pos, needle.length) };
+        index[label] = { label: label, count: 0, differs: 0, ctx: context(source, pos, needle.length) };
         attrs.push(index[label]);
       }
       index[label].count++;
+      if (!cased && String(source).substr(pos, needle.length) !== String(needle)) {
+        index[label].differs++;
+      }
     }
     shapes.forEach(function (f) {
       var v = ent[f.name];
@@ -881,16 +890,22 @@
 
   var _active = null;
 
-  // Opens straight away. The siblings read their settings at the click so that flipping a
-  // switch and pressing the button in one page session does what it says; this plugin has
-  // no setting for that to be true of, so there is nothing to wait for.
+  // Opens once Core's Case-Sensitive Matching is read, fresh, so flipping it and pressing
+  // the button in one page session does what it says. Unreadable, it is off: a search is
+  // worth more than the one box's starting place.
+  var _opening = false;
   function startRun() {
     if (_active) { _active.focus(); return; }
-    _active = new Run();
-    _active.begin();
+    if (_opening) return;
+    _opening = true;
+    caseSensitive().then(null, function () { return false; }).then(function (cs) {
+      _opening = false;
+      _active = new Run(cs);
+      _active.begin();
+    });
   }
 
-  function Run() {
+  function Run(matchCase) {
     var stored = readStore();
     // Off by default, as asked: a search that covered everything the first time it was
     // opened would read the whole library before the user had chosen anything.
@@ -911,16 +926,11 @@
     // all, and a control like that starting in the on position because of something the
     // user did last week is the one default worth being conservative about.
     this.replacing = false;
-    // **Off on a browser that has never been told otherwise**, which is what every search
-    // this plugin has ever run did - and remembered from then on, because somebody who
-    // wants case-sensitive matching usually wants it every time and re-ticking a box per
-    // search is the kind of thing that gets a feature stopped being used.
-    //
-    // Kept unconditionally rather than under "Remember filters", like the search history
-    // beside it and unlike the entity types: that box says it keeps *the types*, and a
-    // user who has left it off would otherwise be told this is a per-search choice while
-    // it silently was not. `matchCase` below is what a run actually uses - see `start`.
-    this.caseSensitive = !!stored.caseSensitive;
+    // **As ᝯㄝₓ Core's Case-Sensitive Matching setting says**, off unless it is on:
+    // somebody who wants case-sensitive matching usually wants it every time, and one
+    // setting says so once, for every plugin with this box. The box then decides for
+    // this dialog. `matchCase` below is what a run actually uses - see `start`.
+    this.caseSensitive = !!matchCase;
     // What a Replace wrote, newest last: `{typeKey, id, input}` where `input` holds the
     // values each entity carried *before* it. That is what Undo sends back, which makes
     // it an exact inverse per field rather than a restore of the whole record.
@@ -1103,15 +1113,15 @@
     this.caseBox.checked = this.caseSensitive;
     this.caseBox.addEventListener('change', function () {
       self.caseSensitive = !!self.caseBox.checked;
-      self.save();
       self.syncFooter();
     });
     cs.appendChild(this.caseBox);
     cs.appendChild(el('span', null, 'Case-sensitive'));
-    cs.title = 'Match the text exactly as typed, capitals included. Off - the default - ' +
-      '"beach" also finds "Beach". It applies to a replacement as well, which finds what ' +
-      'the search found; changing it takes effect on the next search. Remembered in this ' +
-      'browser, so a search that wants it always wants it.';
+    cs.title = 'Match the text exactly as typed, capitals included. Off, "beach" also ' +
+      'finds "Beach". It applies to a replacement as well, which finds what the search ' +
+      'found; changing it takes effect on the next search. It starts as ᝯㄝₓ Core\'s ' +
+      'Case-Sensitive Matching setting says; changing it here lasts for this dialog and ' +
+      'leaves the setting as it is.';
     opts.appendChild(cs);
     bar.appendChild(opts);
     this.modal.appendChild(bar);
@@ -1347,7 +1357,6 @@
       historyMax: this.historyMax,
       history: this.history,
       replaceHistory: this.replaceHistory,
-      caseSensitive: this.caseSensitive,
     });
   };
 
@@ -1804,6 +1813,14 @@
         this.needle + '", out of ' + plural(this.scanned, 'entity', 'entities') + ' read.'
       : 'Finished: nothing in the ' + plural(this.scanned, 'entity', 'entities') +
         ' read mentions "' + this.needle + '".');
+    var differ = this.results.filter(function (hit) {
+      return hit.attrs.some(function (a) { return a.differs; });
+    }).length;
+    if (differ) {
+      this.msg('INFO', plural(differ, 'entity', 'entities') + (differ === 1 ? ' holds' : ' hold') +
+        ' a match written in another case than "' + this.needle + '", marked case differs. ' +
+        'Replace rewrites those too; tick Case-sensitive and search again to leave them out.');
+    }
   };
 
   // ── Replacing ─────────────────────────────────────────────────────────────
@@ -2209,6 +2226,15 @@
       shown.map(function (a) {
         return a.label + (a.count > 1 ? ' ×' + a.count : '');
       }).join(', ')));
+    var differs = caseDiffers(shown);
+    if (differs) {
+      var diff = el('span', 'fretc-casediff', 'case differs');
+      diff.title = plural(differs, 'match', 'matches') + ' here ' + (differs === 1 ? 'is' : 'are') +
+        ' written in another case than "' + this.needle + '". Replace rewrites ' +
+        (differs === 1 ? 'it' : 'them') + ' too; tick Case-sensitive and search again to ' +
+        'leave ' + (differs === 1 ? 'it' : 'them') + ' out.';
+      row.appendChild(diff);
+    }
     if (shown.length) {
       var ctx = el('span', 'fretc-ctx');
       ctx.appendChild(el('span', null, shown[0].ctx.pre));
@@ -2221,12 +2247,17 @@
     return row;
   };
 
+  // How many of the shown attributes' matches are written in another case.
+  function caseDiffers(shown) {
+    return shown.reduce(function (t, a) { return t + (a.differs || 0); }, 0);
+  }
+
   Run.prototype.resultText = function (hit) {
     var shown = this.shownAttrs(hit);
     return ENTITIES[hit.typeKey].label + ' ' + (hit.name || '(untitled)') + ' (' + hit.id +
       ') · ' + shown.map(function (a) {
         return a.label + (a.count > 1 ? ' x' + a.count : '');
-      }).join(', ') +
+      }).join(', ') + (caseDiffers(shown) ? ' (case differs)' : '') +
       (shown.length ? ': ' + shown[0].ctx.pre + shown[0].ctx.hit + shown[0].ctx.post : '');
   };
 

@@ -27,10 +27,13 @@ The fields it looks in:
 | Group | name, aliases, synopsis, director, URLs, custom field names and values |
 | Tag | name, aliases, description, custom field names and values |
 
-A field whose text contains a character whose lower case is *longer than itself* — a handful
-exist, such as `İ` — cannot be matched case-insensitively without the recorded positions
-pointing at the wrong characters, so it is skipped rather than rewritten in the wrong place,
-and the log says how many were.
+The Turkish `İ` is matched as a plain `i`: its lower case is two characters, which would
+put every position after it one out, so it is folded to one first — `istanbul` finds
+`İstanbul`, and a name holding `İ` finds the same name in plain letters. Should a
+browser's case rules hold another character like it, a field holding one is skipped
+rather than rewritten in the wrong place, and the log names each entity with a field
+skipped, linked to it — tick **Case-sensitive** to search those exactly as written, or
+check them by hand.
 
 Which of those your Stash actually has is settled by asking it, once per scan, rather than
 assumed — a field this plugin looks for and your server does not have is skipped instead of
@@ -49,7 +52,13 @@ The listing and the messages share one box and read in the order things happened
 saying what is being looked for, then the occurrences, then whatever the run had to say
 afterwards.
 
-- **Tick** — every line starts ticked. Untick one to leave that occurrence alone.
+- **Tick** — every line starts ticked. Untick one to leave that occurrence alone. A match
+  written in another case than the old name — `jane doe` for `Jane Doe` — is marked
+  **case differs** in amber and starts unticked, since it may be other words; tick it to
+  replace it too.
+- **Unselect All / Select All** — at the right end of the footer, untick or tick every line
+  the filters show; a line a filter
+  hides keeps its tick. Each is disabled when pressing it would change nothing.
 - **Click the entity** — opens it in a new tab, or in this one if ᝯㄝₓ Core is set that way. **Hover it** for a card: the entity's picture
   and the fields it is recognised by, or for a tag its aliases, parents, children and
   description. It is read on the first hover, so a listing nobody hovers costs nothing.
@@ -60,6 +69,12 @@ afterwards.
 - **All On / All Off** — sets every filter at once. Same rule: filters only. Each is
   disabled when pressing it would change nothing — no filters, or every one already on (or
   already off).
+- **Case-sensitive** — beside Replace with. Ticked, only the old name written exactly so is
+  looked for. Pressing it scans again. It starts as ᝯㄝₓ Core's **Case-Sensitive Matching**
+  setting says — one setting for every ᝯㄝₓ plugin with this box — and changing it here lasts
+  for this dialog without touching the setting.
+- **Rescan** — searches the library again from the start, after fixing a field by hand in
+  another tab, say. Every tick starts over. Not while a write stands: Undo it first.
 - **Replace with** — starts as the new name and is editable, because a replacement is not
   always literally the new name. "Jane Doe" may want to become "Jane" in the middle of a
   sentence.
@@ -131,7 +146,8 @@ page already carries its type's count.
 
 Matching is a plain case-insensitive substring. That is deliberate: a name written in prose
 is written the way the sentence wanted it, and a hit you can see and untick is better than a
-miss you cannot. The cost is that a short name matches inside longer words — "Ann" inside
+miss you cannot. A hit in another case is listed but marked and left unticked, and
+**Case-sensitive** leaves it out altogether. The cost is that a short name matches inside longer words — "Ann" inside
 "Anna" — which is what the context on every line, the per-line tick and the two limits below
 are for.
 

@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.6.0 (`02916c8`) | 2026-09-25 | Scene Variants 2.6.0: Display Variant Count ⸎ on Scene Cards, on by default, and the count in amber |
+| 2.5.0 (`1909bf7`) | 2026-09-25 | Scene Variants 2.5.0: every scene card counts its other variants, ⸎ last among its counters |
+| 2.4.1 (`d87ae96`) | 2026-09-25 | Unselect All and Select All close the footer, in that order, in Undo History, Entity Name Maintainer and Scene Variants |
+| 2.4.0 (`fedcb97`) | 2026-09-25 | Scene Variants 2.4.0: Select All and Unselect All in the synchronize listing, and disabled boxes dimmed |
+| 2.3.2 (`2e791c2`) | 2026-09-25 | Checkbox lists in four more dialogs are laid out in whole pixels, so every box draws the same size |
 | 2.3.1 (`18525d7`) | 2026-09-25 | Scene Variants 2.3.1: a title written updates the scanned sets by id, not by a search per write; package.json moves into .tests |
 | 2.3.0 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 2.2.0 (`0200a51`) | 2026-09-25 | Scene Variants 2.2.0: the Variants tab counts the other variants, "N Variants" or "1 Variant" |

@@ -73,6 +73,15 @@ The tab itself writes nothing: it is two read queries and a list of links. Its o
 leads to writes. While any of this plugin's dialogs is open the button is unavailable, and its
 tooltip says so; close that dialog first.
 
+### The variant count on a scene card
+
+Every scene card in a list shows **⸎** and the number of other variants the scene has, in amber,
+last among the counters under the card — after the tags, performers, groups, the O-counter,
+Organized and the rest. A scene with no other variant shows none, and **Display Variant Count ⸎ on
+Scene Cards** turns it off. Hover it for the other variants' titles; the Variants tab on the scene's own page
+lists them in full. The count is matched the way the tab matches, on a shared stash-id or a shared
+line of the **Variant Stash-ID Custom Field**, and every card on the page is counted in one go.
+
 ### Opening the full-duration variant
 
 On a partial-duration scene whose set has a full-duration member, a teal **▶ Open Full-Duration**
@@ -222,7 +231,7 @@ buttons in the same footer, captioned **Selected [Group?]:** and set apart from 
   pretends a stash-box was consulted.
 - **Remove Tag** takes the flag off the ticked scenes — for the ones whose flag is a leftover.
 
-**Select All** and **Unselect All**, at the right end of the footer, tick or untick every
+**Unselect All** and **Select All**, at the right end of the footer, untick or tick every
 [GROUP?] line still open; a line already written stays as it is.
 
 So making a set out of scenes no stash-box knows about is: put the flag tag on them, run
@@ -364,8 +373,8 @@ box above this task's listing starts from that setting and overrides it for the 
 re-planning at once. A set you want left as it is numbered is marked, per scene, in the no-rename
 field or with the no-rename tag.
 
-Every proposed title is a checkbox line, none ticked - **Select All** and **Unselect All** at
-the footer's right tick and untick every line still open - showing what changes between the old title
+Every proposed title is a checkbox line, none ticked - **Unselect All** and **Select All** at
+the footer's right untick and tick every line still open - showing what changes between the old title
 and the new - red for what goes, green for what arrives, a long shared start elided so the end is
 what you see; the hover shows both titles whole and says where the base came from. Nothing is written until you press **Proceed**, and **Undo** puts
 every written title back while the dialog stays open. A partial named after its set is not drift:
@@ -451,6 +460,9 @@ The rules, each visible in the plan:
   third. The line re-says what is picked — `Add 1 of 2 tags: Blonde` — and a line with nothing
   picked counts as no change at all, whatever its own checkbox says. Each name is a link with its
   card, which is exactly what a pick is decided from.
+- **Unselect All** and **Select All**, at the right end of the footer, untick or tick every line
+  still open, and every pick under its `▸` arrow with it. A box that cannot be changed — its line
+  already written, or a write running — is dimmed well past the usual disabled grey.
 - **The full-duration, partial-duration and flag tags are never pushed at all**, descendants included:
   they are what makes a variant a variant, and the flag is the flag task's to keep.
 - **The cover is pushed too, where it differs — with *Compare Cover Images* turned on.** A variant
@@ -565,6 +577,7 @@ switches the tab runs on:
 | Variant Stash-ID Custom Field | `ᱜ╦╦🞮_Variant_Stash_ID` | The custom field the [migration task](#migrating-a-partial-duration-scenes-stash-id) writes into. A **ⓘ** beside the value carries a tooltip with the field's description, how many scenes carry it and the first ten ([placement](../GTTxCore/README.md#links-cards-and-tooltips)). |
 | Variant Flag Tag | `ᱜ╦╦🞮⸎✱MultiVariants✅∙` | The tag the [Flag Variants task](#flagging-the-scenes-that-have-variants) keeps on every scene that has at least one other variant; the task's Proceed creates it if it does not exist yet — or renames it, where the plugin's own tag is found under an earlier default name or by its alias `GTTx Multiple Variants`. |
 | Log to the Browser Console | off | Print each variant lookup to the console under `[svr]`: the scene, how many variants were found and what they were matched on. A failed query is reported whatever this says. |
+| Display Variant Count ⸎ on Scene Cards | on | Show ⸎ and the number of other variants on every scene card that has any — see [the variant count on a scene card](#the-variant-count-on-a-scene-card). Off, the cards are as Stash draws them and nothing is asked for them. |
 | Offer to Propagate Edits to Variants | on | Open the [propagate dialog](#propagating-an-edit-when-you-save) when a save changed something the variants do not have. |
 | Skip Tags the Hierarchy Makes Redundant | on | Leave out a tag another tag on the same scene already implies, as [ᝯㄝₓ Normalize Parent Tags](#relationship-to-the-other-plugins-in-this-repo) decides — see [the rules](#synchronizing-a-variant-set). |
 | Compare Cover Images | off | Also compare the variants' cover images and offer this scene's where they differ — see [the rules](#synchronizing-a-variant-set) and [the set listing](#finding-the-sets-worth-synchronizing). |
@@ -672,7 +685,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
-| Flag Variants | 46 MB | 88 MB | 81 MB |
+| Flag Variants | 46 MB | 86 MB | 81 MB |
 | Review Variant Sets | 1949 MB | — | — |
 | Rename Variants | 635 MB | 664 MB | 664 MB |
 

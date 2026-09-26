@@ -41,7 +41,9 @@ Scene markers are not searched: a marker carries a title and no page of its own 
 
 One line per entity that matched, reading: the entity with its id in brackets, then which
 attributes matched and how many times each, then the text around the first match with the
-match marked.
+match marked. A line whose match is written in another case than what you typed — `Beach`
+for `beach` — says **case differs** in amber, and the log counts them: a Replace rewrites
+those too, so tick **Case-sensitive** and search again to leave them out.
 
 The entity's name is a link to it, and **hovering it opens a card**: its picture and the
 handful of fields it is recognised by — for a tag, its aliases, parents, children and
@@ -160,10 +162,11 @@ leaves everything it wrote in place, still reachable by **Undo**; what it did no
 simply not written. An Undo can be stopped the same way, and what it did not put back stays
 on the pile, so pressing Undo again carries on.
 
-A field whose text contains a character whose lower case is *longer than itself* — a handful
-exist, such as `İ` — cannot be matched case-insensitively without the positions in it
-pointing at the wrong characters, so it is skipped and the log says how many were. Tick
-**Case-sensitive** to search those exactly as typed.
+The Turkish `İ` is matched as a plain `i`: its lower case is two characters, which would
+put every position after it one out, so it is folded to one first — `istanbul` finds
+`İstanbul`. Should a browser's case rules hold another character like it, a field holding
+one is skipped rather than rewritten in the wrong place, and the log says how many were.
+Tick **Case-sensitive** to search those exactly as typed.
 
 A custom field **name** that matches is renamed, carrying its value across; a custom field
 **value** that matches is updated in place. List fields — aliases, URLs — are replaced
@@ -205,14 +208,17 @@ why the text around every result is on the line: so you can see which it was.
   already has its answer, so a control left live there would look like it steers something it
   cannot reach.
 
-**It is remembered**, in this browser, without needing **Remember filters** on — that box keeps
-the entity types, and somebody who wants case-sensitive matching usually wants it every search.
+**It starts as ᝯㄝₓ Core's Case-Sensitive Matching setting says** — off unless you turn it on, since
+somebody who wants case-sensitive matching usually wants it every search. The box then decides
+for that dialog only: the setting is left as it is, and nothing is remembered in the browser.
 
 ## No settings
 
 There are none, on purpose. Every choice this plugin offers — what to look for, which types
 to read, what to replace with, what to remember — is made inside the dialog, where you
-already are. Its group on the settings page carries the description and nothing else.
+already are. Its group on the settings page carries the description and nothing else. Where
+the **Case-sensitive** box starts is ᝯㄝₓ Core's **Case-Sensitive Matching**, shared by every
+ᝯㄝₓ plugin with that box.
 
 ## Relationship to the other plugins in this repo
 
@@ -247,7 +253,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Find & Replace Entities by Text Content | 769 MB | 1731 MB | 1524 MB |
+| Find & Replace Entities by Text Content | 783 MB | 1739 MB | 1538 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

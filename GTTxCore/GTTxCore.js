@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '3.3.3';
+  var PLUGIN_VERSION = '3.8.2';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -1835,6 +1835,16 @@
     try { window.localStorage.setItem(JOURNAL_BACKUP_KEY, String(at)); } catch (e) { /* per page, then */ }
   }
 
+  // When this browser last saved the history to a file, or 0 - what Clear History asks
+  // about before it deletes runs no file holds. Per browser, like the journal.
+  var JOURNAL_EXPORT_KEY = 'gttx-journal-export';
+  function journalExportAt() {
+    try { return parseInt(window.localStorage.getItem(JOURNAL_EXPORT_KEY), 10) || 0; } catch (e) { return 0; }
+  }
+  function journalSawExport(at) {
+    try { window.localStorage.setItem(JOURNAL_EXPORT_KEY, String(at)); } catch (e) { /* per page, then */ }
+  }
+
   // `run` is { plugin, label, source ('plugin' | 'hand'), libraryWide }; each entry is
   // { type ('scenes', 'tags', …), id, name, field, action ('update' | 'create' |
   // 'delete' | 'rename'), before, after, updatedAt } - `updatedAt` the entity's own time
@@ -3266,6 +3276,7 @@
     a3SameTab: false,
     a4HeadingCounts: false,
     a5LogLinesKept: '',
+    a6CaseSensitive: false,
     b1DevMods: '',
     // Undo History. An absent key reads as the default here, and the Plugins tab writes
     // the defaults in once (`seedSettings`) so its boxes show them - which is how two
@@ -3277,6 +3288,8 @@
     c5JournalImageRuns: false,
     c6JournalProtect: true,
     c7JournalDeletes: true,
+    // What the review's "Take it out of the history" box starts as; the box still decides.
+    c8JournalUndoTakesOut: false,
   };
   var _settings = null;
   var _settingsAt = 0;
@@ -3302,6 +3315,23 @@
       try { loadSettings(false); } catch (e) { /* a settings read is never fatal */ }
     }
     return settings().a3SameTab ? '' : '_blank';
+  }
+
+  // **Where every text search's Case-sensitive box starts**, one setting for every plugin
+  // that has such a box. Read fresh, because it is changed on Stash's settings page, which
+  // nothing here hears, often just before the dialog it steers is opened. An unreadable
+  // setting is the default: off.
+  function caseSensitive() {
+    return loadSettings(true).then(function (s) { return truthy(s.a6CaseSensitive); });
+  }
+
+  // `toLowerCase()` made length-preserving, for text searches that record positions in
+  // the folded string and slice the original at them. 'İ' (U+0130) lower-cases to 'i' plus
+  // a combining dot - two units for one - so it is taken to a plain 'i' first; checked
+  // against every code point, it is the only one. A caller still compares lengths, for an
+  // engine whose case tables say otherwise.
+  function fold(text) {
+    return String(text).replace(/\u0130/g, 'i').toLowerCase();
   }
 
   function loadSettings(force) {
@@ -3400,6 +3430,7 @@
     a3SameTab: false,
     a4HeadingCounts: false,
     a5LogLinesKept: LOG_KEEP,
+    a6CaseSensitive: false,
     c1JournalKeepDays: String(JOURNAL_KEEP_DAYS),
     c2JournalSizeMB: JOURNAL_SIZE_MB,
     c3JournalSinceBackup: false,
@@ -3407,6 +3438,7 @@
     c5JournalImageRuns: false,
     c6JournalProtect: true,
     c7JournalDeletes: true,
+    c8JournalUndoTakesOut: false,
   };
   // What each absent key is seeded with: its default, but the heading-counts switch on
   // where either old key was, as `loadSettings` reads it. `showDefaults` shows the same.
@@ -3577,6 +3609,11 @@
   function wireEscape(run) {
     run._onEscape = function (ev) {
       if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
+      // Only the topmost of these dialogs: a warning opened over Undo History closes alone.
+      if (run.backdrop && document.querySelectorAll) {
+        var all = document.querySelectorAll('.gttxcore-backdrop');
+        if (all.length && all[all.length - 1] !== run.backdrop) return;
+      }
       var b = escapeButton(run);
       if (!b) return;
       if (ev.preventDefault) ev.preventDefault();
@@ -3605,6 +3642,7 @@
   // file per month with an index, and loading a month back on demand, come later; so does
   // a folder of its own where the browser offers one (Chrome, Edge).
   function journalExport() {
+    var at = Date.now();
     return journalDb().then(function (db) {
       var tx = db.transaction(['runs', 'entries']);
       return Promise.all([idbRequest(tx.objectStore('runs').getAll()),
@@ -3628,6 +3666,7 @@
         if (a.parentNode) a.parentNode.removeChild(a);
         try { window.URL.revokeObjectURL(a.href); } catch (e) { /* the page lets it go */ }
       }, 0);
+      journalSawExport(at);
       return { runs: both[0].length, entries: both[1].length, name: name };
     });
   }
@@ -3881,7 +3920,7 @@
   function openHistory() {
     if (_history) { if (_history.modal.scrollIntoView) _history.modal.scrollIntoView(); return; }
     injectStyle();
-    var H = { selRuns: {}, selEntries: {}, open: {}, entries: {}, byId: {}, shown: HISTORY_PAGE,
+    var H = { selRuns: {}, selEntries: {}, shownRuns: [], open: {}, entries: {}, byId: {}, shown: HISTORY_PAGE,
       mode: 'list', plan: null, find: '', type: '', source: '', from: 0, to: 0, drawing: 0 };
     var backdrop = el('div', 'gttxcore-backdrop');
     var modal = el('div', 'gttxcore-modal gttxcore-history');
@@ -3959,14 +3998,17 @@
     var amber = function (b) { b.className = b.className.replace('btn-secondary', 'btn-warning'); return b; };
     H.undoBtn = amber(button('Undo Selected...', 'gttxcore-hundo'));
     H.deleteBtn = button('Delete Selected...', 'gttxcore-hdelete');
+    H.unselAllBtn = button('Unselect All', 'gttxcore-hunselall');
+    H.selAllBtn = button('Select All', 'gttxcore-hselall');
     H.popLabel = el('label', 'gttxcore-hpop gttxcore-hidden');
-    H.popBox = el('input', 'gttxcore-hbox');
+    H.popBox = el('input', 'gttxcore-hbox gttxcore-hpopbox');
     H.popBox.type = 'checkbox';
     H.popLabel.appendChild(H.popBox);
     H.popLabel.appendChild(el('span', null, ' Take it out of the history'));
     H.popLabel.title = 'Ticked, what is undone leaves the history instead of an undo joining it - the ' +
       'history goes back to where it was, as a stack does. It cannot then be redone from here. ' +
-      'Unticked, the undo is recorded and can be undone in turn.';
+      'Unticked, the undo is recorded and can be undone in turn. It starts as the Undo Takes It ' +
+      'Out of the History setting says, and this box decides for this undo.';
     H.popBox.addEventListener('change', function () { historyFoot(H); });
     H.proceedBtn = amber(button('Proceed', 'gttxcore-hproceed gttxcore-hidden'));
     H.backBtn = button('Back', 'gttxcore-hback gttxcore-hidden');
@@ -3987,15 +4029,19 @@
     H.backupBtn.title = 'Take a backup of the Stash database, as Settings - Tasks does, and save ' +
       'the history to a file with it.';
     H.clearBtn.title = 'Delete the whole history from this browser. Nothing in your library changes. ' +
-      'Asks for a second press.';
+      'Asks for a second press - or, where runs were recorded since the last export, warns first ' +
+      'and offers to export them.';
     H.dropBtn.title = 'Delete from this browser’s history every run recorded before the backup just ' +
       'taken: the backup holds your library as it was, and the file just saved holds those runs. ' +
       'Nothing in your library changes. Asks for a second press.';
+    H.unselAllBtn.title = 'Untick every run and change, including any the filter hides.';
+    H.selAllBtn.title = 'Tick every run the list shows.';
     H.proceedBtn.title = 'Undo the changes listed above. The undo is recorded, so it can be undone in turn.';
     H.backBtn.title = 'Back to the history, with nothing written.';
     H.closeBtn.title = 'Close Undo History.';
+    // The selection pair at the right end, where every sibling's dialog has it.
     [H.undoBtn, H.deleteBtn, H.popLabel, H.proceedBtn, H.backBtn, H.exportBtn, H.importBtn, H.backupBtn, H.dropBtn,
-      H.clearBtn, H.closeBtn].forEach(function (b) { foot.appendChild(b); });
+      H.clearBtn, H.closeBtn, H.unselAllBtn, H.selAllBtn].forEach(function (b) { foot.appendChild(b); });
     modal.appendChild(foot);
 
     H.undoBtn.addEventListener('click', function () { historyReview(H); });
@@ -4071,8 +4117,19 @@
     }, H);
     historyConfirm(H.clearBtn, 'Press again to clear', function () {
       return journalClear().then(function () { H.progressEl.textContent = 'The history is cleared.'; });
-    }, H);
+    }, H, historyClearGate(H));
     H.closeBtn.addEventListener('click', function () { historyClose(H); });
+    // Unselect All clears what the filter hides too: a tick nobody can see would still
+    // be undone or deleted.
+    H.unselAllBtn.addEventListener('click', function () {
+      H.selRuns = {};
+      H.selEntries = {};
+      historyDraw(H, true);
+    });
+    H.selAllBtn.addEventListener('click', function () {
+      H.shownRuns.forEach(function (id) { H.selRuns[id] = true; });
+      historyDraw(H, true);
+    });
 
     // Another tab recording something redraws the list here, when it is showing.
     try {
@@ -4118,23 +4175,99 @@
 
   // A press that deletes history asks twice: the first press changes the caption, a
   // second within five seconds does it.
-  function historyConfirm(btn, ask, act, H) {
+  // `gate`, where given, is asked before the first press arms: it resolves true to arm as
+  // usual, or false having taken the question over itself - handed `go` to act with.
+  function historyConfirm(btn, ask, act, H, gate) {
     var label = btn.textContent, armed = null;
+    function go() {
+      historyBusy(H, true);
+      return act().then(function () { historyStats(H); return historyDraw(H, true); }, function (e) {
+        H.progressEl.textContent = 'That failed: ' + (e && e.message ? e.message : e);
+      }).then(function () { historyBusy(H, false); });
+    }
+    function arm() {
+      holdWidth(btn);
+      btn.textContent = ask;
+      armed = setTimeout(function () { armed = null; btn.textContent = label; }, 5000);
+    }
     btn.addEventListener('click', function () {
       if (!armed) {
-        holdWidth(btn);
-        btn.textContent = ask;
-        armed = setTimeout(function () { armed = null; btn.textContent = label; }, 5000);
+        if (gate) gate(go).then(function (ok) { if (ok) arm(); });
+        else arm();
         return;
       }
       clearTimeout(armed);
       armed = null;
       btn.textContent = label;
-      historyBusy(H, true);
-      act().then(function () { historyStats(H); return historyDraw(H, true); }, function (e) {
-        H.progressEl.textContent = 'That failed: ' + (e && e.message ? e.message : e);
-      }).then(function () { historyBusy(H, false); });
+      go();
     });
+  }
+
+  // Clear History with runs recorded since the last export - or never exported - asks in
+  // a dialog of its own rather than by a second press: those runs are in no file, and
+  // clearing them is the one step here that nothing can take back. Imported runs came from
+  // a file, so they do not count.
+  function historyClearGate(H) {
+    return function (go) {
+      return journalRuns().then(function (runs) {
+        var since = journalExportAt();
+        var fresh = runs.filter(function (r) { return !r.imported && (r.at || 0) > since; });
+        if (!fresh.length) return true;
+        historyClearAsk(H, fresh, since, go);
+        return false;
+      }, function () { return true; });
+    };
+  }
+
+  function historyClearAsk(H, fresh, since, go) {
+    var changes = 0;
+    fresh.forEach(function (r) { changes += r.count || 0; });
+    var what = plural(fresh.length, 'run') + ' holding ' + plural(changes, 'change');
+    var backdrop = el('div', 'gttxcore-backdrop');
+    var modal = el('div', 'gttxcore-modal gttxcore-narrow');
+    backdrop.appendChild(modal);
+    var head = el('div', 'gttxcore-head');
+    head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - Clear History'));
+    modal.appendChild(head);
+    modal.appendChild(el('div', 'gttxcore-body gttxcore-clearask', (since
+      ? what + ' were recorded after the history was last exported, on ' + new Date(since).toLocaleString() + '.'
+      : 'The history has never been exported from this browser, and it holds ' + what + '.') +
+      ' Clearing deletes them from this browser, and nothing can bring them back: Undo History ' +
+      'could no longer undo them. Nothing in your library changes.'));
+    var foot = el('div', 'gttxcore-foot');
+    var exportBtn = button('Export, Then Clear', 'gttxcore-clearexport');
+    exportBtn.className = exportBtn.className.replace('btn-secondary', 'btn-warning');
+    var clearBtn = button('Clear Without Exporting', 'gttxcore-clearnow');
+    var closeBtn = button('Cancel', 'gttxcore-close');
+    exportBtn.title = 'Save the whole history to a file first, as Export does, then clear it. If the ' +
+      'export fails, nothing is cleared.';
+    clearBtn.title = 'Delete the whole history from this browser now, with no file of it. Nothing ' +
+      'in your library changes.';
+    closeBtn.title = 'Back to Undo History, with nothing deleted.';
+    [exportBtn, clearBtn, closeBtn].forEach(function (b) { foot.appendChild(b); });
+    modal.appendChild(foot);
+    var run = { modal: modal, backdrop: backdrop, closeBtn: closeBtn };
+    function shut() {
+      unwireEscape(run);
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+    }
+    closeBtn.addEventListener('click', shut);
+    clearBtn.addEventListener('click', function () { shut(); go(); });
+    exportBtn.addEventListener('click', function () {
+      shut();
+      historyBusy(H, true);
+      historyWorking(H, 'Saving the history…');
+      journalExport().then(function (r) {
+        H.progressEl.textContent = 'Saved ' + plural(r.entries, 'change') + ' in ' + plural(r.runs, 'run') +
+          ' to ' + r.name + '.';
+        return go();
+      }, function (e) {
+        H.progressEl.textContent = 'The export failed, so nothing was cleared: ' + (e && e.message ? e.message : e);
+        historyBusy(H, false);
+      });
+    });
+    wireEscape(run);
+    document.body.appendChild(backdrop);
   }
 
   function historySelected(H) {
@@ -4151,6 +4284,10 @@
     historyShow(H.proceedBtn, review);
     historyShow(H.backBtn, !list);
     H.undoBtn.disabled = H.deleteBtn.disabled = !!H.busy || !historySelected(H);
+    historyShow(H.unselAllBtn, list);
+    historyShow(H.selAllBtn, list);
+    H.unselAllBtn.disabled = !!H.busy || !historySelected(H);
+    H.selAllBtn.disabled = !!H.busy || H.shownRuns.every(function (id) { return H.selRuns[id]; });
     H.popBox.disabled = !!H.busy;
     // A pop has work to do even where nothing is written: what cancels out leaves the history.
     H.proceedBtn.disabled = !!H.busy || !(H.plan && (H.plan.writes.length ||
@@ -4252,12 +4389,14 @@
 
   function historyRender(H, runs, total, more) {
     var list = H.listEl;
+    H.shownRuns = runs.map(function (r) { return r.id; });
     while (list.firstChild) list.removeChild(list.firstChild);
     if (!runs.length) list.appendChild(el('div', 'gttxcore-line', total ? 'Nothing matches the filter.' : 'Nothing is recorded yet.'));
     runs.forEach(function (r) {
       var block = el('div', 'gttxcore-hrun');
       var row = el('div', 'gttxcore-hhead');
-      var box = el('input', 'gttxcore-hbox');
+      // Its own kind for Shift-click ranges: runs with runs, changes with changes.
+      var box = el('input', 'gttxcore-hbox gttxcore-hrunbox');
       box.type = 'checkbox';
       box.checked = !!H.selRuns[r.id];
       box.addEventListener('change', function () {
@@ -4299,7 +4438,7 @@
           es.forEach(function (e) {
             if ((H.find || H.type) && !historyMatches(H, e)) return;
             var line = el('div', 'gttxcore-hentry' + (e.undone ? ' gttxcore-hundone' : ''));
-            var eb = el('input', 'gttxcore-hbox');
+            var eb = el('input', 'gttxcore-hbox gttxcore-hentrybox');
             eb.type = 'checkbox';
             eb.checked = !!H.selEntries[e.id] || !!H.selRuns[r.id];
             eb.disabled = !!H.selRuns[r.id];
@@ -4351,10 +4490,15 @@
       Object.keys(H.selEntries).forEach(function (id) {
         if (!seen[id] && H.byId[id]) { seen[id] = 1; entries.push(H.byId[id]); }
       });
-      return journalPlan(entries);
-    }).then(function (plan) {
+      // The setting read fresh, not from the copy this page loaded with: it is changed on
+      // Stash's settings page, which nothing here hears, often just before an undo.
+      var fresh = loadSettings(true).then(null, function () { return settings(); });
+      return Promise.all([journalPlan(entries), fresh]);
+    }).then(function (both) {
+      var plan = both[0];
       H.plan = plan;
       H.mode = 'review';
+      H.popBox.checked = truthy((both[1] || settings()).c8JournalUndoTakesOut);
       var list = H.listEl;
       while (list.firstChild) list.removeChild(list.firstChild);
       var ok = 0;
@@ -4453,6 +4597,7 @@
     var btn = document.getElementById(HISTORY_NAV_ID);
     if (btn && btn.parentNode === bar) return;
     if (!btn) {
+      injectStyle();     // its size and its ink; nothing else of ours may be on this page
       btn = el('button', 'btn btn-primary minimal nav-utility gttxcore-navbtn', '↶');
       btn.id = HISTORY_NAV_ID;
       btn.type = 'button';
@@ -4481,6 +4626,65 @@
       if (event.stopPropagation) event.stopPropagation();
       openHistory();
     }, true);
+  }
+
+  // ── Shift-click ranges in every ᝯㄝₓ dialog ───────────────────────────────
+  //
+  // A click on a checkbox is the anchor; a Shift-click sets every box between the anchor
+  // and it to the state it just took. One listener for all the plugins' dialogs: a dialog
+  // here is a `<prefix>-modal` inside a `<prefix>-backdrop` (Stash's own Bootstrap modals
+  // sit in `.modal`, so they are never touched). Only boxes of the anchor's own class
+  // count, so a footer switch never joins a range of lines; disabled boxes and boxes under
+  // a hidden section are skipped. Each box moves by a real `click()`, so whatever the
+  // plugin listens for - `click` or `change` - sees it exactly as a click of its own.
+  function rangeModal(node) {
+    for (var n = node; n && n.parentNode; n = n.parentNode) {
+      var own = /(^|\s)[a-z0-9]+-modal(\s|$)/.test(String(n.className || ''));
+      if (own && /(^|\s)[a-z0-9]+-backdrop(\s|$)/.test(String(n.parentNode.className || ''))) return n;
+    }
+    return null;
+  }
+  function rangeHidden(box, modal) {
+    for (var n = box; n && n !== modal; n = n.parentNode) {
+      if (/(^|\s)([a-z0-9]+-)?hidden(\s|$)/.test(String(n.className || ''))) return true;
+    }
+    return false;
+  }
+  var _ranging = false;
+  function rangeClick(event) {
+    var box = event.target;
+    if (_ranging || !box || box.tagName !== 'INPUT' || box.type !== 'checkbox') return;
+    var modal = rangeModal(box);
+    if (!modal) return;
+    var anchor = modal._gttxAnchor;
+    modal._gttxAnchor = box;
+    if (!event.shiftKey || !anchor || anchor === box || anchor.className !== box.className ||
+        rangeModal(anchor) !== modal) return;
+    var all = modal.querySelectorAll('input'), boxes = [];
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].type === 'checkbox' && all[i].className === box.className) boxes.push(all[i]);
+    }
+    var a = boxes.indexOf(anchor), b = boxes.indexOf(box);
+    if (a < 0 || b < 0) return;
+    var to = box.checked;
+    _ranging = true;
+    try {
+      for (var j = Math.min(a, b); j <= Math.max(a, b); j++) {
+        var x = boxes[j];
+        if (x !== box && !x.disabled && x.checked !== to && !rangeHidden(x, modal)) x.click();
+      }
+    } finally { _ranging = false; }
+  }
+  if (document.addEventListener) {
+    document.addEventListener('click', rangeClick);
+    // Shift held on a box or its label would otherwise highlight the text between the two.
+    document.addEventListener('mousedown', function (event) {
+      if (!event.shiftKey || !event.target || !rangeModal(event.target)) return;
+      var t = event.target;
+      var onBox = (t.tagName === 'INPUT' && t.type === 'checkbox') ||
+        (t.closest && t.closest('label') && t.closest('label').querySelector('input[type="checkbox"]'));
+      if (onBox && event.preventDefault) event.preventDefault();
+    });
   }
 
   // ── The settings page ─────────────────────────────────────────────────────
@@ -4939,6 +5143,7 @@
     '.gttxcore-line{white-space:pre-wrap;word-break:break-word;}' +
     '.gttxcore-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;' +
     'gap:.5rem;flex-wrap:wrap;align-items:center;}' +
+    '.gttxcore-hunselall{margin-left:auto;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
     // one of these rules is a single class, so the last one written wins - and this one
     // is written before the strips and rows that set their own `display`. A `-hidden` on
@@ -5003,22 +5208,37 @@
     'border:1px solid #394b59;border-radius:3px;padding:.15rem .4rem;}' +
     '.gttxcore-hselect,.gttxcore-hdate{background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;' +
     'border-radius:3px;padding:.1rem .3rem;}' +
-    '.gttxcore-hlist{font-family:monospace;font-size:.8rem;min-height:16rem;}' +
-    '.gttxcore-hrun{padding:.15rem 0;border-bottom:1px solid #2b3a45;}' +
-    '.gttxcore-hhead{display:flex;gap:.4rem;align-items:flex-start;}' +
+    // Whole pixels down the list: at .8rem the text's own line height is a fraction of a
+    // pixel, rows land on fractional offsets, and a native checkbox snapped there draws a
+    // pixel taller on every third row or so. So the line height, the paddings and the box
+    // are all in px.
+    '.gttxcore-hlist{font-family:monospace;font-size:.8rem;min-height:16rem;line-height:20px;}' +
+    '.gttxcore-hrun{padding:2px 0;border-bottom:1px solid #2b3a45;}' +
+    // A run's line and a change's line are text that flows, not flex columns: as columns
+    // a long name wrapped inside a column of its own and the change beside it in another.
+    // The box is inline, its margins summing to the 20px line, and a hanging indent
+    // starts every wrapped line after it.
+    '.gttxcore-hhead{padding-left:19px;text-indent:-19px;}' +
     '.gttxcore-hplus{color:#84d68a;font-weight:600;}.gttxcore-hminus{color:#ff7b72;font-weight:600;}' +
     '.gttxcore-hcfname{color:#17a2b8;cursor:help;}' +
-    '.gttxcore-hbackto{margin-left:.75rem;font-size:.8rem;color:#a7b6c2;}' +
+    '.gttxcore-hbackto{margin-left:.75rem;font-size:.8rem;color:#a7b6c2;white-space:nowrap;}' +
     '.gttxcore-hpop{margin:0 .5rem;align-self:center;cursor:pointer;}' +
     '.gttxcore-htoggle{cursor:pointer;white-space:pre-wrap;word-break:break-word;}' +
-    '.gttxcore-hentries{padding:.1rem 0 .25rem 1.6rem;color:#a7b6c2;}' +
-    '.gttxcore-hentry{display:flex;gap:.4rem;align-items:flex-start;white-space:pre-wrap;word-break:break-word;}' +
-    '.gttxcore-hundone{opacity:.55;}' +
+    '.gttxcore-hentries{padding:2px 0 4px 26px;color:#a7b6c2;}' +
+    '.gttxcore-hentry{padding-left:19px;text-indent:-19px;white-space:pre-wrap;word-break:break-word;}' +
+    // An undone change dims its words, not its box: a dim box reads as disabled.
+    '.gttxcore-hlist .gttxcore-hbox{width:13px;height:13px;margin:4px 6px 3px 0;vertical-align:top;}' +
+    '.gttxcore-hundone>:not(.gttxcore-hbox){opacity:.55;}' +
     '.gttxcore-elink{color:#7cc4ff;text-decoration:none;}' +
     '.gttxcore-elink:hover{text-decoration:underline;}' +
     '.gttxcore-hSKIP{color:#ffb648;} .gttxcore-hERROR{color:#ff7373;} .gttxcore-hUNDO{color:#84d68a;}' +
     '.gttxcore-hmore{margin-top:.5rem;}' +
-    '.gttxcore-navbtn{font-size:1.15rem;line-height:1;}';
+    '.gttxcore-navbtn{font-size:1.15rem;line-height:1;}' +
+    // Amber ink, the colour of a control that writes: an Undo does. By id, because Stash's
+    // own `button.minimal:hover:not(:disabled)` outranks any class selector, and every state
+    // is named since Stash sets the colour on each. Its hover background stays Stash's.
+    '#gttxcore-undo-nav,#gttxcore-undo-nav:hover,#gttxcore-undo-nav:focus,' +
+    '#gttxcore-undo-nav:active{color:#ffb648;}';
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -5136,7 +5356,7 @@
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
     keepLog: keepLog, droppedLine: droppedLine, logKeep: logKeep, LOG_KEEP: LOG_KEEP,
     splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
-    linkTarget: linkTarget, holdWidth: holdWidth, fieldLocks: fieldLocks,
+    linkTarget: linkTarget, caseSensitive: caseSensitive, fold: fold, holdWidth: holdWidth, fieldLocks: fieldLocks,
     tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace, tipRatingBadge: tipRatingBadge,
     tipOpen: tipOpen, tipClose: tipClose, tagTip: tagTip,
     tipText: tipText, tagTipNames: tagTipNames, tagLinkTitle: tagLinkTitle,

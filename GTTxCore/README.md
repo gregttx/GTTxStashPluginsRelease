@@ -108,6 +108,16 @@ read from your library for it, and nothing but the heading's text changes.
 It is off by default because it changes a page this plugin does not own. Turn it off and every
 heading goes back to Stash's own word on the next tick.
 
+### Where every Case-sensitive box starts
+
+**Entity Name Maintainer** and **Find & Replace Entities by Text Content** each have a
+**Case-sensitive** box in their dialog. Turn on **Case-Sensitive Matching** and it starts ticked
+in both — and in any later ᝯㄝₓ plugin that searches text — so only text written exactly so is
+found. Off by default: `beach` finds `Beach` too. It is read each time such a dialog opens, and
+ticking or unticking the box there lasts for that dialog without changing this setting.
+
+With it off, the Turkish `İ` is matched as a plain `i`, so `istanbul` finds `İstanbul`.
+
 ### How many log lines a dialog keeps
 
 Every ᝯㄝₓ dialog shows the last 1,000 lines of its log — a node per line is a page that stops
@@ -164,6 +174,14 @@ than under the pointer, so the pointer does not cover its first line. A setting 
 **several** fields - Custom Fields Bulk Editor's Locked Custom Fields - shows each name with a mark
 of its own behind it.
 
+## Ticking a range
+
+In every ᝯㄝₓ plugin's dialog, click one checkbox, then **Shift-click** another: every box between
+the two takes the state the second one just took, ticked or unticked. A range stays within one kind
+of box - lines with lines, runs with runs - so a switch in the footer never joins it, and a box that
+is greyed out, or in a section that is folded away, is left as it is. Stash's own dialogs are not
+touched.
+
 ## The bulk-edit lease
 
 A **lease** is the note a ᝯㄝₓ plugin leaves for its siblings while it is rewriting your library in
@@ -218,7 +236,7 @@ does.
 
 What the ᝯㄝₓ plugins write, and what you save in Stash's own pages in this browser, is kept in this
 browser so it can be undone later — after the dialog that wrote it has closed, days later if need be.
-Open it from **Settings → Tasks → Undo History...**, or from the **↶** button in Stash's top bar,
+Open it from **Settings → Tasks → Undo History...**, or from the amber **↶** button in Stash's top bar,
 beside Settings.
 
 - **The list** shows the history newest first, a run a row: when, who — *Your edit*, a plugin, or an
@@ -233,12 +251,15 @@ beside Settings.
   against what your library holds now, and the list says which can be undone and which are skipped,
   before anything is written. **Proceed** writes it. **back to here**, at the end of a run's row,
   ticks that run and every newer one, to take the library back to before it.
-- **Take it out of the history**, ticked in the review before Proceed, makes the undo a *pop*: what
+- **Take it out of the history**, ticked in the review before Proceed, makes the undo a *pop* (it
+  starts as the **Undo Takes It Out of the History** setting says, off by default): what
   it undoes leaves the history instead of an undo run joining it, so the history reads as it did
   before those changes. It cannot then be redone from here. A change and the undo of it, both
   ticked, cancel out: nothing is written, and a pop takes both out.
 - **Delete Selected...** takes the ticked runs and changes out of the history — test runs, say —
   without touching your library. It asks twice.
+- **Unselect All** and **Select All** close the footer, at its right. **Unselect All** clears every tick, the ones a filter hides included, since those would still be
+  undone or deleted. **Select All** ticks every run the list shows.
 - **A change is undone only while its field still holds what was written.** Anything else — a later
   edit by hand, in another browser, by a Stash task — makes it *changed since*, and it is skipped
   rather than overwritten. A later edit to a *different* field of the same entity does not stop it.
@@ -250,8 +271,11 @@ beside Settings.
   browser, without doubling what is already there. **Back Up and Export** takes a backup of the
   Stash database, as Settings → Tasks does, and saves the history with it, says which folder the
   backup went to, then offers **Drop What the Backup Holds...**: the runs recorded before the backup
-  leave this browser, kept in the file just saved. It and **Clear History...** ask twice. With
-  nothing recorded, only Import... can be pressed.
+  leave this browser, kept in the file just saved. It and **Clear History...** ask twice - except
+  that Clear History..., where runs were recorded since the history was last exported from this
+  browser (or it never was), opens a warning instead, naming how many and offering **Export, Then
+  Clear**, **Clear Without Exporting** or **Cancel**. Imported runs came from a file and do not
+  count. With nothing recorded, only Import... can be pressed.
 
 What is recorded and what is not:
 
@@ -278,6 +302,7 @@ goes through and the history shows a gap there.
 | Record Library-Wide Image Writes | off | a pass over a million images would crowd everything else out |
 | Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
 | Record Deletes and Merges | on | keeps what a delete or a tag merge takes away, so it can be put back; a delete of something large reads a lot first |
+| Undo Takes It Out of the History | off | where the review's **Take it out of the history** box starts; the box, beside Proceed, still decides for each undo |
 
 The history lives in this browser's own storage, per browser and per device, and goes if you clear
 this site's data. The dialog says how much it holds, how old the oldest run is, whether the browser
