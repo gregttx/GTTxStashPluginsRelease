@@ -8,6 +8,9 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 5.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 4.2.4 (`2b5e4ea`) | 2026-09-27 | Merge Performer Tags 4.2.4: its own settings are read again as a save of them lands |
+| 4.2.3 (`3c64c77`) | 2026-09-26 | Every plugin's settings come from one read Core shares, dropped by any settings save |
 | 4.2.2 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 4.2.1 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 4.2.0 (`7ee2847`) | 2026-09-23 | Undo History, step 2: five plugins record their writes |

@@ -37,6 +37,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var showDefaults = C.showDefaults, coop = C.coop, plural = C.plural, el = C.el, hasClass = C.hasClass, hasOwn = C.hasOwn,
     byClass = C.byClass, gqlRequest = C.gqlRequest, coreSettingElement = C.settingElement,
     coreSettingRow = C.settingRow, linkTarget = C.linkTarget, entityTip = C.entityTip,
@@ -51,7 +54,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '1.5.4';
+  var PLUGIN_VERSION = '2.0.0';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -166,15 +169,17 @@
   var _seeded = false;
 
   function seedDefaults(raw, s) {
-    if (_seeded) return;
     var missing = [], k;
     for (k in SEED_DEFAULTS) if (hasOwn(SEED_DEFAULTS, k) && !hasOwn(raw, k)) missing.push(k);
+    // An unanswered box is its default on every read, not only the one that writes the seed.
+    missing.forEach(function (key) { s[key] = SEED_DEFAULTS[key]; });
+    if (_seeded) return;
     var promoted = raw.b1RenameTemplate == null ? null : promoteTemplate(raw.b1RenameTemplate);
     if (!missing.length && promoted == null) return;
     _seeded = true;
     var input = {};
     for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-    missing.forEach(function (key) { s[key] = input[key] = SEED_DEFAULTS[key]; });
+    missing.forEach(function (key) { input[key] = SEED_DEFAULTS[key]; });
     if (promoted != null) {
       s.b1RenameTemplate = input.b1RenameTemplate = promoted;
       sfm('[sfm] the rename template\'s base and postfix tokens are now basetitle and ' +
@@ -205,7 +210,7 @@
   }
 
   function loadSettings() {
-    return gqlRequest('query SFMSettings { configuration { plugins } }', null).then(function (data) {
+    return pluginConfig().then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
       var s = {};
       for (var k in DEFAULTS) {
@@ -460,8 +465,8 @@
         return { id: k, name: names.map[k] };
       })[0] : null;
       if (!added.length && !bare) return null;
-      // A missing field may be added whatever the lock; a present one only changed.
-      if (names.raw != null && run.locked) {
+      // A missing field may be added whatever the lock, and a present one added to.
+      if (names.raw != null && run.locked && !keepsAll(names, map)) {
         run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] ' + (added.length ? 'has ' +
           plural(added.length, 'file') + ' not archived yet' : 'holds the older bare name') +
           ', and is skipped: "' + field + '" is locked in ᝯㄝₓ Custom Fields Bulk Editor, so it ' +
@@ -746,8 +751,9 @@
     '>': '›', '|': '∣' };
 
   // The names Windows keeps for devices, in any case and whatever follows a dot: a file
-  // cannot be called CON, nul.mp4 or Com1.part.mp4 there.
-  var RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9]) *(\.|$)/i;
+  // cannot be called CON, nul.mp4 or Com1.part.mp4 there. Microsoft's list runs COM0-COM9
+  // and LPT0-LPT9 with the superscript ¹²³ as digits too, and CONIN$ and CONOUT$ are devices.
+  var RESERVED_NAME = /^(con|prn|aux|nul|com[0-9\u00b9\u00b2\u00b3]|lpt[0-9\u00b9\u00b2\u00b3]|conin\$|conout\$) *(\.|$)/i;
 
   function utf8Length(text) { return unescape(encodeURIComponent(text)).length; }
 
@@ -795,6 +801,16 @@
     // What follows the index is kept as it is, bar the trailing dots and spaces every
     // name loses: only the text before the index is ever cut.
     r.stem = trim(head + keep).replace(/[. ]+$/, '');
+    // A device name only the cut or the index made - the head cut away, or a template
+    // opening with `{COM|autoindex1|}` - takes its underscore here, or no name where that
+    // does not fit.
+    var late = RESERVED_NAME.exec(r.stem);
+    if (late) {
+      var fixed = late[1] + '_' + r.stem.slice(late[1].length);
+      r.reserved = late[1];
+      r.stem = fits(fixed) ? fixed : '';
+      if (!r.stem) r.by = 'device';
+    }
     return r;
   }
 
@@ -885,7 +901,11 @@
       run.autoTokens.forEach(function (t) { values[t] = k ? String(run.specs[t].arg + k - 1) : ''; });
       var rep = cleanReport(renderTemplate(run.nodes, values), room), stem = rep.stem;
       // Cut to nothing for the path is the folder's doing, not the template's.
-      if (!stem) return rep.by === 'path' ? noRoom() : { why: 'the template gives it an empty name' };
+      if (!stem) {
+        return rep.by === 'path' ? noRoom() : rep.by === 'device'
+          ? { why: 'the name would be "' + rep.reserved + '", which Windows keeps for a device, with no room for an underscore after it' }
+          : { why: 'the template gives it an empty name' };
+      }
       var to = stem + ext, holder = holderOf(run, folderOf(file), to, file);
       if (!holder) return { to: to, cut: !!rep.cut, cutBy: rep.by, full: rep.cut ? stem.length + ext.length : 0 };
       if (to === last) {
@@ -939,6 +959,15 @@
     Object.keys(map).forEach(function (k) { out[k] = map[k]; });
     filesOf(scene).forEach(function (f) { if (!hasOwn(out, f.id)) out[f.id] = stemOf(f.basename); });
     return out;
+  }
+
+  // Whether `map` keeps every name the field holds now, each under its own file - a write
+  // that only adds, or rewrites the older bare name by file id with its name kept. A lock in
+  // Custom Fields Bulk Editor does not stop that: the lock is there so a value is not lost,
+  // and nothing is. Anything that would change or drop a name the field holds still waits
+  // for the lock to come off.
+  function keepsAll(names, map) {
+    return Object.keys(names.map).every(function (k) { return hasOwn(map, k) && map[k] === names.map[k]; });
   }
 
   // Always by file id, so a name follows its file and never the scene's primary of the day.
@@ -1045,8 +1074,8 @@
             'leaves no more under the ' + run.maxPath + '-character path limit.');
         }
         if (got.to !== f.basename && !hasOwn(names.map, f.id)) {
-          // A missing field may be added whatever the lock; a present one only changed.
-          if (names.raw != null && run.locked) {
+          // A missing field may be added whatever the lock, and a present one added to.
+          if (names.raw != null && run.locked && !keepsAll(names, withEveryFile(scene, names.map))) {
             run.msg('WARN', who + ' is skipped: its name is not archived, and "' + field +
               '" is locked in ᯯㄝₓ Custom Fields Bulk Editor, so it cannot be added.');
             return;
@@ -1217,8 +1246,14 @@
   var MOVE_SCENES_QUERY = 'query SFMMoveScenes($ids: [ID!]) { findScenes(ids: $ids, ' +
     'filter: { per_page: -1 }) { scenes { id title custom_fields files { id basename ' +
     'parent_folder { id } } } } }';
-  var FILE_SCENES_QUERY = 'query SFMFileScenes($id: ID) { findFile(id: $id) { ... on VideoFile ' +
-    '{ scenes { id title custom_fields files { id basename parent_folder { id } } } } } }';
+  // A Reassign names the file, not the scene it leaves. A file on the Stash this targets
+  // carries no `scenes` back-reference - Stash's development branch adds one - and no
+  // filter matches a file id, so the scenes holding it are found by its path: read the
+  // path, then every scene with a file at exactly that path.
+  var FILE_PATH_QUERY = 'query SFMFilePath($id: ID) { findFile(id: $id) { path } }';
+  var FILE_SCENES_QUERY = 'query SFMFileScenes($path: String!) { findScenes(scene_filter: ' +
+    '{ path: { value: $path, modifier: EQUALS } }, filter: { per_page: -1 }) { scenes { id title ' +
+    'custom_fields files { id basename parent_folder { id } } } } }';
 
   // The move a request makes, or null: `{ dest, sources }` for a merge, `{ dest, fileId }`
   // for a reassign.
@@ -1263,22 +1298,24 @@
       legend: 'A file moved to this scene had its name archived on the scene it came from. ' +
         'The line names the scene the file is in now, with its id in brackets, then the ' +
         'archived names Proceed adds to its field, so Restore Original Filenames can still ' +
-        'put them back.',
+        'put them back; a reassign also takes the name off the scene the file left.',
       verb: 'to carry over',
       op: 'SFMCarry',
       undoRemovesField: true,
       prepare: function (run) { return lockedFor(run); },
       read: function (run) {
-        run.scanned = run.total = 1;
+        run.scanned = run.total = 1 + (move.sourcesAfter || []).length;
         run.planScene(move.destAfter);
+        (move.sourcesAfter || []).forEach(function (sc) { run.planScene(sc); });
         return Promise.resolve();
       },
       plan: function (scene, field, run) {
+        if (String(scene.id) !== move.dest) return leftBehind(move, scene, field, run);
         var c = carried(move, scene, field), now = namesOf(run, scene, field);
         if (!now || !c.added.length) return null;
         var value = archiveValue(c.map);
         if (value === now.raw) return null;
-        if (now.raw != null && run.locked) {
+        if (now.raw != null && run.locked && !keepsAll(now, c.map)) {
           run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] is not given the archived ' +
             plural(c.added.length, 'name') + ' of the files moved to it: "' + field + '" is ' +
             'locked in ᝯㄝₓ Custom Fields Bulk Editor, so it cannot be changed.');
@@ -1286,11 +1323,42 @@
         }
         return { scene: scene, value: value, prev: now.raw, added: c.added };
       },
-      tail: ARCHIVE_TASK.tail,
-      write: ARCHIVE_TASK.write,
+      tail: function (job, field) {
+        return job.left ? ': ' + job.left.map(function (a) { return '"' + a.name + '" [' + a.id + ']'; }).join(', ') +
+          ' taken off "' + field + '", ' + (job.left.length === 1 ? 'its file' : 'their files') + ' now in scene ' + move.dest
+          : ARCHIVE_TASK.tail(job, field);
+      },
+      write: function (job, field) {
+        if (!job.remove) return ARCHIVE_TASK.write(job, field);
+        return { field: 'sceneUpdate', type: 'SceneUpdateInput', sel: ' { id }',
+          input: { id: job.scene.id, custom_fields: { remove: [field] } } };
+      },
       undo: ARCHIVE_TASK.undo,
       closed: move.release,
     };
+  }
+
+  // The scene a reassigned file left: its archived name goes with the file rather than stay
+  // behind as a name for a file the scene no longer has. The field goes where nothing is left;
+  // a locked one is left as it is - a lock is there so a value is not taken from it.
+  function leftBehind(move, scene, field, run) {
+    var now = namesOf(run, scene, field);
+    if (!now || now.raw == null) return null;
+    var gone = [].concat(move.fileId || []).map(String).filter(function (id) {
+      return hasOwn(now.map, id) && !filesOf(scene).some(function (f) { return String(f.id) === id; });
+    });
+    if (!gone.length) return null;
+    if (run.locked) {
+      run.msg('INFO', sceneName(scene) + ' [' + scene.id + '] keeps the archived name of the file it no longer ' +
+        'has: "' + field + '" is locked in ᝯㄝₓ Custom Fields Bulk Editor, so nothing is taken from it.');
+      return null;
+    }
+    var map = {};
+    Object.keys(now.map).forEach(function (k) { if (gone.indexOf(k) === -1) map[k] = now.map[k]; });
+    var left = gone.map(function (id) { return { id: id, name: now.map[id] }; });
+    return Object.keys(map).length
+      ? { scene: scene, value: archiveValue(map), prev: now.raw, added: [], left: left }
+      : { scene: scene, remove: true, prev: now.raw, added: [], left: left };
   }
 
   // Reads what the move is about to take away, lets the save through, then reads where
@@ -1302,10 +1370,13 @@
       field = fieldName(s);
       if (move.fileId) {
         return Promise.all([
-          gqlRequest(FILE_SCENES_QUERY, { id: move.fileId }),
+          gqlRequest(FILE_PATH_QUERY, { id: move.fileId }).then(function (d) {
+            var path = (d.findFile || {}).path;
+            return path ? gqlRequest(FILE_SCENES_QUERY, { path: path }) : {};
+          }),
           gqlRequest(MOVE_SCENES_QUERY, { ids: [move.dest] }),
         ]).then(function (r) {
-          move.sources = ((r[0].findFile || {}).scenes || []).filter(function (sc) {
+          move.sources = ((r[0].findScenes || {}).scenes || []).filter(function (sc) {
             return String(sc.id) !== move.dest;
           });
           move.destBefore = ((r[1].findScenes || {}).scenes || [])[0] || null;
@@ -1321,9 +1392,15 @@
       var resp = orig.apply(self, args);
       Promise.resolve(resp).then(function () {
         // What the save did is read back from the server, not out of its answer.
-        return gqlRequest(MOVE_SCENES_QUERY, { ids: [move.dest] });
+        return gqlRequest(MOVE_SCENES_QUERY, { ids: [move.dest].concat(move.fileId
+          ? (move.sources || []).map(function (sc) { return String(sc.id); }) : []) });
+        // A reassign's source scene too, as it is after the move: the name it keeps for a file
+        // it no longer has is taken off it.
       }).then(function (d) {
-        move.destAfter = ((d.findScenes || {}).scenes || [])[0];
+        move.destAfter = ((d.findScenes || {}).scenes || []).filter(function (sc) { return String(sc.id) === move.dest; })[0];
+        move.sourcesAfter = move.fileId ? ((d.findScenes || {}).scenes || []).filter(function (sc) {
+          return String(sc.id) !== move.dest;
+        }) : [];
         if (!move.destAfter || !carried(move, move.destAfter, field).added.length) return move.release();
         if (_active) {
           sfm('[sfm] A moved file\'s archived name was not carried to scene ' + move.dest +
@@ -1782,12 +1859,13 @@
   };
 
   // Undo History, where ᝯㄝₓ Core keeps one. A job here is one of two changes: a value
-  // for the custom field (Archive, the archive a rename writes first, a carried name), or
+  // for the custom field (Archive, the archive a rename writes first, a carried name, or the
+  // name a reassigned file leaves behind taken off - the field removed where none is left), or
   // a file's new name, which goes back by moving it in its folder under the old one.
   function journalEntry(job, field, reversed) {
-    var e = job.value !== undefined
+    var e = job.value !== undefined || job.remove
       ? { type: 'scenes', id: String(job.scene.id), name: sceneName(job.scene), field: 'custom_fields.' + field,
-        before: job.prev == null ? undefined : job.prev, after: job.value }
+        before: job.prev == null ? undefined : job.prev, after: job.remove ? undefined : job.value }
       : { type: 'scenes', id: String(job.scene.id), name: sceneName(job.scene), field: 'files.' + job.file.id,
         before: job.from, after: job.to, folder: job.folder };
     if (reversed) { var b = e.before; e.before = e.after; e.after = b; }
@@ -1884,8 +1962,9 @@
     });
   };
 
-  // An Archive is undone by removing the field it added. Locked in Custom Fields Bulk
-  // Editor, the field may be added and never removed, so that Undo is refused - and
+  // An Archive is undone by removing the field it added, or the names it added to one.
+  // Locked in Custom Fields Bulk Editor, the field may be added to and never taken from,
+  // so that Undo is refused - and
   // where the lock list cannot be read, refused too. Restore's Undo renames files and
   // touches no field.
   Run.prototype.undo = function () {
@@ -1896,11 +1975,11 @@
     fieldLocks().then(function (locks) {
       self.setState('listing');
       if (locks === false || (locks && locks.isLocked(field))) {
-        self.msg('WARN', 'Undo is refused: it would remove "' + field + '" from ' +
-          plural(self.changes.length, 'scene') + ', and ' + (locks === false
+        self.msg('WARN', 'Undo is refused: it would take out of "' + field + '" what this dialog ' +
+          'added on ' + plural(self.changes.length, 'scene') + ', and ' + (locks === false
           ? 'ᝯㄝₓ Custom Fields Bulk Editor could not say whether it is locked.'
           : 'it is locked in ᝯㄝₓ Custom Fields Bulk Editor\u2019s Locked Custom Fields ' +
-            'setting - a locked field can be added, never removed.'));
+            'setting - a locked field can be added to, never taken from.'));
         return;
       }
       self.undoWrites();

@@ -30,6 +30,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, insertBeforeImportantAction = C.insertBeforeImportantAction,
     findEditContainer = C.findEditContainer,
     applyButtonSpacing = C.applyButtonSpacing, domBus = C.domBus,
@@ -64,7 +67,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.6.3';
+  var PLUGIN_VERSION = '6.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -610,8 +613,10 @@
     return s;
   }
 
-  function loadSettings() {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+  // `fresh`: past the answer every plugin shares - a task or dialog opening, which must
+  // see a change another tab saved a moment ago.
+  function loadSettings(fresh) {
+    return pluginConfig(fresh).then(function (data) {
       var all = (data.configuration || {}).plugins || {};
       var raw = all[PLUGIN_ID] || {};
       return { settings: settingsFrom(raw), sibling: all[SIBLING_ID] || null };
@@ -2352,7 +2357,7 @@
     // long before Proceed is reachable, and setState is re-applied when it does.
     this.checkVersion();
 
-    loadSettings().then(function (loaded) {
+    loadSettings(true).then(function (loaded) {
       self.settings = loaded.settings;
       self.checkSibling(loaded.sibling);
 
@@ -2835,7 +2840,7 @@
     document.body.appendChild(this.backdrop);
     this.checkVersion();
 
-    loadSettings().then(function (loaded) {
+    loadSettings(true).then(function (loaded) {
       if (_active !== self) return;
       self.stored = formatAutoModes(loaded.settings.modes);
       self.panel.set(loaded.settings.modes);
@@ -3208,7 +3213,7 @@
 
   TreeView.prototype.load = function () {
     var self = this;
-    loadSettings().then(function (loaded) {
+    loadSettings(true).then(function (loaded) {
       self.settings = loaded.settings;
       return gqlRequest(tagQuery(self.settings, true), null);
     }).then(function (data) {
@@ -4690,9 +4695,10 @@
   // fetched for the handful being added, on the click, where a round trip is free.
   function tagChips(ids) {
     if (!ids.length) return Promise.resolve([]);
-    return gqlRequest('query NPTChips($ids: [ID!]) { findTags(tag_filter: { id: ' +
-      '{ value: $ids, modifier: INCLUDES } }, filter: { per_page: -1 }) { tags { ' +
-      'id name aliases image_path } } }', { ids: ids })
+    // By `ids`: a tag filter has no `id` criterion, so asking through one was refused and
+    // every chip went out without its picture.
+    return gqlRequest('query NPTChips($ids: [ID!]) { findTags(ids: $ids, ' +
+      'filter: { per_page: -1 }) { tags { id name aliases image_path } } }', { ids: ids })
       .then(function (data) { return ((data.findTags || {}).tags) || []; },
         function () { return []; })
       // **Every id gets a chip, whatever the query answered.** A chip without its picture
@@ -5052,9 +5058,12 @@
       TYPES.forEach(function (type) {
         var bulk = autoRe(type, 'bulk').test(q);
         if (!bulk && !autoRe(type, 'single').test(q)) return;
+        // `$input`, or the variables themselves where Stash's page spells the input out of
+        // separate variables named like its fields - `SceneMarkerUpdate` does.
+        var input = v.input || v;
         var ids = bulk
-          ? (v.input && v.input.ids)
-          : (v.input && v.input.id != null ? [v.input.id] : null);
+          ? input.ids
+          : (input.id != null ? [input.id] : null);
         if (!ids || !ids.length) return;
         // Whether to stand down for someone else's lease is decided inside
         // autoNormalize, once the settings say an auto mode is actually on - asking

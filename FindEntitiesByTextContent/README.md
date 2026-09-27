@@ -253,7 +253,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Find & Replace Entities by Text Content | 783 MB | 1739 MB | 1538 MB |
+| Find & Replace Entities by Text Content | 783 MB | 1748 MB | 1538 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

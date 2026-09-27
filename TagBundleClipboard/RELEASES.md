@@ -8,6 +8,10 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 2.3.3 (`fb9d6df`) | 2026-09-27 | Fixes from the delta review of the branch |
+| 2.3.2 (`3c64c77`) | 2026-09-26 | Every plugin's settings come from one read Core shares, dropped by any settings save |
+| 2.3.1 (`46d1ed9`) | 2026-09-26 | A page at rest redraws nothing and asks nothing but its settings; Tag Bundle Clipboard stops asking during playback |
 | 2.3.0 (`1c3e190`) | 2026-09-25 | Tag Bundle Clipboard 2.3.0: Unselect All and Select All in the paste dialog |
 | 2.2.7 (`2e791c2`) | 2026-09-25 | Checkbox lists in four more dialogs are laid out in whole pixels, so every box draws the same size |
 | 2.2.6 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |

@@ -8,6 +8,14 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 3.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 2.6.7 (`06304f8`) | 2026-09-27 | Scene Variants 2.6.7: ⸎ goes before Core's ⓕ and 🖬 on a scene card |
+| 2.6.6 (`fb9d6df`) | 2026-09-27 | Fixes from the delta review of the branch |
+| 2.6.5 (`1dcf10e`) | 2026-09-27 | Fixes from the first live check: marker saves as Stash sends them, one run per rename, Undo History ticks like a tree and refreshes the page |
+| 2.6.4 (`3c64c77`) | 2026-09-26 | Every plugin's settings come from one read Core shares, dropped by any settings save |
+| 2.6.3 (`60fe6ed`) | 2026-09-26 | Every task runs in a real browser and its dialog is checked at each phase; one fault it found is fixed |
+| 2.6.2 (`b0808e4`) | 2026-09-26 | Names built from any input are well formed; three faults the fuzzer found are fixed |
+| 2.6.1 (`32dd0fc`) | 2026-09-26 | Every task is run again with each request failing, Stop at each write, and each history write failing; two bugs it found are fixed |
 | 2.6.0 (`02916c8`) | 2026-09-25 | Scene Variants 2.6.0: Display Variant Count ⸎ on Scene Cards, on by default, and the count in amber |
 | 2.5.0 (`1909bf7`) | 2026-09-25 | Scene Variants 2.5.0: every scene card counts its other variants, ⸎ last among its counters |
 | 2.4.1 (`d87ae96`) | 2026-09-25 | Unselect All and Select All close the footer, in that order, in Undo History, Entity Name Maintainer and Scene Variants |

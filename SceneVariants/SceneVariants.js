@@ -44,6 +44,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var showDefaults = C.showDefaults, coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
@@ -68,7 +71,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '2.6.0';
+  var PLUGIN_VERSION = '3.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -436,8 +439,10 @@
       });
   }
 
-  function loadSettings() {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+  // `fresh`: past the answer every plugin shares - a task or dialog opening, which must
+  // see a change another tab saved a moment ago.
+  function loadSettings(fresh) {
+    return pluginConfig(fresh).then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
       if (raw.c5PropagateTitleOnSave == null && raw.c2PropagateTitleOnSave != null) {
         raw.c5PropagateTitleOnSave = raw.c2PropagateTitleOnSave;
@@ -507,7 +512,6 @@
   if (typeof showDefaults === 'function') showDefaults(PLUGIN_ID, function () { return SEED_DEFAULTS; });
 
   function seedFieldDefault(raw, s) {
-    if (_seededField) return;
     var missing = [], k;
     for (k in SEED_DEFAULTS) {
       if (!hasOwn(SEED_DEFAULTS, k)) continue;
@@ -516,14 +520,15 @@
       if (!hasOwn(raw, k) ||
         (k === 'a4VariantFlagTag' && isLegacyFlag(raw[k]))) missing.push(k);
     }
-    if (!missing.length) return;
+    // An unanswered box is its default on every read, not only the one that writes the
+    // seed: a later read before the seed is stored - or where it was lost - read an empty
+    // postfix and first index, which is the answer "none", and planned bare titles.
+    missing.forEach(function (key) { s[key] = SEED_DEFAULTS[key]; });
+    if (_seededField || !missing.length) return;
     _seededField = true;
     var input = {};
     for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-    missing.forEach(function (key) {
-      s[key] = SEED_DEFAULTS[key];
-      input[key] = SEED_DEFAULTS[key];
-    });
+    missing.forEach(function (key) { input[key] = SEED_DEFAULTS[key]; });
     gqlRequest('mutation SVRSeedSettings($id: ID!, $input: Map!) ' +
       '{ configurePlugin(plugin_id: $id, input: $input) }',
     { id: PLUGIN_ID, input: input }).then(null, function () {
@@ -544,6 +549,11 @@
     if (!_settings) {
       _settings = {};
       for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) _settings[k] = DEFAULTS[k];
+      // Until the settings are read - or where they cannot be - the naming is the default
+      // the settings page shows and the seed writes: an empty postfix or first index is an
+      // answer ("none"), not "not read yet", and a rename planned on it wrote bare titles.
+      _settings.e1PartialPostfix = POSTFIX_DEFAULT;
+      _settings.e2FirstIndex = FIRST_INDEX_DEFAULT;
     }
     if (!_settingsWait && Date.now() - _settingsAt > SETTINGS_TTL_MS) {
       _settingsWait = loadSettings().then(function (s) {
@@ -577,6 +587,15 @@
   var TAGS_TTL_MS = 60000;   // the tag tree is re-read at most this often
   var _tagsWait = null, _tagsAt = 0;
 
+  // A task's scan says so when the tag list could not be read, rather than listing every
+  // scene as unclassified without a word.
+  function tagsUnreadNote(run, tags) {
+    if (tags && tags.unread) {
+      run.msg('WARN', 'The tag list could not be read (' + tags.unread + '), so no scene is ' +
+        'classified full- or partial-duration in this scan. Rescan to try again.');
+    }
+  }
+
   function tagTree() {
     if (!_tagsWait || Date.now() - _tagsAt > TAGS_TTL_MS) {
       _tagsAt = Date.now();
@@ -585,10 +604,16 @@
       }, function (err) {
         // Loud, like the variant query and for the same reason: with no tag tree every
         // row lists unclassified, which is indistinguishable from two tag names that
-        // match nothing.
+        // match nothing. Not kept: the next ask reads again, rather than a blip reading
+        // as a library with no tags for a minute. And marked, so a task that must know
+        // whether a tag exists can refuse instead of creating a second one.
         console.warn('[svr] the tag list could not be read, so no row can be classified: ' +
           err.message);
-        return [];
+        _tagsWait = null;
+        _tagsAt = 0;
+        var none = [];
+        none.unread = err && err.message ? err.message : String(err);
+        return none;
       });
     }
     return _tagsWait;
@@ -2467,7 +2492,10 @@
     this.candidates = [];
     this.sets = [];
     this.allSets = [];
-    this.setCount = 0;
+    // A re-plan from the last scan (`replanOnly`, the renumber box) lists what that scan
+    // read, so its counts stand: zeroed, the head said "Scanned 0 scenes".
+    var relist = this.replanOnly && this.scannedSets;
+    if (!relist) this.setCount = 0;
     this.srcRadios = [];
     this.source = null;
     this.sourceSet = null;
@@ -2486,8 +2514,7 @@
     this.show(this.candSep, false);
     this.show(this.selAllBtn, false);
     this.show(this.unselAllBtn, false);
-    this.scanned = 0;
-    this.total = 0;
+    if (!relist) { this.scanned = 0; this.total = 0; }
     this.written = 0;
     this.failed = 0;
     this.scanFailed = false;
@@ -2594,6 +2621,7 @@
   function migrateBegin(run) {
     return Promise.all([settingsReady(), tagTree(), fieldLocks()]).then(function (both) {
       var s = both[0];
+      tagsUnreadNote(run, both[1]);
       var m = matchers(both[1], s);
       var field = fieldName(s);
       run.field = field;
@@ -2983,6 +3011,12 @@
       var s = both[0];
       var field = fieldName(s), name = flagTagName(s);
       run.field = field;
+      // Unread is not "none": planning a create here is how a blip makes a second flag tag.
+      if (both[1].unread) {
+        throw new Error('the tag list could not be read (' + both[1].unread + '), so whether "' +
+          name + '" exists is unknown, and nothing is planned rather than a second one created. ' +
+          'Rescan to try again');
+      }
       // Exact name or alias, never descendants: the flag is one machine-kept tag, and a
       // scene wearing a child of it is not wearing it.
       var hits = tagsMatchingName(both[1], name);
@@ -3877,6 +3911,7 @@
     var scene = run.scope || {};
     return Promise.all([settingsReady(), tagTree()]).then(function (both) {
       var s = both[0], m = matchers(both[1], s);
+      tagsUnreadNote(run, both[1]);
       if (run.auto && !s.c5PropagateTitleOnSave) run.titleOff = true;
       run.settings = s;
       var skip = skipTagIds(both[1], s, m);
@@ -4733,12 +4768,14 @@
   // twenty-six a spreadsheet names its columns in, padded to the first index's length
   // and growing past it rather than stopping. Anything else - "#1", "A1", "Aa" - counts
   // as "1": `start` is where such a spelling counts from, since it has no value of its own.
+  // So does one too long for a number to hold exactly, where n + 1 is n and counting on
+  // from it never ends.
   function indexAlphabet(first) {
     if (!first) return null;   // no index at all
-    if (/^[0-9]+$/.test(first)) return { kind: 'digits', width: first.length };
-    if (/^[A-Z]+$/.test(first)) return { kind: 'upper', width: first.length };
-    if (/^[a-z]+$/.test(first)) return { kind: 'lower', width: first.length };
-    return { kind: 'digits', width: 1, start: 1 };
+    var a = /^[0-9]+$/.test(first) ? { kind: 'digits', width: first.length }
+      : /^[A-Z]+$/.test(first) ? { kind: 'upper', width: first.length }
+      : /^[a-z]+$/.test(first) ? { kind: 'lower', width: first.length } : null;
+    return a && indexValue(first, a) <= 9007199254740991 ? a : { kind: 'digits', width: 1, start: 1 };
   }
   function indexValue(str, alpha) {
     if (alpha.kind === 'digits') return parseInt(str, 10);
@@ -4862,12 +4899,28 @@
     });
     var live = out.filter(function (o) { return !o.skipped; });
     if (!base) return out;
-    if (!alpha || (live.length === 1 && !naming.loneIndex)) {
-      live.forEach(function (o) { o.expected = bareTitle(base, naming.postfix); });
+    // A lone partial wears the postfix alone, unless one left alone wears it already.
+    var bare = bareTitle(base, naming.postfix);
+    // Spacing read loosely, as the shape is (`looseRe`): "Base  - Promo" wears it too.
+    var spaced = function (t) { return String(t || '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); };
+    var bareTaken = out.some(function (o) { return o.skipped && spaced(o.member.title) === spaced(bare); });
+    if (!alpha || (live.length === 1 && !naming.loneIndex && !bareTaken)) {
+      live.forEach(function (o) { o.expected = bare; });
       return out;
     }
     var shape = new RegExp('^\\s*' + looseRe(base + naming.postfix) + '(' + indexPattern(alpha) + ')\\s*$');
     var taken = {};
+    // A partial left alone keeps the index it wears, so no other is given it - read off the
+    // end of its title after the postfix, whatever base it wears before that: it is left
+    // alone precisely because its title is not the rule's ("Adventures #04 - Scene 4 -
+    // Promo 1" in a set now based "Adventures #04, Scene #04"). With no postfix, only a
+    // title in the expected shape says which number is an index.
+    var worn = naming.postfix && /\S/.test(naming.postfix)
+      ? new RegExp(looseRe(naming.postfix) + '(' + indexPattern(alpha) + ')\\s*$') : shape;
+    out.forEach(function (o) {
+      var m = o.skipped && worn.exec(o.member.title || '');
+      if (m) taken[indexValue(m[1], alpha)] = true;
+    });
     if (!renumber) {
       live.forEach(function (o) {
         var m = shape.exec(o.member.title || '');
@@ -5068,7 +5121,7 @@
     this.modal.appendChild(foot);
     wireEscape(this);
     document.body.appendChild(this.backdrop);
-    loadSettings().then(function (s) {
+    loadSettings(true).then(function (s) {
       if (_title !== self) return;
       self.stored = s;
       TITLE_FIELDS.forEach(function (f) {
@@ -5232,6 +5285,7 @@
   function renameBegin(run) {
     return Promise.all([settingsReady(), tagTree()]).then(function (both) {
       var s = both[0], m = matchers(both[1], s), field = fieldName(s), nm = naming(s);
+      tagsUnreadNote(run, both[1]);
       run.settings = s;
       // The box starts from the setting and is this run's override of it.
       if (run.renumber == null) run.renumber = nm.renumber;
@@ -5737,6 +5791,7 @@
   function reviewBegin(run) {
     return Promise.all([settingsReady(), tagTree()]).then(function (both) {
       var s = both[0], m = matchers(both[1], s);
+      tagsUnreadNote(run, both[1]);
       var field = fieldName(s);
       run.settings = s;
       run.matchers = m;
@@ -7145,13 +7200,29 @@
       return;
     }
     var Count = VariantCount(React, Bootstrap);
+    // ᝯㄝₓ Core's counters (ⓕ, 🖬) patch the card first and go after ⸎: in the card's group, or
+    // in the row Core drew itself where the card has none - there ⸎ gets a row of its own above.
+    function beforeCore(el, id) {
+      if (!React.isValidElement(el) || !el.props || el.props.children == null) return null;
+      var arr = React.Children.toArray(el.props.children);
+      for (var i = 0; i < arr.length; i++) {
+        if (React.isValidElement(arr[i]) && /gttx-card-counts$/.test(String(arr[i].key))) {
+          var inGroup = /(^|\s)card-popovers(\s|$)/.test(String(el.props.className || ''));
+          arr.splice(i, 0, React.createElement(Count, { key: 'svr-vcount', id: id, own: !inGroup }));
+          return React.cloneElement(el, null, arr);
+        }
+        var placed = beforeCore(arr[i], id);
+        if (placed) { arr[i] = placed; return React.cloneElement(el, null, arr); }
+      }
+      return null;
+    }
     api.patch.after('SceneCard.Popovers', function (props) {
       var result = arguments[arguments.length - 1];
       try {
         // A compact card draws no counters of its own, so it gets none of ours either.
         if (!props || !props.scene || props.compact) return result;
         var id = String(props.scene.id);
-        var placed = intoPopovers(React, result, React.createElement(Count, { key: 'svr-vcount', id: id }));
+        var placed = beforeCore(result, id) || intoPopovers(React, result, React.createElement(Count, { key: 'svr-vcount', id: id }));
         return placed || React.createElement(React.Fragment, null, result,
           React.createElement(Count, { key: 'svr-vcount', id: id, own: true }));
       } catch (e) {

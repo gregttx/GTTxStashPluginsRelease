@@ -8,6 +8,13 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 3.10.1 (`21fb723`) | 2026-09-27 | GTTx Core 3.10.1: ⓕ before 🖬 on the cards, both amber, and Undo History first among its settings |
+| 3.10.0 (`a112b33`) | 2026-09-27 | GTTx Core 3.10.0: ⓕ and 🖬 counters on cards, Undo History settings in a dialog of their own, settings saves recorded, and Rescan breathing when another tab records a change |
+| 3.9.1 (`fb9d6df`) | 2026-09-27 | Fixes from the delta review of the branch |
+| 3.9.0 (`1dcf10e`) | 2026-09-27 | Fixes from the first live check: marker saves as Stash sends them, one run per rename, Undo History ticks like a tree and refreshes the page |
+| 3.8.4 (`3c64c77`) | 2026-09-26 | Every plugin's settings come from one read Core shares, dropped by any settings save |
+| 3.8.3 (`389376c`) | 2026-09-26 | Undo History taken back to any point leaves the library as it was there; four faults it found are fixed |
 | 3.8.2 (`d87ae96`) | 2026-09-25 | Unselect All and Select All close the footer, in that order, in Undo History, Entity Name Maintainer and Scene Variants |
 | 3.8.1 (`7be61c5`) | 2026-09-25 | A long list line flows as text: no more overlap in Find & Replace and Entity Name Maintainer, no more columns in Undo History |
 | 3.8.0 (`cbc87d0`) | 2026-09-25 | Core 3.8.0: one Case-Sensitive Matching setting for every plugin with a Case-sensitive box, and the shared fold |

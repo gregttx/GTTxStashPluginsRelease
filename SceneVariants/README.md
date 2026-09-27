@@ -76,8 +76,8 @@ tooltip says so; close that dialog first.
 ### The variant count on a scene card
 
 Every scene card in a list shows **⸎** and the number of other variants the scene has, in amber,
-last among the counters under the card — after the tags, performers, groups, the O-counter,
-Organized and the rest. A scene with no other variant shows none, and **Display Variant Count ⸎ on
+among the counters under the card — after the tags, performers, groups, the O-counter, Organized
+and the rest, and before ᝯㄝₓ Core's ⓕ and 🖬. A scene with no other variant shows none, and **Display Variant Count ⸎ on
 Scene Cards** turns it off. Hover it for the other variants' titles; the Variants tab on the scene's own page
 lists them in full. The count is matched the way the tab matches, on a shared stash-id or a shared
 line of the **Variant Stash-ID Custom Field**, and every card on the page is counted in one go.
@@ -357,11 +357,11 @@ by the base you write into the **Variant Base Name** custom field: a base you ha
 scene of the set wins over the titles, which is how a set the rule reads wrong is settled once. A
 scene carrying anything in the **Variant No-Rename** custom field is left alone, and so is one
 carrying the tag named in **Exclude Scenes Carrying This Tag From Renaming**, or any tag filed
-under it - by the synchronize dialogs too, which offer such a partial no title at all. When ᝯㄝₓ Custom Fields Bulk Editor is installed, both fields are described in its store.
+under it - by the synchronize dialogs too, which offer such a partial no title at all. It keeps its index, too: no other partial is given the index its title ends in, even where the rest of its title is not the set's shape, nor, where it wears the postfix alone, that title. When ᝯㄝₓ Custom Fields Bulk Editor is installed, both fields are described in its store.
 
 Indexes count from the **First Partial Index** setting, whose spelling is the rule: `1` counts 1,
 2, 3; `01` pads to two digits; `A` counts A to Z and then AA; `AA` runs to ZZ and then AAA. Any
-other spelling — `#1`, `A1`, `Aa` — counts like `1`. Empty it, and no index is ever added: every partial wears the postfix alone, however many there are. They
+other spelling — `#1`, `A1`, `Aa`, or one too long to count exactly — counts like `1`. Empty it, and no index is ever added: every partial wears the postfix alone, however many there are. They
 are handed out longest scene first — the order the Variants tab lists them in — with the bigger
 file breaking a tie, and a partial whose title already carries an index in the expected shape keeps
 it — doubled or non-breaking spaces included, which the rename then makes single and marks
@@ -685,7 +685,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
-| Flag Variants | 46 MB | 86 MB | 81 MB |
+| Flag Variants | 46 MB | 86 MB | 83 MB |
 | Review Variant Sets | 1949 MB | — | — |
 | Rename Variants | 635 MB | 664 MB | 664 MB |
 

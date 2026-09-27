@@ -97,21 +97,21 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
-| SceneFilenameManager | Archive Original Filenames | 114 MB | 157 MB | 157 MB |
+| SceneFilenameManager | Archive Original Filenames | 114 MB | 158 MB | 157 MB |
 | SceneFilenameManager | Restore Original Filenames | 56 MB | 82 MB | 82 MB |
-| SceneFilenameManager | Rename Files From Metadata | 194 MB | 253 MB | 253 MB |
+| SceneFilenameManager | Rename Files From Metadata | 194 MB | 257 MB | 253 MB |
 | SceneVariants | Migrate Variant Stash-IDs | 58 MB | 92 MB | 91 MB |
-| SceneVariants | Flag Variants | 46 MB | 86 MB | 81 MB |
+| SceneVariants | Flag Variants | 46 MB | 86 MB | 83 MB |
 | SceneVariants | Review Variant Sets | 1949 MB | — | — |
 | SceneVariants | Rename Variants | 635 MB | 664 MB | 664 MB |
 | CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 551 MB | 1149 MB | 1149 MB |
 | CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 311 MB | 311 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 783 MB | 1739 MB | 1538 MB |
-| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4181 MB | 4080 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 783 MB | 1748 MB | 1538 MB |
+| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4184 MB | 4080 MB |
 | NormalizeParentTags | Auto Mode Settings | 0 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
-| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 270 MB | 293 MB | 282 MB |
-| PropagateTagsAndPerformers | Propagate All | 1777 MB | 1819 MB | 1802 MB |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 268 MB | 294 MB | 283 MB |
+| PropagateTagsAndPerformers | Propagate All | 1792 MB | 1835 MB | 1818 MB |
 
 A task gives all of it back when its dialog is closed.
 <!-- memory:end -->

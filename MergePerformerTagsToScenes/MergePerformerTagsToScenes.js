@@ -24,6 +24,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
     keepLog = C.keepLog, droppedLine = C.droppedLine,
@@ -76,7 +79,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '4.2.2';
+  var PLUGIN_VERSION      = '5.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -962,7 +965,7 @@
     if (!force && now - _settingsLoadedAt < LOAD_SETTINGS_MIN_INTERVAL_MS) return;
     _settingsLoadedAt = now;
     _settingsInFlight = true;
-    gqlRequest('{ configuration { plugins } }', null)
+    pluginConfig()
       .then(function (data) {
         var ps = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
         for (var key in SETTING_MAP) {
@@ -2764,6 +2767,13 @@
       var parsed = JSON.parse(opts.body);
       var q = parsed.query || '';
       var vars = parsed.variables || {};
+
+      // Our own settings saved - on Stash's settings page, or seeded - are read again once
+      // the save lands, past the throttle: waiting for the next navigation or the ten-second
+      // timer left a changed exclusion or switch unapplied in between.
+      if (/\bconfigurePlugin\b/.test(q) && (vars.plugin_id || vars.id) === PLUGIN_ID) {
+        mutationSucceeded(p).then(function (ok) { if (ok) loadSettings(true); });
+      }
 
       if (settings.autoMergeOnSceneUpdate && /\bbulkSceneUpdate\b/.test(q) && !autoMergeSuppressed()) {
         var bulkSceneIds = vars.input && vars.input.ids;

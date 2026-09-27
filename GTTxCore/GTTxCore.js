@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '3.8.2';
+  var PLUGIN_VERSION = '4.0.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -1856,8 +1856,13 @@
       function () { return journalRecordNow(run, entries); });
   }
 
+  // A run's time is strictly after the last one this page recorded: its entries carry the
+  // time and no sequence, and two runs in one millisecond - a save and the automatic pass
+  // it set off - would otherwise tie, and an undo could not tell which came first.
+  var _journalLastAt = 0;
   function journalHead(run) {
-    var at = Date.now();
+    var at = Math.max(Date.now(), _journalLastAt + 1);
+    _journalLastAt = at;
     return { id: at.toString(36) + '-' + Math.random().toString(36).slice(2, 8), at: at, seq: ++_journalSeq,
       source: run.source === 'hand' || run.source === 'undo' ? run.source : 'plugin',
       plugin: run.plugin || null, label: String(run.label || ''), note: String(run.note || ''),
@@ -1912,7 +1917,7 @@
       rows.forEach(function (r) { store.put(r); });
       return idbDone(tx);
     }).then(function () {
-      journalChanged();
+      journalChanged(true);
       journalProtect();
       return journalTrim();
     }).then(function () { return { recorded: rows.length, run: id, bytes: bytes }; });
@@ -2037,14 +2042,53 @@
 
   // Every tab of this Stash shares the store; a history open in another one redraws
   // when this one writes. Where the channel is missing it redraws on its next open.
+  // `recorded`: a change to the library was recorded, not the history tidied - which is
+  // what marks another tab's Rescan (`watchOtherTabs`). `from` tells this page's own
+  // messages apart: a channel hears every other one of its name, in this tab too.
   var _journalChannel = null;
-  function journalChanged() {
+  var PAGE_ID = Math.random().toString(36).slice(2);
+  function journalChanged(recorded) {
     try {
       if (!_journalChannel && typeof window.BroadcastChannel === 'function') {
         _journalChannel = new window.BroadcastChannel(JOURNAL_DB);
       }
-      if (_journalChannel) _journalChannel.postMessage({ changed: Date.now() });
+      if (_journalChannel) _journalChannel.postMessage({ changed: Date.now(), recorded: recorded === true, from: PAGE_ID });
     } catch (e) { /* another tab catches up on its next open */ }
+  }
+
+  // A change another tab recorded, while a ᝯㄝₓ dialog is open here: what it lists was read
+  // before, so its Rescan - Refresh, in Find & Replace - says so, bold amber and breathing,
+  // until it is pressed. Found by the class every dialog gives it, `<prefix>-rescan`.
+  var STALE_TIP = 'Another tab of this Stash changed your library after this listing was read, ' +
+    'so what it shows may be out of date. Press this to read it again.';
+  function markRescans() {
+    var all = document.querySelectorAll ? document.querySelectorAll('button') : [];
+    var hit = Array.prototype.slice.call(all).filter(function (b) {
+      return /(^|\s)[a-z0-9]+-(rescan|refresh)(\s|$)/.test(String(b.className || '')) && !hasClass(b, 'gttx-stale-rescan');
+    });
+    if (!hit.length) return;
+    injectStyle();
+    hit.forEach(function (b) {
+      b._gttxTitle = b.title || '';
+      b.title = STALE_TIP + (b._gttxTitle ? '\n\n' + b._gttxTitle : '');
+      b.className += ' gttx-stale-rescan';
+      var clear = function () {
+        b.className = String(b.className).replace(/\s*gttx-stale-rescan/g, '');
+        b.title = b._gttxTitle;
+        b.removeEventListener('click', clear);
+      };
+      b.addEventListener('click', clear);
+    });
+  }
+  function watchOtherTabs() {
+    if (typeof window.BroadcastChannel !== 'function') return;
+    try {
+      var ch = new window.BroadcastChannel(JOURNAL_DB);
+      ch.onmessage = function (ev) {
+        var m = ev && ev.data;
+        if (m && m.recorded && m.from !== PAGE_ID) markRescans();
+      };
+    } catch (e) { /* no channel: no mark */ }
   }
 
   // ── Undo History: the entity types, and reading a field the way it is written ──
@@ -2076,6 +2120,9 @@
       input: 'GroupUpdateInput', name: 'name', destroy: 'groupDestroy', destroyInput: 'GroupDestroyInput' },
     tags: { label: 'Tag', labels: 'Tags', one: 'findTag', update: 'tagUpdate',
       input: 'TagUpdateInput', name: 'name', destroy: 'tagDestroy', destroyInput: 'TagDestroyInput' },
+    // A plugin's settings, by its id: read and written as the whole map `configurePlugin`
+    // replaces (`journalRead`, `journalUndo`), each key a field `settings.<key>`.
+    settings: { label: 'Plugin settings', labels: 'Plugin settings', name: 'id', settings: true },
   };
 
   var JOURNAL_RELATIONS = { tag_ids: 'tags', performer_ids: 'performers', gallery_ids: 'galleries',
@@ -2129,6 +2176,13 @@
   // for a save by another plugin's wrapper. Resolves to { id: entity or null }.
   function journalRead(send, type, ids, fields, customFields, files) {
     var t = JOURNAL_TYPES[type];
+    if (t.settings) {
+      return pluginConfig(true).then(function (d) {
+        var all = ((d || {}).configuration || {}).plugins || {}, out = {};
+        ids.forEach(function (id) { out[id] = { id: id, settings: all[id] || {} }; });
+        return out;
+      });
+    }
     var sel = ['id', 'updated_at', t.name].concat(fields.map(function (k) { return journalField(k).sel; }));
     if (customFields) sel.push('custom_fields');
     // A file renamed is `files.<file id>`; an image's files are read under the same name.
@@ -2367,7 +2421,7 @@
             return drop('this pass is more than half its size limit. Its Undo here still works while this dialog is open.');
           }
           if (!written) return '';
-          journalChanged();
+          journalChanged(true);
           journalProtect();
           return journalTrim().then(function () {
             return 'Recorded in Undo History: ' + plural(head.count, 'change') +
@@ -2453,7 +2507,55 @@
   // Around one save: read what it will change, let it through, read again, record the
   // difference. A read that fails never holds the save back: it goes through and the
   // history shows a gap there instead.
+  // A plugin's settings saved - on Stash's settings page, or from a plugin's own dialog -
+  // recorded key by key, where Record Settings Changes is on: the map as it was, read just
+  // before, against the map the save sends, which is the whole of it. Not a seeded default
+  // written on first load, and not an undo's own write, which its run already records.
+  function journalSettingsSave(send, input, init, op) {
+    var v = {};
+    try { v = JSON.parse(init.body).variables || {}; } catch (e) { v = {}; }
+    var pid = v.plugin_id || v.id, next = v.input;
+    var record = pid && next && typeof next === 'object' && !/mutation\s+\w*(Seed|GTTxUndo)/.test(op);
+    // Its own query, not the shared read: the save about to go out drops that anyway.
+    var prior = !record ? Promise.resolve(null) : gqlRequest('query GTTxSettingsBefore { configuration { plugins } }', null).then(function (d) {
+      var all = ((d || {}).configuration || {}).plugins || {}, core = all[PLUGIN_ID] || {};
+      var on = hasOwn(core, 'c9JournalSettings') ? truthy(core.c9JournalSettings) : DEFAULTS.c9JournalSettings;
+      return on ? all[pid] || {} : null;
+    }, function () { return null; });
+    return prior.then(function (was) {
+      var sent = send(input, init);
+      sent.then(configChanged, configChanged);
+      if (was) {
+        sent.then(function (resp) {
+          if (!resp || resp.ok === false) return null;
+          var copy = typeof resp.clone === 'function' ? resp.clone() : null;
+          return (copy ? copy.json() : Promise.resolve({})).then(function (j) {
+            if (j && j.errors && j.errors.length) return null;
+            var keys = {}, entries = [];
+            Object.keys(was).concat(Object.keys(next)).forEach(function (k) { keys[k] = true; });
+            Object.keys(keys).sort().forEach(function (k) {
+              var b = hasOwn(was, k) ? was[k] : undefined, a = hasOwn(next, k) ? next[k] : undefined;
+              if (JSON.stringify(b) === JSON.stringify(a)) return;
+              entries.push({ type: 'settings', id: pid, name: pid, field: 'settings.' + k, before: b, after: a });
+            });
+            return entries.length ? journalRecord({ source: 'hand', label: pid + ' settings changed' }, entries) : null;
+          });
+        }).then(null, function () { /* a settings save is never held back by its record */ });
+      }
+      return sent;
+    });
+  }
+
   function journalCapture(send, input, init) {
+    // A settings write is no save of the library, but it is what makes the shared read of
+    // every plugin's settings stale (`pluginConfig`).
+    // The operation, not the body: a save whose text mentions it is still a save.
+    var op = null;
+    try { op = init && typeof init.body === 'string' ? JSON.parse(init.body).query : null; } catch (e) { op = null; }
+    if (typeof op === 'string' && /\bconfigurePlugin\b/.test(op)) {
+      configChanged();
+      return journalSettingsSave(send, input, init, op);
+    }
     var saves = journalSaves(init);
     if (!saves.length) return send(input, init);
     var removal = saves.some(function (sv) { return sv.spec.mode === 'destroy' || sv.spec.mode === 'merge'; });
@@ -2566,7 +2668,9 @@
   var JOURNAL_CARRIERS = {
     tags: [['scenes', 'findScenes', 'scene_filter', 'tags', 'tag_ids'], ['images', 'findImages', 'image_filter', 'tags', 'tag_ids'],
       ['galleries', 'findGalleries', 'gallery_filter', 'tags', 'tag_ids'], ['performers', 'findPerformers', 'performer_filter', 'tags', 'tag_ids'],
-      ['groups', 'findGroups', 'group_filter', 'tags', 'tag_ids'], ['studios', 'findStudios', 'studio_filter', 'tags', 'tag_ids']],
+      ['groups', 'findGroups', 'group_filter', 'tags', 'tag_ids'], ['studios', 'findStudios', 'studio_filter', 'tags', 'tag_ids'],
+      // Its children: Stash drops a deleted tag from their parents, and a merge moves them.
+      ['tags', 'findTags', 'tag_filter', 'parents', 'parent_ids']],
     performers: [['scenes', 'findScenes', 'scene_filter', 'performers', 'performer_ids'],
       ['images', 'findImages', 'image_filter', 'performers', 'performer_ids'],
       ['galleries', 'findGalleries', 'gallery_filter', 'performers', 'performer_ids']],
@@ -2762,25 +2866,34 @@
       return gqlRequest('mutation GTTxUndoCreate($input: ' + c.input + '!) { ' + c.create + '(input: $input) { id } }', { input: input });
     }).then(function (d) {
       var made = String(((d || {})[c.create] || {}).id);
-      var before = into ? into.carriers || {} : {};
-      return Object.keys(e.carriers || {}).reduce(function (p, key) {
-        return p.then(function () {
-          var parts = key.split('.'), ct = parts[0], field = parts[1];
-          var ids = e.carriers[key].map(function (x) { return x; });
-          return journalReattach(ct, field, ids, made, e.type, w.remap, w.renew).then(function () {
-            if (!into || field === 'groups') return;
-            var had = (before[key] || []).map(String);
-            var only = ids.map(function (x) { return w.remap(ct, String(x)); }).filter(function (x) { return had.indexOf(x) === -1; });
-            return journalDetach(ct, field, only, w.intoId, w.renew);
-          });
-        });
-      }, Promise.resolve()).then(function () { return made; });
+      return journalCarry(w, made).then(function () { return made; });
     });
+  }
+
+  // The recreated entity put back on what carried it, and for a merge the destination taken
+  // off what only the source carried.
+  function journalCarry(w, made) {
+    var e = w.entries[0], into = e.merge;
+    var before = into ? into.carriers || {} : {};
+    return Object.keys(e.carriers || {}).reduce(function (p, key) {
+      return p.then(function () {
+        var parts = key.split('.'), ct = parts[0], field = parts[1];
+        var ids = e.carriers[key].map(function (x) { return x; });
+        return journalReattach(ct, field, ids, made, e.type, w.remap, w.renew).then(function () {
+          if (!into || field === 'groups') return;
+          // Both sides through the same remap: a carrier recreated earlier in this undo is
+          // compared under its new id, or the destination was taken off what had it all along.
+          var had = (before[key] || []).map(function (x) { return w.remap(ct, String(x)); });
+          var only = ids.map(function (x) { return w.remap(ct, String(x)); }).filter(function (x) { return had.indexOf(x) === -1; });
+          return journalDetach(ct, field, only, w.intoId, w.renew);
+        });
+      });
+    }, Promise.resolve());
   }
 
   var BULK = { scenes: ['bulkSceneUpdate', 'BulkSceneUpdateInput'], images: ['bulkImageUpdate', 'BulkImageUpdateInput'],
     galleries: ['bulkGalleryUpdate', 'BulkGalleryUpdateInput'], performers: ['bulkPerformerUpdate', 'BulkPerformerUpdateInput'],
-    groups: ['bulkGroupUpdate', 'BulkGroupUpdateInput'] };
+    groups: ['bulkGroupUpdate', 'BulkGroupUpdateInput'], tags: ['bulkTagUpdate', 'BulkTagUpdateInput'] };
 
   // `renew` is the undo's lease, renewed before each chunk.
   function journalChunks(ids, fn, renew) {
@@ -2894,6 +3007,10 @@
     if (field.indexOf('custom_fields.') === 0) {
       var cf = (o && o.custom_fields) || {}, k = field.slice(14);
       return hasOwn(cf, k) ? cf[k] : JOURNAL_ABSENT;
+    }
+    if (field.indexOf('settings.') === 0) {
+      var map = (o && o.settings) || {}, key = field.slice(9);
+      return hasOwn(map, key) ? map[key] : JOURNAL_ABSENT;
     }
     return journalField(field).read(o);
   }
@@ -3076,6 +3193,12 @@
           items.push({ entry: e, status: 'ok', reason: '' });
         });
         if (!touched.length) return;
+        if (JOURNAL_TYPES[t].settings) {
+          var patch = {};
+          touched.forEach(function (f) { patch[f.slice(9)] = state[f]; });
+          writes.push({ type: t, id: id, name: id, entries: done, settings: patch });
+          return;
+        }
         var input = { id: id }, partial = null, remove = [];
         // A file goes back by moving it, in its own folder, under the name it had.
         touched.filter(function (f) { return f.indexOf('files.') === 0; }).forEach(function (f) {
@@ -3124,12 +3247,21 @@
     };
     renew();
     var written = [], failed = 0, made = {};
+    // Old id to now: the past undos' remaps, then this undo's own recreations as they land -
+    // a tag put back a step ago is the one the next step re-attaches to, and a merge's
+    // destination recreated first is the tag the split works on.
+    var live = function (type, id) {
+      var r = plan.remap ? plan.remap(type, id) : String(id);
+      return made[type] && hasOwn(made[type], r) ? made[type][r] : r;
+    };
     var write = function (p, w) {
       return p.then(function () {
         renew();
         var t = JOURNAL_TYPES[w.type], q, vars;
         if (w.recreate) {
           w.renew = renew;
+          w.remap = live;
+          if (w.entries[0].merge) w.intoId = live(w.type, w.entries[0].merge.into);
           return journalRecreate(w).then(function (id) {
             w.made = id;
             (made[w.type] = made[w.type] || {})[w.id] = id;
@@ -3138,6 +3270,25 @@
           }, function (e) {
             failed++;
             line('ERROR', 'it could not be put back: ' + (e && e.message ? e.message : e), w);
+          });
+        }
+        if (w.settings) {
+          // The map as it is now, the keys put back, and the whole of it sent: a plugin's
+          // settings are one value to `configurePlugin`, which replaces what it is given.
+          return gqlRequest('query GTTxUndoSettingsRead { configuration { plugins } }', null).then(function (d) {
+            var map = {}, cur = (((d || {}).configuration || {}).plugins || {})[w.id] || {};
+            Object.keys(cur).forEach(function (k) { map[k] = cur[k]; });
+            Object.keys(w.settings).forEach(function (k) {
+              if (w.settings[k] === JOURNAL_ABSENT) delete map[k]; else map[k] = w.settings[k];
+            });
+            return gqlRequest('mutation GTTxUndoSettings($plugin_id: ID!, $input: Map!) { ' +
+              'configurePlugin(plugin_id: $plugin_id, input: $input) }', { plugin_id: w.id, input: map });
+          }).then(function () {
+            written.push(w);
+            line('UNDO', plural(w.entries.length, 'setting') + ' put back', w);
+          }, function (e) {
+            failed++;
+            line('ERROR', 'the undo failed: ' + (e && e.message ? e.message : e), w);
           });
         }
         if (w.move) {
@@ -3166,22 +3317,45 @@
     };
     var puts = plan.writes.filter(function (w) { return w.recreate; });
     var rest = plan.writes.filter(function (w) { return !w.recreate; });
-    // The deletes go back first. The rest was checked before they were back, so a tag
-    // added and then deleted read as "changed since", and a studio changed and then
-    // deleted would be written back as the dead id: it is checked again now, with the
-    // new ids followed. A check that fails keeps the plan as reviewed.
-    return puts.reduce(write, Promise.resolve()).then(function () {
-      if (!Object.keys(made).length || !plan.entries) return rest;
-      var remap = function (type, id) {
-        var r = plan.remap(type, id);
-        return made[type] && hasOwn(made[type], r) ? made[type][r] : r;
-      };
-      var again = plan.entries.filter(function (e) { return e.action !== 'delete' && e.action !== 'merge'; });
-      return journalPlanNow(again.map(function (e) { return journalRemapped(e, remap); }), remap)
-        .then(function (p) { return p.writes; }, function () { return rest; });
-    }).then(function (writes) {
-      return writes.reduce(write, Promise.resolve());
-    }).then(release, function (e) { release(); throw e; }).then(function () {
+    // In the order the history happened, newest first: each delete or merge put back only
+    // once every edit newer than it is undone, and each run of edits checked against the
+    // library as it is then, with the ids recreated so far followed. A relation is undone as
+    // a delta, so an edit newer than a merge, undone after the split, would put back what the
+    // split took off; and an edit older than a delete, checked before the tag is back, reads
+    // as "changed since" - as a studio changed then deleted would be written back as the dead
+    // id. A check that fails keeps that run of edits out, as reviewed.
+    var edits = (plan.entries || []).filter(function (e) { return e.action !== 'delete' && e.action !== 'merge'; });
+    var backs = plan.entries ? puts.slice().sort(function (a, b) { return journalOrder(b.entries[0], a.entries[0]); }) : [];
+    var edited = function (list) {
+      if (!list.length) return Promise.resolve();
+      var who = function (e) { return { type: e.type, id: e.eid, name: e.name, entries: [e] }; };
+      return journalPlanNow(list.map(function (e) { return journalRemapped(e, live); }), live)
+        .then(function (p) {
+          // What the check keeps out is said, with its reason, as the review said it.
+          p.items.forEach(function (it) {
+            if (it.status !== 'ok' && it.status !== 'undone') line('SKIP', it.reason || it.status, who(it.entry));
+          });
+          return p.writes;
+        }, function (e) {
+          failed++;
+          line('ERROR', plural(list.length, 'change') + ' could not be checked again, so ' +
+            (list.length === 1 ? 'it was' : 'they were') + ' not undone: ' + (e && e.message ? e.message : e), who(list[0]));
+          return [];
+        })
+        .then(function (writes) { return writes.reduce(write, Promise.resolve()); });
+    };
+    var left = edits;
+    // A plan with no entries to check again is written as reviewed: put-backs, then the rest.
+    var steps = !plan.entries ? puts.concat(rest).reduce(write, Promise.resolve())
+      : !backs.length ? rest.reduce(write, Promise.resolve()) : backs.reduce(function (p, w) {
+      var at = w.entries[0];
+      return p.then(function () {
+        var now = left.filter(function (e) { return journalOrder(e, at) > 0; });
+        left = left.filter(function (e) { return journalOrder(e, at) <= 0; });
+        return edited(now);
+      }).then(function () { return write(Promise.resolve(), w); });
+    }, Promise.resolve()).then(function () { return edited(left); });
+    return steps.then(release, function (e) { release(); throw e; }).then(function () {
       var entries = [], undid = [], remap = null;
       written.forEach(function (w) {
         if (w.recreate) {
@@ -3277,6 +3451,8 @@
     a4HeadingCounts: false,
     a5LogLinesKept: '',
     a6CaseSensitive: false,
+    a7CardFieldCount: true,
+    a8CardFileCount: true,
     b1DevMods: '',
     // Undo History. An absent key reads as the default here, and the Plugins tab writes
     // the defaults in once (`seedSettings`) so its boxes show them - which is how two
@@ -3288,6 +3464,7 @@
     c5JournalImageRuns: false,
     c6JournalProtect: true,
     c7JournalDeletes: true,
+    c9JournalSettings: true,
     // What the review's "Take it out of the history" box starts as; the box still decides.
     c8JournalUndoTakesOut: false,
   };
@@ -3334,13 +3511,51 @@
     return String(text).replace(/\u0130/g, 'i').toLowerCase();
   }
 
+  // ── Every plugin's settings, read once for all of them ────────────────────
+  //
+  // `configuration { plugins }` cannot be scoped to one plugin, and each plugin re-reads its
+  // own every ten seconds: an idle page with all of them installed asked the same question
+  // eighteen times a minute. They ask here instead, and one answer serves every caller for
+  // `SETTINGS_TTL_MS`. A `configurePlugin` passing through `fetch` - Stash's settings page, a
+  // plugin's own write, a seeded default - drops the answer as it goes out and again as it
+  // lands (`configChanged`), so a read after a save is the saved map, and a read already in
+  // flight when the save went out is handed to whoever asked before it but not kept. Each
+  // caller gets a copy of its own, since some adjust what they read. `fresh` - a task or a
+  // dialog opening - goes past the shared answer (and renews it): a change another tab saved
+  // a moment ago is one no save here dropped. A write's read of the map it is about to send
+  // back stays a query of its own, never this: a value another tab changed is one it would
+  // otherwise write back over.
+  var _config = null, _configAt = 0, _configWait = null, _configGen = 0;
+  function configCopy(d) { return JSON.parse(JSON.stringify(d)); }
+  function pluginConfig(fresh) {
+    if (!fresh && _config && Date.now() - _configAt < SETTINGS_TTL_MS) return Promise.resolve(configCopy(_config));
+    if (!_configWait) {
+      var gen = _configGen;
+      var wait = _configWait = gqlRequest('query GTTxPluginConfig { configuration { plugins } }', null).then(function (d) {
+        if (_configWait === wait) _configWait = null;
+        if (gen === _configGen) { _config = d; _configAt = Date.now(); }
+        return d;
+      }, function (e) {
+        if (_configWait === wait) _configWait = null;
+        throw e;
+      });
+    }
+    return _configWait.then(configCopy);
+  }
+  // Core's own settings too, and a read of them already in flight is not kept.
+  function configChanged() {
+    _configGen++; _config = null; _configWait = null;
+    _settingsAt = 0; _settingsInFlight = null;
+  }
+
   function loadSettings(force) {
     var now = Date.now();
     if (!force && _settings && now - _settingsAt < SETTINGS_TTL_MS) {
       return Promise.resolve(_settings);
     }
     if (_settingsInFlight) return _settingsInFlight;
-    _settingsInFlight = gqlRequest('query GTTxCoreSettings { configuration { plugins } }', null)
+    var gen = _configGen;
+    var wait = _settingsInFlight = pluginConfig(force)
       .then(function (data) {
         var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
         var out = {}, k;
@@ -3351,17 +3566,17 @@
         if (!hasOwn(raw, 'a4HeadingCounts') && (raw.a4TagCount || raw.a5PerformerCount)) {
           out.a4HeadingCounts = true;
         }
-        _settings = out;
-        _settingsAt = Date.now();
-        _settingsInFlight = null;
+        // Kept only where no settings save went out meanwhile (`configChanged`).
+        if (gen === _configGen) { _settings = out; _settingsAt = Date.now(); }
+        if (_settingsInFlight === wait) _settingsInFlight = null;
         applyDevMods(parseDevMods(out.b1DevMods));
         seedSettings(raw, out);
         return out;
       }, function () {
-        _settingsInFlight = null;
+        if (_settingsInFlight === wait) _settingsInFlight = null;
         return settings();
       });
-    return _settingsInFlight;
+    return wait;
   }
 
   // Every box is written once with its default - the switches, the log cap and Undo
@@ -3431,6 +3646,8 @@
     a4HeadingCounts: false,
     a5LogLinesKept: LOG_KEEP,
     a6CaseSensitive: false,
+    a7CardFieldCount: true,
+    a8CardFileCount: true,
     c1JournalKeepDays: String(JOURNAL_KEEP_DAYS),
     c2JournalSizeMB: JOURNAL_SIZE_MB,
     c3JournalSinceBackup: false,
@@ -3439,6 +3656,7 @@
     c6JournalProtect: true,
     c7JournalDeletes: true,
     c8JournalUndoTakesOut: false,
+    c9JournalSettings: true,
   };
   // What each absent key is seeded with: its default, but the heading-counts switch on
   // where either old key was, as `loadSettings` reads it. `showDefaults` shows the same.
@@ -3593,6 +3811,223 @@
     _dialog = run;
     wireEscape(run);
     document.body.appendChild(backdrop);
+  }
+
+  // ── The Undo History settings, in a dialog of their own ───────────────────
+  //
+  // Nine settings about one thing made the group read as a wall, so they are one row of it -
+  // what they say now, and a button opening them - the way Scene Variants keeps its title
+  // rules. Nothing in the `.yml` names them any more (`.tests/version.test.js` lists them as
+  // dialog-only); they are stored under their keys as before, the seed still writes their
+  // defaults, and the dialog writes the whole map back like every settings write here.
+  var JOURNAL_FIELDS = [
+    { key: 'c1JournalKeepDays', label: 'Keep For (Days)', text: true,
+      tip: 'How long Undo History keeps what was changed, in days: 1 to 999, or Forever. Default ' +
+        '90.\n\nOlder runs are dropped, oldest first, the next time anything is recorded. A run ' +
+        'you imported back from a file is kept past this, since you brought it back to undo it. ' +
+        'Whichever limit is reached first - this one or the size - drops the oldest.' },
+    { key: 'c2JournalSizeMB', label: 'Size Limit (MB)', number: true,
+      tip: 'The most space Undo History may use in this browser, in MB: 16 to 4096. Default ' +
+        '256.\n\n256 MB holds roughly half a million to a million changes - a couple of ' +
+        'library-wide runs and years of edits by hand. Past it the oldest runs are dropped. A ' +
+        'single run that would fill more than half of it is not recorded at all, and the dialog ' +
+        'that wrote it says so; its own Undo still works while it is open.' },
+    { key: 'c3JournalSinceBackup', label: 'Only Since the Last Backup',
+      tip: 'Keep only what changed after the last database backup this browser saw. Off by ' +
+        'default.\n\nA backup is the way back to anything older, so with this on the history ' +
+        'holds just what the backup does not. A run you imported back from a file is kept, since ' +
+        'you brought it back to undo it. This browser sees a backup when you take one with Back ' +
+        'Up and Export in the Undo History dialog.' },
+    { key: 'c4JournalHandEdits', label: 'Record Edits Made in Stash\'s Pages',
+      tip: 'Record the edits you make in Stash\'s own pages in this browser, so they can be undone ' +
+        'later too. On by default.\n\nTo record one, the entity is read just before Stash saves ' +
+        'it and again just after, so a save waits for one small read - a large bulk edit in a ' +
+        'list view pauses a moment. If that read fails, the save still goes through, unrecorded, ' +
+        'and the history shows a gap there. Edits made in another browser, on another device, by ' +
+        'Stash\'s own tasks (Scan, Identify, Auto Tag, Clean) or by scripts are never recorded. ' +
+        'Deletes and tag merges have a switch of their own, Record Deletes and Merges, which ' +
+        'works with this one off.' },
+    { key: 'c7JournalDeletes', label: 'Record Deletes and Merges',
+      tip: 'Keep what a delete or a tag merge takes away, so it can be put back. On by ' +
+        'default.\n\nJust before Stash deletes a tag, performer, studio, group or scene, its ' +
+        'fields and the ids of everything carrying it are read and kept; the undo creates it ' +
+        'again - under a new id, since Stash never reuses one - and puts it back on what still ' +
+        'exists of those. A tag merge is undone the same way, and the tag it was merged into is ' +
+        'taken off what only the merged tag carried. Not brought back: a scene\'s play history ' +
+        'and O-count, markers, pictures, and images, galleries and scenes whose files were ' +
+        'deleted with them - those are recorded and the review says so. A delete of something ' +
+        'large reads a lot first, and waits for it.' },
+    { key: 'c9JournalSettings', label: 'Record Settings Changes',
+      tip: 'Record the plugin settings you save in this browser - on Stash\'s settings page or in a ' +
+        'ᝯㄝₓ plugin\'s own dialog - so a change can be undone later. On by default.\n\nEach ' +
+        'setting that changed is a change of its own, the value before and after; undoing it ' +
+        'puts that value back, the plugin\'s other settings left as they are then. The defaults ' +
+        'a plugin writes in when it first loads are not recorded.' },
+    { key: 'c5JournalImageRuns', label: 'Record Library-Wide Image Writes',
+      tip: 'Record the image changes a ᝯㄝₓ plugin writes across the whole library. Off by ' +
+        'default.\n\nOne such pass over a million images is up to a million changes and could ' +
+        'push everything else out of the size limit. Off, those image changes are left out of ' +
+        'the history - the dialog\'s own Undo still covers them while it is open - and images ' +
+        'you edit yourself are always recorded.' },
+    { key: 'c6JournalProtect', label: 'Protect Its Storage',
+      tip: 'Ask the browser not to clear Undo History when the disk is nearly full. On by ' +
+        'default.\n\nChrome and Edge grant it quietly to a site you use often, Firefox asks you ' +
+        'once, and Safari may ignore it; the Undo History dialog says which. Nothing protects it ' +
+        'from clearing this site\'s data yourself, or from a private window closing.' },
+    { key: 'c8JournalUndoTakesOut', label: 'Undo Takes It Out of the History', warn: true,
+      tip: 'Start the undo review with "Take it out of the history" ticked. Off by default.\n\nRISK ' +
+        'OF HISTORY LOSS: ticked, what an undo puts back leaves Undo History instead of an undo ' +
+        'being recorded beside it. Nothing is kept of it: that undo cannot itself be undone, and ' +
+        'the changes it took out cannot be redone, found or exported again. Leave it off unless ' +
+        'you mean the history to work as a stack.\n\nUnticked, the undo is recorded and can ' +
+        'itself be undone. This only sets where the box starts: the review screen still shows it ' +
+        'beside Proceed, and changing it there decides for that undo alone.' },
+  ];
+  var _journalDialog = null;
+
+  function journalSummary(s) {
+    var days = String(s.c1JournalKeepDays == null || s.c1JournalKeepDays === '' ? JOURNAL_KEEP_DAYS : s.c1JournalKeepDays);
+    var mb = String(s.c2JournalSizeMB == null || s.c2JournalSizeMB === '' ? JOURNAL_SIZE_MB : s.c2JournalSizeMB);
+    var on = function (k) { return truthy(s[k]); };
+    var records = ['edits made in Stash\'s pages', 'deletes and merges', 'settings changes', 'library-wide image writes']
+      .filter(function (x, i) { return on(['c4JournalHandEdits', 'c7JournalDeletes', 'c9JournalSettings', 'c5JournalImageRuns'][i]); });
+    return 'Kept ' + (/^forever$/i.test(days) ? 'forever' : days + ' days') + ', up to ' + mb + ' MB' +
+      (on('c3JournalSinceBackup') ? ', only since the last backup' : '') + '. Records ' +
+      (records.length ? records.join(', ') : 'nothing from Stash\'s pages') + '.' +
+      (on('c8JournalUndoTakesOut') ? ' An undo takes what it undid out of the history.' : '');
+  }
+
+  function openJournalSettings() {
+    if (_journalDialog) { if (_journalDialog.modal.scrollIntoView) _journalDialog.modal.scrollIntoView(); return; }
+    injectStyle();
+    var backdrop = el('div', 'gttxcore-backdrop');
+    var modal = el('div', 'gttxcore-modal gttxcore-narrow');
+    backdrop.appendChild(modal);
+    var head = el('div', 'gttxcore-head');
+    head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - Undo History Settings'));
+    var note = el('div', 'gttxcore-note', 'Reading the current settings…');
+    head.appendChild(note);
+    modal.appendChild(head);
+    var body = el('div', 'gttxcore-body');
+    var boxes = {};
+    JOURNAL_FIELDS.forEach(function (f) {
+      var row = el('div', 'gttxcore-devrow');
+      var label = el('label', 'gttxcore-devlabel' + (f.warn ? ' gttxcore-warnlabel' : ''));
+      label.title = f.tip;
+      var box = document.createElement('input');
+      box.type = f.text || f.number ? 'text' : 'checkbox';
+      box.className = f.text || f.number ? 'gttxcore-jbox' : 'gttxcore-devbox';
+      box.disabled = true;
+      box.addEventListener(box.type === 'checkbox' ? 'change' : 'input', function () { refreshSave(); });
+      boxes[f.key] = box;
+      if (box.type === 'checkbox') { label.appendChild(box); label.appendChild(el('span', 'gttxcore-devname', f.label)); }
+      else { label.appendChild(el('span', 'gttxcore-devname', f.label)); label.appendChild(box); }
+      row.appendChild(label);
+      row.appendChild(el('div', 'gttxcore-devhelp' + (f.warn ? ' gttxcore-warnhelp' : ''), f.tip.split('\n\n').slice(0, 2).join(' ')));
+      body.appendChild(row);
+    });
+    modal.appendChild(body);
+    var foot = el('div', 'gttxcore-foot');
+    var saveBtn = button('Save', 'gttxcore-save');
+    saveBtn.className = saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    var closeBtn = button('Close', 'gttxcore-close');
+    closeBtn.title = 'Close without saving.';
+    foot.appendChild(saveBtn);
+    foot.appendChild(closeBtn);
+    modal.appendChild(foot);
+    var run = { modal: modal, backdrop: backdrop, closeBtn: closeBtn, stored: null };
+    var values = function () {
+      var out = {};
+      JOURNAL_FIELDS.forEach(function (f) {
+        var b = boxes[f.key];
+        out[f.key] = b.type === 'checkbox' ? !!b.checked
+          : f.number && /^\s*\d+\s*$/.test(b.value) ? Number(b.value) : String(b.value).replace(/^\s+|\s+$/g, '');
+      });
+      return out;
+    };
+    function refreshSave() {
+      var v = values(), s = run.stored, moved = false;
+      if (s) JOURNAL_FIELDS.forEach(function (f) { if (String(v[f.key]) !== String(s[f.key])) moved = true; });
+      saveBtn.disabled = !s || !moved;
+      saveBtn.title = !s ? 'Still reading the current settings.' : !moved ? 'Nothing has changed since this opened.'
+        : 'Store these settings. They apply from the next thing recorded.';
+    }
+    refreshSave();
+    function shut() {
+      unwireEscape(run);
+      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+      _journalDialog = null;
+    }
+    closeBtn.addEventListener('click', shut);
+    saveBtn.addEventListener('click', function () {
+      if (saveBtn.disabled) return;
+      saveBtn.disabled = true;
+      closeBtn.disabled = true;
+      note.textContent = 'Saving…';
+      writeOwnSettings(values()).then(shut, function (e) {
+        closeBtn.disabled = false;
+        note.textContent = 'The settings could not be saved: ' + (e && e.message ? e.message : e);
+        refreshSave();
+      });
+    });
+    _journalDialog = run;
+    wireEscape(run);
+    document.body.appendChild(backdrop);
+    loadSettings(true).then(function (s) {
+      if (_journalDialog !== run) return;
+      run.stored = {};
+      JOURNAL_FIELDS.forEach(function (f) {
+        var b = boxes[f.key], v = s[f.key];
+        if (b.type === 'checkbox') b.checked = truthy(v);
+        else b.value = v == null || v === '' ? String(f.number ? JOURNAL_SIZE_MB : JOURNAL_KEEP_DAYS) : String(v);
+        run.stored[f.key] = b.type === 'checkbox' ? b.checked : (f.number && /^\d+$/.test(b.value) ? Number(b.value) : b.value);
+        b.disabled = false;
+      });
+      note.textContent = 'What Undo History keeps and records, in this browser. Hover a line for all it does.';
+      refreshSave();
+    }, function (e) {
+      if (_journalDialog !== run) return;
+      note.textContent = 'The current settings could not be read (' + (e && e.message ? e.message : e) +
+        '), so Save stays off: saving would replace them with whatever the boxes hold.';
+    });
+  }
+
+  // The group's row for them, in the shape of Stash's own: a heading, a line, what they
+  // say now, and the button where Edit would be - first, above the rest of the settings.
+  var JOURNAL_ROW_ID = 'gttxcore-journal-row';
+  function journalRowTick(group) {
+    var had = document.getElementById(JOURNAL_ROW_ID);
+    var text = journalSummary(settings());
+    if (had) {
+      if (had._sum && had._sum.textContent !== text) had._sum.textContent = text;
+      return;
+    }
+    // The group's own heading is a `.setting` too, beside the `.collapsible-section` of the rest.
+    var rows = group.querySelectorAll ? group.querySelectorAll('.setting') : [], first = null;
+    for (var i = 0; i < rows.length && !first; i++) if (rows[i].parentNode !== group) first = rows[i];
+    var row = el('div', 'setting gttxcore-journal-row');
+    row.id = JOURNAL_ROW_ID;
+    var left = el('div');
+    left.appendChild(el('h3', null, 'Undo History'));
+    left.appendChild(el('div', 'sub-heading', 'How long Undo History keeps what was changed and what it ' +
+      'records: edits in Stash\'s pages, deletes and merges, settings changes, library-wide image writes. ' +
+      'Nine settings, in a dialog.'));
+    row._sum = left.appendChild(el('div', 'value gttxcore-journal-sum', text));
+    row.appendChild(left);
+    var right = el('div');
+    var btn = button('Undo History Settings...', 'gttxcore-journal-btn');
+    btn.className = btn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    btn._coopOwner = PLUGIN_ID;
+    btn.title = 'Open the Undo History settings. Nothing is written until you press Save there.';
+    btn.addEventListener('click', function (ev) {
+      if (ev && ev.preventDefault) ev.preventDefault();
+      if (ev && ev.stopPropagation) ev.stopPropagation();
+      openJournalSettings();
+    });
+    right.appendChild(btn);
+    row.appendChild(right);
+    if (first && first.parentNode) first.parentNode.insertBefore(row, first);
+    else group.appendChild(row);
   }
 
   function button(label, className) {
@@ -3774,6 +4209,13 @@
   // The entity as a link to its page, with the hover card every listing here draws.
   function historyEntity(e) {
     var t = JOURNAL_TYPES[e.type] || { label: e.type };
+    if (t.settings) {
+      var set = el('a', 'gttxcore-elink', t.label + ' "' + e.eid + '"');
+      set.href = '/settings?tab=plugins';
+      set.target = linkTarget();
+      set.rel = 'noopener noreferrer';
+      return set;
+    }
     var a = el('a', 'gttxcore-elink', t.label + ' "' + (e.name || 'untitled') + '" [' + e.eid + ']');
     if (e.eid !== '?') {
       a.href = '/' + e.type + '/' + e.eid;
@@ -3866,6 +4308,11 @@
   // What a change says, drawn: related entities as named links, the rest as text.
   function historyChangeNode(e) {
     var span = el('span', null, '');
+    if (/^settings\./.test(e.field || '')) {
+      span.textContent = 'setting ' + e.field.slice(9) + ': ' + historyValue(e.before, e.beforeAbsent) + ' \u2192 ' +
+        historyValue(e.after, e.afterAbsent);
+      return span;
+    }
     if (/^custom_fields\./.test(e.field || '') && e.action !== 'gap') {
       span.appendChild(el('span', null, 'custom field '));
       span.appendChild(historyCfName(e.field.slice(14)));
@@ -4127,7 +4574,11 @@
       historyDraw(H, true);
     });
     H.selAllBtn.addEventListener('click', function () {
-      H.shownRuns.forEach(function (id) { H.selRuns[id] = true; });
+      // A run ticked whole: its changes ticked singly go, or the count says them twice.
+      H.shownRuns.forEach(function (id) {
+        H.selRuns[id] = true;
+        Object.keys(H.selEntries).forEach(function (k) { if (k.indexOf(id + ':') === 0) delete H.selEntries[k]; });
+      });
       historyDraw(H, true);
     });
 
@@ -4396,11 +4847,27 @@
       var block = el('div', 'gttxcore-hrun');
       var row = el('div', 'gttxcore-hhead');
       // Its own kind for Shift-click ranges: runs with runs, changes with changes.
+      // A run and its changes tick like a tree: the run ticks every change, a change taken
+      // out of a ticked run leaves the rest ticked, every change ticked is the run ticked,
+      // and some of them is a run partly ticked. Changes are keyed `<run>:<n>`, so a closed
+      // run knows its own. Updated in place, never redrawn, so a Shift-click range keeps
+      // the box it started from.
       var box = el('input', 'gttxcore-hbox gttxcore-hrunbox');
       box.type = 'checkbox';
-      box.checked = !!H.selRuns[r.id];
+      var ebs = [];
+      var mine = function () {
+        return Object.keys(H.selEntries).filter(function (k) { return k.indexOf(r.id + ':') === 0; });
+      };
+      var runState = function () {
+        box.checked = !!H.selRuns[r.id];
+        box.indeterminate = !box.checked && mine().length > 0;
+      };
+      runState();
       box.addEventListener('change', function () {
         if (box.checked) H.selRuns[r.id] = true; else delete H.selRuns[r.id];
+        mine().forEach(function (k) { delete H.selEntries[k]; });
+        ebs.forEach(function (b) { b.checked = box.checked; });
+        runState();
         historyFoot(H);
       });
       var toggle = el('span', 'gttxcore-htoggle', (H.open[r.id] ? '▾ ' : '▸ ') + historyWhen(r.at) +
@@ -4441,9 +4908,18 @@
             var eb = el('input', 'gttxcore-hbox gttxcore-hentrybox');
             eb.type = 'checkbox';
             eb.checked = !!H.selEntries[e.id] || !!H.selRuns[r.id];
-            eb.disabled = !!H.selRuns[r.id];
+            ebs.push(eb);
             eb.addEventListener('change', function () {
-              if (eb.checked) H.selEntries[e.id] = true; else delete H.selEntries[e.id];
+              if (H.selRuns[r.id]) {
+                delete H.selRuns[r.id];
+                es.forEach(function (x) { if (x.id !== e.id) H.selEntries[x.id] = true; });
+              } else if (eb.checked) H.selEntries[e.id] = true;
+              else delete H.selEntries[e.id];
+              if (es.every(function (x) { return H.selEntries[x.id]; })) {
+                es.forEach(function (x) { delete H.selEntries[x.id]; });
+                H.selRuns[r.id] = true;
+              }
+              runState();
               historyFoot(H);
             });
             line.appendChild(eb);
@@ -4537,12 +5013,14 @@
       list.appendChild(line);
     }, { pop: pop }).then(function (res) {
       H.failed = res.failed;
+      if (res.written) H.wrote = true;
       H.progressEl.textContent = 'Undone: ' + plural(res.written, 'entity', 'entities') + ' written' +
         (res.failed ? ', ' + plural(res.failed, 'failure') : '') + '. ' + (pop
         ? plural(res.popped, 'change') + ' taken out of the history; what was skipped or failed is still there.'
         : 'The undo is in the history, where it can be undone in turn.');
     }, function (e) {
       H.failed = 1;
+      H.wrote = true;   // it may have written before it failed
       H.progressEl.textContent = 'The undo failed: ' + (e && e.message ? e.message : e);
     }).then(function () {
       H.plan = null;
@@ -4562,6 +5040,24 @@
     try { if (H.channel) H.channel.close(); } catch (e) { /* gone with the page */ }
     if (H.backdrop.parentNode) H.backdrop.parentNode.removeChild(H.backdrop);
     _history = null;
+    if (H.wrote) refreshPage();
+  }
+
+  // What Stash's page shows, asked again: every query it has on screen, refetched through
+  // Apollo, so an undo - which can touch entities no notice names, the scenes a restored
+  // tag goes back on - is on the page behind the dialog once it closes. Apollo 3.4 names
+  // it `refetchQueries`; an older one, `reFetchObservableQueries`. Without Apollo the page
+  // stays as it is until the next navigation.
+  function refreshPage() {
+    var client = window.__APOLLO_CLIENT__;
+    try {
+      var p = client && typeof client.refetchQueries === 'function' ? client.refetchQueries({ include: 'active' })
+        : client && typeof client.reFetchObservableQueries === 'function' ? client.reFetchObservableQueries() : null;
+      // A refetch that fails - Stash gone meanwhile - leaves the page as it was, said nowhere.
+      if (p && typeof p.then === 'function') p.then(null, function () {});
+    } catch (e) {
+      console.error('[gttxcore] refreshing the page after an undo:', e);
+    }
   }
 
   // ── Undo History: where it opens from ─────────────────────────────────────
@@ -5200,6 +5696,17 @@
     '.gttxcore-devhelp{font-size:.82rem;color:#a7b6c2;margin-top:.25rem;' +
     'margin-left:1.6rem;}' +
     '.gttxcore-devline{margin:.1rem 0 .25rem;}' +
+    // Undo History Settings: a text box beside its caption; the one setting that can lose
+    // history amber, caption and help, as a warning is everywhere here.
+    '.gttxcore-jbox{margin-left:.5rem;width:7rem;background:#30404d;color:#f5f8fa;border:1px solid #394b59;' +
+    'border-radius:3px;padding:.1rem .35rem;}' +
+    '.gttxcore-warnlabel .gttxcore-devname,.gttxcore-warnhelp{color:#ffc107;}' +
+    // A Rescan whose listing another tab has since changed: bold amber, breathing white and
+    // green about once a second.
+    '@keyframes gttx-breathe{0%,100%{box-shadow:0 0 0 2px #f5f8fa;border-color:#f5f8fa;}' +
+    '50%{box-shadow:0 0 0 3px #28a745;border-color:#28a745;}}' +
+    '.gttx-stale-rescan{font-weight:700 !important;color:#ffc107 !important;' +
+    'animation:gttx-breathe 1s ease-in-out infinite;}' +
     // Undo History: the list, a run a row, its changes indented under it.
     '.gttxcore-modal.gttxcore-history{width:min(100rem,94vw);}' +
     '.gttxcore-hfilter{padding:.35rem 1rem;border-bottom:1px solid #394b59;display:flex;gap:.5rem;' +
@@ -5328,12 +5835,164 @@
 
   function fail(e) { if (window.console && console.error) console.error('[gttxcore]', e); }
 
+  // ── Counters on the cards ─────────────────────────────────────────────────
+  //
+  // Last in the row of counters Stash draws under a card - tags, performers, groups: ⓕ and
+  // the number of custom fields, on the card of every entity that has them and holds at
+  // least one, and on a scene card 🖬 and its number of files where it has more than one.
+  // The files are in what the card was drawn from. The custom fields are too on a performer,
+  // tag, group or studio card, and on the others are asked for a page of cards at once -
+  // the cards mounting together join one batch per type - and kept a short while.
+  // Registered at load, before the cards first render, through Stash's component patching.
+  var CARD_TYPES = [
+    { card: 'SceneCard', patch: 'SceneCard.Popovers', prop: 'scene', find: 'findScenes', node: 'scenes', files: true },
+    { card: 'ImageCard', patch: 'ImageCard.Popovers', prop: 'image', find: 'findImages', node: 'images' },
+    { card: 'GalleryCard', patch: 'GalleryCard.Popovers', prop: 'gallery', find: 'findGalleries', node: 'galleries' },
+    { card: 'PerformerCard', patch: 'PerformerCard.Popovers', prop: 'performer', find: 'findPerformers', node: 'performers' },
+    { card: 'TagCard', patch: 'TagCard.Popovers', prop: 'tag', find: 'findTags', node: 'tags' },
+    // No counter row of their own to patch: the whole card, whose `popovers` it is handed.
+    { card: 'GroupCard', patch: 'GroupCard', prop: 'group', find: 'findGroups', node: 'groups', whole: true },
+    { card: 'StudioCard', patch: 'StudioCard', prop: 'studio', find: 'findStudios', node: 'studios', whole: true },
+  ];
+  var CARD_SHARE_MS = 30000, CARD_BATCH_MS = 50, CARD_TIP_LINES = 10;
+  var _cardFields = {}, _cardBatch = {};
+
+  // One entity's custom fields: `{ name: value }`, from its batch.
+  function cardFields(t, id) {
+    var key = t.node + ':' + id, hit = _cardFields[key];
+    if (hit && Date.now() - hit.at < CARD_SHARE_MS) return hit.p;
+    if (!_cardBatch[t.node]) {
+      var batch = _cardBatch[t.node] = { ids: [] };
+      batch.p = new Promise(function (done) { setTimeout(done, CARD_BATCH_MS); }).then(function () {
+        _cardBatch[t.node] = null;
+        return gqlRequest('query GTTxCardFields($ids: [ID!]) { ' + t.find + '(ids: $ids, filter: { per_page: -1 }) { ' +
+          t.node + ' { id custom_fields } } }', { ids: batch.ids });
+      }).then(function (d) {
+        var out = {};
+        ((((d || {})[t.find]) || {})[t.node] || []).forEach(function (e) { out[String(e.id)] = e.custom_fields || {}; });
+        return out;
+      }, function () { return {}; });
+    }
+    _cardBatch[t.node].ids.push(id);
+    var p = _cardBatch[t.node].p.then(function (map) { return map[id] || {}; });
+    _cardFields[key] = { at: Date.now(), p: p };
+    return p;
+  }
+
+  function cardValueText(v) {
+    var t = typeof v === 'string' ? v : JSON.stringify(v);
+    t = String(t).replace(/\s+/g, ' ');
+    return t.length > 60 ? t.slice(0, 59) + '\u2026' : t;
+  }
+  function cardFieldTip(fields) {
+    var names = Object.keys(fields).sort(), more = names.length - CARD_TIP_LINES;
+    return plural(names.length, 'custom field') + ':\n' + names.slice(0, CARD_TIP_LINES).map(function (n) {
+      return n + ': ' + cardValueText(fields[n]);
+    }).join('\n') + (more > 0 ? '\n...and ' + more + ' more' : '');
+  }
+  function cardFileTip(files) {
+    var more = files.length - CARD_TIP_LINES;
+    return plural(files.length, 'file') + ', the first the one Stash plays and names the scene by:\n' +
+      files.slice(0, CARD_TIP_LINES).map(function (f) { return f.basename || f.path || f.id; }).join('\n') +
+      (more > 0 ? '\n...and ' + more + ' more' : '');
+  }
+
+  // The counters, drawn like Stash's own: a minimal button in a wrapper div, the mark where
+  // their icon is. `own` draws the rule and the group too, for a card Stash drew none on.
+  // Amber, as Scene Variants' ⸎ beside them is.
+  var CARD_AMBER = { color: '#ffc107' };
+  function CardCounts(React, Bootstrap) {
+    return function (props) {
+      var t = props.t, ent = props.ent;
+      var st = React.useState(null), fields = st[0], setFields = st[1];
+      var on = React.useState(settings()), s = on[0], setS = on[1];
+      React.useEffect(function () {
+        var live = true;
+        loadSettings(false).then(function (now) {
+          if (!live) return null;
+          setS(now);
+          if (!truthy(now.a7CardFieldCount)) return null;
+          return ent.custom_fields ? ent.custom_fields : cardFields(t, String(ent.id));
+        }).then(function (f) { if (live && f) setFields(f); }, function () {});
+        return function () { live = false; };
+      }, [ent.id]);
+      var kids = [];
+      var n = fields && truthy(s.a7CardFieldCount) ? Object.keys(fields).length : 0;
+      if (n) {
+        kids.push(React.createElement('div', { key: 'gttx-cfields', className: 'gttx-cfields', title: cardFieldTip(fields) },
+          React.createElement(Bootstrap.Button, { className: 'minimal', style: CARD_AMBER },
+            React.createElement('span', { className: 'gttx-card-mark', style: { marginRight: '7px' } }, '\u24d5'),
+            React.createElement('span', null, String(n)))));
+      }
+      var files = t.files && truthy(s.a8CardFileCount) ? ent.files || [] : [];
+      if (files.length > 1) {
+        kids.push(React.createElement('div', { key: 'gttx-cfiles', className: 'gttx-cfiles', title: cardFileTip(files) },
+          React.createElement(Bootstrap.Button, { className: 'minimal', style: CARD_AMBER },
+            React.createElement('span', { className: 'gttx-card-mark', style: { marginRight: '7px' } }, '\ud83d\uddac'),
+            React.createElement('span', null, String(files.length)))));
+      }
+      if (!kids.length) return null;
+      if (!props.own) return React.createElement(React.Fragment, null, kids);
+      return React.createElement(React.Fragment, null, React.createElement('hr', { key: 'gttx-card-hr' }),
+        React.createElement(Bootstrap.ButtonGroup, { key: 'gttx-card-group', className: 'card-popovers' }, kids));
+    };
+  }
+
+  // The card's `card-popovers` group, found in what Stash rendered and rebuilt with `extra`
+  // as its last child; null where it has none.
+  function intoCardPopovers(React, el, extra) {
+    if (!React.isValidElement(el)) return null;
+    var kids = el.props && el.props.children;
+    if (/(^|\s)card-popovers(\s|$)/.test(String((el.props && el.props.className) || ''))) {
+      return React.cloneElement(el, null, React.Children.toArray(kids).concat([extra]));
+    }
+    if (kids == null) return null;
+    var arr = React.Children.toArray(kids);
+    for (var i = 0; i < arr.length; i++) {
+      var placed = intoCardPopovers(React, arr[i], extra);
+      if (placed) { arr[i] = placed; return React.cloneElement(el, null, arr); }
+    }
+    return null;
+  }
+
+  var _cardsPatched = false;
+  function installCardCounts() {
+    var api = window.PluginApi;
+    if (_cardsPatched || !api || !api.patch || typeof api.patch.after !== 'function') return;
+    var React = api.React, Bootstrap = (api.libraries || {}).Bootstrap;
+    if (!React || !React.cloneElement || !Bootstrap || !Bootstrap.Button || !Bootstrap.ButtonGroup) return;
+    _cardsPatched = true;
+    var Counts = CardCounts(React, Bootstrap);
+    CARD_TYPES.forEach(function (t) {
+      api.patch.after(t.patch, function (props) {
+        var result = arguments[arguments.length - 1];
+        try {
+          var ent = props && props[t.prop];
+          // A compact card draws no counters of its own, so it gets none of ours either.
+          if (!ent || ent.id == null || props.compact) return result;
+          var mine = function (own) { return React.createElement(Counts, { key: 'gttx-card-counts', t: t, ent: ent, own: own }); };
+          if (!t.whole) {
+            return intoCardPopovers(React, result, mine(false)) || React.createElement(React.Fragment, null, result, mine(true));
+          }
+          if (!React.isValidElement(result) || !result.props || !('popovers' in result.props)) return result;
+          var pop = result.props.popovers;
+          return React.cloneElement(result, { popovers: (pop && intoCardPopovers(React, pop, mine(false))) ||
+            React.createElement(React.Fragment, null, pop, mine(!pop)) });
+        } catch (e) {
+          fail(e);
+          return result;
+        }
+      });
+    });
+  }
+
   function settingsTick(group) {
     injectStyle();
     splitDescription(group);
     collapseDescription(group);
     tipSettings();
     devFieldTick();
+    journalRowTick(group);
     ensureStaleNotice(group);
     ensureReadmeLink();
   }
@@ -5351,7 +6010,7 @@
     version: PLUGIN_VERSION,
     hasOwn: hasOwn, hasClass: hasClass, el: el, stripEllipsis: stripEllipsis,
     pickControl: pickControl,
-    byClass: byClass, gqlRequest: gqlRequest, settingElement: settingElement,
+    byClass: byClass, gqlRequest: gqlRequest, pluginConfig: pluginConfig, settingElement: settingElement,
     settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, waitingOn: waitingOn,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
     keepLog: keepLog, droppedLine: droppedLine, logKeep: logKeep, LOG_KEEP: LOG_KEEP,
@@ -5386,11 +6045,14 @@
     selectPasteTick: selectPasteTick,
     headCountTick: headCountTick, headCountTargets: headCountTargets, headCountClear: headCountClear,
     parseDevMods: parseDevMods, formatDevMods: formatDevMods, applyDevMods: applyDevMods,
-    devMods: DEV_MODS, openDevMods: openDevMods, tick: tick,
+    devMods: DEV_MODS, openDevMods: openDevMods, openJournalSettings: openJournalSettings,
+    journalSummary: journalSummary, tick: tick,
     settings: function () { return settings(); },
     // Forced, because the tick only reads them when the page shows something that
     // depends on the answer - which a suite driving the dialog directly does not.
     load: function () { return loadSettings(true); },
+    // For a suite that changes the stored map behind the page's back.
+    configChanged: configChanged,
   };
   if (_previous) {
     log('[gttxcore] replacing the ' + (_previous.version || 'unknown') +
@@ -5425,7 +6087,9 @@
     _pending = setTimeout(function () { _pending = null; tick(); }, OBSERVE_MS);
   }
 
-  window.addEventListener('load', start);
+  window.addEventListener('load', function () { installCardCounts(); start(); });
   window.addEventListener('popstate', tick);
+  installCardCounts();
+  watchOtherTabs();
   start();
 }());

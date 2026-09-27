@@ -45,6 +45,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var showDefaults = C.showDefaults, caseSensitive = C.caseSensitive, fold = C.fold, coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
     tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
@@ -75,7 +78,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '2.8.2';
+  var PLUGIN_VERSION = '3.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -431,8 +434,10 @@
 
   // `configuration { plugins }` cannot be scoped to one plugin, so every other plugin's
   // settings arrive in the same response. Nothing here needs them.
-  function loadSettings() {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+  // `fresh`: past the answer every plugin shares - a task or dialog opening, which must
+  // see a change another tab saved a moment ago.
+  function loadSettings(fresh) {
+    return pluginConfig(fresh).then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
       var s = {};
       for (var k in DEFAULTS) {
@@ -2604,7 +2609,7 @@
       return;
     }
     trace(spec.label + ' ' + id + ' renamed "' + from + '" to "' + to + '"; opening.');
-    loadSettings().then(function (s) {
+    loadSettings(true).then(function (s) {
       openRun(spec, id, from, to, s, pending);
     }, function () { openRun(spec, id, from, to, DEFAULTS, pending); });
   }

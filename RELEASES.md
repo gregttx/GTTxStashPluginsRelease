@@ -10,6 +10,26 @@ commit has not been pushed yet. Per-plugin notes are in each plugin's own `RELEA
 
 | Date | CFBE | ENM | FRETC | GTTxCore | MPTTS | NPT | PTP2RE | SFM | SVR | TBC | Change |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2026-09-27 | 4.0.0 (`faeaa8b`) | 3.0.0 (`faeaa8b`) | 4.0.0 (`faeaa8b`) | 4.0.0 (`faeaa8b`) | 5.0.0 (`faeaa8b`) | 6.0.0 (`faeaa8b`) | 6.0.0 (`faeaa8b`) | 2.0.0 (`faeaa8b`) | 3.0.0 (`faeaa8b`) | 3.0.0 (`faeaa8b`) | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 2026-09-27 | 3.7.0 (`6ca5e7c`) |  |  |  |  |  |  |  |  |  | Custom Fields Bulk Editor 3.7.0: 🔒 on a locked field's name tooltip, and its read-only box keeps the form's colour |
+| 2026-09-27 | 3.6.1 (`12eddec`) |  |  |  |  |  |  |  |  |  | Custom Fields Bulk Editor 3.6.1: a locked field is read-only on the edit form when it has a description too |
+| 2026-09-27 |  |  |  |  |  |  |  |  | 2.6.7 (`06304f8`) |  | Scene Variants 2.6.7: ⸎ goes before Core's ⓕ and 🖬 on a scene card |
+| 2026-09-27 |  |  |  | 3.10.1 (`21fb723`) |  |  |  |  |  |  | GTTx Core 3.10.1: ⓕ before 🖬 on the cards, both amber, and Undo History first among its settings |
+| 2026-09-27 | 3.6.0 (`3247294`) |  |  |  |  |  |  |  |  |  | Custom Fields Bulk Editor 3.6.0: a locked field is read-only on Stash's edit forms, and a save that would change or remove it is refused |
+| 2026-09-27 |  |  |  | 3.10.0 (`a112b33`) |  |  |  |  |  |  | GTTx Core 3.10.0: ⓕ and 🖬 counters on cards, Undo History settings in a dialog of their own, settings saves recorded, and Rescan breathing when another tab records a change |
+| 2026-09-27 |  |  |  |  | 4.2.4 (`2b5e4ea`) |  |  |  |  |  | Merge Performer Tags 4.2.4: its own settings are read again as a save of them lands |
+| 2026-09-27 |  |  |  |  |  |  |  | 1.5.10 (`cb7099f`) |  |  | Scene Filename Manager 1.5.10: a reassigned file's archived name leaves the scene it left |
+| 2026-09-27 | 3.5.11 (`fb9d6df`) |  |  | 3.9.1 (`fb9d6df`) |  |  |  | 1.5.9 (`fb9d6df`) | 2.6.6 (`fb9d6df`) | 2.3.3 (`fb9d6df`) | Fixes from the delta review of the branch |
+| 2026-09-27 |  |  |  |  |  |  |  | 1.5.8 (`910aa7d`) |  |  | Scene Filename Manager 1.5.8: a locked archive field is still added to |
+| 2026-09-27 | 3.5.10 (`1dcf10e`) | 2.8.4 (`1dcf10e`) |  | 3.9.0 (`1dcf10e`) |  | 5.6.6 (`1dcf10e`) | 5.3.8 (`1dcf10e`) |  | 2.6.5 (`1dcf10e`) |  | Fixes from the first live check: marker saves as Stash sends them, one run per rename, Undo History ticks like a tree and refreshes the page |
+| 2026-09-26 | 3.5.9 (`3c64c77`) | 2.8.3 (`3c64c77`) |  | 3.8.4 (`3c64c77`) | 4.2.3 (`3c64c77`) | 5.6.5 (`3c64c77`) | 5.3.7 (`3c64c77`) | 1.5.7 (`3c64c77`) | 2.6.4 (`3c64c77`) | 2.3.2 (`3c64c77`) | Every plugin's settings come from one read Core shares, dropped by any settings save |
+| 2026-09-26 |  |  |  |  |  |  |  |  | 2.6.3 (`60fe6ed`) |  | Every task runs in a real browser and its dialog is checked at each phase; one fault it found is fixed |
+| 2026-09-26 |  |  |  |  |  |  |  |  |  | 2.3.1 (`46d1ed9`) | A page at rest redraws nothing and asks nothing but its settings; Tag Bundle Clipboard stops asking during playback |
+| 2026-09-26 |  |  |  |  |  |  |  | 1.5.6 (`b0808e4`) | 2.6.2 (`b0808e4`) |  | Names built from any input are well formed; three faults the fuzzer found are fixed |
+| 2026-09-26 |  |  |  | 3.8.3 (`389376c`) |  |  |  |  |  |  | Undo History taken back to any point leaves the library as it was there; four faults it found are fixed |
+| 2026-09-26 |  |  |  |  |  |  | 5.3.6 (`32dd0fc`) |  | 2.6.1 (`32dd0fc`) |  | Every task is run again with each request failing, Stop at each write, and each history write failing; two bugs it found are fixed |
+| 2026-09-26 | 3.5.8 (`1eef32f`) |  |  |  |  |  |  |  |  |  | Every place a plugin sends a mutation says whether Undo History has it; two that did not now do |
+| 2026-09-26 |  |  |  |  |  | 5.6.4 (`f6bcd14`) | 5.3.5 (`f6bcd14`) | 1.5.5 (`f6bcd14`) |  |  | Every request a plugin sends is checked against Stash 0.31.1's schema, and three that it refused are fixed |
 | 2026-09-25 |  |  |  |  |  |  |  |  | 2.6.0 (`02916c8`) |  | Scene Variants 2.6.0: Display Variant Count ⸎ on Scene Cards, on by default, and the count in amber |
 | 2026-09-25 |  |  |  |  |  |  |  |  | 2.5.0 (`1909bf7`) |  | Scene Variants 2.5.0: every scene card counts its other variants, ⸎ last among its counters |
 | 2026-09-25 |  | 2.8.2 (`d87ae96`) |  | 3.8.2 (`d87ae96`) |  |  |  |  | 2.4.1 (`d87ae96`) |  | Unselect All and Select All close the footer, in that order, in Undo History, Entity Name Maintainer and Scene Variants |

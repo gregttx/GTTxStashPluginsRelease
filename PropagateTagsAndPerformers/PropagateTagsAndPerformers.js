@@ -33,6 +33,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var showDefaults = C.showDefaults, stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
     coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget,
@@ -82,7 +85,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '5.3.4';
+  var PLUGIN_VERSION = '6.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1600,8 +1603,10 @@
     return s;
   }
 
-  function loadSettings() {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+  // `fresh`: past the answer every plugin shares - a task or dialog opening, which must
+  // see a change another tab saved a moment ago.
+  function loadSettings(fresh) {
+    return pluginConfig(fresh).then(function (data) {
       var all = (data.configuration || {}).plugins || {};
       return { settings: settingsFrom(all[PLUGIN_ID] || {}, all[MPTTS_ID]), all: all };
     });
@@ -2163,13 +2168,30 @@
   //
   // Falls back to the bare label and id on a failure, rather than rejecting: a dialog
   // that cannot name its scope should still open. It is a title.
+  // One entity by id. Every type has a single-entity query but a scene marker: Stash names
+  // that one `findSceneMarkers`, a list filtered by `ids` - there is no `findSceneMarker`.
+  // So the query is written, and its answer read back, in one place.
+  function byIdQuery(opName, one, sel) {
+    if (one === 'findSceneMarker') {
+      return 'query ' + opName + '($id: ID!) { findSceneMarkers(ids: [$id]) { scene_markers { ' +
+        sel + ' } } }';
+    }
+    return 'query ' + opName + '($id: ID!) { ' + one + '(id: $id) { ' + sel + ' } }';
+  }
+
+  function byIdResult(data, one) {
+    if (one === 'findSceneMarker') {
+      return ((((data || {}).findSceneMarkers) || {}).scene_markers || [])[0] || null;
+    }
+    return (data || {})[one] || null;
+  }
+
   function scopeLabel(type, id) {
     var d = SOURCES[type] || TARGETS[type];
     if (!d) return Promise.resolve(type + ' ' + id);
-    return gqlRequest('query PTP_scopename($id: ID!) { ' + d.one + '(id: $id) { ' + d.fields + ' } }',
-      { id: String(id) }
+    return gqlRequest(byIdQuery('PTP_scopename', d.one, d.fields), { id: String(id) }
     ).then(function (data) {
-      var ent = data && data[d.one];
+      var ent = byIdResult(data, d.one);
       return d.label + ' "' + ((ent && displayName(ent)) || 'untitled') + '" (' + id + ')';
     }, function () {
       return d.label + ' ' + id;
@@ -3074,7 +3096,7 @@
     // long before Proceed is reachable, and setState is re-applied when it does.
     this.checkVersion();
 
-    loadSettings().then(function (loaded) {
+    loadSettings(true).then(function (loaded) {
       self.settings = loaded.settings;
 
       // A scoped run reviews the one path its button names, and re-reads the setting
@@ -4983,7 +5005,7 @@
     document.body.appendChild(this.backdrop);
     this.checkVersion();
 
-    loadSettings().then(function (loaded) {
+    loadSettings(true).then(function (loaded) {
       if (_paths !== self) return;
       // Save rewrites the whole setting from these selectors, so a value this script
       // could not read is about to be replaced by what it managed to make of it. That
@@ -5310,7 +5332,7 @@
     document.body.appendChild(this.backdrop);
     this.checkVersion();
 
-    loadSettings().then(function (loaded) {
+    loadSettings(true).then(function (loaded) {
       if (_buttons !== self) return;
       var s = loaded.settings;
       self.settings = s;
@@ -5494,7 +5516,7 @@
     document.body.appendChild(this.backdrop);
     this.checkVersion();
 
-    loadSettings().then(function (loaded) {
+    loadSettings(true).then(function (loaded) {
       if (_auto !== self) return;
       self.body.appendChild(self.panel());
       AUTO_MODES.forEach(function (m) { self.on[m] = !!loaded.settings.auto[m]; });
@@ -5925,13 +5947,12 @@
   // (`PTP_one_`) so a log or a test can tell a reaction's target refresh from its
   // source fan-out.
   function sourceFieldQuery(entry) {
-    return 'query PTP_sfield_' + entry.one + '($id: ID!) {' +
-      ' ' + entry.one + '(id: $id) { ' + entry.sel + ' } }';
+    return byIdQuery('PTP_sfield_' + entry.one, entry.one, entry.sel);
   }
 
   function resolveFieldReverse(entry, id) {
     return gqlRequest(sourceFieldQuery(entry), { id: String(id) }).then(function (data) {
-      var ent = data[entry.one];
+      var ent = byIdResult(data, entry.one);
       return ent ? entry.pick(ent) : [];
     });
   }
@@ -6527,7 +6548,8 @@
   // The scene a `sceneMarkerCreate` is putting a marker on, or null for anything else.
   function newMarkerScene(q, v) {
     if (!/\bsceneMarkerCreate\b/.test(q)) return null;
-    var input = v.input || {};
+    // Stash's page sends its fields as separate variables, not as `$input`.
+    var input = v.input || v || {};
     return input.scene_id == null ? null : String(input.scene_id);
   }
 
@@ -7805,6 +7827,13 @@
   // page, adding what is missing and dropping what no longer belongs - a stale
   // button left over from the previous entity, or every button at once when the
   // setting is off or the page is not one of the four.
+  // A tick whose settings read failed - Stash restarting, the network gone - draws nothing
+  // and says so once, rather than leaving a rejection nobody handles, once a second.
+  function settingsUnread(e) {
+    gateLogOnce('t:settings', 'no buttons drawn: the settings could not be read - ' +
+      (e && e.message ? e.message : String(e)));
+  }
+
   function manualButtonsTick() {
     autoSettings().then(function (s) {
       var any = anyButtonOn(s);
@@ -7920,7 +7949,7 @@
         if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
         insertBeforeImportantAction(container, buildManualButton(p, label, rt.target, rt.id, immediate));
       });
-    });
+    }, settingsUnread);
   }
 
   // ── The source-side buttons: push outward instead of pulling in ─────────────
@@ -8498,7 +8527,7 @@
         if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
         insertBeforeImportantAction(container, buildManualSourceButton(p, label, rt.id, s));
       });
-    });
+    }, settingsUnread);
   }
 
   // A MutationObserver, unlike the settings page's decoration-only tick: a button
@@ -8645,12 +8674,16 @@
 
     var q = req.query || '';
     var v = req.variables || {};
+    // What the save puts: `$input`, or - where Stash's page spells it out of separate
+    // variables named like its fields, as `SceneMarkerCreate` and `SceneMarkerUpdate` do -
+    // the variables themselves. Read as `v.input` alone, a marker save was never seen.
+    var input = v.input || v;
     var hit = targetOfMutation(q);
     // The one case the save waits for us: the assist needs the scene as it was.
     // Forwarded whatever the read does, so a failure there is never a failed save.
     // Not under a lease: a sibling's bulk write (Scene Variants' synchronize) is not a
     // removal the user made by hand.
-    var before = hit && !hit.bulk && !autoSuppressed() ? depropBefore(hit.target, v.input) : null;
+    var before = hit && !hit.bulk && !autoSuppressed() ? depropBefore(hit.target, input) : null;
     var p = before ? before.then(forward, forward) : forward();
 
     try {
@@ -8677,7 +8710,7 @@
       // gated on `a3`/`a4` and on `autoSuppressed()`, and a button appearing after a
       // save is not something a user should have to enable auto mode to get. See
       // `invalidateButtonProbes`.
-      var savedIds = (v.input && (v.input.ids || (v.input.id != null ? [v.input.id] : []))) || [];
+      var savedIds = (input.ids || (input.id != null ? [input.id] : []));
       if (savedIds.length && (targetOfMutation(q) || sourceOfMutation(q)) && viewingOneOf(savedIds)) {
         mutationSucceeded(p).then(function (ok) { if (ok) invalidateButtonProbes(); });
       }
@@ -8685,7 +8718,7 @@
       if (before) {
         // Registered on Core's settling registry like the reaction below, so a sibling
         // reading the scene after this save waits for the offer to be answered.
-        var offered = settle(hit.target, v.input.id);
+        var offered = settle(hit.target, input.id);
         mutationSucceeded(p).then(function (ok) {
           if (!ok) { offered(); return; }
           before.then(function (b) { return b ? offerDepropagate(b) : 0; }).then(offered, offered);
@@ -8697,8 +8730,8 @@
       // emitted for a mutation that would actually have been reacted to.
       if (hit && !autoSuppressed()) {
         var ids = hit.bulk
-          ? (v.input && v.input.ids) || []
-          : (v.input && v.input.id != null ? [v.input.id] : []);
+          ? (input && input.ids) || []
+          : (input && input.id != null ? [input.id] : []);
         if (ids.length) {
           // Registered now, synchronously, so a sibling watching this same save finds
           // it when the response lands; released once the reaction is over, which with
@@ -8732,8 +8765,8 @@
       var srcHit = sourceOfMutation(q);
       if (srcHit && !autoSuppressed()) {
         var sids = srcHit.bulk
-          ? (v.input && v.input.ids) || []
-          : (v.input && v.input.id != null ? [v.input.id] : []);
+          ? (input && input.ids) || []
+          : (input && input.id != null ? [input.id] : []);
         if (sids.length) {
           mutationSucceeded(p).then(function (ok) {
             if (ok) reactToSources(srcHit.sourceType, sids);

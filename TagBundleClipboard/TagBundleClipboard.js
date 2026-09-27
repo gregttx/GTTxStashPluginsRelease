@@ -35,6 +35,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var pickControl = C.pickControl, findEditContainer = C.findEditContainer,
     coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget,
@@ -69,7 +72,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '2.3.0';
+  var PLUGIN_VERSION = '3.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -302,7 +305,7 @@
   }
 
   function loadSettings() {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+    return pluginConfig().then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
       var s = {};
       for (var k in DEFAULTS) {
@@ -2241,23 +2244,24 @@
   // `⮺ Tags` is not drawn while the entity carries no tag - removed rather than
   // disabled, at the user's call over the repo's disabled-with-a-reason rule: a button
   // that can never act on this page is noise in the action row. The question is asked
-  // with the click's own query, once when the route is first seen and again on a
-  // DOM-driven tick at most every `PROBE_MIN_MS`, which is what brings the button back
-  // after a save put the first tag on: the page re-renders, the bus fires, the tick
-  // asks. The interval tick never asks, so a page nobody touches costs nothing. A read
-  // that fails counts as tagged: the button shows and its click says what went wrong.
-  // The answer lives per entity, not on the button, since the button may not exist, and
-  // it stands while a re-probe is in flight - dropping it for the round trip drew the
-  // button into the row and took it out again every two seconds during playback. Only a
-  // page with somewhere to draw the button asks at all.
-  var PROBE_MIN_MS = 2000;
-  var _copyState = {};   // `type:id` -> { empty, at, probing }
+  // with the click's own query, as the page of an entity is arrived at, and again after a
+  // save that names it (`watchSaves`), which is what brings the button back once a save put
+  // the first tag on - a save made anywhere on this page, a list's bulk edit included; a
+  // change elsewhere is read on the next arrival. Not on a change to the page: during playback the page
+  // changes all the time, and asking on each change was a query every two seconds. A
+  // read that fails counts as tagged: the button shows and its click says what went
+  // wrong. The answer lives per entity, not on the button, since the button may not
+  // exist, and it stands while a re-probe is in flight - dropping it for the round trip
+  // drew the button into the row and took it out again. Only a page with somewhere to
+  // draw the button asks at all.
+  var _copyState = {};   // `type:id` -> { empty, stale, probing }
+  var _copyRoute = null; // the `type:id` the last tick was on
 
-  function probeCopy(rt, fromDom) {
+  function probeCopy(rt) {
     var key = rt.type + ':' + rt.id;
     var st = _copyState[key];
-    if (st && (st.probing || !fromDom || Date.now() - st.at < PROBE_MIN_MS)) return;
-    st = _copyState[key] = { empty: st ? st.empty : false, at: st ? st.at : 0, probing: true };
+    if (st && (st.probing || !st.stale)) return;
+    st = _copyState[key] = { empty: st ? st.empty : false, stale: false, probing: true };
     var e = ENTITIES[rt.type];
     gqlRequest(tagQueryFor(rt.type), { id: String(rt.id) }).then(function (data) {
       var ent = data && data[e.one];
@@ -2265,7 +2269,6 @@
     }, function () { return false; }).then(function (empty) {
       var was = st.empty;
       st.probing = false;
-      st.at = Date.now();
       st.empty = empty;
       if (was !== empty) tick();   // draw or remove now, not on the next second
     });
@@ -2286,7 +2289,7 @@
   // re-render, so there is nothing durable to track. Each tick rebuilds its opinion of
   // which buttons should exist from the route and the containers, and an id keeps a
   // re-render that kept ours from producing a second one.
-  function buttonsTick(fromDom) {
+  function buttonsTick() {
     var rt = currentRoute();
     if (!rt) {
       gateLogOnce('route', 'not on a Scene/Image/Gallery/Performer/Studio/Group page');
@@ -2300,7 +2303,11 @@
     // The copy button, on the detail view.
     var copyBox = findCopyContainer();
     var copy = document.getElementById(COPY_BTN_ID);
-    if (copyBox) probeCopy(rt, fromDom);
+    // Arriving at an entity's page asks again; staying on it does not.
+    var here = rt.type + ':' + rt.id;
+    if (here !== _copyRoute && _copyState[here]) _copyState[here].stale = true;
+    _copyRoute = here;
+    if (copyBox) probeCopy(rt);
     if (copyBox && copyEmpty(rt)) {
       gateLogOnce('copy', ENTITIES[rt.type].label + ' ' + rt.id + ' carries no tags - "⮺ Tags" not shown');
       if (copy && copy.parentNode) copy.parentNode.removeChild(copy);
@@ -2361,16 +2368,40 @@
   // mutations is coalesced into one tick.
   var _tickTimer = null;
 
-  // `fromDom` marks a tick the bus raised - the page changed - from one the interval
-  // or a click raised; only the former re-asks whether there is anything to copy.
-  function tick(fromDom) {
+  function tick() {
     try { settingsTick(); } catch (e) { console.error('[tbc] settings tick:', e); }
-    try { buttonsTick(fromDom === true); } catch (e) { console.error('[tbc] buttons tick:', e); }
+    try { buttonsTick(); } catch (e) { console.error('[tbc] buttons tick:', e); }
   }
 
   function scheduleTick() {
     if (_tickTimer) return;
-    _tickTimer = setTimeout(function () { _tickTimer = null; tick(true); }, 100);
+    _tickTimer = setTimeout(function () { _tickTimer = null; tick(); }, 100);
+  }
+
+  // A save that names the entity on screen - Stash's own form, or a sibling's bulk write
+  // through the same `fetch` - is what can change whether it carries a tag: once it has
+  // landed, the answer is asked again on the next tick.
+  function watchSaves() {
+    var inner = window.fetch;
+    window.fetch = function (url, opts) {
+      var p = inner.apply(this, arguments);
+      try {
+        var req = opts && typeof opts.body === 'string' ? JSON.parse(opts.body) : null;
+        var input = req && /^\s*mutation\b/.test(req.query || '') && req.variables && req.variables.input;
+        var ids = input ? input.ids || (input.id != null ? [input.id] : []) : [];
+        // Every entity it names that has been asked about, whatever page it was saved from.
+        var named = ids.map(String);
+        if (named.length) {
+          p.then(function () {
+            Object.keys(_copyState).forEach(function (k) {
+              if (named.indexOf(k.slice(k.indexOf(':') + 1)) !== -1) _copyState[k].stale = true;
+            });
+            tick();
+          }, function () {});
+        }
+      } catch (e) { /* a body that is not JSON is not a save */ }
+      return p;
+    };
   }
 
   // The shared bus rather than an observer of our own - see `domBus`. This is called at
@@ -2400,6 +2431,7 @@
   }, true);
   setInterval(function () { tick(); }, 1000);
   settings();   // warm the settings cache so the first copy knows the bundle limit
+  watchSaves();
   startObserver();
   tick();
 }());

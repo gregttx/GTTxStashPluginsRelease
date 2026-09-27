@@ -8,6 +8,14 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 3.7.0 (`6ca5e7c`) | 2026-09-27 | Custom Fields Bulk Editor 3.7.0: 🔒 on a locked field's name tooltip, and its read-only box keeps the form's colour |
+| 3.6.1 (`12eddec`) | 2026-09-27 | Custom Fields Bulk Editor 3.6.1: a locked field is read-only on the edit form when it has a description too |
+| 3.6.0 (`3247294`) | 2026-09-27 | Custom Fields Bulk Editor 3.6.0: a locked field is read-only on Stash's edit forms, and a save that would change or remove it is refused |
+| 3.5.11 (`fb9d6df`) | 2026-09-27 | Fixes from the delta review of the branch |
+| 3.5.10 (`1dcf10e`) | 2026-09-27 | Fixes from the first live check: marker saves as Stash sends them, one run per rename, Undo History ticks like a tree and refreshes the page |
+| 3.5.9 (`3c64c77`) | 2026-09-26 | Every plugin's settings come from one read Core shares, dropped by any settings save |
+| 3.5.8 (`1eef32f`) | 2026-09-26 | Every place a plugin sends a mutation says whether Undo History has it; two that did not now do |
 | 3.5.7 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 3.5.6 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 3.5.5 (`67095e1`) | 2026-09-24 | Core 3.2.0: Stash's settings page shows every seeded default from its first paint |

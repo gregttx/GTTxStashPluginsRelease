@@ -8,6 +8,11 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 6.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 5.3.8 (`1dcf10e`) | 2026-09-27 | Fixes from the first live check: marker saves as Stash sends them, one run per rename, Undo History ticks like a tree and refreshes the page |
+| 5.3.7 (`3c64c77`) | 2026-09-26 | Every plugin's settings come from one read Core shares, dropped by any settings save |
+| 5.3.6 (`32dd0fc`) | 2026-09-26 | Every task is run again with each request failing, Stop at each write, and each history write failing; two bugs it found are fixed |
+| 5.3.5 (`f6bcd14`) | 2026-09-26 | Every request a plugin sends is checked against Stash 0.31.1's schema, and three that it refused are fixed |
 | 5.3.4 (`2e791c2`) | 2026-09-25 | Checkbox lists in four more dialogs are laid out in whole pixels, so every box draws the same size |
 | 5.3.3 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 5.3.2 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |

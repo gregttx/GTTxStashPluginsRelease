@@ -36,6 +36,9 @@
     }
     return;
   }
+  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
+  // here where the Core on the page predates it.
+  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
   var showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
     linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth,
     tagTipImage = C.tagTipImage, tipBox = C.tipBox,
@@ -63,7 +66,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '3.5.7';
+  var PLUGIN_VERSION = '4.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -183,7 +186,9 @@
   // The custom fields no bulk write of this plugin's, or of Find & Replace's, may touch:
   // exact names, comma- or newline-separated. A lock guards a field a person or another
   // plugin keeps by hand - an archived filename, a pinned base name - against the one
-  // press that rewrites it across the library. Stash's own edit form is not ours to stop.
+  // press that rewrites it across the library, and on Stash's own edit form against a
+  // hand's edit or removal too (`lockFormTick`, `lockGuard`). Adding one where it is
+  // missing is never stopped.
   function lockedFields(s) {
     var out = [];
     String((s && s.d1LockedFields) || '').split(/[,\n]/).forEach(function (t) {
@@ -391,8 +396,10 @@
   // `configuration { plugins }` cannot be scoped to one plugin, so every other
   // plugin's settings arrive in the same response - which is what the sibling plugins'
   // cross-checks read, for free. Nothing here needs them yet.
-  function loadSettings() {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
+  // `fresh`: past the answer every plugin shares - a task or dialog opening, which must
+  // see a change another tab saved a moment ago.
+  function loadSettings(fresh) {
+    return pluginConfig(fresh).then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
       var s = {};
       for (var k in DEFAULTS) {
@@ -615,8 +622,13 @@
   // keeps the store tag out of the listings that would otherwise show this plugin's own
   // plumbing back to the user.
   var _descriptions = {};
+  // The locked fields as last read, for the 🔒 on a field name's tooltip.
+  var _lockedNow = [];
   var _storeTagId = null;
   var _storeTagFields = {};        // its own custom fields - the marker, and the hide field
+  // Its name, and its description as last read or written: what Undo History puts back.
+  var _storeTagName = '';
+  var _storeTagDesc = '';
   var _store = null;               // the parsed blob, for the writes a rename has to make
 
   function readStore(settings) {
@@ -624,6 +636,8 @@
       var parsed = tag ? parseStore(tag.description) : { version: null, hideField: '', descriptions: {} };
       _storeTagId = tag ? String(tag.id) : null;
       _storeTagFields = (tag && tag.custom_fields) || {};
+      _storeTagName = (tag && tag.name) || '';
+      _storeTagDesc = (tag && tag.description) || '';
       _store = parsed;
       _descriptions = parsed.broken ? {} : parsed.descriptions;
       return { tag: tag, store: parsed };
@@ -1461,7 +1475,7 @@
       openRun(type || null, type ? ids : null, s);
       if (failed && _active) noteUnread(_active);
     };
-    loadSettings().then(function (s) { go(s, false); }, function () { go(DEFAULTS, true); });
+    loadSettings(true).then(function (s) { go(s, false); }, function () { go(DEFAULTS, true); });
   }
 
   // A dialog opened on the defaults because the settings could not be read cannot see
@@ -1484,7 +1498,7 @@
       _active = new DescRun(s);
       _active.begin();
     };
-    loadSettings().then(go, function () { go(DEFAULTS); if (_active) noteUnread(_active); });
+    loadSettings(true).then(go, function () { go(DEFAULTS); if (_active) noteUnread(_active); });
   }
 
   function openRun(type, ids, settings) {
@@ -2968,7 +2982,7 @@
   // whole blob back is what loses something. Resolves either way, so the caller can
   // chain the hide-field rename after it and never have two writes to one tag in
   // flight at once.
-  Run.prototype.moveDescription = function (from, to) {
+  Run.prototype.moveDescription = function (from, to, into) {
     var self = this;
     if (!_storeTagId || !_store || !hasOwn(_descriptions, from)) return Promise.resolve();
     if (_store.broken || (_store.version && cmpVersion(_store.version, PLUGIN_VERSION) > 0)) {
@@ -2995,11 +3009,12 @@
     // the difference as a rename of the setting and offer to migrate a library that has
     // already moved.
     var hideField = _store.hideField === from ? to : _store.hideField;
+    var after = serialiseStore({ hideField: hideField, descriptions: descriptions });
     return gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
       '{ tagUpdate(input: $input) { id } }',
-    { input: { id: _storeTagId, description: serialiseStore(
-      { hideField: hideField, descriptions: descriptions }) } })
+    { input: { id: _storeTagId, description: after } })
       .then(function () {
+        recordStoreWrite('Custom field renamed: its description moved', after, into);
         _descriptions = descriptions;
         _store = { version: PLUGIN_VERSION, hideField: hideField, descriptions: descriptions };
         self.msg('INFO', 'The description of "' + from + '" moved to "' + to +
@@ -3122,16 +3137,18 @@
 
     this.runWrites(batches, label, written).then(function (ok) {
       self.applied = ok;
-      self.recordPass(label, planned.changes, written, false);
       // Only once something was actually written: a rename that failed everywhere must
       // not move a description, or the setting, off the name the library still carries.
-      if (ok && planned.mode === 'rename' && planned.from) {
-        self.moveDescription(planned.from, planned.name)
-          .then(function () { return self.followHideRename(planned.from, planned.name); })
-          .then(function (moved) {
-            if (moved) self.hideRename = { from: planned.from, to: planned.name };
-          });
-      }
+      // The move is recorded in the rename's own run, so undoing the rename from Undo
+      // History puts the description back with it.
+      var renamed = ok && planned.mode === 'rename' && planned.from, held = [];
+      (renamed ? self.moveDescription(planned.from, planned.name, held) : Promise.resolve()).then(function () {
+        self.recordPass(label, planned.changes, written, false, held);
+        if (!renamed) return null;
+        return self.followHideRename(planned.from, planned.name).then(function (moved) {
+          if (moved) self.hideRename = { from: planned.from, to: planned.name };
+        });
+      });
       // The local copy is moved with the server's, so Undo compares against what the
       // dialog actually wrote rather than against the map it read at open.
       planned.changes.forEach(function (c) {
@@ -3211,20 +3228,19 @@
     var undoWritten = {};
     this.runWrites(batches, 'Custom Fields (undo)', undoWritten).then(function (ok) {
       self.undone = ok;
-      self.recordPass('Custom Fields, undone', undoable, undoWritten, true);
       // The description followed the rename out, and the setting with it where the
-      // rename was the hide field's; both follow the undo back. Read off the changes
-      // rather than remembered separately - `c.to` is what a rename leaves on one.
-      var ren = null;
+      // rename was the hide field's; both follow the undo back, in the undo's own run.
+      // Read off the changes rather than remembered separately - `c.to` is what a rename
+      // leaves on one.
+      var ren = null, held = [];
       undoable.forEach(function (c) { if (!ren && c.to) ren = { from: c.name, to: c.to }; });
-      if (ok && ren) {
-        self.moveDescription(ren.to, ren.from).then(function () {
-          if (!self.hideRename) return null;
-          var h = self.hideRename;
-          self.hideRename = null;
-          return self.followHideRename(h.to, h.from);
-        });
-      }
+      ((ok && ren) ? self.moveDescription(ren.to, ren.from, held) : Promise.resolve()).then(function () {
+        self.recordPass('Custom Fields, undone', undoable, undoWritten, true, held);
+        if (!(ok && ren) || !self.hideRename) return null;
+        var h = self.hideRename;
+        self.hideRename = null;
+        return self.followHideRename(h.to, h.from);
+      });
       undoable.forEach(function (c) {
         if (c.to) delete c.entity.fields[c.to];
         if (c.had) c.entity.fields[c.name] = c.before;
@@ -3275,6 +3291,29 @@
       ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
   }
 
+  // A write to the description store made outside the descriptions dialog - a field's
+  // description moved by its rename, or a sibling's replacement through
+  // `updateDescriptions` - in Undo History as the store tag's description before and
+  // after, the way the dialog records its own. Entity Name Maintainer leaves descriptions
+  // to this store, so without it a rename's replacements in them were in neither history.
+  // `into`: an array the caller's own pass takes the entry from, so a description moved by
+  // a rename is in the rename's run and undoing the rename puts it back too.
+  function recordStoreWrite(label, after, into) {
+    if (into && _storeTagId) {
+      into.push(['tags', _storeTagId, _storeTagName, { id: _storeTagId, description: after },
+        { id: _storeTagId, description: _storeTagDesc }]);
+      _storeTagDesc = after;
+      return;
+    }
+    var pass = journalPass(label, false);
+    if (pass && _storeTagId) {
+      pass.add('tags', _storeTagId, _storeTagName, { id: _storeTagId, description: after },
+        { id: _storeTagId, description: _storeTagDesc });
+      pass.finish();
+    }
+    _storeTagDesc = after;
+  }
+
   // What landed of `changes`, per the chunks `runWrites` reports written - handed over a
   // slice at a time, each written before the next is built, so a pass over the whole
   // library never holds its entries all at once.
@@ -3291,9 +3330,11 @@
     return next();
   }
 
-  Run.prototype.recordPass = function (label, changes, writtenIds, reversed) {
+  // `extra`: `pass.add` arguments recorded in the same run - the description a rename moved.
+  Run.prototype.recordPass = function (label, changes, writtenIds, reversed, extra) {
     var pass = journalPass(label, !this.spec), self = this;
     if (!pass) return;
+    (extra || []).forEach(function (a) { pass.add.apply(pass, a); });
     journalSlices(pass, changes, function (c) { return hasOwn(writtenIds, c.spec.key + ':' + c.id); }, reversed)
       .then(function (line) { if (line) self.msg('INFO', line); });
   };
@@ -4383,15 +4424,24 @@
       var tag = (data && (data.tagUpdate || data.tagCreate)) || null;
       // The store tag is a tag like any other, so Undo History has it too: its name and
       // description as they were, or its creation.
-      var pass = journalPass('Custom field descriptions', false);
-      if (pass && tag) {
-        if (self.tag) {
-          pass.add('tags', self.tag.id, name, { id: self.tag.id, name: name, description: description },
-            { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
-        } else {
-          pass.entries([{ type: 'tags', id: String(tag.id), name: name, action: 'create' }]);
+      // Where this Apply also renames a field, the store's change goes in the rename's run
+      // (`runMigration` takes `heldStore`), so undoing the rename puts its description
+      // back too; whatever the rename does not take is recorded on its own below.
+      var m = self.migration;
+      if (tag && self.tag && m && m.armed && !m.done) {
+        self.heldStore = [['tags', self.tag.id, name, { id: self.tag.id, name: name, description: description },
+          { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' }]];
+      } else {
+        var pass = journalPass('Custom field descriptions', false);
+        if (pass && tag) {
+          if (self.tag) {
+            pass.add('tags', self.tag.id, name, { id: self.tag.id, name: name, description: description },
+              { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
+          } else {
+            pass.entries([{ type: 'tags', id: String(tag.id), name: name, action: 'create' }]);
+          }
+          pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         }
-        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
       }
       if (!self.tag) {
         self.created = true;
@@ -4403,6 +4453,8 @@
       self.tag = { id: tag ? String(tag.id) : (self.tag && self.tag.id),
         name: name, description: description };
       _storeTagId = self.tag.id;
+      _storeTagName = name;
+      _storeTagDesc = description;
       self.reportChanges(changes, false);
       self.base = {};
       for (var kk in store.descriptions) {
@@ -4413,7 +4465,15 @@
         descriptions: store.descriptions };
       _descriptions = store.descriptions;
       lease.release();
-      return self.runMigration(false);
+      return self.runMigration(false).then(function () {
+        var left = self.heldStore;
+        self.heldStore = null;
+        var own = left && journalPass('Custom field descriptions', false);
+        if (own) {
+          left.forEach(function (a) { own.add.apply(own, a); });
+          own.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        }
+      });
     }, function (e) {
       lease.release();
       self.msg('ERROR', 'Writing the descriptions failed: ' +
@@ -4498,6 +4558,10 @@
       .then(function (ok) {
         // Recorded as the rename it is on each entity: `from` going, `to` arriving.
         var pass = journalPass(reversed ? label + ', undone' : label, true);
+        if (pass && self.heldStore) {
+          self.heldStore.forEach(function (a) { pass.add.apply(pass, a); });
+          self.heldStore = null;
+        }
         if (pass) {
           // As a rename on each entity - `from` going, `to` arriving - in slices. Every
           // change is built here, ahead of the move below: a slice built after it would
@@ -4560,6 +4624,8 @@
             { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
           pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         }
+        _storeTagName = back.name;
+        _storeTagDesc = back.description;
         var parsed = parseStore(back.description);
         self.base = {};
         self.desc = {};
@@ -5122,6 +5188,106 @@
     });
   }
 
+  // ── A locked field on Stash's own pages ───────────────────────────────────
+  //
+  // On an edit form, a locked field's value box is read-only and its remove button gone,
+  // with a tooltip saying why. And a save of Stash's own page - one Apollo names, which no
+  // ᝯㄝₓ plugin's does - that would still change or remove a locked field's value is refused
+  // before it reaches Stash, with a message Stash shows: another client, a bulk edit, a
+  // form this script had not reached. The plugins' own writes keep the lock by their own
+  // rules - Scene Filename Manager adds names to a locked archive, which the lock allows.
+  // A lock list or a value that cannot be read lets the save through.
+  function lockTip(name) {
+    return '\ud83d\udd12 "' + name + '" is locked in \u176f\u311d\u2093 Custom Fields Bulk Editor\'s Locked Custom Fields, ' +
+      'so its value cannot be changed or removed here. Unlock it there to edit it.';
+  }
+
+  function lockFormTick() {
+    if (!document.querySelector || !document.querySelector('.custom-fields-row')) return;
+    loadSettings().then(function (s) {
+      var locked = lockedFields(s);
+      Array.prototype.slice.call(document.querySelectorAll('.custom-fields-row')).forEach(function (row) {
+        if (hasClass(row, 'custom-fields-new')) return;
+        var within = function (cls, tag) { var box = row.querySelector('.' + cls); return box && box.querySelector(tag); };
+        var label = within('custom-fields-field', 'label');
+        // The text, not the title: `detailTip` has put the field's description in that.
+        var name = label ? String(label.textContent || '').replace(/^\s+|\s+$/g, '') : '';
+        var on = !!name && locked.indexOf(name) !== -1;
+        var input = within('custom-fields-value', 'input');
+        var remove = row.querySelector('.custom-fields-remove');
+        if (input && (on || input._cfbeLocked)) {
+          // Bootstrap paints a read-only box light grey, a white box on Stash's dark form:
+          // it keeps the colour it had, with a cursor saying it cannot be typed in.
+          if (on && !input._cfbeLocked && window.getComputedStyle) input._cfbeBg = window.getComputedStyle(input).backgroundColor;
+          input.style.backgroundColor = on ? input._cfbeBg || '' : '';
+          input.style.cursor = on ? 'not-allowed' : '';
+          input.readOnly = on;
+          input.title = on ? lockTip(name) : '';
+          input._cfbeLocked = on;
+        }
+        if (remove && (on || remove._cfbeLocked)) {
+          remove.style.display = on ? 'none' : '';
+          remove._cfbeLocked = on;
+        }
+      });
+    }, function () { /* the form stays as Stash drew it; the save is still guarded */ });
+  }
+
+  var LOCK_TYPES = { Scene: ['findScenes', 'scenes'], Image: ['findImages', 'images'],
+    Gallery: ['findGalleries', 'galleries'], Performer: ['findPerformers', 'performers'],
+    Studio: ['findStudios', 'studios'], Group: ['findGroups', 'groups'], Tag: ['findTags', 'tags'] };
+
+  // The refusal Stash will show, or null to let the save through.
+  function lockGuard(init) {
+    var body = null;
+    try { body = init && typeof init.body === 'string' ? JSON.parse(init.body) : null; } catch (e) { body = null; }
+    if (!body || !body.operationName) return Promise.resolve(null);
+    var m = /\b(?:bulk)?(Scene|Image|Gallery|Performer|Studio|Group|Tag)Update\s*\(/.exec(body.query || '');
+    var input = m && body.variables && body.variables.input;
+    var cf = input && input.custom_fields;
+    if (!cf || typeof cf !== 'object') return Promise.resolve(null);
+    var ids = input.ids || (input.id != null ? [input.id] : []);
+    if (!ids.length) return Promise.resolve(null);
+    return loadSettings(true).then(function (s) {
+      var locked = lockedFields(s);
+      var partial = cf.partial || {}, remove = cf.remove || [];
+      var touched = cf.full ? locked : locked.filter(function (n) {
+        return hasOwn(partial, n) || remove.indexOf(n) !== -1;
+      });
+      if (!touched.length) return null;
+      var t = LOCK_TYPES[m[1]];
+      return gqlRequest('query CFBE_LockRead($ids: [ID!]) { ' + t[0] + '(ids: $ids, filter: { per_page: -1 }) { ' +
+        t[1] + ' { id custom_fields } } }', { ids: ids.map(String) }).then(function (d) {
+        var hit = [];
+        (((d || {})[t[0]] || {})[t[1]] || []).forEach(function (e) {
+          var now = e.custom_fields || {};
+          touched.forEach(function (n) {
+            if (!hasOwn(now, n) || hit.indexOf(n) !== -1) return;   // absent: adding it is allowed
+            var gone = cf.full ? !hasOwn(cf.full, n) : remove.indexOf(n) !== -1;
+            var next = cf.full ? cf.full[n] : partial[n];
+            if (gone || (hasOwn(cf.full || partial, n) && JSON.stringify(next) !== JSON.stringify(now[n]))) hit.push(n);
+          });
+        });
+        if (!hit.length) return null;
+        return 'Not saved: ' + hit.map(function (n) { return '"' + n + '"'; }).join(', ') + (hit.length === 1 ? ' is' : ' are') +
+          ' locked in \u176f\u311d\u2093 Custom Fields Bulk Editor\'s Locked Custom Fields, and this save would change or ' +
+          'remove ' + (hit.length === 1 ? 'its value' : 'their values') + '. Unlock ' + (hit.length === 1 ? 'it' : 'them') +
+          ' there first; nothing was written.';
+      });
+    }).then(null, function () { return null; });
+  }
+
+  function refusedResponse(message) {
+    var json = { errors: [{ message: message }], data: null };
+    var text = JSON.stringify(json);
+    if (typeof Response === 'function') {
+      return new Response(text, { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }
+    return { ok: true, status: 200, headers: { get: function () { return 'application/json'; } },
+      json: function () { return Promise.resolve(json); }, text: function () { return Promise.resolve(text); },
+      clone: function () { return this; } };
+  }
+
   // Wrapped once, and every failure path returns the original response: a dropdown that
   // shows one entity too many is a nuisance, and one that shows nothing because a
   // filter threw is a broken editor.
@@ -5135,6 +5301,13 @@
     ns.cfbeSelectFilter = true;
     var orig = window.fetch;
     window.fetch = function (url, init) {
+      var self = this, args = arguments;
+      // A save that would change a locked field is held for the check, and refused.
+      if (init && typeof init.body === 'string' && /custom_fields/.test(init.body) && /Update\s*\(/.test(init.body)) {
+        return lockGuard(init).then(function (refusal) {
+          return refusal ? refusedResponse(refusal) : orig.apply(self, args);
+        });
+      }
       var out = orig.apply(this, arguments);
       var key = selectOp(init);
       if (!key || !out || typeof out.then !== 'function') return out;
@@ -5186,7 +5359,8 @@
   // The one string this puts on the page, in the user's own shape.
   function detailTip(name) {
     var d = String(_descriptions[name] || '').replace(/^\s+|\s+$/g, '');
-    return d ? name + '\n\nDescription: ' + d : name;
+    var head = (_lockedNow.indexOf(name) !== -1 ? '\ud83d\udd12 ' : '') + name;
+    return d ? head + '\n\nDescription: ' + d : head;
   }
 
   // Stash renders a field's name in two places, and neither is the bare name as text:
@@ -5203,10 +5377,11 @@
   // setting it, and one trailing colon comes off it.
   function fieldNameAt(n) {
     var t = String(n.title == null ? '' : n.title).replace(/^\s+|\s+$/g, '');
-    if (t && hasOwn(_descriptions, t)) return t;
+    var known = function (x) { return hasOwn(_descriptions, x) || _lockedNow.indexOf(x) !== -1; };
+    if (t && known(t)) return t;
     var text = String(n.textContent == null ? '' : n.textContent)
       .replace(/^\s+|\s+$/g, '').replace(/:$/, '').replace(/\s+$/, '');
-    return text && hasOwn(_descriptions, text) ? text : '';
+    return text && known(text) ? text : '';
   }
 
   function decorateDetailNames(root) {
@@ -5250,7 +5425,8 @@
       _detailStore = filterSettings().then(function (s) { return readStore(s); })
         .then(null, function () { return null; });
     }
-    var names = 0;
+    loadSettings().then(function (s) { _lockedNow = lockedFields(s); }, function () {});
+    var names = _lockedNow.length;
     for (var k in _descriptions) { if (hasOwn(_descriptions, k)) { names++; break; } }
     if (!names) return;
     var root = document.getElementById('root') || document.body;
@@ -5313,11 +5489,14 @@
         if (hasOwn(_descriptions, k)) descriptions[k] = _descriptions[k];
       }
       descriptions[field] = text;
+      var after = serialiseStore({ hideField: _store.hideField, descriptions: descriptions });
       return gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
         '{ tagUpdate(input: $input) { id } }',
-      { input: { id: _storeTagId, description: serialiseStore(
-        { hideField: _store.hideField, descriptions: descriptions }) } })
+      { input: { id: _storeTagId, description: after } })
         .then(function () {
+          // Not a run of its own - siblings describe their fields as a page loads - but the
+          // store's text as it now is, or the next recorded write's "before" would drop this.
+          _storeTagDesc = after;
           _descriptions = descriptions;
           _store = { version: PLUGIN_VERSION, hideField: _store.hideField,
             descriptions: descriptions };
@@ -5367,7 +5546,7 @@
     // The lock list read fresh, not off the filter's once-a-page cache: a lock added a
     // minute ago must hold. A read that fails writes nothing rather than guess.
     var locks = null;
-    return loadSettings().then(function (s) {
+    return loadSettings(true).then(function (s) {
       locks = s;
       return readStore(s);
     }, function () {
@@ -5399,11 +5578,12 @@
         written.push(name);
       }
       if (!written.length) return { written: [], skipped: skipped };
+      var after = serialiseStore({ hideField: _store.hideField, descriptions: descriptions });
       return gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
         '{ tagUpdate(input: $input) { id } }',
-      { input: { id: _storeTagId, description: serialiseStore(
-        { hideField: _store.hideField, descriptions: descriptions }) } })
+      { input: { id: _storeTagId, description: after } })
         .then(function () {
+          recordStoreWrite('Custom field descriptions rewritten', after);
           _descriptions = descriptions;
           _store = { version: PLUGIN_VERSION, hideField: _store.hideField,
             descriptions: descriptions };
@@ -5417,7 +5597,7 @@
   // now. The list is this plugin's setting, so the rule stays here rather than being
   // copied; a failed read rejects, and a caller treats that as "cannot tell".
   function apiLocks() {
-    return loadSettings().then(function (s) {
+    return loadSettings(true).then(function (s) {
       var names = lockedFields(s);
       return {
         names: names.slice(),
@@ -5466,6 +5646,7 @@
   function tick() {
     try { menuTick(); } catch (e) { console.error('[cfbe] tick failed', e); }
     try { detailTick(); } catch (e) { console.error('[cfbe] detail tick failed', e); }
+    try { lockFormTick(); } catch (e) { console.error('[cfbe] lock tick failed', e); }
     try { settingsTick(); } catch (e) { console.error('[cfbe] settings tick failed', e); }
     try { paintTaskButtons(); } catch (e) { console.error('[cfbe] task paint failed', e); }
   }

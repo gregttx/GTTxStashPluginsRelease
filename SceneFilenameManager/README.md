@@ -121,8 +121,8 @@ An unknown token, a rating scale outside 5–100, or a tag no tag or alias is na
 is named. `/` and `\` are dropped; the other characters a filename cannot hold become look-alikes it
 can — `:` becomes `∶`, `?` `？`, `*` `∗`, `"` `＂`, `<` `‹`, `>` `›`, `|` `∣`. Spaces are collapsed, a
 trailing dot or space trimmed, a name Windows keeps for a device — `CON`, `PRN`, `AUX`, `NUL`,
-`COM1`–`COM9`, `LPT1`–`LPT9`, in any case, alone or before a dot — given an underscore after the
-word (`Con_.mp4`), and the name capped at the **Maximum Filename Length**, and its full
+`COM0`–`COM9` and `LPT0`–`LPT9` (with `¹²³` as digits too), `CONIN$`, `CONOUT$`, in any case, alone or before a dot — given an underscore after the
+word (`Con_.mp4`) — wherever it comes from, a cut or an index group included — and the name capped at the **Maximum Filename Length**, and its full
 path at the **Maximum Full Path Length**; a name cut for the path is also a WARN line, saying how
 much room its folder left. A scene whose template gives an
 empty name is skipped, and so is one whose folder leaves too little room for any name.
@@ -170,9 +170,11 @@ opens a dialog offering to add it to the field of the scene it went to:
 [PLAN] Dest [50]: "a51" [51], "b52" [52], "c53" [53] added to "ᱜ╦╦🞮_Original_Filename"
 ```
 
-A file with no archived name moves without a dialog. If Merge copied a source's value into a
+A reassign also takes the name off the scene the file left, which no longer has that file - the
+field goes where nothing is left - unless that field is locked. A file with no archived name moves
+without a dialog. If Merge copied a source's value into a
 scene that had none, the value is rebuilt by file id rather than kept as it came. Undo puts the
-field back as the move left it. A locked field that already holds a value is not changed.
+field back as the move left it. A locked field is still added to, the names already in it kept.
 
 ### Proceed, Stop, Undo
 
@@ -200,9 +202,10 @@ the dialog already wrote.
 Backing up your database before proceeding is recommended.
 
 **Locked field.** If the field is listed in ᝯㄝₓ Custom Fields Bulk Editor's **Locked Custom Fields**
-— which is a good way to protect the archive — Archive still writes it where it is missing, but
-never adds a file to a value already there, and **Undo** of an Archive is refused, since it would
-remove a locked field. A file Rename cannot archive for that reason is not renamed.
+— which is a good way to protect the archive — Archive, Rename and a moved file's carried name
+still add to it: a name is only ever added, and every name already there is kept, so nothing the
+lock protects is lost. What would change or drop a name already there is refused, and so is
+**Undo** of an Archive or a carry, since it would take out what it added.
 
 ## Settings
 
@@ -244,9 +247,9 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 114 MB | 157 MB | 157 MB |
+| Archive Original Filenames | 114 MB | 158 MB | 157 MB |
 | Restore Original Filenames | 56 MB | 82 MB | 82 MB |
-| Rename Files From Metadata | 194 MB | 253 MB | 253 MB |
+| Rename Files From Metadata | 194 MB | 257 MB | 253 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 <!-- memory:end -->

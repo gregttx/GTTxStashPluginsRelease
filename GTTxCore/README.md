@@ -33,8 +33,8 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 
 ## What you actually see
 
-Six things: five are off until you turn them on, and one is a number with a default — and
-[Undo History](#undo-history), which is on.
+Eight things: five are off until you turn them on, two counters on the cards are on, and one is
+a number with a default — and [Undo History](#undo-history), which is on.
 
 ### The Scene Tagger's duration mismatch
 
@@ -107,6 +107,21 @@ read from your library for it, and nothing but the heading's text changes.
 
 It is off by default because it changes a page this plugin does not own. Turn it off and every
 heading goes back to Stash's own word on the next tick.
+
+### Counters on the cards
+
+Last in the row of counters Stash draws under a card — tags, performers, groups — two of this
+plugin's, in amber, each drawn only where it has something to say. On a scene card Scene Variants'
+⸎ goes before them:
+
+- **ⓕ and a number**: the custom fields the entity holds, on scene, image, gallery, performer,
+  studio, group and tag cards. Its tooltip lists them, name and value. The fields are read once for
+  a page of cards at a time.
+- **🖬 and a number**: the files of a scene that has more than one. Its tooltip names them, the
+  first being the one Stash plays and names the scene by. Nothing is read for it.
+
+**Show ⓕ Custom Field Count on Cards** and **Show 🖬 File Count on Scene Cards** turn them off; both
+are on by default.
 
 ### Where every Case-sensitive box starts
 
@@ -247,14 +262,17 @@ beside Settings.
   the tag a merge went into: `merged into Tag "Blonde" [105]`. The list
   says what the change did; the review and the undo's result say what the undo does, so the same
   change reads `−Blonde (105)` there. Filter by text, type, who, and a range of days.
-- **Undo Selected...** — tick runs or single changes, then press it. Every ticked change is checked
+- **Undo Selected...** — tick runs or single changes, then press it. A run's box ticks every change in
+  it; unticking one change leaves the rest ticked, ticking all of them ticks the run, and a run with
+  only some ticked shows as partly ticked. Every ticked change is checked
   against what your library holds now, and the list says which can be undone and which are skipped,
   before anything is written. **Proceed** writes it. **back to here**, at the end of a run's row,
   ticks that run and every newer one, to take the library back to before it.
 - **Take it out of the history**, ticked in the review before Proceed, makes the undo a *pop* (it
   starts as the **Undo Takes It Out of the History** setting says, off by default): what
   it undoes leaves the history instead of an undo run joining it, so the history reads as it did
-  before those changes. It cannot then be redone from here. A change and the undo of it, both
+  before those changes. **It risks history loss:** nothing is kept of that undo, so it cannot be
+  redone, and the changes it took out cannot be found or exported again. A change and the undo of it, both
   ticked, cancel out: nothing is written, and a pop takes both out.
 - **Delete Selected...** takes the ticked runs and changes out of the history — test runs, say —
   without touching your library. It asks twice.
@@ -266,7 +284,18 @@ beside Settings.
   A custom field locked in ᝯㄝₓ Custom Fields Bulk Editor is never changed or removed by an undo; one
   an edit removed can be put back.
 - **An undo is recorded too**, so undoing it is redo.
+- **Settings changes are recorded** (Record Settings Changes, on by default): a plugin's settings
+  saved in this browser — on Stash's settings page or in a ᝯㄝₓ plugin's own dialog — each setting
+  that changed a change of its own, undone by putting its value back. The defaults a plugin writes
+  in when it first loads are not recorded.
+- **Another tab's change marks an open dialog's Rescan.** When another tab of this Stash records a
+  change while a ᝯㄝₓ dialog is open here, that dialog's **Rescan** (**Refresh** in Find & Replace)
+  turns bold amber and breathes, white and green, until you press it; its tooltip says why. Closing the dialog after an undo refreshes the
+  page behind it, so the scene or list you are on shows what was put back.
 - **Undoing a create deletes what was created** — never its files.
+- **A deleted or merged tag comes back where it was**: on everything that carried it, with its own
+  parents, and as the parent of the tags that had it as theirs. Undone together with edits made
+  before and after it, each is taken back in the order it happened.
 - **Export** saves the whole history to a file; **Import...** brings files back, here or in another
   browser, without doubling what is already there. **Back Up and Export** takes a backup of the
   Stash database, as Settings → Tasks does, and saves the history with it, says which folder the
@@ -291,7 +320,8 @@ To record an edit of yours, the entity is read just before Stash saves it and ag
 a save waits for one small read; a large bulk edit pauses a moment. If that read fails, the save still
 goes through and the history shows a gap there.
 
-**Its settings**, in this plugin's group:
+**Its settings** are in a dialog: the first row of this plugin's settings, **Undo History**, says
+what they are now, and its **Undo History Settings...** button opens them.
 
 | Setting | Default | |
 |---|---|---|
@@ -302,7 +332,8 @@ goes through and the history shows a gap there.
 | Record Library-Wide Image Writes | off | a pass over a million images would crowd everything else out |
 | Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
 | Record Deletes and Merges | on | keeps what a delete or a tag merge takes away, so it can be put back; a delete of something large reads a lot first |
-| Undo Takes It Out of the History | off | where the review's **Take it out of the history** box starts; the box, beside Proceed, still decides for each undo |
+| Record Settings Changes | on | every plugin's settings saved in this browser, each setting a change of its own; not the defaults a plugin seeds |
+| Undo Takes It Out of the History | off | **amber: it risks history loss.** Where the review's **Take it out of the history** box starts; the box, beside Proceed, still decides for each undo |
 
 The history lives in this browser's own storage, per browser and per device, and goes if you clear
 this site's data. The dialog says how much it holds, how old the oldest run is, whether the browser

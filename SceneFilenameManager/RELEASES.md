@@ -8,6 +8,13 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 2.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
+| 1.5.10 (`cb7099f`) | 2026-09-27 | Scene Filename Manager 1.5.10: a reassigned file's archived name leaves the scene it left |
+| 1.5.9 (`fb9d6df`) | 2026-09-27 | Fixes from the delta review of the branch |
+| 1.5.8 (`910aa7d`) | 2026-09-27 | Scene Filename Manager 1.5.8: a locked archive field is still added to |
+| 1.5.7 (`3c64c77`) | 2026-09-26 | Every plugin's settings come from one read Core shares, dropped by any settings save |
+| 1.5.6 (`b0808e4`) | 2026-09-26 | Names built from any input are well formed; three faults the fuzzer found are fixed |
+| 1.5.5 (`f6bcd14`) | 2026-09-26 | Every request a plugin sends is checked against Stash 0.31.1's schema, and three that it refused are fixed |
 | 1.5.4 (`5804c87`) | 2026-09-25 | Review fixes 2026-09-25: plugins and docs; Scene Variants hides its tab at no variants |
 | 1.5.3 (`951ed70`) | 2026-09-25 | Dot-prefix the maintainer folders: .tools, .tests, .docs, .dist |
 | 1.5.2 (`67095e1`) | 2026-09-24 | Core 3.2.0: Stash's settings page shows every seeded default from its first paint |

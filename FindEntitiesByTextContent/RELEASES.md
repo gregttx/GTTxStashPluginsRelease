@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 4.0.0 (`faeaa8b`) | 2026-09-27 | Every plugin's major digit moves on: Core 4.0.0, Custom Fields Bulk Editor 4.0.0, Entity Name Maintainer 3.0.0, Find Entities 4.0.0, Merge Performer Tags 5.0.0, Normalize Parent Tags 6.0.0, Propagate 6.0.0, Scene Filename Manager 2.0.0, Scene Variants 3.0.0, Tag Bundle Clipboard 3.0.0 |
 | 3.6.1 (`7be61c5`) | 2026-09-25 | A long list line flows as text: no more overlap in Find & Replace and Entity Name Maintainer, no more columns in Undo History |
 | 3.6.0 (`9655cbe`) | 2026-09-25 | Find & Replace 3.6.0: a match in another case is marked case differs in amber, and counted in the log |
 | 3.5.0 (`6b6d338`) | 2026-09-25 | Find & Replace 3.5.0: the Case-sensitive box starts from Core's setting; no settings of its own again |
