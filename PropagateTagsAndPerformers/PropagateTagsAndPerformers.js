@@ -24,44 +24,39 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[ptp2re] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[ptp2re] ᝯㄝₓ Propagate Tags and Performers to Related Entities cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
   var showDefaults = C.showDefaults, stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
-    coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn, domBus = C.domBus, plural = C.plural,
-    linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
-    tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
-    entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
-    entityTipGender = C.entityTipGender, entityTipLines = C.entityTipLines,
-    entityTipDetail = C.entityTipDetail, entityTip = C.entityTip,
-    splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny,
-    cfTipCarriers = C.cfTipCarriers, cfTipTitle = C.cfTipTitle, cfTipLoad = C.cfTipLoad,
-    cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen, cfTipArm = C.cfTipArm,
-    cfTipTick = C.cfTipTick, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    computedStyleOf = C.computedStyleOf, findActionByLabel = C.findActionByLabel,
-    borderingAction = C.borderingAction, pxOf = C.pxOf, sideMargin = C.sideMargin,
-    neighbourGap = C.neighbourGap, stashButtonMargins = C.stashButtonMargins,
-    fillNeighbourGaps = C.fillNeighbourGaps, ensureRowSpacing = C.ensureRowSpacing,
-    applyButtonSpacing = C.applyButtonSpacing, insertOrdered = C.insertOrdered,
+    coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn,
+    domBus = C.domBus, plural = C.plural, linkTarget = C.linkTarget,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    holdWidth = C.holdWidth, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
+    splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny, cfTipTick = C.cfTipTick,
+    staleReloadButton = C.staleReloadButton, ensureRowSpacing = C.ensureRowSpacing,
     insertBeforeImportantAction = C.insertBeforeImportantAction,
-    entityTipName = C.entityTipName;
+    hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass,
+    gqlRequest = C.gqlRequest, settingRow = C.settingRow,
+    writePluginSettings = C.writePluginSettings, installedVersion = C.installedVersion,
+    displayName = C.displayName, wireEscape = C.wireEscape, unwireEscape = C.unwireEscape,
+    paintButton = C.paintButton, paintTaskButtons = C.paintTaskButtons,
+    ownTaskName = C.ownTaskName, fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
+    findEditContainer = C.findEditContainer;
+  var partsText = C.partsText;
+  var runLog = C.runLog, LOG_RENDER_CAP = C.runLogCap;   // log lines kept in the DOM; all stay in `lines`
 
   var PLUGIN_ID   = 'PropagateTagsAndPerformers';
   var PLUGIN_NAME = 'ᝯㄝₓ Propagate Tags and Performers to Related Entities';
   // The name the dialog wears. `PLUGIN_NAME` is the manifest's, and it has to stay
-  // byte-identical to the `.yml` because `ownSettingGroup` finds this plugin's block
+  // byte-identical to the `.yml` because Core's `settingsPage` finds this plugin's block
   // on the settings page by matching that heading - but as the first third of a
   // dialog title that also names a task, a path and an entity, it is the least
   // informative third and the longest. Two names, one of them free to be short.
@@ -85,27 +80,16 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.0.0';
+  var PLUGIN_VERSION = '6.0.5';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
   // code is running and broken, no banner means the browser is still on the old one.
-  // Through whatever the console offers rather than console.info directly: this is
-  // the first statement in the file, so a console without it would take the whole
-  // plugin down before anything loaded.
-  function ptp2re(message) {
-    if (typeof console !== 'undefined' && (console.info || console.log)) {
-      (console.info || console.log).call(console, message);
-    }
-  }
-
-  ptp2re('[ptp2re] PropagateTagsAndPerformers.js ' + PLUGIN_VERSION + ' loaded. This is the ' +
+  console.info('[ptp2re] PropagateTagsAndPerformers.js ' + PLUGIN_VERSION + ' loaded. This is the ' +
     'running script\'s own version - the settings page reads the manifest instead, which can be ' +
     'newer than the script your browser has cached.');
 
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/PropagateTagsAndPerformers/README.md';
-  var README_LINK_ID = 'ptp2re-readme-link';
-  var DESC_TOGGLE_ID = 'ptp2re-desc-toggle';
   var STYLE_ID       = 'ptp2re-style';
 
   // Every button this plugin puts on a page, and every task button Stash renders for
@@ -138,7 +122,7 @@
   // settings row - both places a user is already looking at what it edits.
   var TASK_PATHS = 'Path Settings...';
   var TASK_BUTTONS = 'Manual Buttons Settings...';
-  var TASK_AUTO = 'Automatic Propagation and Depropagate Assist...';
+  var TASK_AUTO = 'Auto-Propagation and Depropagate Assist...';
   // On a constant because `setState` swaps it for the reason the button is unavailable
   // and has to be able to put it back.
   var PATHS_BTN_TIP = 'Choose which of the thirteen paths run. Saving there changes ' +
@@ -147,26 +131,18 @@
 
   var PAGE_SIZE      = 500;    // targets per page while walking the library
   var CHUNK_SIZE     = 100;    // target ids per bulk mutation
-  var LOG_RENDER_CAP = 1000;   // log lines kept in the DOM; all of them stay in memory
   var PICK_RENDER_CAP = 1000;  // pick dialog lines drawn; the rest are set by the bulk buttons
-  var LOG_FLUSH_MS   = 100;
   var PROGRESS_TIP =
-    'Each segment is one pass: the entity type it walks, then the pipeline stage it ' +
+    'Each segment is one pass: the entity-type it walks, then the pipeline stage it ' +
     'runs in, then how many of that pass\u2019s entities have been read out of how ' +
     'many it found. Stages run in order and a later one sees what an earlier one ' +
     'added \u2014 markers put tags on a scene in stage 2, and stage 4 carries that ' +
     'scene\u2019s tags on to its groups \u2014 so one type can appear more than once ' +
     'with a different stage each time. A segment appears only once its pass has ' +
     'started.';
-  // The busy cursor under the last log line. The counters say how far a pass has
-  // got; this says it is still going, which is the question a sweep that spends
-  // seconds on one page of images leaves unanswered.
-  var SPIN_FRAMES    = ['▙', '▛', '▜', '▟'];
-  var SPIN_MS        = 125;   // one four-frame cycle at 2Hz
-  var LEASE_TTL_MS   = 300000;
   var UNDO_ARM_MS    = 4000;   // how long Undo stays armed for its second click
 
-  // Auto mode. The lease it takes is measured in the seconds one reaction lasts, not
+  // Auto-mode. The lease it takes is measured in the seconds one reaction lasts, not
   // the minutes a library-wide task does, so it gets its own much shorter TTL - a
   // crashed tab must not stand a sibling down for five minutes over one scene save.
   var AUTO_LEASE_TTL_MS    = 30000;
@@ -174,20 +150,11 @@
   var AUTO_COOLDOWN_MS     = 8000;   // per-entity: how long after our own write we ignore it
   var AUTO_COOLDOWN_MAX    = 2000;   // entries kept before the expired ones are swept
 
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-  }
-
-
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').replace(/^ | $/g, '');
-  }
-
   // ── Targets ───────────────────────────────────────────────────────────────
   //
   // The four entities anything is ever written to. Everything a write needs hangs
   // off this table so a path only has to name its target - `bulk` for the task,
-  // `single` for auto mode to watch, `route` for the manual buttons to recognise a
+  // `single` for auto-mode to watch, `route` for the manual buttons to recognise a
   // page, `fields` for the log to name the entity.
   //
   // `organized` records which of them actually have the flag - in Stash 0.31 that
@@ -237,7 +204,7 @@
   // ── Paths ─────────────────────────────────────────────────────────────────
   //
   // The thirteen things this plugin can do, and the spine of everything below: the
-  // task, the auto modes, the manual buttons and the cross-plugin declaration all
+  // task, the auto-modes, the manual buttons and the cross-plugin declaration all
   // read this one table rather than each carrying their own list.
   //
   // **Array order is the pipeline order and is semantics, not presentation.** Paths
@@ -487,13 +454,13 @@
   // ── The same thirteen paths, as a diagram ─────────────────────────────────
   //
   // The list is a column of names; this is the graph those names describe - one box
-  // per entity type, the tags and (where the type has them) the performers inside
+  // per entity-type, the tags and (where the type has them) the performers inside
   // it, and one arrow per path leaving what it reads and entering what it writes.
   //
   // **Hand-placed boxes, everything else derived.** An arrow runs between the two
   // chips it joins, clipped to the boxes, and its toggle sits on that curve. So a
   // fourteenth path draws itself from `PATHS` alone, and only a
-  // new *entity type* would need a coordinate - which is why `propagate-paths` pins
+  // new *entity-type* would need a coordinate - which is why `propagate-paths` pins
   // the node table against the paths in both directions, the way it already pins
   // `PATH_COLUMNS`.
   //
@@ -750,7 +717,6 @@
     return stripEllipsis(a) === stripEllipsis(b);
   }
 
-
   // ── Settings ──────────────────────────────────────────────────────────────
   //
   // The manifest keys carry ordering prefixes because `settings:` is a YAML map:
@@ -758,7 +724,7 @@
   // page renders the keys sorted alphabetically. The blocks are
   //
   //   a1-a3  what starts a run: the buttons, the staging flag (dialog-only, set
-  //          where the buttons are), then the two automatic modes as one line
+  //          where the buttons are), then the two auto-modes as one line
   //   b1-b5  paths into Scenes
   //   c1-c2  paths into Galleries
   //   d1     paths into Images
@@ -794,7 +760,7 @@
     // Dialog-only: no row in the yml; set in Manual Buttons Settings, beside the
     // buttons it is about, and stored under this key by that dialog's Save.
     a2SaveImmediately: false,
-    // The two automatic modes as one line - see `parseAuto`. `a3AutoOnTargetUpdate`
+    // The two auto-modes as one line - see `parseAuto`. `a3AutoOnTargetUpdate`
     // and `a4AutoOnSourceUpdate`, the two switches this replaced, are read only by
     // the migration in `settingsFrom` and retired by the auto dialog's first Save.
     a3AutoPropagation: '',
@@ -1018,20 +984,20 @@
     return out;
   }
 
-  // ── The two automatic modes as one setting ────────────────────────────────
+  // ── The two auto-modes as one setting ────────────────────────────────
   //
   // `target` and `source`, the two reactions `reactToTargets` and `reactToSources`
   // gate on, as one line in the same shape as the buttons: read forgivingly,
   // written back as only the modes that are on. Each had a BOOLEAN row of its own
-  // on Stash's settings page; the pair is edited in the Automatic Propagation and Depropagate Assist
+  // on Stash's settings page; the pair is edited in the Auto-Propagation and Depropagate Assist
   // dialog now, and the old keys are read by the migration in `settingsFrom` only.
   var AUTO_MODES = ['target', 'source', 'silent', 'depropagate'];
   var AUTO_ROWS = [
-    ['target', 'Auto Propagate when the Target is Saved',
+    ['target', 'Auto-Propagate when the Target is Saved',
       'Whenever Stash saves a scene, gallery, image or group, every enabled path that ' +
       'copies into it runs on that one entity. One small read per save, so it is the ' +
       'cheaper of the two.'],
-    ['source', 'Auto Propagate when the Source is Saved',
+    ['source', 'Auto-Propagate when the Source is Saved',
       'Whenever Stash saves an entity, its tags or performers are pushed into every ' +
       'entity an enabled path copies them to. This one fans out: saving a popular ' +
       'performer can rewrite every scene they appear in.'],
@@ -1134,6 +1100,9 @@
   // replacement from being a reset. It runs once per page, only when the new setting
   // is empty and at least one old key is set, and it writes the result back so the
   // settings page shows it.
+  // COMPAT: the fifteen per-path booleans (`b1TagsPerformersToScenes` ...) before `b1Paths`
+  // (since PropagateTagsAndPerformers 3.0.0); remove when never on its own: an install may
+  // skip releases, and this is what keeps its paths.
   var LEGACY_PATH = {
     'tags:performer>scene': 'b1TagsPerformersToScenes',
     'tags:studio>scene': 'b2TagsStudioToScenes',
@@ -1186,30 +1155,18 @@
   // had already found this and says so beside `followHideRename`; the knowledge stayed
   // in one plugin while two others copied the broken shape.
   //
-  // So: read the stored map, apply the patch to a copy, send the whole thing. The read
-  // is per write rather than off the settings cache, for the same reason that plugin
-  // re-reads - a value another tab changed is a value we would otherwise write back
-  // over - and these writes are rare enough that one query is nothing.
+  // So: read the stored map, apply the patch to a copy, send the whole thing - Core's
+  // `writePluginSettings`, which reads per write rather than off the settings cache: a
+  // value another tab changed is a value we would otherwise write back over.
   function writeOwnSettings(patch) {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
-      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
-      var input = {}, k;
-      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-      for (k in patch) if (hasOwn(patch, k)) input[k] = patch[k];
-      return gqlRequest(
-        'mutation PTPSaveSettings($plugin_id: ID!, $input: Map!) {' +
-        '  configurePlugin(plugin_id: $plugin_id, input: $input)' +
-        '}',
-        { plugin_id: PLUGIN_ID, input: input }
-      );
-    });
+    return writePluginSettings(PLUGIN_ID, patch, 'PTP');
   }
 
   var _savingPaths = false;
 
   // Stash's own settings page sends the same mutation, and the fetch hook already
   // notices it and drops the settings cache - so a save made here reaches the
-  // automatic modes and the manual buttons exactly as one made by hand does.
+  // auto-modes and the manual buttons exactly as one made by hand does.
   // `extra` is for the settings the Path Settings dialog owns outright - ones with no
   // row on Stash's settings page, so this write is the only thing that ever sets them.
   // One mutation rather than two: they are saved by one press, and a second write
@@ -1228,14 +1185,16 @@
     });
   }
 
+  // COMPAT: writes back the per-path booleans' reading as `b1Paths` (since
+  // PropagateTagsAndPerformers 3.0.0); remove when `LEGACY_PATH` goes.
   var _migrated = false;
 
   function migrateLegacyPaths(text) {
     if (_migrated) return;
     _migrated = true;
-    ptp2re('[ptp2re] migrating the legacy per-path settings to "' + text + '".');
+    console.info('[ptp2re] migrating the legacy per-path settings to "' + text + '".');
     savePaths(text).then(null, function (e) {
-      ptp2re('[ptp2re] the migrated path setting could not be saved (' +
+      console.info('[ptp2re] the migrated path setting could not be saved (' +
         (e && e.message ? e.message : e) + '). It is being used for this page all the ' +
         'same; set it by hand from the Path Settings task if this keeps happening.');
     });
@@ -1249,59 +1208,31 @@
   //
   // This plugin is on both sides of the protocol, like both of its siblings and for
   // the same reason: the roles are per *run*, not per plugin. The library-wide task
-  // is bulk; the two automatic modes are reactive.
-
-
-
-
+  // is bulk; the two auto-modes are reactive. The lease itself is Core's `lease`.
 
   // ── Button gating diagnostics ────────────────────────────────────────────
   //
-  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true`, which is typed into the browser
-  // console: no setting, no reload, no file edit, and the flag is read at call time so
+  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true` (or Dev Mods' Debug switch,
+  // `debugMode`), which is typed into the browser console: no setting, no reload, no file edit, and the flag is read at call time so
   // it takes effect on the next tick. On the shared object rather than a global of our
   // own because both plugins that draw buttons into these rows answer to it, and "why
   // is this button missing" is rarely a question about only one of them.
   //
-  // Two shapes, and the difference is what each is for:
+  // Core's `gate` channel, in two shapes, and the difference is what each is for:
   //
-  //   `gateLog` fires every time. Its callers are the probe resolutions, which happen
+  //   `gate.log` fires every time. Its callers are the probe resolutions, which happen
   //   once per entity and again after every save that invalidates them - seeing the
   //   same answer twice there is the *point*, since it says the re-check ran.
   //
-  //   `gateLogOnce` is deduplicated per channel, for the tick-driven states.
+  //   `gate.once` is deduplicated per channel, for the tick-driven states.
   //   `manualButtonsTick` runs every second and on every DOM mutation burst, so an
   //   undeduplicated line there would emit forever on a page nobody is touching. What
   //   is worth seeing is the moment an outcome changes. Turning the flag off clears the
   //   channels, so switching it back on restates the current position rather than
   //   staying silent until something moves.
-  var _gateLast = {};
-  function gateLog(line) {
-    if (!coop().debugButtons) return;
-    console.info('[ptp2re gate] ' + line);
-  }
-  function gateLogOnce(channel, line) {
-    if (!coop().debugButtons) { _gateLast = {}; return; }
-    if (_gateLast[channel] === line) return;
-    _gateLast[channel] = line;
-    console.info('[ptp2re gate] ' + line);
-  }
+  var gate = C.gate('ptp2re');
 
-  function acquireLease(label, ttl) {
-    var c = coop();
-    var ms = ttl || LEASE_TTL_MS;
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + ms };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + ms; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
-
-  // Registered at load, unconditionally rather than only while an auto mode is
+  // Registered at load, unconditionally rather than only while an auto-mode is
   // enabled: the flag says this copy honours the protocol, which is true whatever
   // the settings happen to be. It is what lets another plugin's bulk run tell "will
   // stand down" apart from "too old to know about leases".
@@ -1318,7 +1249,7 @@
 
   // The N-way declaration registry (D3 of the design plan): unlike `respecters`,
   // which is a fixed capability, this is refreshed on every settings load - task or
-  // auto mode alike, see `Run.prototype.begin` and `autoSettings` - because a path
+  // auto-mode alike, see `Run.prototype.begin` and `autoSettings` - because a path
   // whose setting is off is not one this plugin is actually covering, and another
   // plugin scanning `coop().declares` for overlap needs to see that as soon as this
   // plugin's own settings do, not only while its dialog happens to be open.
@@ -1331,14 +1262,14 @@
     var c = coop();
     var now = Date.now();
     // Expired leases are dropped rather than honoured: a tab that crashed mid-run
-    // must not disable auto mode until the next page reload.
+    // must not disable auto-mode until the next page reload.
     for (var i = c.leases.length - 1; i >= 0; i--) {
       if (!c.leases[i] || !(c.leases[i].until > now)) c.leases.splice(i, 1);
     }
     if (!c.leases.length) { _standDownAnnounced = false; return false; }
     if (!_standDownAnnounced) {
       _standDownAnnounced = true;
-      console.info('[ptp2re] auto mode is standing down while ' + c.leases[0].owner +
+      console.info('[ptp2re] auto-mode is standing down while ' + c.leases[0].owner +
         ' applies bulk changes (' + c.leases[0].label + ')');
     }
     return true;
@@ -1364,21 +1295,6 @@
       function (v) { _writeDepth--; return v; },
       function (e) { _writeDepth--; throw e; }
     );
-  }
-
-  // ── GraphQL ───────────────────────────────────────────────────────────────
-
-  function gqlRequest(query, variables) {
-    return fetch('/graphql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query, variables: variables }),
-    })
-      .then(function (resp) { return resp.json(); })
-      .then(function (json) {
-        if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
-        return json.data;
-      });
   }
 
   // `configuration { plugins }` cannot be scoped to one plugin, so every other
@@ -1502,7 +1418,7 @@
     if (adopted) {
       var names = [];
       for (k in adopted) if (hasOwn(adopted, k)) names.push(k);
-      ptp2re('[ptp2re] adopting ' + plural(names.length, 'exclusion setting') + ' from ' +
+      console.info('[ptp2re] adopting ' + plural(names.length, 'exclusion setting') + ' from ' +
         MPTTS_NAME + ' (' + names.join(', ') + '): this plugin had never been set to ' +
         'anything for ' + (names.length === 1 ? 'it' : 'them') + '. Change them here from now on.');
     }
@@ -1519,7 +1435,7 @@
       { plugin_id: PLUGIN_ID, input: input }
     ).then(null, function (e) {
       _wroteInitial = false;
-      ptp2re('[ptp2re] the initial settings could not be saved (' +
+      console.info('[ptp2re] the initial settings could not be saved (' +
         (e && e.message ? e.message : e) + '). They are in force for this page all the same.');
     });
     // Described only where the field in force is the one this plugin named. An imported
@@ -1530,15 +1446,13 @@
 
   // Shown on Stash's settings page from its first paint, by the same rule (Core's
   // `showDefaults`); `saveInitialSettings` is what writes them. The sibling's exclusion filters win, as they do there.
-  if (typeof showDefaults === 'function') {
-    showDefaults(PLUGIN_ID, function (raw, all) {
-      var out = {}, k;
-      out[F4_KEY] = F4_DEFAULT;
-      var adopted = importSiblingExclusions({}, raw, all[MPTTS_ID]) || {};
-      for (k in adopted) if (hasOwn(adopted, k)) out[k] = adopted[k];
-      return out;
-    });
-  }
+  showDefaults(PLUGIN_ID, function (raw, all) {
+    var out = {}, k;
+    out[F4_KEY] = F4_DEFAULT;
+    var adopted = importSiblingExclusions({}, raw, all[MPTTS_ID]) || {};
+    for (k in adopted) if (hasOwn(adopted, k)) out[k] = adopted[k];
+    return out;
+  });
 
   // Feature-detected, never version-checked: the number on the entry is for a log line,
   // and what decides whether to call is whether the function is there. The answer is a
@@ -1546,13 +1460,16 @@
   // it goes to the console under the plugin's own prefix and nowhere else.
   function describeExclusionField() {
     var api = coop().api && coop().api[CFBE_ID];
+    // COMPAT: a CustomFieldsBulkEditor with no `describeField`, before its 2.7.0 (since
+    // PropagateTagsAndPerformers 3.13.0); remove when never on its own: the sibling is
+    // optional, and an install may keep an old one.
     if (!api || typeof api.describeField !== 'function') return;
     api.describeField(F4_DEFAULT, F4_DESCRIPTION).then(function (outcome) {
       if (outcome === 'added') {
-        ptp2re('[ptp2re] described the custom field "' + F4_DEFAULT + '" in ' + CFBE_ID +
+        console.info('[ptp2re] described the custom field "' + F4_DEFAULT + '" in ' + CFBE_ID +
           '\u2019s description store.');
       } else if (outcome === 'queued') {
-        ptp2re('[ptp2re] a description for "' + F4_DEFAULT + '" is waiting for ' + CFBE_ID +
+        console.info('[ptp2re] a description for "' + F4_DEFAULT + '" is waiting for ' + CFBE_ID +
           '\u2019s description store - open "Manage Custom Field Descriptions and Locks..." and ' +
           'press Apply to file it.');
       }
@@ -1569,13 +1486,16 @@
       if (!hasOwn(DEFAULTS, k)) continue;
       s[k] = typeof DEFAULTS[k] === 'boolean' ? !!raw[k] : (raw[k] || '');
     }
+    // COMPAT: the per-path booleans before `b1Paths` (since PropagateTagsAndPerformers 3.0.0);
+    // remove when `LEGACY_PATH` goes.
     if (!String(s.b1Paths).replace(/^\s+|\s+$/g, '') && hasLegacyPaths(raw)) {
       s.b1Paths = formatPaths(legacyPaths(raw));
       migrateLegacyPaths(s.b1Paths);
     }
     s.paths = parsePaths(s.b1Paths);
-    // Show Manual Buttons was one switch for every button: on, every button starts on.
-    // Read-side only - the dialog's first Save writes the old key false in the same
+    // COMPAT: `a1ShowManualButtons`, the one switch for every button before `a1ManualButtons`
+    // (since PropagateTagsAndPerformers 5.0.0); remove when never on its own: an install may
+    // skip releases. On, every button starts on. Read-side only - the dialog's first Save writes the old key false in the same
     // write, which is what stops a saved "none" coming back as "all".
     if (!String(s.a1ManualButtons).replace(/^\s+|\s+$/g, '') && raw.a1ShowManualButtons) {
       var every = {};
@@ -1583,8 +1503,10 @@
       s.a1ManualButtons = formatButtons(every);
     }
     s.buttons = parseButtons(s.a1ManualButtons);
-    // The two automatic modes had a switch each: on, that mode starts on. Read-side
-    // only, and retired by the auto dialog's first Save, for the reason above.
+    // COMPAT: `a3AutoOnTargetUpdate` / `a4AutoOnSourceUpdate`, a switch per auto-mode before
+    // `a3AutoPropagation` (since PropagateTagsAndPerformers 5.0.1); remove when never on its
+    // own: an install may skip releases. On, that mode starts on. Read-side only, and
+    // retired by the auto dialog's first Save, for the reason above.
     if (!String(s.a3AutoPropagation).replace(/^\s+|\s+$/g, '')) {
       var was = {};
       if (raw.a3AutoOnTargetUpdate) was.target = true;
@@ -1930,7 +1852,7 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#a7b6c2;cursor:help;}' +
+    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -1964,28 +1886,92 @@
     (document.head || document.body || document.documentElement).appendChild(style);
   }
 
-
-
-
-
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
   function button(label, className) {
     var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
     b.type = 'button';
     return b;
+  }
+
+  // ── The dialog shell ──────────────────────────────────────────────────────
+  //
+  // Every dialog here: a backdrop, the modal (`size` is its width modifier, or null)
+  // and a head carrying the title. The head is returned for the lines each dialog puts
+  // under its title; `dialogOpen` goes last, once the footer is in.
+  function dialogShell(dlg, size, title) {
+    injectStyle();
+    dlg.backdrop = el('div', 'ptp2re-backdrop');
+    dlg.modal = el('div', 'ptp2re-modal' + (size ? ' ' + size : ''));
+    dlg.backdrop.appendChild(dlg.modal);
+    var head = el('div', 'ptp2re-head');
+    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + title));
+    dlg.modal.appendChild(head);
+    return head;
+  }
+
+  // Escape acts through whichever of Close/Cancel the footer is showing (Core's
+  // `wireEscape`), never by calling `close()` itself: mid-write, where both are hidden,
+  // the key does nothing. Two dialogs can be up at once - Path Settings over the run, a
+  // pick over either - and only the topmost answers. On `document`, since the modal is
+  // not focusable; removed in `dialogClose`.
+  function dialogOpen(dlg) {
+    wireEscape(dlg, 'ptp2re');
+    document.body.appendChild(dlg.backdrop);
+  }
+
+  function dialogClose(dlg) {
+    unwireEscape(dlg);
+    if (dlg.backdrop && dlg.backdrop.parentNode) dlg.backdrop.parentNode.removeChild(dlg.backdrop);
+  }
+
+  // The three settings dialogs (Path Settings, Manual Buttons Settings, Auto-Propagation):
+  // the head's warning and legend, a note that reads the setting, an empty body, and a
+  // footer of Save - amber, the button that writes, held until something moved - and
+  // Cancel. Returns the footer, for the dialog's own buttons.
+  function settingsShell(dlg, warn, legend) {
+    var head = dialogShell(dlg, 'ptp2re-narrow', dlg.taskName);
+    head.appendChild(el('div', 'ptp2re-warn', warn));
+    head.appendChild(el('div', 'ptp2re-legend', legend));
+    dlg.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
+    head.appendChild(dlg.noteEl);
+    dlg.body = el('div', 'ptp2re-pathsbody');
+    dlg.modal.appendChild(dlg.body);
+    var foot = el('div', 'ptp2re-foot');
+    dlg.saveBtn = button('Save', 'ptp2re-proceed');
+    dlg.saveBtn.className = dlg.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    dlg.cancelBtn = button('Cancel', 'ptp2re-cancel');
+    dlg.saveBtn.disabled = true;
+    dlg.saveBtn.addEventListener('click', function () { dlg.save(); });
+    dlg.cancelBtn.addEventListener('click', function () { dlg.close(); });
+    foot.appendChild(dlg.saveBtn);
+    foot.appendChild(dlg.cancelBtn);
+    dlg.modal.appendChild(foot);
+    return foot;
+  }
+
+  // Their Save. Cancel goes with Save while the write is out, and Escape acts through
+  // Cancel: mid-write the honest answer is nothing, and a key that abandoned a save in
+  // flight would leave the user with no report of whether it landed. `write` starts the
+  // write; `live` says whether the dialog is still the open one when it answers.
+  function saveDialog(dlg, write, live, onSaved) {
+    if (dlg.saving || dlg.saveBtn.disabled) return;
+    dlg.saving = true;
+    dlg.saveBtn.disabled = true;
+    dlg.cancelBtn.disabled = true;
+    dlg.enable(false);
+    dlg.noteEl.textContent = 'Saving...';
+    write().then(function () {
+      if (!live()) return;
+      if (onSaved) onSaved();
+      dlg.close();
+    }, function (e) {
+      dlg.saving = false;
+      if (!live()) return;
+      dlg.refreshSave();
+      dlg.cancelBtn.disabled = false;
+      dlg.enable(true);
+      dlg.noteEl.textContent = 'The setting could not be saved: ' +
+        (e && e.message ? e.message : e);
+    });
   }
 
   // ── Is this script the one Stash has installed? ───────────────────────────
@@ -2004,30 +1990,21 @@
   //
   // It catches only what a version bump makes visible. Editing the file without
   // bumping it leaves both numbers equal and this check blind - which is the
-  // practical reason the repo bumps a digit on every change.
-  function installedVersion() {
-    return gqlRequest('query PTP2REPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; });
-  }
-
+  // practical reason the repo bumps a digit on every change. The question itself is
+  // Core's `installedVersion`.
+  //
   // The two quiet outcomes are settled here, on the console next to the load banner:
   // a matching version is the boring case and the dialog's log is about the library,
   // not about itself.
   function checkInstalledVersion(onMismatch) {
-    return installedVersion().then(function (installed) {
+    return installedVersion(PLUGIN_ID, 'PTP2REPluginVersion').then(function (installed) {
       if (!installed) {
-        ptp2re('[ptp2re] version check: Stash reported no installed version; running ' +
+        console.info('[ptp2re] version check: Stash reported no installed version; running ' +
           PLUGIN_VERSION + '.');
         return;
       }
       if (installed === PLUGIN_VERSION) {
-        ptp2re('[ptp2re] version check: running ' + PLUGIN_VERSION + ', which is what is installed.');
+        console.info('[ptp2re] version check: running ' + PLUGIN_VERSION + ', which is what is installed.');
         return;
       }
       onMismatch(installed);
@@ -2044,7 +2021,7 @@
     var tag = (s.f1ExcludeTargetWithTagName || '').trim();
     if (tag) out.push('entities tagged "' + tag + '" are skipped');
     if (s.f2ExcludeTargetOrganized) out.push('entities marked Organized are skipped');
-    if (s.f3ExcludeTagWithIgnoreAutoTag) out.push('tags set to Ignore auto tag are never copied');
+    if (s.f3ExcludeTagWithIgnoreAutoTag) out.push('tags set to Ignore Auto Tag are never copied');
     var field = (s.f4ExcludeTagWithCustomFieldName || '').trim();
     if (field) out.push('tags carrying the custom field "' + field + '" are never copied');
     var terms = splitTerms(s.f6ExcludeTagNameContains, (s.f7TagNameSeparator || '').trim());
@@ -2100,25 +2077,10 @@
   }
 
   // ── Naming things in the log ──────────────────────────────────────────────
-
-  function firstBasename(files) {
-    for (var i = 0; files && i < files.length; i++) {
-      if (files[i] && files[i].basename) return files[i].basename;
-    }
-    return null;
-  }
-
-  // `title` is optional on scenes, galleries and images, so each falls back to
-  // whichever of the file fields its query asked for. Read off what is present
-  // rather than switched on the target type: a per-type branch here is what let
-  // galleries and images log as "untitled" in the sibling for three releases, the
-  // fallback having been written for scenes and never extended.
-  function displayName(ent) {
-    return ent.title || ent.name ||
-      firstBasename(ent.files) || firstBasename(ent.visual_files) ||
-      (ent.folder && ent.folder.basename) || null;
-  }
-
+  //
+  // `title` is optional on scenes, galleries and images, so Core's `displayName` falls
+  // back to whichever of the file fields the query asked for - read off what is present
+  // rather than switched on the target type.
   function entityLabel(target, ent) {
     return TARGETS[target].label + ' "' + (displayName(ent) || 'untitled') + '" (' + ent.id + ')';
   }
@@ -2268,16 +2230,12 @@
     return String(a) < String(b) ? -1 : (String(a) > String(b) ? 1 : 0);
   }
 
-  function partsText(parts) {
-    return parts.map(function (p) { return p.text; }).join('');
-  }
-
   // ── The exclusion filters ─────────────────────────────────────────────────
   //
   // Two levels, and they answer different questions. Entity-level skips a whole
   // target; tag-level refuses one tag wherever it would land.
   //
-  // Note what tag-level filters cannot do: a *performer* has no "ignore auto tag"
+  // Note what tag-level filters cannot do: a *performer* has no "Ignore Auto Tag"
   // and no custom fields on the relationship, so the two performer paths are
   // governed by the entity-level filters alone. The settings say "tags" for that
   // reason.
@@ -2298,7 +2256,7 @@
         }
         var t = tagMap[String(id)];
         if (!t) return null;
-        if (ignoreAuto && t.ignore_auto_tag) return 'Ignore auto tag is set';
+        if (ignoreAuto && t.ignore_auto_tag) return 'Ignore Auto Tag is set';
         if (wantCustom && t.custom_fields && hasOwn(t.custom_fields, wantCustom)) {
           return 'it carries the custom field "' + wantCustom + '"';
         }
@@ -2427,7 +2385,7 @@
       // A pass containing a reverse path has to gather that path's sources before it
       // can read a single target, so the sweep is recorded on the pass rather than
       // discovered halfway through it. Every reverse path in one pass sweeps the same
-      // entity type - they are one query, not one each.
+      // entity-type - they are one query, not one each.
       if (p.reverse && !index[key].sweep) {
         index[key].sweep = { type: p.sourceType, scanned: 0, total: 0, started: false };
       }
@@ -2455,7 +2413,7 @@
     var parts = [SOURCES[paths[0].sourceType].fields];
     paths.forEach(function (p) { parts.push(leafSelection(p)); });
     // How a source names its targets. The same field for every reverse path in a
-    // pass, since they all sweep one entity type into one target type.
+    // pass, since they all sweep one entity-type into one target type.
     parts.push(paths[0].reverse.backRef + ' { id }');
     // Named apart from the target query over the same entity - `findImages` is both
     // the sweep here and the target pass of stage 6 - so a log, a network tab or a
@@ -2469,7 +2427,7 @@
   // enabled path's traversal at once. Repeating a field is legal GraphQL and the
   // server merges the selections, so two paths sharing a walk prefix cost nothing.
   // What a pass reads off one target, independent of how the targets were found.
-  // Extracted so the library walk and auto mode's single-entity fetch cannot come to
+  // Extracted so the library walk and auto-mode's single-entity fetch cannot come to
   // disagree about it: a field missing from one of two copies is a path that silently
   // plans nothing, and the diff it feeds is what decides "already has this".
   function targetParts(pass) {
@@ -2500,7 +2458,7 @@
       ' count ' + t.node + ' { ' + parts.join(' ') + ' } } }';
   }
 
-  // One named target, for auto mode. The task walks the library and never needs this;
+  // One named target, for auto-mode. The task walks the library and never needs this;
   // a reaction knows exactly which entity was saved and must not page past everything
   // else to reach it.
   function oneQuery(pass) {
@@ -2622,13 +2580,11 @@
     return input;
   }
 
-  // Undo History, where ᝯㄝₓ Core keeps one: a batch landed is, per entity, the tags or
+  // Undo History, which ᝯㄝₓ Core keeps: a batch landed is, per entity, the tags or
   // performers it added (or, undone, took away) - recorded as that delta, which an undo
   // checks is still true and reverses, whatever else the entity gained since.
   function journalPass(label, libraryWide) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide });
   }
 
   function journalBatch(pass, batch, mode) {
@@ -2756,19 +2712,12 @@
   };
 
   Run.prototype.build = function () {
-    injectStyle();
     var self = this;
-
-    this.backdrop = el('div', 'ptp2re-backdrop');
-    this.modal = el('div', 'ptp2re-modal');
-    this.backdrop.appendChild(this.modal);
-
-    var head = el('div', 'ptp2re-head');
-    // A plain block, so a title too long for one line wraps rather than being clipped
-    // - which a scoped run's does, naming a plugin, a path and an entity. Nothing to
-    // set: it is the default, and the only reason it holds is that no rule in `CSS`
-    // makes this a flex child or sets `white-space`.
-    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
+    // The title is a plain block, so a title too long for one line wraps rather than
+    // being clipped - which a scoped run's does, naming a plugin, a path and an entity.
+    // Nothing to set: it is the default, and the only reason it holds is that no rule
+    // in `CSS` makes this a flex child or sets `white-space`.
+    var head = dialogShell(this, null, this.taskName);
     // The stale-script warning gets a box of its own, in the same red the settings
     // banner uses, rather than a sentence appended to `noteEl` among the run's other
     // warnings. Every other note here is about the library or another plugin; this one
@@ -2782,7 +2731,7 @@
     // instruction leads and the limits are stated beside it rather than left to be
     // discovered.
     head.appendChild(el('div', 'ptp2re-warn',
-      'Backing up your database before proceeding is recommended. This only ever adds tags and performers, but ' +
+      'Backing up your database before proceeding is strongly recommended. This only ever adds tags and performers, but ' +
       'Undo only reverses what this dialog wrote, while it stays open, and cannot account ' +
       'for changes made elsewhere in the meantime.'));
     // Every name in this log carries a number in brackets and it is always a Stash
@@ -2795,10 +2744,9 @@
       'written as x250, never in brackets.'));
     this.noteEl = el('div', 'ptp2re-note', '');
     head.appendChild(this.noteEl);
-    this.modal.appendChild(head);
 
     this.progressEl = el('div', 'ptp2re-progress', 'Starting...');
-    // The counters name a *pass*, and a pass is "<entity type> <stage>", so the same
+    // The counters name a *pass*, and a pass is "<entity-type> <stage>", so the same
     // type appears more than once in one line and the bare number is the only thing
     // telling two of them apart. Nothing on the page says what it is, hence the title.
     this.progressEl.title = PROGRESS_TIP;
@@ -2844,13 +2792,7 @@
     [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.undoBtn,
       this.rescanBtn, this.closeBtn, this.pathsBtn].forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
-
-    wireEscape(this);
-    document.body.appendChild(this.backdrop);
-  };
-
-  Run.prototype.focus = function () {
-    if (this.modal && this.modal.scrollIntoView) this.modal.scrollIntoView();
+    dialogOpen(this);
   };
 
   // Empty hides it. `begin()` clears it on every pass for the same reason it clears
@@ -2917,29 +2859,10 @@
     this.spin(scanning || applying || undoing);
   };
 
-  // A cursor cycling under the last log line for as long as work is in flight, and
-  // gone the moment it is not. It is a sibling of the lines rather than part of one,
-  // so it survives a flush that appends under it - `flush` moves it back to the end -
-  // and it carries no `-line` class, since it is not a log line and must not be read
-  // back as one. `state` is the single source of truth for whether it runs: every
-  // path in and out of a write goes through setState.
-  Run.prototype.spin = function (on) {
-    if (!on) {
-      if (this.spinTimer) clearInterval(this.spinTimer);
-      this.spinTimer = null;
-      if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
-      this.spinEl = null;
-      return;
-    }
-    if (!this.spinEl) {
-      this.spinEl = el('div', 'ptp2re-spin', SPIN_FRAMES[0]);
-      var self = this, i = 0;
-      this.spinTimer = setInterval(function () {
-        self.spinEl.textContent = SPIN_FRAMES[++i % SPIN_FRAMES.length];
-      }, SPIN_MS);
-    }
-    this.logEl.appendChild(this.spinEl);
-  };
+  // The log - its cursor, lines and the Undo button's disarm - is Core's `runLog`. `flush`
+  // is this plugin's own: it redraws the progress line even with no line waiting, and
+  // draws a line's parts through `appendParts`, as the pick dialogs do.
+  runLog(Run.prototype, 'ptp2re', ['flush']);
 
   // A run-level warning: into the log, where Copy log will carry it, and into the
   // dialog head, where it stays visible after the log has scrolled past it. Appends
@@ -2949,28 +2872,6 @@
     this.log('WARN', msg);
     this.noteEl.textContent = this.noteEl.textContent
       ? this.noteEl.textContent + ' ' + msg : msg;
-  };
-
-  // `parts` is optional and only the tag recap passes it: that line is rendered as
-  // spans so each tag can carry its own tooltip. `lines` keeps the plain string
-  // either way - Copy log hands over text, and a tooltip is not text.
-  Run.prototype.log = function (kind, message, parts) {
-    var line = '[' + kind + '] ' + message;
-    this.logged = (this.logged || 0) + 1;
-    this.lines.push(line);
-    // Bounded, because the copy buffer is what a library-wide pass grows without limit.
-    this.logDropped = (this.logDropped || 0) + keepLog(this.lines);
-    this.pending.push({ kind: kind, line: line, parts: parts || null });
-    this.scheduleFlush();
-  };
-
-  Run.prototype.scheduleFlush = function () {
-    var self = this;
-    if (this.flushTimer) return;
-    this.flushTimer = setTimeout(function () {
-      self.flushTimer = null;
-      self.flush();
-    }, LOG_FLUSH_MS);
   };
 
   // Only the tail is rendered: a first run on a large library can plan six figures
@@ -3246,8 +3147,8 @@
     }
     var api = nptApi();
     this.log('INFO', api
-      ? 'Skipping tags ' + NPT_NAME + ' would prune again is on, but it has no entity type set ' +
-        'to automatic Prune, so nothing is skipped.'
+      ? 'Skipping tags ' + NPT_NAME + ' would prune again is on, but it has no entity-type set ' +
+        'to Auto-Prune, so nothing is skipped.'
       : 'Skipping tags ' + NPT_NAME + ' would prune again is on, but that plugin is not ' +
         'answering: it is absent, disabled, or not ' + NPT_API_MIN + ' or newer, which is the ' +
         'release that lets another plugin ask it. Nothing is skipped.');
@@ -3289,7 +3190,7 @@
   };
 
   // A manual button's review. Same planner as everything else - `planPass` is the one
-  // auto mode uses, borrowed back below - so what this dialog lists is by construction
+  // auto-mode uses, borrowed back below - so what this dialog lists is by construction
   // what the click used to write without asking. The only difference from `scan` is
   // where the entities come from: named, rather than paged out of the library.
   Run.prototype.scanScoped = function (paths) {
@@ -3489,7 +3390,7 @@
     return agg;
   };
 
-  // Which of `ids` the sibling's automatic Prune would take straight back off this
+  // Which of `ids` the sibling's Auto-Prune would take straight back off this
   // entity. Asked against the tags the entity will actually be carrying - its own,
   // whatever an earlier path in this plan already decided to add, and the ones under
   // consideration - because a tag is pruned for being implied by *any* of them, and
@@ -3622,14 +3523,14 @@
     });
   };
 
-  // NormalizeParentTags' automatic modes, as its settings actually spell them.
-  // Today that is one string carrying a mode per entity type ("SCENES=PRUNE,
+  // NormalizeParentTags' auto-modes, as its settings actually spell them.
+  // Today that is one string carrying a mode per entity-type ("SCENES=PRUNE,
   // IMAGES=ROLLUP"), so both directions can be on at once for different types; the
   // pair of booleans it replaced covered every type it was enabled for, where both at
   // once was that plugin's own documented no-op.
   //
   // Read by name rather than through its `coop().api`, like the rest of this check:
-  // the API answers for one entity type at a time and needs the plugin to be running
+  // the API answers for one entity-type at a time and needs the plugin to be running
   // in this page, and what this warning is about is a setting that may be set while
   // the plugin is disabled. It renamed every key it had at once, which is why the old
   // pair is still read - an install that has not been touched since then still
@@ -3642,6 +3543,9 @@
         rollup: /=\s*roll[\s_-]*up\b/i.test(modes),
       };
     }
+    // COMPAT: NormalizeParentTags' `a8AutoPruneOnUpdate` / `a9AutoRollUpOnUpdate`, the pair
+    // before its `a1AutoModes` (since NormalizeParentTags 4.0.0); remove when never on its
+    // own: an install untouched since then still carries them.
     var prune = !!(ps && ps.a8AutoPruneOnUpdate), rollup = !!(ps && ps.a9AutoRollUpOnUpdate);
     if (prune === rollup) return { prune: false, rollup: false };
     return { prune: prune, rollup: rollup };
@@ -3663,11 +3567,11 @@
     // the pair of booleans it used to keep could not express, and which this once read
     // as "no mode is running".
     var mode = auto.prune && auto.rollup
-      ? 'automatic Prune and Roll Up'
-      : (auto.prune ? 'automatic Prune' : 'automatic Roll Up');
+      ? 'Auto-Prune and Auto-Roll-Up'
+      : (auto.prune ? 'Auto-Prune' : 'Auto-Roll-Up');
     var effect = auto.prune && auto.rollup
       ? 'it will rewrite the tags this run adds - removing the ones a more specific tag on ' +
-        'the same entity implies, or adding every ancestor, depending on the entity type'
+        'the same entity implies, or adding every ancestor, depending on the entity-type'
       : (auto.prune
         ? 'it will remove the tags this run adds, wherever a more specific tag on the same ' +
           'entity already implies them'
@@ -3918,20 +3822,20 @@
   // going away mid-run.
   //
   // guarded() is the other half of that, pointed inwards: every batch here is a
-  // bulk*Update, which is exactly what this plugin's own auto mode watches for, so
-  // without it a run with an auto mode enabled would re-plan each batch it had just
+  // bulk*Update, which is exactly what this plugin's own auto-mode watches for, so
+  // without it a run with an auto-mode enabled would re-plan each batch it had just
   // written - and an Undo would have its reversal put straight back. The lease cannot
   // do that job: it is advisory, and we honour our own leases no more than anyone
   // else's.
   Run.prototype.runBatches = function (batches, leaseLabel, step, verb, finish) {
     var self = this;
-    var lease = acquireLease(leaseLabel);
+    var lease = C.lease(PLUGIN_ID, leaseLabel);
     var i = 0;
     var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
       ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, !self.scope);
     var recorded = function () {
       self.journalRun = null;
-      if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+      pass.finish().then(function (line) { if (line) self.log('INFO', line); });
     };
 
     function nextBatch() {
@@ -4069,7 +3973,7 @@
     // first is the only sequence that lands where the run started. An undo is a bulk
     // write like any other, so it announces itself the same way - see runBatches, and
     // note that guarded() matters more sharply here: an undo writes the inverse delta,
-    // so an auto mode reacting to it would put back exactly what the user just asked
+    // so an auto-mode reacting to it would put back exactly what the user just asked
     // to have taken away.
     this.runBatches(this.undoable.slice().reverse(), this.taskName + ' (undo)',
       function (b) { return self.undoBatch(b); },
@@ -4092,12 +3996,6 @@
     // Same reasoning as finishApply: an undo moved these entities too.
     evictWritten(this.wrote);
     this.wrote = {};
-  };
-
-  Run.prototype.disarmUndo = function () {
-    if (this.undoTimer) { clearTimeout(this.undoTimer); this.undoTimer = null; }
-    this.undoArmed = false;
-    if (this.undoBtn) this.undoBtn.textContent = 'Undo';
   };
 
   // ── The footer ────────────────────────────────────────────────────────────
@@ -4147,7 +4045,6 @@
     this.begin();
   };
 
-
   // Says what happened on the button that was pressed, and puts its caption back.
   function copyFeedback(btn, label) {
     return function (ok) {
@@ -4162,63 +4059,11 @@
       copyFeedback(this.copyBtn, 'Copy log'));
   };
 
-  // ── Escape ────────────────────────────────────────────────────────────────
-  //
-  // Escape acts through whichever of Cancel/Close the footer is actually showing,
-  // never by calling `close()` itself. The footer is the dialog's own statement of
-  // what it will let you do right now, so routing the key through it means the key
-  // can never reach a button that is hidden or disabled - and in particular does
-  // nothing mid-write, where both are hidden and Stop is the only way out. A key
-  // that quietly abandoned a run in flight would be worse than one that does nothing.
-  function escapeButton(run) {
-    var order = [run.closeBtn, run.cancelBtn];
-    for (var i = 0; i < order.length; i++) {
-      var b = order[i];
-      if (b && !b.disabled && !hasClass(b, 'ptp2re-hidden')) return b;
-    }
-    return null;
-  }
-
-  // On `document`, not on the modal: the modal is not focusable, so a click into the
-  // log would otherwise put the key out of reach. Removed in `close()` - a dialog that
-  // has gone away must not still be answering for the page.
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      // Two dialogs can be on the page at once - the path editor opens over the run -
-      // and both listen on `document`, so without this the key would close both. The
-      // editor is always the one on top while it is open - unless a pick dialog is:
-      // a reaction opens one over whatever is on screen.
-      if (_pick) {
-        if (_pick !== run) return;
-      } else {
-        if (_paths && _paths !== run) return;
-        if (_buttons && _buttons !== run) return;
-        if (_auto && _auto !== run) return;
-      }
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
-  }
-
   Run.prototype.close = function () {
-    unwireEscape(this);
+    dialogClose(this);
     this.disarmUndo();
     this.spin(false);
     if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
-    if (this.backdrop && this.backdrop.parentNode) {
-      this.backdrop.parentNode.removeChild(this.backdrop);
-    }
     if (_active === this) _active = null;
     // Whatever this dialog wrote may have made a manual button on the page behind it
     // eligible or not, and the buttons were unreachable while it was open, so this is
@@ -4239,7 +4084,7 @@
   // It writes a setting, not the library, so it carries no backup instruction: there
   // is nothing here for an Undo to reverse. What it does carry is what a path being
   // on actually means - the task covers it, the buttons appear for it, and the
-  // automatic modes, if they are on, write along it with no dialog at all.
+  // auto-modes, if they are on, write along it with no dialog at all.
   // Which of the two views the dialog opens on, kept across close and reopen. In
   // localStorage rather than in the plugin settings, for the same reason
   // `NormalizeParentTags` keeps its run selection there: it is one browser's
@@ -4584,7 +4429,7 @@
 
     var wrap = el('div', 'ptp2re-dia');
     wrap.appendChild(el('div', 'ptp2re-dia-legend',
-      'One box per entity type, with what it holds inside it, and one arrow per path ' +
+      'One box per entity-type, with what it holds inside it, and one arrow per path ' +
       'from what that path reads to what it writes. Green carries tags, blue carries ' +
       'performers, and a dashed arrow reaches its source through the target’s ' +
       'scenes - a Group has no performers or markers of its own. Every button is the ' +
@@ -4807,7 +4652,7 @@
     this.viewBtn.textContent = this.visual ? 'List view' : 'System view';
     this.viewBtn.title = this.visual
       ? 'Show the paths as a list of names, which is narrower and easier to read down.'
-      : 'Show the paths as a diagram: a box per entity type and an arrow per path.';
+      : 'Show the paths as a diagram: a box per entity-type and an arrow per path.';
     rememberView(this.visual);
   };
 
@@ -4862,7 +4707,7 @@
   //     dialog decides. The user is already here choosing that.
   //
   // The value still lives in the plugin's stored settings, written by Save along with
-  // the paths in one `configurePlugin`, so both automatic modes and every other tab
+  // the paths in one `configurePlugin`, so both auto-modes and every other tab
   // read it exactly as they did when it had a row. Stash's own settings panel spreads
   // the whole stored map when it writes a setting of its own, so a key it does not
   // render is a key it does not drop.
@@ -4880,21 +4725,21 @@
     label.appendChild(box);
     label.appendChild(el('span', null,
       'Skip tags ' + NPT_NAME + ' would prune again'));
-    label.title = 'The automatic Prune in ' + NPT_NAME + ' removes a tag from an entity when ' +
+    label.title = 'The Auto-Prune in ' + NPT_NAME + ' removes a tag from an entity when ' +
       'a more specific tag on the same entity already implies it. Where it is set to Prune ' +
-      'an entity type, a tag copied onto one of those is removed again on the very save ' +
+      'an entity-type, a tag copied onto one of those is removed again on the very save ' +
       'this plugin makes - work done, logged, and undone, every run. Ticked, such a tag is ' +
       'never copied in the first place: the plan says how many were skipped, and the ' +
       'buttons that would only have added those hide. It asks that plugin rather than ' +
       'guessing, so its own tag exclusions are honoured and a type it is not pruning ' +
-      'automatically is left alone. Roll Up is never skipped - that mode adds ancestors, ' +
+      'automatically is left alone. Roll-Up is never skipped - that mode adds ancestors, ' +
       'so a tag copied here is one it would have added anyway.';
     // Said on the page rather than left to the tooltip, because it is the difference
     // between a filter that is doing something and one that cannot: a box ticked with
     // nobody answering skips nothing, and the run log is the only other place that
     // says so - after the user has already pressed a button.
     var note = el('div', 'ptp2re-optnote', api
-      ? NPT_NAME + ' is answering. Which entity types it would prune is its own setting, ' +
+      ? NPT_NAME + ' is answering. Which entity-types it would prune is its own setting, ' +
         'and the run log names them.'
       : NPT_NAME + ' is not answering: it is absent, disabled, or older than ' +
         NPT_API_MIN + ', which is the release that lets another plugin ask it. Nothing ' +
@@ -4936,57 +4781,35 @@
   };
 
   PathsDialog.prototype.build = function () {
-    injectStyle();
     var self = this;
-
-    this.backdrop = el('div', 'ptp2re-backdrop');
-    this.modal = el('div', 'ptp2re-modal ptp2re-narrow');
-    this.backdrop.appendChild(this.modal);
-
-    var head = el('div', 'ptp2re-head');
-    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
-    head.appendChild(el('div', 'ptp2re-warn',
+    var foot = settingsShell(this,
       'A path switched on here is one the task covers, one a manual button appears ' +
-      'for, and - if either automatic mode is on - one that is written along whenever ' +
+      'for, and - if either auto-mode is on - one that is written along whenever ' +
       'Stash saves an entity, with no dialog if Silent Auto-propagation is on. Off is what a path does ' +
-      'until you say otherwise.'));
-    head.appendChild(el('div', 'ptp2re-legend',
+      'until you say otherwise.',
       'Every path only ever adds; nothing is removed from the source or the target. ' +
       'The order below is the order a run walks them in, and it matters: what an ' +
       'earlier path adds is what a later one reads. The exclusion filters apply to all ' +
-      'of them - seven in the plugin settings, and the eighth under the paths here.'));
-    this.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
-    head.appendChild(this.noteEl);
-    this.modal.appendChild(head);
+      'of them - seven in the plugin settings, and the eighth under the paths here.');
 
-    var body = el('div', 'ptp2re-pathsbody');
     // Both views are built up front and one is hidden. The diagram is a hundred-odd
     // nodes of static geometry - cheaper to build once than to keep a flag saying
     // whether it has been built, and building it on the first switch would leave the
     // buttons homeless until then.
     this.listPanel = this.panel();
     this.diaPanel = this.diagram();
-    body.appendChild(this.listPanel);
-    body.appendChild(this.diaPanel);
+    this.body.appendChild(this.listPanel);
+    this.body.appendChild(this.diaPanel);
     // Under both panels rather than inside either: it is not a path, and it applies to
     // whichever view is showing.
-    body.appendChild(this.skipRow());
-    this.modal.appendChild(body);
+    this.body.appendChild(this.skipRow());
 
-    var foot = el('div', 'ptp2re-foot');
-    // Amber: this is the button that writes. See "one colour for a plugin wrote this".
-    this.saveBtn   = button('Save', 'ptp2re-proceed');
-    this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    this.cancelBtn = button('Cancel', 'ptp2re-cancel');
     // Teal: it changes nothing but which of the two views is on screen. See "one
     // colour for a plugin wrote this".
     this.viewBtn = button('System view', 'ptp2re-view');
     this.viewBtn.className = this.viewBtn.className.replace('btn-secondary', 'btn-info');
-    this.saveBtn.disabled = true;
-    this.saveBtn.addEventListener('click', function () { self.save(); });
-    this.cancelBtn.addEventListener('click', function () { self.close(); });
     this.viewBtn.addEventListener('click', function () { self.showView(!self.visual); });
-    [this.saveBtn, this.cancelBtn, this.viewBtn].forEach(function (b) { foot.appendChild(b); });
+    foot.appendChild(this.viewBtn);
     // The bulk buttons sit at the other end of the footer, pushed there by the row's
     // own `margin-left:auto` rather than by anything in the shared `.foot` rule, which
     // is pinned byte-identical across the plugins. They belong in a footer and not
@@ -4996,13 +4819,11 @@
     // After the footer, so the bulk buttons are disabled with the rest until the
     // settings land: `enable` reaches every control the dialog owns.
     this.enable(false);
-    this.modal.appendChild(foot);
     // Last, because it moves the toggles into whichever view is showing and reads the
     // footer's own button back.
     this.showView(storedVisual());
 
-    wireEscape(this);
-    document.body.appendChild(this.backdrop);
+    dialogOpen(this);
     this.checkVersion();
 
     loadSettings(true).then(function (loaded) {
@@ -5044,18 +4865,7 @@
   // least shows the plan it would write; here the loss is invisible.
   PathsDialog.prototype.checkVersion = function () {
     var self = this;
-    return checkInstalledVersion(function (installed) {
-      if (_paths !== self) return;
-      self.stale = true;
-      self.saveBtn.disabled = true;
-      self.noteEl.parentNode.insertBefore(el('div', 'ptp2re-stale',
-        '⚠ This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
-        ', but ' + installed + ' is installed. Reload the page (F5); if this warning ' +
-        'comes back, hard-refresh with Ctrl+Shift+R (⌘+Shift+R on a Mac). Save stays ' +
-        'disabled until the script matches: it would rewrite the whole setting from the ' +
-        'paths this older script knows, dropping anything the installed one has added.'),
-        self.noteEl);
-    });
+    return staleGate(this, function () { return _paths === self; }, 'paths');
   };
 
   PathsDialog.prototype.focus = function () {
@@ -5063,20 +4873,10 @@
   };
 
   PathsDialog.prototype.save = function () {
-    if (this.saving || this.saveBtn.disabled) return;
     var self = this;
-    this.saving = true;
-    this.saveBtn.disabled = true;
-    // Cancel goes with it, and Escape acts through Cancel: this dialog's footer is its
-    // own statement of what it will let you do, and mid-write the honest answer is
-    // nothing. A key that abandoned a save in flight would leave the user with no
-    // report of whether it landed.
-    this.cancelBtn.disabled = true;
-    this.enable(false);
-    this.noteEl.textContent = 'Saving...';
-    savePaths(formatPaths(this.modes),
-      { f5SkipTagsNormalizeWouldPrune: this.skip }).then(function () {
-      if (_paths !== self) return;
+    saveDialog(this, function () {
+      return savePaths(formatPaths(self.modes), { f5SkipTagsNormalizeWouldPrune: self.skip });
+    }, function () { return _paths === self; }, function () {
       // A run dialog underneath is holding a plan built from the paths that were set a
       // moment ago. Saying so beats letting the user read a plan that no longer matches
       // the configuration the head above it lists.
@@ -5090,23 +4890,11 @@
         _active.setState(_active.state);
         _active.flush();
       }
-      self.close();
-    }, function (e) {
-      self.saving = false;
-      if (_paths !== self) return;
-      self.refreshSave();
-      self.cancelBtn.disabled = false;
-      self.enable(true);
-      self.noteEl.textContent = 'The setting could not be saved: ' +
-        (e && e.message ? e.message : e);
     });
   };
 
   PathsDialog.prototype.close = function () {
-    unwireEscape(this);
-    if (this.backdrop && this.backdrop.parentNode) {
-      this.backdrop.parentNode.removeChild(this.backdrop);
-    }
+    dialogClose(this);
     if (_paths === this) _paths = null;
     // Whatever was saved changes which manual buttons belong on the page behind this.
     invalidateButtonProbes();
@@ -5277,7 +5065,7 @@
       'them and press Save yourself. On - or on a Stash that cannot stage - a click opens a ' +
       'dialog listing every change first, and nothing is written until you press Proceed. ' +
       'Only the Edit-tab buttons: a button on a source\'s own page always reviews, and the ' +
-      'automatic modes ask in a dialog of their own unless Silent Auto-propagation is on.';
+      'auto-modes ask in a dialog of their own unless Silent Auto-propagation is on.';
     var note = el('div', 'ptp2re-optnote', 'Off, an Edit-tab button stages what it would ' +
       'add in the form for Stash\'s own Save; on, it opens the review dialog. A button on ' +
       'the source\'s own page always opens the dialog.');
@@ -5289,47 +5077,18 @@
   };
 
   ButtonsDialog.prototype.build = function () {
-    injectStyle();
     var self = this;
-
-    this.backdrop = el('div', 'ptp2re-backdrop');
-    this.modal = el('div', 'ptp2re-modal ptp2re-narrow');
-    this.backdrop.appendChild(this.modal);
-
-    var head = el('div', 'ptp2re-head');
-    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
-    head.appendChild(el('div', 'ptp2re-warn',
+    var foot = settingsShell(this,
       'A button switched on here is drawn on its page whenever its path is on in Path ' +
       'Settings and a click would add something. Off is what a button does until you say ' +
-      'otherwise.'));
-    head.appendChild(el('div', 'ptp2re-legend',
+      'otherwise.',
       'A button on an Edit tab pulls tags or performers into the entity in front of you; ' +
       'one on a source\'s own page pushes its tags or performers out to everything the path ' +
       'reaches, and always reviews first. The two marker paths have no source button: a ' +
-      'marker has no page of its own.'));
-    this.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
-    head.appendChild(this.noteEl);
-    this.modal.appendChild(head);
-
-    this.body = el('div', 'ptp2re-pathsbody');
-    this.modal.appendChild(this.body);
-
-    var foot = el('div', 'ptp2re-foot');
-    // Amber: this is the button that writes. See "one colour for a plugin wrote this".
-    this.saveBtn   = button('Save', 'ptp2re-proceed');
-    this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    this.cancelBtn = button('Cancel', 'ptp2re-cancel');
-    this.saveBtn.disabled = true;
-    this.saveBtn.addEventListener('click', function () { self.save(); });
-    this.cancelBtn.addEventListener('click', function () { self.close(); });
-    foot.appendChild(this.saveBtn);
-    foot.appendChild(this.cancelBtn);
+      'marker has no page of its own.');
     foot.appendChild(this.bulkRow());
     this.enable(false);
-    this.modal.appendChild(foot);
-
-    wireEscape(this);
-    document.body.appendChild(this.backdrop);
+    dialogOpen(this);
     this.checkVersion();
 
     loadSettings(true).then(function (loaded) {
@@ -5357,7 +5116,7 @@
   };
 
   // Blocks Save for the reason the path editor's does: Save rewrites the whole
-  // string from the `what` this script knows. Shared with the auto dialog; `live`
+  // string from the `what` this script knows. All three settings dialogs; `live`
   // says whether the dialog is still the open one when the answer lands.
   function staleGate(dlg, live, what) {
     return checkInstalledVersion(function (installed) {
@@ -5382,44 +5141,27 @@
   ButtonsDialog.prototype.focus = PathsDialog.prototype.focus;
 
   ButtonsDialog.prototype.save = function () {
-    if (this.saving || this.saveBtn.disabled) return;
     var self = this;
-    this.saving = true;
-    this.saveBtn.disabled = true;
-    this.cancelBtn.disabled = true;
-    this.enable(false);
-    this.noteEl.textContent = 'Saving...';
-    // The old master switch goes false in the same write: it is what the migration
-    // reads while this setting is empty, and a Show None saved over it would otherwise
-    // come back as Show All on the next load.
-    writeOwnSettings({
-      a1ManualButtons: formatButtons(this.on),
-      a2SaveImmediately: this.immediate,
-      a1ShowManualButtons: false,
-    }).then(function () {
-      invalidateAutoSettings();
-      if (_buttons !== self) return;
-      self.close();
-    }, function (e) {
-      self.saving = false;
-      if (_buttons !== self) return;
-      self.refreshSave();
-      self.cancelBtn.disabled = false;
-      self.enable(true);
-      self.noteEl.textContent = 'The setting could not be saved: ' +
-        (e && e.message ? e.message : e);
-    });
+    saveDialog(this, function () {
+      return writeOwnSettings({
+        a1ManualButtons: formatButtons(self.on),
+        a2SaveImmediately: self.immediate,
+        // COMPAT: `a1ShowManualButtons`, the one switch for every button before the buttons
+        // became one string (since PropagateTagsAndPerformers 5.0.0); remove when the
+        // migration in `settingsFrom` goes. It goes false in the same write: the migration
+        // reads it while this setting is empty, and a Show None saved over it would
+        // otherwise come back as Show All on the next load.
+        a1ShowManualButtons: false,
+      }).then(invalidateAutoSettings);
+    }, function () { return _buttons === self; });
   };
 
   ButtonsDialog.prototype.close = function () {
-    unwireEscape(this);
-    if (this.backdrop && this.backdrop.parentNode) {
-      this.backdrop.parentNode.removeChild(this.backdrop);
-    }
+    dialogClose(this);
     if (_buttons === this) _buttons = null;
   };
 
-  // ── The Automatic Propagation and Depropagate Assist dialog ──────────────────────────────
+  // ── The Auto-Propagation and Depropagate Assist dialog ──────────────────────────────
   //
   // Two switches that were two rows on Stash's settings page. A dialog for two
   // checkboxes is not about room: both make the plugin write the library with no
@@ -5475,45 +5217,17 @@
   };
 
   AutoDialog.prototype.build = function () {
-    injectStyle();
     var self = this;
-
-    this.backdrop = el('div', 'ptp2re-backdrop');
-    this.modal = el('div', 'ptp2re-modal ptp2re-narrow');
-    this.backdrop.appendChild(this.modal);
-
-    var head = el('div', 'ptp2re-head');
-    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
-    head.appendChild(el('div', 'ptp2re-warn',
+    settingsShell(this,
       'Both modes react to Stash\'s own saves. Unless Silent Auto-propagation is on, a ' +
       'reaction lists what it would add and writes only what you leave ticked; with Silent ' +
       'on it writes the moment Stash saves, with no dialog. The Depropagate assist removes ' +
       'only what you tick. Every write is recorded in ᝯㄝₓ Core\'s Undo History - but try ' +
-      'the task first.'));
-    head.appendChild(el('div', 'ptp2re-legend',
+      'the task first.',
       'Every enabled path is written along, and every exclusion filter applies. An ' +
       'entity this plugin has just written to is left alone for a few seconds, which is ' +
-      'what stops a reversible pair of paths bouncing.'));
-    this.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
-    head.appendChild(this.noteEl);
-    this.modal.appendChild(head);
-
-    this.body = el('div', 'ptp2re-pathsbody');
-    this.modal.appendChild(this.body);
-
-    var foot = el('div', 'ptp2re-foot');
-    this.saveBtn   = button('Save', 'ptp2re-proceed');
-    this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    this.cancelBtn = button('Cancel', 'ptp2re-cancel');
-    this.saveBtn.disabled = true;
-    this.saveBtn.addEventListener('click', function () { self.save(); });
-    this.cancelBtn.addEventListener('click', function () { self.close(); });
-    foot.appendChild(this.saveBtn);
-    foot.appendChild(this.cancelBtn);
-    this.modal.appendChild(foot);
-
-    wireEscape(this);
-    document.body.appendChild(this.backdrop);
+      'what stops a reversible pair of paths bouncing.');
+    dialogOpen(this);
     this.checkVersion();
 
     loadSettings(true).then(function (loaded) {
@@ -5541,39 +5255,22 @@
   AutoDialog.prototype.focus = PathsDialog.prototype.focus;
 
   AutoDialog.prototype.save = function () {
-    if (this.saving || this.saveBtn.disabled) return;
     var self = this;
-    this.saving = true;
-    this.saveBtn.disabled = true;
-    this.cancelBtn.disabled = true;
-    this.enable(false);
-    this.noteEl.textContent = 'Saving...';
-    // The two old switches go false in the same write, for the reason the buttons
-    // dialog retires its own: the migration reads them while this setting is empty.
-    writeOwnSettings({
-      a3AutoPropagation: formatAuto(this.on),
-      a3AutoOnTargetUpdate: false,
-      a4AutoOnSourceUpdate: false,
-    }).then(function () {
-      invalidateAutoSettings();
-      if (_auto !== self) return;
-      self.close();
-    }, function (e) {
-      self.saving = false;
-      if (_auto !== self) return;
-      self.refreshSave();
-      self.cancelBtn.disabled = false;
-      self.enable(true);
-      self.noteEl.textContent = 'The setting could not be saved: ' +
-        (e && e.message ? e.message : e);
-    });
+    saveDialog(this, function () {
+      return writeOwnSettings({
+        a3AutoPropagation: formatAuto(self.on),
+        // COMPAT: `a3AutoOnTargetUpdate` / `a4AutoOnSourceUpdate`, the two auto-mode switches
+        // before the modes became one string (since PropagateTagsAndPerformers 5.0.1);
+        // remove when the migration in `settingsFrom` goes. False in the same write, for
+        // the reason the buttons dialog retires its own.
+        a3AutoOnTargetUpdate: false,
+        a4AutoOnSourceUpdate: false,
+      }).then(invalidateAutoSettings);
+    }, function () { return _auto === self; });
   };
 
   AutoDialog.prototype.close = function () {
-    unwireEscape(this);
-    if (this.backdrop && this.backdrop.parentNode) {
-      this.backdrop.parentNode.removeChild(this.backdrop);
-    }
+    dialogClose(this);
     if (_auto === this) _auto = null;
   };
 
@@ -5614,18 +5311,11 @@
   };
 
   PickDialog.prototype.build = function () {
-    injectStyle();
     var self = this;
-    this.backdrop = el('div', 'ptp2re-backdrop');
-    this.modal = el('div', 'ptp2re-modal ptp2re-mid');
-    this.backdrop.appendChild(this.modal);
-
-    var head = el('div', 'ptp2re-head');
-    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + this.title));
+    var head = dialogShell(this, 'ptp2re-mid', this.title);
     head.appendChild(el('div', 'ptp2re-warn', this.warn));
     this.waitEl = el('div', 'ptp2re-pick-wait hidden');
     head.appendChild(this.waitEl);
-    this.modal.appendChild(head);
     if (this.held) {
       this.tickWait();
       (function arm() {
@@ -5689,9 +5379,7 @@
     foot.appendChild(bulk);
     this.modal.appendChild(foot);
     this.syncOk();
-
-    wireEscape(this);
-    document.body.appendChild(this.backdrop);
+    dialogOpen(this);
     if (this.modal.scrollIntoView) this.modal.scrollIntoView();
   };
 
@@ -5731,17 +5419,13 @@
   };
 
   PickDialog.prototype.close = function (keys) {
-    unwireEscape(this);
+    dialogClose(this);
     if (this.waitTimer) clearTimeout(this.waitTimer);
-    if (this.backdrop && this.backdrop.parentNode) {
-      this.backdrop.parentNode.removeChild(this.backdrop);
-    }
     if (_pick === this) _pick = null;
     this.resolve(keys);
   };
 
-
-  // ── Auto mode ─────────────────────────────────────────────────────────────
+  // ── Auto-mode ─────────────────────────────────────────────────────────────
   //
   // A reaction to a save Stash made, reviewed in a pick dialog unless Silent is on. It shares the task's
   // planner rather than carrying a second one - see `AutoRun` below - so what a
@@ -5859,19 +5543,9 @@
   // rejected would copy tags onto an entity on the strength of an edit that never
   // happened.
   //
-  // The clone is safe because this handler is attached before Apollo's, so the body is
-  // still unread; a clone that fails falls back to assuming success rather than
-  // dropping the reaction.
-  function mutationSucceeded(p) {
-    return p.then(function (resp) {
-      if (!resp || typeof resp.clone !== 'function') return true;
-      if (resp.ok === false) return false;
-      var copy;
-      try { copy = resp.clone(); } catch (e) { return true; }
-      return copy.json().then(function (j) { return !(j && j.errors && j.errors.length); },
-                              function () { return true; });
-    }, function () { return false; });
-  }
+  // Core's `mutationSucceeded` reads a clone, safe because this handler is attached
+  // before Apollo's, so the body is still unread; a clone that fails falls back to
+  // assuming success rather than dropping the reaction.
 
   // ── The source side: from a saved source to the targets that read it ───────
   //
@@ -6015,7 +5689,7 @@
     return chain.then(function () { return Object.keys(out); });
   }
 
-  // Every entity type that appears as a `PATHS` `sourceType`. Four of the seven are
+  // Every entity-type that appears as a `PATHS` `sourceType`. Four of the seven are
   // also `TARGETS` and reuse its mutation names; the other three - Performer, Studio,
   // SceneMarker - are only ever a source in this plugin and are named here instead.
   var SOURCE_ENTITIES = {
@@ -6050,7 +5724,7 @@
   // walk, the aggregation, the union/intersection fold, the filters, the attribution,
   // the cascade through `plannedFor`. A second planner is the thing this must not
   // become - it would be free to drift from the one the review dialog shows, and the
-  // user's only evidence about auto mode is that the task agrees with it.
+  // user's only evidence about auto-mode is that the task agrees with it.
   //
   // What differs is the driver: no dialog, no Proceed, entities named rather than
   // paged, and the log going to the console.
@@ -6157,15 +5831,15 @@
   //
   // Apollo eviction happens here rather than in a caller, because every headless write
   // this plugin makes goes through this one function - the two manual buttons and both
-  // auto modes. It shipped in `runManualSource` alone, so an auto reaction rewrote the
+  // auto-modes. It shipped in `runManualSource` alone, so an auto reaction rewrote the
   // page the user was looking at and left it showing what it read before the save;
-  // `MergePerformerTagsToScenes` refreshes after every one of its own auto merges.
+  // `MergePerformerTagsToScenes` refreshes after every one of its own auto-merges.
   // Evicting from the caller means remembering to, once per write path.
   AutoRun.prototype.apply = function (label) {
     var self = this;
     var batches = buildBatches(this.plan);
     if (!batches.length) return Promise.resolve(0);
-    var lease = acquireLease(label, AUTO_LEASE_TTL_MS);
+    var lease = C.lease(PLUGIN_ID, label, AUTO_LEASE_TTL_MS);
     // One run in Undo History per save that set it off.
     var pass = journalPass(label, false);
     // Only what the server accepted, so a failed batch does not drop a cache entry
@@ -6197,7 +5871,7 @@
           }, function (e) {
             // One failed batch does not cancel the rest, and says so where the user
             // will look: there is no dialog to carry an [ERROR] line.
-            console.error('[ptp2re] auto mode: a batch of ' +
+            console.error('[ptp2re] auto-mode: a batch of ' +
               plural(batch.entries.length, batch.target) + ' failed:', e);
           });
       });
@@ -6205,12 +5879,12 @@
     return chain.then(function () {
       lease.release();
       evictWritten(wrote);
-      if (pass) pass.finish();
+      pass.finish();
       return self.written;
     }, function (e) {
       lease.release();
       evictWritten(wrote);
-      if (pass) pass.finish();
+      pass.finish();
       throw e;
     });
   };
@@ -6258,7 +5932,7 @@
     return p;
   }
 
-  // Plans and writes into a fixed set of targets - shared by both auto modes, so a
+  // Plans and writes into a fixed set of targets - shared by both auto-modes, so a
   // source reaction and a target reaction end up going through the identical write
   // path once the target ids are known. `label` is the only thing that tells them
   // apart in a log.
@@ -6305,7 +5979,7 @@
       });
     });
     if (!lines.length) return Promise.resolve(run);
-    return pick('Automatic Propagation - review',
+    return pick('Auto-Propagation - review',
       'These additions follow the save you just made. Untick any you do not want; ' +
       'nothing is written until you press OK.', lines, true, held).then(function (keys) {
       if (!keys) return null;
@@ -6438,16 +6112,14 @@
         'is written until you press OK.', lines, false, { type: 'scene', ids: [b.id] }).then(function (keys) {
         if (!keys || !keys.length) return 0;
         return guarded(function () {
-          var lease = acquireLease('depropagate assist', AUTO_LEASE_TTL_MS);
+          var lease = C.lease(PLUGIN_ID, 'depropagate assist', AUTO_LEASE_TTL_MS);
           return gqlRequest(bulkMutation('scene'),
             { input: { ids: [b.id], tag_ids: { ids: keys, mode: 'REMOVE' } } }).then(function () {
             lease.release();
             var pass = journalPass('Depropagate assist', false);
-            if (pass) {
-              pass.entries([{ type: 'scenes', id: String(b.id), name: displayName(ent) || '', field: 'tag_ids',
-                before: keys.slice().sort(), after: [] }]);
-              pass.finish();
-            }
+            pass.entries([{ type: 'scenes', id: String(b.id), name: displayName(ent) || '', field: 'tag_ids',
+              before: keys.slice().sort(), after: [] }]);
+            pass.finish();
             markWritten('scene', b.id);
             var wrote = { scene: {} };
             wrote.scene[b.id] = true;
@@ -6476,7 +6148,7 @@
     }).catch(function (e) {
       // Never rethrown into Stash's own fetch chain: the user's save succeeded, and a
       // failed reaction to it must not look like a failed save.
-      console.error('[ptp2re] auto mode (' + target + '):', e);
+      console.error('[ptp2re] auto-mode (' + target + '):', e);
       return 0;
     });
   }
@@ -6516,7 +6188,7 @@
         return total;
       });
     }).catch(function (e) {
-      console.error('[ptp2re] auto mode (source: ' + sourceType + '):', e);
+      console.error('[ptp2re] auto-mode (source: ' + sourceType + '):', e);
       return 0;
     });
   }
@@ -6556,7 +6228,7 @@
   // ── Skipping what NormalizeParentTags would prune straight back off ───────
   //
   // The two plugins pull in opposite directions on the same tags. This one copies a
-  // tag onto an entity along a relationship; the sibling's automatic Prune removes a
+  // tag onto an entity along a relationship; the sibling's Auto-Prune removes a
   // tag from an entity when a more specific tag on it already implies that one. So a
   // scene carrying "Platinum" that gains "Hair Colour" from its studio loses it again
   // on the very save this plugin makes - work done, logged, and undone, every run.
@@ -6570,7 +6242,7 @@
   //
   // Three things it deliberately does not do:
   //
-  //   - **It never asks about Roll Up.** That mode *adds* ancestors, so a tag this
+  //   - **It never asks about Roll-Up.** That mode *adds* ancestors, so a tag this
   //     plugin copies is one the sibling would have added anyway - there is nothing
   //     to skip, and skipping would mean second-guessing an addition both plugins
   //     want.
@@ -6584,6 +6256,9 @@
 
   function nptApi() {
     var api = coop().api && coop().api[NPT_ID];
+    // COMPAT: a NormalizeParentTags with no `prepare`, before its 3.2.0 (since
+    // PropagateTagsAndPerformers 3.17.0); remove when never on its own: the sibling is
+    // optional, and an install may keep an old one.
     return api && typeof api.prepare === 'function' ? api : null;
   }
 
@@ -6620,423 +6295,28 @@
     return null;
   }
 
-  function hasClass(node, name) {
-    return (' ' + String((node && node.className) || '') + ' ').indexOf(' ' + name + ' ') !== -1;
-  }
-
-  // SettingsPluginsPanel.tsx gives every plugin setting an id built from the plugin
-  // id and the setting key - `plugin-PropagateTagsAndPerformers-a1ManualButtons`.
-  // That is ours by construction: no version suffix, no localisation, nothing
-  // formatted for display. Both siblings shipped this broken by matching heading
-  // text instead, twice, so the ids are the anchor and the heading is only a
-  // fallback.
-  function settingElement(key) {
-    return document.getElementById('plugin-' + PLUGIN_ID + '-' + key);
-  }
-
-  // Walks up from any one of our settings to the group box that contains it. Trying
-  // every key rather than two named ones means removing or renaming a setting cannot
-  // quietly break the anchor.
-  function ownSettingGroup() {
-    var node = null, d;
-    for (var key in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, key)) continue;
-      node = settingElement(key);
-      if (node) break;
-    }
-    for (d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    // Fallback: the group headed with our own name. Trying every key already survives
-    // one rename, but not a release that renames them all - and the first casualty of
-    // that is the stale-script banner, which is the one thing on this page that such a
-    // release needed to show. NormalizeParentTags renamed all nine of its keys at once
-    // and its own banner went silent in every tab that had not been reloaded.
-    //
-    // Settings - Tasks heads *its* group with the same name, and that group is not
-    // this one: it holds the task buttons and no settings, so decorating it would put
-    // a README link and a split description on a page that never had either - and the
-    // link lands inside the task button, replacing the label `ownTaskName` matches on.
-    // The heading identifies us; the buttons say which page.
-    var heading = ownSettingGroupHeading();
-    for (node = heading, d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return hasOwnTaskButton(node) ? null : node;
-    }
-    return heading && !hasOwnTaskButton(heading.parentElement)
-      ? heading.parentElement : null;
-  }
-
-  function ownSettingGroupHeading() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (headingIsOurs(nodes[i].textContent)) return nodes[i];
-    }
-    return null;
-  }
-
-  // A plain recursive walk rather than `querySelectorAll('button')`: this runs against
-  // a group that may be anywhere in the page's own markup, and matching on the task
-  // captions is the only thing that identifies the Tasks page from inside it.
-  function hasOwnTaskButton(node) {
-    if (!node) return false;
-    if (node.tagName === 'BUTTON' &&
-        TASKS.indexOf(String(node.textContent || '').replace(/^\s+|\s+$/g, '')) !== -1) {
-      return true;
-    }
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) {
-      if (hasOwnTaskButton(kids[i])) return true;
-    }
-    return false;
-  }
-
-  // The `.setting` row a given setting lives in. `settingElement` returns the input
-  // itself - Stash puts the id on the Form.Switch, not on the row. ' setting ' is
-  // matched with its spaces so that "setting-group" is not mistaken for it.
-  function settingRow(key) {
-    var node = settingElement(key);
-    for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting')) return node;
-    }
-    return null;
-  }
-
-  // The two pages that show a group headed with our name do not head it the same
-  // way. Settings - Tasks passes the plugin name straight through
-  // (`heading: o.name`), but Settings - Plugins appends the version:
+  // ── The settings page ─────────────────────────────────────────────────────
   //
-  //   heading: `${plugin.name} ${plugin.version ? `(${plugin.version})` : undefined}`
-  //
-  // so the h3 there reads "... (<version>)" - and, because that template interpolates
-  // the literal when there is no version at all, sometimes "... undefined".
-  //
-  // Strip the suffix and compare exactly, rather than testing a prefix: a plugin
-  // whose name merely starts with ours must not be mistaken for us.
-  function headingIsOurs(text) {
-    var t = String(text == null ? '' : text).trim();
-    if (t === PLUGIN_NAME) return true;
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
-
-  // The first descendant carrying a class, in document order. This was a hand-rolled
-  // depth-capped walk until the test harness grew a class selector; the walk existed
-  // only because the fake DOM could not answer `.foo`, not because a browser cannot.
-  // `querySelector` is the same search with the same ordering, and the depth cap it
-  // drops was arbitrary rather than load-bearing.
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
-
-  // Under the description, which is inside the group header and therefore outside
-  // the <Collapse> - so it shows whether or not the group is expanded. The fallbacks
-  // are for a Stash that renders no sub-heading (an empty description) or no header
-  // row at all.
-  function readmeLinkSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub.nextSibling };
-    var header = byClass(group, 'setting');
-    var box = header && header.childNodes && header.childNodes[0];
-    if (box) return { parent: box, before: null };
-    return { parent: group, before: null };
-  }
-
-  // Paragraph spacing needs elements. Under `white-space: pre-wrap` a blank line is
-  // always one whole line-height and nothing can target it, so the description's
-  // paragraphs are rebuilt as divs and the gap becomes a margin - about a third of a
-  // line, rather than a whole empty one.
-  //
-  // Stash renders the description as a single text node; React puts that text node
-  // back on every re-render of this panel, so this runs on every tick and re-splits
-  // when it has to. It is idempotent: once the children are ours, there is no text
-  // node left to split.
-  function splitDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'ptp2re-p')) return;   // already ours
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;                      // nothing to split
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = oneLine(para);
-      if (t) sub.appendChild(el('div', 'ptp2re-p', t));
-    });
-  }
-
-  // ── Settings verbosity: a summary on the page, the rest on hover ──────────
-  //
-  // Twenty-four settings is a wall of prose to read past to reach the next checkbox.
-  // A description written as "summary\n\ndetail" shows only its first paragraph,
-  // with the rest moved into a tooltip.
-  //
-  // Stash's own Setting renders `<h3 title={tooltip}>` (Inputs.tsx), but
-  // SettingsPluginsPanel never passes a tooltip for a plugin setting, and
-  // `PluginSetting` has no field to declare one - name, display_name, description,
-  // type is the whole type. So the slot exists, is always empty for us, and is
-  // filled from here.
-  //
-  // The split rides on the blank line the description format already supports rather
-  // than a delimiter of our own. If this script never runs - a stale browser cache,
-  // a .js that was never copied into the plugin folder - Stash renders the whole
-  // description exactly as it did before, instead of showing a raw marker.
-  //
-  // The reasoning in full is in §6 of NormalizeParentTags' AGENTS.md; this is the
-  // third copy of one design, and `.tests/style.test.js` pins the CSS across all
-  // three.
-  var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*ptp2re-tip-open\b/, '');
-    sub.className = (on ? cls + ' ptp2re-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  // A class toggled from JS rather than a `:hover ~` selector, because the triggers
-  // do not sit in one predictable place: the mark is inside the .sub-heading and the
-  // name is an <h3> somewhere above it, and a sibling combinator would depend on
-  // exactly how Stash nests the pair.
-  //
-  // The row is passed rather than the .sub-heading, and the current one looked up
-  // per event: an <h3> is Stash's element and survives the re-renders that replace
-  // everything we put in the row, so a captured reference would go stale. The flag
-  // is what stops a second pair of listeners landing on it each time we rebuild.
-  function tipTrigger(node, row) {
-    if (!node || node._ptpTipWired) return;
-    node._ptpTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'ptp2re-sum')) return;   // already ours
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;                                       // nothing to hide
-    var summary = oneLine(text.slice(0, cut));
-    // Kept as paragraphs: a description with three paragraphs run together reads
-    // worse than the wall this is replacing.
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'ptp2re-tipped')) {
-      sub.className = ((sub.className || '') + ' ptp2re-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'ptp2re-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a
-    // sibling of the mark rather than a child: as a child it would sit inside an
-    // inline span and inherit its clipping and stacking.
-    var mark = el('span', 'ptp2re-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'ptp2re-tipbox', detail));
-    tipTrigger(mark, row);
-    // The visible summary opens it too. The mark is a small target for something
-    // every row now hides half its text behind, and the box opens *above* the
-    // .sub-heading, so it covers the name rather than the sentence being read.
-    tipTrigger(sum, row);
-    // The setting's *name* opens the same box, rather than carrying a plain `title`
-    // that would show the same words in the small browser tooltip this replaces.
-    // Stash's own `<h3 title>` slot is left empty.
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var k in DEFAULTS) {
-      if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    }
-  }
-
-  // The group description is in the group *header*, which is outside the <Collapse>
-  // - so it stays on screen at full height whether the group is expanded or not, and
-  // per-plugin collapse does not shorten it. Hiding all but the first paragraph is
-  // the only thing that does.
-  //
-  // A <button>, never a <span>: SettingGroup's onDivClick walks up from the event
-  // target and returns early for `a` and `button`, so anything else folds the whole
-  // group on click. A button is also the keyboard-reachable choice, which matters
-  // more here than for the tooltips - this is the half of the description that has
-  // nowhere else to be read. stopPropagation is belt and braces for a Stash that
-  // changes that early return.
-  function descCollapsed(sub) { return hasClass(sub, 'ptp2re-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*ptp2re-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' ptp2re-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  function collapseDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'ptp2re-p')) paras++;
-    if (paras < 2) return;                        // one paragraph hides nothing
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    // A re-render drops the button and the class together, so the description
-    // returns to collapsed rather than to a half-state with no way out of it.
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'ptp2re-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  // Re-added rather than tracked: React re-renders this panel whenever a setting
-  // changes and drops anything we put in it, so the tick puts it back. Keyed on the
-  // id, so a re-render that kept it does not produce a second one.
-  //
-  // Clicking the link does not fold the group: SettingGroup's onDivClick walks up
-  // from the event target and returns early for `a` and `button`.
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes
-  // on running it after an update and nothing on screen says so. The settings
-  // heading is where the two numbers meet: Stash builds it as `${name} (${version})`
-  // from the **manifest**, read fresh from the server, while `PLUGIN_VERSION` is what
-  // this script actually is. A disagreement means the page is running code the
-  // manifest has already replaced.
-  //
-  // No query for it - the number is on the page already, and this tick runs once a
-  // second. `installedVersion` asks the server the same question, which is right for
-  // a dialog that opens once and wrong for a timer.
-  //
-  // It catches only what a version bump makes visible; editing the file without
-  // bumping leaves both numbers equal, which is the practical reason this repo bumps
-  // the patch digit on every change.
-  var STALE_ID = 'ptp2re-stale-notice';
-
-  // The group's own h3, not a search of the page: the header row comes before the
-  // setting rows, each of which has an h3 too, and the group is already ours. That
-  // also keeps this working here, where the group is found by setting id rather than
-  // by the heading text.
-  function installedFromHeading(group) {
-    var h3 = group && group.querySelector ? group.querySelector('h3') : null;
-    var t = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? m[1].replace(/^\s+|\s+$/g, '') : null;
-  }
-
-  // Above the description rather than under it: it is the first thing in the group
-  // worth reading, and it leaves the README link's slot alone. Both sit in the group
-  // header, outside Stash's <Collapse>, so a collapsed group still shows the banner.
-  function staleSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
-    return { parent: group, before: group.firstChild };
-  }
-
-
-
-
-  function ensureStaleNotice(group) {
-    var installed = installedFromHeading(group);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, group, !!installed && installed !== PLUGIN_VERSION);
-    // No parenthesised version on the heading means Settings → Tasks, which heads its
-    // group with the bare name - not a mismatch, and nothing to say.
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = staleSlot(group);
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'ptp2re-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
-      'the older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-
-  function ensureReadmeLink() {
-    var group = ownSettingGroup();
-    if (!group) return;
-    // All of these run on every tick, not just when the link is missing: React
-    // re-renders this panel on any settings change, and the class is the only thing
-    // making the description's paragraph breaks visible.
-    injectStyle();
-    if (!hasClass(group, 'ptp2re-own-group')) {
-      group.className = ((group.className || '') + ' ptp2re-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(group);
-    collapseDescription(group);   // after the split: it counts the .ptp2re-p divs
-    tipSettings();
-    ensureStaleNotice(group);     // before the early return: the link outlives it
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'ptp2re-readme', 'PropagateTagsAndPerformers/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noreferrer';
-    link.title = 'Open this plugin\'s documentation';
-    link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
-    var slot = readmeLinkSlot(group);
-    slot.parent.insertBefore(link, slot.before);
-  }
+  // Core's `settingsPage`: the group found by `plugin-<id>-<key>` ids over every
+  // `DEFAULTS` key, the heading as fallback, and Settings - Tasks, headed the same, told
+  // apart by this plugin's task captions; the description split into paragraphs behind
+  // Show more, each multi-paragraph setting reduced to its summary with the rest in a
+  // hover box, the stale-script banner and the README link. `settingsTick` re-adds it
+  // all per tick - React re-renders this panel on any settings change - and keeps what
+  // is this plugin's own: the rows it takes over, the tag links and the task buttons.
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'ptp2re', keys: Object.keys(DEFAULTS), tasks: TASKS, readmeUrl: README_URL,
+    readmeLabel: 'PropagateTagsAndPerformers/README.md', injectStyle: injectStyle,
+  });
 
   // ── Plugin Task buttons ───────────────────────────────────────────────────
   //
   // Settings - Tasks - Plugin Tasks renders every task of every plugin with the same
   // `btn-secondary`, so nothing on that page says which buttons rewrite the library.
-  // Repainting ours in the same amber as their page buttons is the whole change.
-  //
-  // `ownTaskName` decides what is ours - the same function the click interception
-  // keys on, which checks the label *and* the enclosing group's heading, so another
-  // plugin declaring a task by the same name is not repainted.
-  //
-  // Swapping Bootstrap's variant class rather than writing a colour: `btn-warning`
-  // brings Stash's hover, focus and active states with it, which a background-color
-  // of ours would have to restate and then keep in step with the theme.
-  //
-  // `btn-warning` is deliberately not in the strip list - it is what we add, and the
-  // guard above returns before any of this once it is there.
-  var BTN_VARIANTS = /\bbtn-(secondary|primary|success|info|light|dark|link)\b/g;
-
-  function paintButton(btn, variant) {
-    if (hasClass(btn, variant)) return;                        // already ours
-    var cls = String(btn.className || '').replace(BTN_VARIANTS, '');
-    btn.className = cls.replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
-  }
-
-  // Re-applied every tick rather than once: React re-renders this panel and hands
-  // back a button with Stash's own classes, and `paintButton` is a no-op on one that
-  // still carries ours.
-  function paintTaskButtons() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      var name = ownTaskName(nodes[i]);
-      // Amber for the one that rewrites the library, teal for the one that only edits
-      // a setting of ours - what that setting says is already amber on its own row.
-      if (name) {
-        paintButton(nodes[i], name === TASK_PROPAGATE_ALL
-          ? PLUGIN_BTN_VARIANT : READONLY_BTN_VARIANT);
-      }
-    }
-  }
+  // Core's `paintTaskButtons` repaints ours amber, re-applied every tick because React
+  // hands back a button with Stash's own classes; `ownTaskName` decides what is ours,
+  // the same rule the click interception keys on.
 
   // ── The path setting's own row ────────────────────────────────────────────
   //
@@ -7090,7 +6370,7 @@
   // line that replaces Stash's value, and the teal button that replaces its Edit.
   // Returns the line, or null where the row is not on the page.
   function takeOverRow(key, lineId, btnId, taskName) {
-    var row = settingRow(key);
+    var row = settingRow(PLUGIN_ID, key);
     if (!row) return null;
 
     var line = document.getElementById(lineId);
@@ -7155,7 +6435,7 @@
     // invisible from here, and only one of the two is safe to act on.
     if (!canon || unrecognisedPairs(raw) > 0) {
       _normalizedFrom = raw;
-      ptp2re('[ptp2re] the stored path setting is not one this script fully understands ' +
+      console.info('[ptp2re] the stored path setting is not one this script fully understands ' +
         '("' + raw + '"), so it is left exactly as it is. Nothing is copied along a path ' +
         'it could not read; open Path Settings to set them again, or check whether the ' +
         'script running here is older than the plugin installed.');
@@ -7234,7 +6514,7 @@
     renderButtonString(line, s);
   }
 
-  // The automatic modes row, the same way.
+  // The auto-modes row, the same way.
   var AUTO_LINE_ID = 'ptp2re-auto-line';
   var AUTO_BTN_ID  = 'ptp2re-auto-button';
 
@@ -7257,11 +6537,6 @@
     line._ptp2reText = canon;
     renderAutoString(line, s);
   }
-    // circled Latin small letter i
-
-
-
-
 
   // The two rows that name a tag, each with its own link and its own lookup cache.
   var TAG_ROWS = [
@@ -7314,20 +6589,17 @@
 
   function tagRowTick(tagRow) {
     var KEY = tagRow.key;
-    if (!settingRow(KEY)) return;
+    if (!settingRow(PLUGIN_ID, KEY)) return;
     // From the cache rather than the row: Stash renders a STRING setting's value into
-    // a span, and the dialog's own saves never reach the React state behind it.
-    if (!_autoSettings) {
-      // Asked for here rather than left to `pathFieldTick`, which happens to run first
-      // and fill the same cache: a tick that depends on the order of its neighbours is
-      // one an edit somewhere else can silence.
-      if (!_autoSettingsWait) autoSettings().then(function () { exclusionTagTick(); }, function () {});
-      return;
-    }
+    // a span, and the dialog's own saves never reach the React state behind it. Asked
+    // for here rather than left to `pathFieldTick`, which happens to run first and fill
+    // the same cache: a tick that depends on the order of its neighbours is one an edit
+    // somewhere else can silence.
+    if (!settingsOr(exclusionTagTick)) return;
     var name = String(_autoSettings[KEY] || '').trim();
     if (!name) { dropExclusionLink(tagRow); return; }
     lookupExclusionTag(tagRow, name).then(function (tag) {
-      var row = settingRow(KEY);
+      var row = settingRow(PLUGIN_ID, KEY);
       if (!row || name !== _excl[KEY].name) return;      // the box moved on while we asked
       if (!tag) { dropExclusionLink(tagRow); return; }
       var node = document.getElementById(tagRow.linkId);
@@ -7360,8 +6632,8 @@
   }
 
   function settingsTick() {
-    ensureReadmeLink();
-    paintTaskButtons();
+    page.decorate(page.group());
+    paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
     pathFieldTick();
     buttonsFieldTick();
     autoFieldTick();
@@ -7404,7 +6676,7 @@
   // this plugin's buttons simply do not appear there - the same failure mode as a
   // missing route.
   //
-  // Reuses the auto mode machinery wholesale rather than a third planner: `AutoRun`
+  // Reuses the auto-mode machinery wholesale rather than a third planner: `AutoRun`
   // already plans a *named* set of ids without paging the library, which is exactly
   // what one entity is. The only thing a click adds is where the result goes -
   // `run.apply()` unchanged for "save immediately", or pushed into a captured form
@@ -7441,6 +6713,9 @@
   // window.PluginApi later than usual.
   // Whether staging is possible at all on this Stash. Read by `runManual`, which saves
   // rather than staging when it is false.
+  // COMPAT: a Stash with no PluginApi component patching, older than the 0.31.0 this plugin
+  // requires (since PropagateTagsAndPerformers 0.16.0); remove when never on its own: Stash
+  // does not enforce the floor.
   var _selectPatchesInstalled = false;
 
   function installSelectPatches() {
@@ -7467,10 +6742,6 @@
     _warnedNoStaging = true;
     console.warn('[ptp2re] staging is unavailable - this Stash does not expose PluginApi ' +
       'component patching, so the manual buttons will copy and save directly.');
-  }
-
-  function idsOf(items) {
-    return (items || []).map(function (t) { return String(t.id); }).sort().join(',');
   }
 
   // Which capture is the control in front of the user: ᝯㄝₓ Core's rule, because getting
@@ -7543,7 +6814,7 @@
   //
   // **Nothing here writes.** The "save immediately" branch used to call
   // `run.apply()` on the spot, which was the one thing in this plugin a user could
-  // trigger with no plan in front of them - the task has a dialog, the auto modes are
+  // trigger with no plan in front of them - the task has a dialog, the auto-modes are
   // opted into per path, and this had neither. It now opens the same dialog the task
   // does, scoped to the one entity and the one path (`Run`'s `scope`), so every write
   // this plugin makes on purpose is either reviewed or staged.
@@ -7570,7 +6841,7 @@
           return { mode: 'dialog', count: 0 };
         });
       }
-      // `guarded()` around the staging path for the same reason auto mode needs it -
+      // `guarded()` around the staging path for the same reason auto-mode needs it -
       // it is only the writing branch that matters, and the dialog guards its own.
       return guarded(function () {
         return autoContext(s).then(function (ctx) {
@@ -7671,36 +6942,8 @@
   // detail-view navbar carrying a Delete button, and the edit form itself carrying
   // Cancel/Save in its place. We want the edit-form instance, so - the opposite
   // filter from MergePerformerTagsToScenes' performer button, which wants the
-  // *other* one - skip any `.details-edit` that carries a Delete button.
-  function findManualButtonContainer() {
-    var c = document.querySelector('.edit-buttons');
-    if (c) return c;
-    var candidates = document.querySelectorAll('.details-edit');
-    for (var i = 0; i < candidates.length; i++) {
-      if (!candidates[i].querySelector('button.delete')) return candidates[i];
-    }
-    return null;
-  }
-
-
-
-
-
-
-
-  // The index of our button among the container's children, read once from a single
-  // `childNodes` snapshot: a real `NodeList` is live, and this repo's own test harness
-  // models one that is rebuilt on every read, which was once a bug here.
-  function childIndex(kids, button) {
-    for (var i = 0; i < kids.length; i++) { if (kids[i] === button) return i; }
-    return -1;
-  }
-
-
-
-
-
-
+  // *other* one - skip any `.details-edit` that carries a Delete button. That is
+  // Core's `findEditContainer`.
 
   // Whether some *other* loaded plugin declares this same path - the `declares`
   // registry from step 7, read here for the first time by anything other than the
@@ -7803,7 +7046,7 @@
       var check = _existenceCheck = {
         target: rt.target, id: rt.id, pathsKey: wantKey, status: 'pending', adds: null, has: null,
       };
-      gateLog('probing ' + TARGETS[rt.target].label + ' ' + rt.id + ' for ' +
+      gate.log('probing ' + TARGETS[rt.target].label + ' ' + rt.id + ' for ' +
         plural(paths.length, 'path') + ' - the outcomes below are this probe\'s');
       probeButtons(rt.target, paths, rt.id, s).then(function (r) {
         if (_existenceCheck !== check) return;
@@ -7830,7 +7073,7 @@
   // A tick whose settings read failed - Stash restarting, the network gone - draws nothing
   // and says so once, rather than leaving a rejection nobody handles, once a second.
   function settingsUnread(e) {
-    gateLogOnce('t:settings', 'no buttons drawn: the settings could not be read - ' +
+    gate.once('t:settings', 'no buttons drawn: the settings could not be read - ' +
       (e && e.message ? e.message : String(e)));
   }
 
@@ -7839,7 +7082,7 @@
       var any = anyButtonOn(s);
       var rt = any ? currentRouteTarget() : null;
       if (!rt) {
-        gateLogOnce('t:route', any
+        gate.once('t:route', any
           ? 'no target buttons: this route is not one of the four target pages'
           : 'no target buttons: no manual button is switched on');
         clearManualButtons(); return;
@@ -7848,13 +7091,13 @@
         return p.target === rt.target && buttonOn(s, 'target', p);
       });
       if (!wanted.length) {
-        gateLogOnce('t:route', 'no target buttons on ' + TARGETS[rt.target].label + ' ' + rt.id +
+        gate.once('t:route', 'no target buttons on ' + TARGETS[rt.target].label + ' ' + rt.id +
           ': no enabled path with its button on writes into a ' + TARGETS[rt.target].label.toLowerCase());
         clearManualButtons(); return;
       }
-      gateLogOnce('t:route', TARGETS[rt.target].label + ' ' + rt.id + ' - ' +
+      gate.once('t:route', TARGETS[rt.target].label + ' ' + rt.id + ' - ' +
         plural(wanted.length, 'enabled path') + ' into this page: ' + wanted.map(function (p) { return p.id; }).join(', '));
-      var container = findManualButtonContainer();
+      var container = findEditContainer();
       if (!container) {
         // No row yet - on a Scene that means the Edit tab is not open. Probe anyway:
         // see `armExistenceCheck`. The dedup filter below needs a container to read, so
@@ -7862,13 +7105,13 @@
         // is *showing* a button for it, so in every other case the key is the one the
         // filtered call would have produced and the answer is already there when the
         // row appears.
-        gateLogOnce('t:container', 'no button row yet on ' + TARGETS[rt.target].label + ' ' + rt.id +
+        gate.once('t:container', 'no button row yet on ' + TARGETS[rt.target].label + ' ' + rt.id +
           ' - probing anyway; this usually means the Edit tab is not open');
         armExistenceCheck(rt, wanted, s);
         clearManualButtons();
         return;
       }
-      gateLogOnce('t:container', 'button row found on ' + TARGETS[rt.target].label + ' ' + rt.id);
+      gate.once('t:container', 'button row found on ' + TARGETS[rt.target].label + ' ' + rt.id);
       ensureRowSpacing(container);
       // A path another plugin also declares, whose button is already visible right
       // here, is dropped from what we want before either loop below ever sees it -
@@ -7876,7 +7119,7 @@
       // plugin's appears, and the add loop never puts a second one up beside it.
       var paths = wanted.filter(function (p) {
         var dropped = otherPluginDeclaresPath(p.id) && foreignButtonAlreadyShows(container, buttonLabel(p, s));
-        if (dropped) gateLogOnce('t:dedup:' + p.id, p.id + ' - hidden: another plugin is already ' +
+        if (dropped) gate.once('t:dedup:' + p.id, p.id + ' - hidden: another plugin is already ' +
           'showing "' + buttonLabel(p, s) + '" in this row');
         return !dropped;
       });
@@ -7906,11 +7149,11 @@
       // point: a probe runs once per entity, so a cached answer produced no line at
       // all - which is exactly the state someone is in when they switch the debug flag
       // on while already looking at the page whose buttons they are asking about.
-      // `gateLogOnce` keys on the path and carries the entity in the text, so a repeat
+      // `gate.once` keys on the path and carries the entity in the text, so a repeat
       // of the same answer is silent and a change (or a navigation) speaks.
       var adds = _existenceCheck.adds, seen = _existenceCheck.has;
       paths.forEach(function (p) {
-        gateLogOnce('t:out:' + p.id, TARGETS[rt.target].label + ' ' + rt.id + ' - ' + p.id + ' - ' +
+        gate.once('t:out:' + p.id, TARGETS[rt.target].label + ' ' + rt.id + ' - ' + p.id + ' - ' +
           // `has` and `adds` are both kept precisely so this can tell the two reasons
           // for hiding apart: "there is no studio here" and "the studio's tags are
           // already all on this scene" look identical from the button.
@@ -7997,7 +7240,7 @@
   // target buttons on its Edit tab and a source button on its detail view, and a
   // `sceneUpdate` is the save that changes what either would do.
   //
-  // Matching on the id alone, rather than on the id *and* the entity type the mutation
+  // Matching on the id alone, rather than on the id *and* the entity-type the mutation
   // names, is deliberate: the two route matchers agree on the type for every page this
   // plugin draws a button on, so adding the type would only be a second way to say the
   // same thing. The cost of a false positive is one re-probe.
@@ -8038,7 +7281,7 @@
     return template.replace('{mode}', pathCommon(s, path) ? 'common' : 'all');
   }
 
-  // The other half of the swap `findManualButtonContainer` already reads: the
+  // The other half of the swap `findEditContainer` already reads: the
   // detail-view navbar carrying a Delete button, rather than the edit form a target
   // button wants. This is where a source button belongs, on the page *about* the
   // source entity rather than inside its edit form.
@@ -8097,7 +7340,7 @@
     return null;
   }
 
-  // Which entity type a tab shows, from its `data-rb-event-key`. The keys are
+  // Which entity-type a tab shows, from its `data-rb-event-key`. The keys are
   // `<page>-<what>-panel` (`scene-details-panel`, `scene-edit-panel`), so the middle
   // segment is the answer. Gallery's image-list strip uses bare keys (`images`, `add`)
   // with neither prefix nor suffix, hence the no-hyphen fallback.
@@ -8412,7 +7655,7 @@
   //
   //   - the `fetch` wrapper, on a save of the entity in view. **Unconditional on the
   //     auto-mode settings**: these caches decide whether a button appears, and a scene
-  //     that just gained a performer has to gain its button whether or not auto mode is
+  //     that just gained a performer has to gain its button whether or not auto-mode is
   //     also configured to react. `MergePerformerTagsToScenes` learned this one first
   //     and its AGENTS.md §3 says the same thing about not tidying it into the auto
   //     conditions.
@@ -8436,7 +7679,7 @@
       var any = anyButtonOn(s);
       var rt = any ? currentSourceRouteTarget() : null;
       if (!rt) {
-        gateLogOnce('s:route', any
+        gate.once('s:route', any
           ? 'no source buttons: this route is not one of the six source pages'
           : 'no source buttons: no manual button is switched on');
         clearManualSourceButtons(); return;
@@ -8451,30 +7694,30 @@
           buttonOn(s, 'source', p);
       });
       if (!candidates.length) {
-        gateLogOnce('s:paths', 'no source buttons on ' + SOURCES[rt.sourceType].label + ' ' + rt.id +
+        gate.once('s:paths', 'no source buttons on ' + SOURCES[rt.sourceType].label + ' ' + rt.id +
           ': no enabled path with its button on reads from a ' + SOURCES[rt.sourceType].label.toLowerCase() +
           ' (both marker paths have no detail page and never qualify)');
         clearManualSourceButtons(); return;
       }
-      gateLogOnce('s:paths', SOURCES[rt.sourceType].label + ' ' + rt.id + ' - ' +
+      gate.once('s:paths', SOURCES[rt.sourceType].label + ' ' + rt.id + ' - ' +
         plural(candidates.length, 'candidate path') + ': ' + candidates.map(function (p) { return p.id; }).join(', '));
       var container = findSourceButtonContainer();
       if (!container) {
-        gateLogOnce('s:container', 'nowhere to put a source button on ' + SOURCES[rt.sourceType].label +
+        gate.once('s:container', 'nowhere to put a source button on ' + SOURCES[rt.sourceType].label +
           ' ' + rt.id + ' - no detail action row and no tab strip');
         clearManualSourceButtons(); return;
       }
-      gateLogOnce('s:container', 'source button row on ' + SOURCES[rt.sourceType].label + ' ' + rt.id +
+      gate.once('s:container', 'source button row on ' + SOURCES[rt.sourceType].label + ' ' + rt.id +
         ': ' + (hasClass(container, SRC_ROW_CLASS) ? 'our own, under the tab strip' : "Stash's detail action row"));
       ensureRowSpacing(container);
       var paths = candidates.filter(function (p) {
         var dropped = otherPluginDeclaresPath(p.id) && foreignButtonAlreadyShows(container, sourceButtonLabel(p, s));
-        if (dropped) gateLogOnce('s:dedup:' + p.id, p.id + ' - hidden: another plugin is already ' +
+        if (dropped) gate.once('s:dedup:' + p.id, p.id + ' - hidden: another plugin is already ' +
           'showing "' + sourceButtonLabel(p, s) + '" in this row');
         return !dropped;
       }).filter(function (p) {
         var sel = targetTabSelected(p);
-        gateLogOnce('s:tab:' + p.id, p.id + ' - ' + (sel === null
+        gate.once('s:tab:' + p.id, p.id + ' - ' + (sel === null
           ? 'no ' + TARGETS[p.target].plural + ' tab found on this page, so the tab does not gate it'
           : sel ? 'the ' + TARGETS[p.target].plural + ' tab is open'
           : 'hidden: the ' + TARGETS[p.target].plural + ' tab is not the one open'));
@@ -8485,7 +7728,7 @@
       if (!_existenceCheckSrc || _existenceCheckSrc.sourceType !== rt.sourceType ||
           _existenceCheckSrc.id !== rt.id || _existenceCheckSrc.pathsKey !== wantKey) {
         var check = _existenceCheckSrc = { sourceType: rt.sourceType, id: rt.id, pathsKey: wantKey, status: 'pending', has: null };
-        gateLog('probing ' + SOURCES[rt.sourceType].label + ' ' + rt.id + ' for ' +
+        gate.log('probing ' + SOURCES[rt.sourceType].label + ' ' + rt.id + ' for ' +
           plural(paths.length, 'path') + ' - the outcomes below are this probe\'s');
         checkSourceButtonExistence(paths, rt.id, s).then(function (r) {
           if (_existenceCheckSrc !== check) return;
@@ -8503,7 +7746,7 @@
       var srcHas = _existenceCheckSrc.has;
       var srcReaches = _existenceCheckSrc.reaches || {};
       paths.forEach(function (p) {
-        gateLogOnce('s:out:' + p.id, SOURCES[rt.sourceType].label + ' ' + rt.id + ' - ' + p.id + ' - ' +
+        gate.once('s:out:' + p.id, SOURCES[rt.sourceType].label + ' ' + rt.id + ' - ' + p.id + ' - ' +
           (!srcHas ? 'SHOWN: the probe failed, so every button is shown rather than hidden'
             : srcHas[p.id] ? 'SHOWN: reaches at least one ' + TARGETS[p.target].label.toLowerCase() +
                 ' and carries something to copy'
@@ -8584,45 +7827,15 @@
   // "added job to queue" toast - from ever running.
   //
   // The button is only ours if it carries one of our task names AND sits inside a
-  // SettingGroup headed with the plugin name; another plugin is free to declare a
-  // task with the same name. When the group cannot be identified the click is left
+  // SettingGroup headed with the plugin name (Core's `ownTaskName`); another plugin is
+  // free to declare a task with the same name. When the group cannot be identified the click is left
   // alone on purpose: layer 2 still blocks it, keyed on the plugin id the mutation
   // itself carries, which is the authoritative check.
-  function ownTaskName(btn) {
-    var label = (btn.textContent || '').trim();
-    if (TASKS.indexOf(label) === -1) return null;
-    // Answer from the button's *own* SettingGroup and stop there. Testing every
-    // ancestor for an h3 - which is what this used to do - climbs past the group
-    // on a miss and into the panel holding every plugin's group, where
-    // `querySelector('h3')` answers with whichever plugin is listed first. A plugin
-    // declaring a task by the same name as ours was therefore hijacked whenever we
-    // happened to be above it, which is the one thing the heading check exists to
-    // stop. Found by the tasks-page check in `.tests/placement.test.js`.
-    //
-    // A group's first h3 is its heading: PluginTasks renders it in the header, above
-    // the per-task `Setting` rows that each carry an h3 of their own - which is also
-    // why the walk cannot simply stop at the nearest ancestor containing any h3.
-    //
-    // The any-ancestor walk survives as a fallback for a Stash that does not put
-    // `setting-group` on that box. It carries the bug above, and that is deliberate:
-    // it is the behaviour every release before this one shipped, so it can be no worse
-    // than what it replaces.
-    var node = btn;
-    var fallback = null;
-    for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-      var heading = node.querySelector ? node.querySelector('h3') : null;
-      var ours = !!heading && headingIsOurs(heading.textContent);
-      if (hasClass(node, 'setting-group')) return ours ? label : null;
-      if (ours) fallback = label;
-    }
-    return fallback;
-  }
-
   document.addEventListener('click', function (event) {
     var target = event.target;
     var btn = target && target.closest ? target.closest('button') : null;
     if (!btn) return;
-    var taskName = ownTaskName(btn);
+    var taskName = ownTaskName(btn, PLUGIN_NAME, TASKS);
     if (!taskName) return;
     event.preventDefault();
     event.stopPropagation();
@@ -8631,19 +7844,7 @@
 
   // Layer 2: backstop for a click layer 1 did not recognise. The mutation is
   // answered from here with a synthesized success rather than being forwarded, so
-  // the server never tries to exec a plugin that has nothing to exec.
-  function fakeOk(payload) {
-    var body = JSON.stringify(payload);
-    if (typeof Response === 'function') {
-      return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-    return {
-      ok: true, status: 200,
-      json: function () { return Promise.resolve(JSON.parse(body)); },
-      text: function () { return Promise.resolve(body); },
-      clone: function () { return fakeOk(payload); },
-    };
-  }
+  // the server never tries to exec a plugin that has nothing to exec (Core's `fakeOk`).
 
   var _fetch = window.fetch;
   window.fetch = function (url, opts) {
@@ -8688,7 +7889,7 @@
 
     try {
 
-      // Our own settings being saved. Auto mode caches them for AUTO_SETTINGS_TTL_MS,
+      // Our own settings being saved. Auto-mode caches them for AUTO_SETTINGS_TTL_MS,
       // so without this, changing an exclusion filter and immediately saving an entity
       // would be governed by the old settings for up to ten seconds. Two details:
       // re-read only once the mutation has landed, or the old values come straight
@@ -8708,7 +7909,7 @@
       // type it names and whatever the auto-mode settings say. Deliberately its own
       // branch, ahead of and independent of both reaction branches below: those are
       // gated on `a3`/`a4` and on `autoSuppressed()`, and a button appearing after a
-      // save is not something a user should have to enable auto mode to get. See
+      // save is not something a user should have to enable auto-mode to get. See
       // `invalidateButtonProbes`.
       var savedIds = (input.ids || (input.id != null ? [input.id] : []));
       if (savedIds.length && (targetOfMutation(q) || sourceOfMutation(q)) && viewingOneOf(savedIds)) {

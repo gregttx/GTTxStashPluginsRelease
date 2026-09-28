@@ -21,18 +21,19 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[npt] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[npt] ᝯㄝₓ Normalize Parent Tags cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
+  var hasOwn = C.hasOwn, el = C.el, byClass = C.byClass, gqlRequest = C.gqlRequest, pluginConfig = C.pluginConfig,
+    settingRow = C.settingRow, displayName = C.displayName, mutationSucceeded = C.mutationSucceeded, fakeOk = C.fakeOk,
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, ownTaskName = C.ownTaskName, paintButton = C.paintButton,
+    paintTaskButtons = C.paintTaskButtons;
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, insertBeforeImportantAction = C.insertBeforeImportantAction,
     findEditContainer = C.findEditContainer,
     applyButtonSpacing = C.applyButtonSpacing, domBus = C.domBus,
@@ -48,6 +49,9 @@
     cfTipTick = C.cfTipTick, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
     entityTipName = C.entityTipName, splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny;
+  var writePluginSettings = C.writePluginSettings;
+  var tagHasDetail = C.tagHasDetail, tagTooltip = C.tagTooltip, lowerId = C.lowerId, partsText = C.partsText;
+  var runLog = C.runLog, LOG_RENDER_CAP = C.runLogCap;   // log lines kept in the DOM; all stay in `lines`
 
   var PLUGIN_ID   = 'NormalizeParentTags';
   var PLUGIN_NAME = 'ᝯㄝₓ Normalize Parent Tags';
@@ -67,7 +71,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.0.0';
+  var PLUGIN_VERSION = '6.0.5';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -85,18 +89,18 @@
     'script\'s own version - the settings page reads the manifest instead, which can be newer ' +
     'than the script your browser has cached.');
 
-  // One task does both directions. Prune and Roll Up were two tasks for as long as a
-  // run had one mode for the whole library; now the mode is per entity type, chosen
+  // One task does both directions. Prune and Roll-Up were two tasks for as long as a
+  // run had one mode for the whole library; now the mode is per entity-type, chosen
   // in the dialog, and "which task did you press" would only have set a default that
   // the selectors immediately override.
   var TASK_RUN   = 'Normalize Parent Tags...';
-  var TASK_MODES = 'Auto Mode Settings...';
+  var TASK_MODES = 'Auto-Mode Settings...';
   var TASK_TREE  = 'Show Tag Hierarchy...';
   var TASKS = [TASK_RUN, TASK_MODES, TASK_TREE];
 
   // Stash renders every plugin task with the same `btn-secondary`, so nothing on the
   // Tasks page says which of these three rewrites the library. Amber for the two that
-  // lead to writes - Normalize writes the library, Auto Mode Settings decides what is
+  // lead to writes - Normalize writes the library, Auto-Mode Settings decides what is
   // written silently on every save - and teal for the one that only reads: Show Tag
   // Hierarchy opens a viewer and writes nothing, and it is the button a user should be
   // able to press without checking first.
@@ -113,17 +117,9 @@
 
   var PAGE_SIZE      = 1000;  // entities per find query
   var CHUNK_SIZE     = 100;   // entity ids per bulk mutation
-  var LOG_RENDER_CAP = 1000;  // log lines kept in the DOM; all of them stay in memory
-  var LOG_FLUSH_MS   = 100;
-  var LEASE_TTL_MS   = 300000;
-  // The busy cursor under the last log line. The counters say how far a pass has
-  // got; this says it is still going, which is the question a run that spends
-  // seconds on one page of a large library leaves unanswered.
-  var SPIN_FRAMES    = ['▙', '▛', '▜', '▟'];
-  var SPIN_MS        = 125;   // one four-frame cycle at 2Hz
   var UNDO_ARM_MS    = 4000;  // how long Undo stays armed for its second click
 
-  // Auto mode (see "Auto normalize on entity updates" below). The lease it takes is
+  // Auto-mode (see "Auto normalize on entity updates" below). The lease it takes is
   // measured in the seconds one reaction lasts, not the minutes a library-wide task
   // does, so it gets its own much shorter TTL - a crashed tab must not stand the
   // sibling down for five minutes over a single scene save.
@@ -133,12 +129,7 @@
   var AUTO_COOLDOWN_MS     = 8000;   // per-entity: how long after our own write we ignore it
   var AUTO_COOLDOWN_MAX    = 2000;   // entries kept before the expired ones are swept
 
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-  }
-
-
-  // ── Entity types ──────────────────────────────────────────────────────────
+  // ── Entity-types ──────────────────────────────────────────────────────────
   //
   // Processing order is the array order and is deliberate: performers first, so
   // that the scene-fanning auto-merge in MergePerformerTagsToScenes (if it is
@@ -155,7 +146,7 @@
   // itself SCENE MARKERS, and the setting is a single line the user may type by hand,
   // where a token with a space in it is a token that cannot be parsed back.
   //
-  // `single` is the per-entity update mutation, watched by auto mode alongside
+  // `single` is the per-entity update mutation, watched by auto-mode alongside
   // `bulk`. The two names never collide under a \b-anchored regex because Stash
   // capitalises the type inside the bulk name: "bulkSceneUpdate" does not contain
   // "sceneUpdate", and neither contains "sceneMarkerUpdate".
@@ -207,37 +198,22 @@
   // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root AGENTS.md.
   // A lease asks reactive plugins in this tab to stand down while we write. It is
   // advisory and always expires, so a crash cannot disable anyone permanently.
-
-
-  function acquireLease(label, ttl) {
-    var c = coop();
-    var ms = ttl || LEASE_TTL_MS;
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + ms };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + ms; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
-
+  // Taken through Core's `lease`, under this plugin's id.
   function siblingRespectsLeases() {
     return !!coop().respecters[SIBLING_ID];
   }
 
-  // Registered at load, because auto mode (below) makes this plugin reactive as well
+  // Registered at load, because auto-mode (below) makes this plugin reactive as well
   // as bulk. It is what lets another plugin's bulk run tell "will stand down" apart
   // from "too old to know about leases" - the same signal this plugin's own dialog
   // reads off the sibling. Registering unconditionally, rather than only while an
-  // auto mode is enabled, is deliberate: the flag says this copy honours the
+  // auto-mode is enabled, is deliberate: the flag says this copy honours the
   // protocol, which is true whatever the settings happen to be.
   coop().respecters[PLUGIN_ID] = true;
 
   // ── The API this plugin publishes ─────────────────────────────────────────
   //
-  // Prune and Roll Up are this plugin's operations, and another plugin offering them
+  // Prune and Roll-Up are this plugin's operations, and another plugin offering them
   // has two ways to do it: copy the rules, or call the plugin that owns them. The
   // first was tried - `TagBundleClipboard` mirrored the tag-exclusion filters
   // byte-for-byte - and it has the failure a copy always has: a filter added here is
@@ -285,7 +261,7 @@
   // settings and the hierarchy are read once, here, and the returned `plan` is
   // synchronous - a checkbox that had to await a round trip would be worse than no
   // feature at all. Both reads are this plugin's own auto-mode caches, so a page with
-  // auto mode running pays nothing extra.
+  // auto-mode running pays nothing extra.
   function apiPrepare(opts) {
     var o = opts || {};
     var type = apiType(o.entityType);
@@ -335,14 +311,14 @@
     var c = coop();
     var now = Date.now();
     // Expired leases are dropped rather than honoured: a tab that crashed mid-run
-    // must not disable auto mode until the next page reload.
+    // must not disable auto-mode until the next page reload.
     for (var i = c.leases.length - 1; i >= 0; i--) {
       if (!c.leases[i] || !(c.leases[i].until > now)) c.leases.splice(i, 1);
     }
     if (!c.leases.length) { _standDownAnnounced = false; return false; }
     if (!_standDownAnnounced) {
       _standDownAnnounced = true;
-      console.info('[npt] auto mode is standing down while ' + c.leases[0].owner +
+      console.info('[npt] auto-mode is standing down while ' + c.leases[0].owner +
         ' applies bulk changes (' + c.leases[0].label + ')');
     }
     return true;
@@ -370,21 +346,6 @@
     );
   }
 
-  // ── GraphQL ───────────────────────────────────────────────────────────────
-
-  function gqlRequest(query, variables) {
-    return fetch('/graphql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query, variables: variables }),
-    })
-      .then(function (resp) { return resp.json(); })
-      .then(function (json) {
-        if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
-        return json.data;
-      });
-  }
-
   // ── Settings ──────────────────────────────────────────────────────────────
   //
   // Read once at the start of each run. `configuration { plugins }` cannot be
@@ -394,7 +355,7 @@
   // The a1/b2/c3 prefixes are the only way to control the order Stash renders the
   // settings in: `settings:` is a YAML map, so the manifest's order is lost and
   // what the page shows is the keys sorted alphabetically. The prefixes buy the
-  // grouping the user reads top to bottom - entity types in processing order,
+  // grouping the user reads top to bottom - entity-types in processing order,
   // then entity-level exclusions, then the tag filters in add/remove pairs. Keys
   // are never shown in the UI, but they *are* the storage key, so renaming one
   // orphans whatever the user had configured under the old name.
@@ -419,7 +380,7 @@
   // pruned or rolled up on its own, which is three states - and a Stash plugin
   // setting is BOOLEAN, NUMBER or STRING, with no tri-state and no repeated group, so
   // seven tri-states either become fourteen checkboxes with an illegal combination in
-  // every pair, or one line. It is one line, and the "Auto Mode Settings..." task is
+  // every pair, or one line. It is one line, and the "Auto-Mode Settings..." task is
   // the editor for it: the field is there to be *read* at a glance and edited by hand
   // when someone wants to, not to be the only way in.
   //
@@ -432,8 +393,8 @@
   var MODE_OFF = 'off', MODE_PRUNE = 'prune', MODE_ROLLUP = 'rollup';
   var MODE_TOKEN = { off: 'OFF', prune: 'PRUNE', rollup: 'ROLLUP' };
   // The same three modes as words. One table, so the selectors, the recap lines and
-  // the settings row cannot end up calling Roll Up three different things.
-  var MODE_LABEL = { off: 'Off', prune: 'Prune', rollup: 'Roll Up' };
+  // the settings row cannot end up calling Roll-Up three different things.
+  var MODE_LABEL = { off: 'Off', prune: 'Prune', rollup: 'Roll-Up' };
 
   // "SCENES", "scene", "Scenes" - all the same type. Nothing else is accepted: a
   // word this does not know is not a typo to guess at, it is a pair to ignore.
@@ -500,14 +461,18 @@
   // The same configuration used to be `a1EnablePerformers`...`a7EnableMarkers`
   // saying which types a run covered, and `a8AutoPruneOnUpdate`/`a9AutoRollUpOnUpdate`
   // saying what happened automatically to all of them. The mapping is exact: an
-  // enabled type takes whichever single auto mode was on, and everything else is OFF.
-  // Both auto modes at once was that release's documented no-op - they are inverses -
+  // enabled type takes whichever single auto-mode was on, and everything else is OFF.
+  // Both auto-modes at once was that release's documented no-op - they are inverses -
   // so it migrates to OFF rather than picking one.
   //
   // Renaming a key orphans what the user had; this is the one thing that stops the
   // rename from being a silent reset. It runs once per page, only when the new
   // setting is empty and at least one old key is set, and it writes the result back
   // so the settings page shows it.
+  //
+  // COMPAT: the a1EnablePerformers..a7EnableMarkers and a8AutoPruneOnUpdate/a9AutoRollUpOnUpdate
+  // booleans a1AutoModes replaced (since NormalizeParentTags 4.0.0); remove when never on its
+  // own: an install may skip releases.
   var LEGACY_ENABLE = {
     performers: 'a1EnablePerformers', studios: 'a2EnableStudios', groups: 'a3EnableGroups',
     galleries: 'a4EnableGalleries', scenes: 'a5EnableScenes', images: 'a6EnableImages',
@@ -549,27 +514,16 @@
   // while two others copied the broken shape, which is why the rule is now in the
   // repo-root AGENTS.md rather than in a comment.
   //
-  // So: read the stored map, apply the patch to a copy, send the whole thing. The read
-  // is per write rather than off the settings cache - a value another tab changed is a
-  // value we would otherwise write back over - and this mutation is rare enough that
-  // one query is nothing.
+  // So: read the stored map, apply the patch to a copy, send the whole thing - Core's
+  // `writePluginSettings`. The read is per write rather than off the settings cache - a
+  // value another tab changed is a value we would otherwise write back over - and this
+  // mutation is rare enough that one query is nothing.
   function writeOwnSettings(patch) {
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
-      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
-      var input = {}, k;
-      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-      for (k in patch) if (hasOwn(patch, k)) input[k] = patch[k];
-      return gqlRequest(
-        'mutation NPTSaveSettings($plugin_id: ID!, $input: Map!) {' +
-        '  configurePlugin(plugin_id: $plugin_id, input: $input)' +
-        '}',
-        { plugin_id: PLUGIN_ID, input: input }
-      );
-    });
+    return writePluginSettings(PLUGIN_ID, patch, 'NPTSaveSettings');
   }
 
   // Stash's own settings page sends the same mutation, and our fetch hook already
-  // notices it and drops the settings cache - so a save made here reaches auto mode
+  // notices it and drops the settings cache - so a save made here reaches auto-mode
   // exactly as one made by hand does.
   function saveAutoModes(text) {
     _savingModes = true;
@@ -585,6 +539,8 @@
 
   var _migrated = false;
 
+  // COMPAT: writes back, once, the string those booleans map to
+  // (since NormalizeParentTags 4.0.0); remove when LEGACY_ENABLE goes.
   function migrateLegacy(text) {
     if (_migrated) return;
     _migrated = true;
@@ -592,7 +548,7 @@
     saveAutoModes(text).then(null, function (e) {
       npt('[npt] the migrated auto-mode setting could not be saved (' +
         (e && e.message ? e.message : e) + '). It is being used for this page all the same; ' +
-        'set it by hand from the Auto Mode Settings task if this keeps happening.');
+        'set it by hand from the Auto-Mode Settings task if this keeps happening.');
     });
   }
 
@@ -605,6 +561,8 @@
       if (!hasOwn(DEFAULTS, k)) continue;
       s[k] = typeof DEFAULTS[k] === 'boolean' ? !!raw[k] : (raw[k] || '');
     }
+    // COMPAT: the old booleans, read where a1AutoModes is empty
+    // (since NormalizeParentTags 4.0.0); remove when LEGACY_ENABLE goes.
     if (!String(s.a1AutoModes).replace(/^\s+|\s+$/g, '') && hasLegacySettings(raw)) {
       s.a1AutoModes = formatAutoModes(legacyModes(raw));
       migrateLegacy(s.a1AutoModes);
@@ -717,75 +675,9 @@
   // similarly named tags apart. Two callers - the viewer's rows, where they are the
   // whole point of hovering, and the run dialog's closing recap, where the tags are
   // the only ones a user is deciding about. Neither is worth putting `description` on
-  // the run's own tag query for; both fetch it where it is needed. See §5a.
-
-  var TIP_ALIASES = 8;        // aliases named in a tooltip before the rest are a count
-  var TIP_ALIAS_CHARS = 120;  // and the width that can cut the list shorter still
-  // Shared by all three tooltip blocks in this file - the hierarchy viewer's, the tag
-  // link's and the custom field mark's. Each arrived carrying its own copy of this
-  // declaration, which in one IIFE is three `var`s of one name where the last one wins;
-  // they agreed, so nothing showed, and a drift would have been silent. Neither this nor
-  // `tipText` wears a `tag` in its name: they are about a native `title`, not about tags.
-  var TIP_DESC_CHARS = 240;   // how much of a description the excerpt carries
-
-  // Free text arrives with newlines and runs of spaces in it, and a tooltip line is
-  // one line however the description was written.
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
-  }
-
-  // Cut on the last space before the limit so a word is never sliced in half - unless
-  // the only space is near the start, where honouring it would throw most of the
-  // excerpt away and say less than the blunt cut would.
-  function excerpt(text, max) {
-    var s = oneLine(text);
-    if (s.length <= max) return s;
-    var cut = s.slice(0, max);
-    var space = cut.lastIndexOf(' ');
-    if (space > max * 0.6) cut = cut.slice(0, space);
-    return cut.replace(/[\s,;:.\-]+$/, '') + '…';
-  }
-
-  function aliasList(t) {
-    return (((t && t.aliases) || []).map(oneLine)).filter(function (a) { return !!a; });
-  }
-
-  // Whether a tag has anything to say beyond its name and id. The recap's spans
-  // already carry both, so a tooltip there would open on a hover and repeat the line
-  // underneath it - and since nothing marks which tags have one, every hover that
-  // does open had better say something new. The viewer's rows tooltip
-  // unconditionally instead, because there the full name is itself information: a
-  // long one is cut off by the row.
-  function tagHasDetail(t) {
-    return !!(aliasList(t).length || oneLine(t && t.description));
-  }
-
-  // Both lists are capped rather than rendered whole - a tag with forty aliases or a
-  // paragraph of description would otherwise put a wall of text under the pointer,
-  // which is worse than the caption it replaced. The tail is counted rather than
-  // dropped silently, so a truncated list still says there is more, and the tag page
-  // is where to read all of it.
-  function tagTooltip(t, id) {
-    var lines = [oneLine((t && t.name) || 'unknown'), 'tag id ' + id];
-
-    var aliases = aliasList(t);
-    if (aliases.length) {
-      var shown = [], used = 0;
-      for (var i = 0; i < aliases.length; i++) {
-        // The first alias is always named, excerpted if it has to be: "and 3 more"
-        // on its own would leave the tooltip listing nothing at all.
-        if (shown.length && (shown.length >= TIP_ALIASES || used + aliases[i].length > TIP_ALIAS_CHARS)) break;
-        shown.push(shown.length ? aliases[i] : excerpt(aliases[i], TIP_ALIAS_CHARS));
-        used += aliases[i].length + 2;
-      }
-      var rest = aliases.length - shown.length;
-      lines.push('Aliases: ' + shown.join(', ') + (rest > 0 ? ', and ' + rest + ' more' : ''));
-    }
-
-    var desc = oneLine(t && t.description);
-    if (desc) lines.push('Description: ' + excerpt(desc, TIP_DESC_CHARS));
-    return lines.join('\n');
-  }
+  // the run's own tag query for; both fetch it where it is needed. See §5a. The
+  // tooltip itself is Core's `tagTooltip`, and `tagHasDetail` says whether a recap's
+  // tag has one.
 
   // One query for the tags a recap names - tens of them, after a scan that read the
   // library - rather than two more fields on every tag in the hierarchy. Resolves to
@@ -823,7 +715,7 @@
       var t = graph.byId[id];
       if (!t) return 'unknown to Stash';         // never touch it
       if (graph.cyclic[id]) return 'in a hierarchy cycle';
-      if (settings.c1ExcludeTagWithIgnoreAutoTag && t.ignore_auto_tag) return 'Ignore auto tag';
+      if (settings.c1ExcludeTagWithIgnoreAutoTag && t.ignore_auto_tag) return 'Ignore Auto Tag';
       // Presence alone excludes; the value is never inspected. hasOwnProperty
       // rather than `in`, or inherited keys like "constructor" match every tag.
       if (cfName && t.custom_fields && hasOwn(t.custom_fields, cfName)) {
@@ -844,21 +736,14 @@
 
   // ── Planning ──────────────────────────────────────────────────────────────
 
-  function firstBasename(files) {
-    return (files && files.length && files[0].basename) || '';
-  }
-
   // Title is optional on scenes, galleries and images alike, so fall back the way
   // Stash's own UI does rather than logging "untitled" at the user: the file name,
-  // and for a gallery that is a folder rather than a zip, the folder name. Which
+  // and for a gallery that is a folder rather than a zip, the folder name (Core's
+  // `displayName`). Which
   // of these fields exists is decided by the type's `fields` - a type that does
   // not ask for files simply has none here.
   function entityLabel(type, ent) {
-    var name = ent.name || ent.title;
-    if (!name) {
-      name = firstBasename(ent.files) || firstBasename(ent.visual_files) ||
-        (ent.folder && ent.folder.basename) || '';
-    }
+    var name = displayName(ent);
     if (!name && type.key === 'markers' && ent.primary_tag) name = ent.primary_tag.name;
     return '"' + (name || 'untitled') + '" (' + ent.id + ')';
   }
@@ -869,14 +754,6 @@
     if (id == null) return -1;
     for (var i = 0; i < ids.length; i++) if (String(ids[i]) === String(id)) return i;
     return -1;
-  }
-
-  // Compare ids as numbers where both parse, so 9 sorts below 10, and fall back to a
-  // string compare so the order is total whatever Stash hands us.
-  function lowerId(a, b) {
-    var na = parseInt(a, 10), nb = parseInt(b, 10);
-    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na < nb;
-    return String(a) < String(b);
   }
 
   // Is `a` the better "due to" tag than the incumbent `b`? The lowest-level tag
@@ -967,16 +844,12 @@
         // click goes to it. The count rides inside the link here rather than beside
         // it - unlike the sibling's ", +2 more", `x3` is a fact about this tag.
         href: entityHref('tags', tid),
-        title: d && tagHasDetail(d) ? tagTooltip(d, tid) : null,
+        title: d && tagHasDetail(d) ? tagTooltip(d, tid, 'unknown') : null,
         tip: tid,
       });
       if (i < ids.length - 1) parts.push({ text: ', ' });
     });
     return parts;
-  }
-
-  function partsText(parts) {
-    return parts.map(function (p) { return p.text; }).join('');
   }
 
   function summaryTagIds(counts) {
@@ -1134,7 +1007,7 @@
       '}';
   }
 
-  // Pages through one entity type, appending plan entries as it goes.
+  // Pages through one entity-type, appending plan entries as it goes.
   function scanType(type, mode, ctx) {
     var per = type.pageSize || PAGE_SIZE;
     var page = 1;
@@ -1279,14 +1152,12 @@
     run.errors++;
   }
 
-  // Undo History, where ᝯㄝₓ Core keeps one: a batch landed is, per entity, the tags it
+  // Undo History, which ᝯㄝₓ Core keeps: a batch landed is, per entity, the tags it
   // added or took away - recorded as that delta, which is what an undo checks is still
   // true and what it reverses, whatever else the entity gained since. Library-wide only
   // for the unscoped task: a save's reaction and a button's scoped run keep their images.
   function journalPass(label, libraryWide) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide });
   }
 
   function journalBatch(run, batch, mode) {
@@ -1423,7 +1294,7 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#a7b6c2;cursor:help;}' +
+    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -1634,31 +1505,12 @@
     (document.head || document.body || document.documentElement).appendChild(style);
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
   // ── The per-type mode selectors ───────────────────────────────────────────
   //
   // The same seven selectors serve two dialogs: the run, where they say what this
   // pass does, and the settings task, where they say what happens by itself on every
   // save. One widget for both, because a user who has learnt one has learnt the other
-  // and because the two must never disagree about what "Roll Up" is called.
+  // and because the two must never disagree about what "Roll-Up" is called.
   //
   // `modes` is mutated in place and is the caller's own object - a run's `this.modes`
   // is what the scan reads, so there is no second copy to keep in step.
@@ -1693,7 +1545,7 @@
       sel.value = modes[t.key] || MODE_OFF;
       paintMode(sel);
       sel.title = t.plural + ': Prune removes a tag another tag on the same ' +
-        t.label.toLowerCase() + ' already implies; Roll Up adds every ancestor of the ' +
+        t.label.toLowerCase() + ' already implies; Roll-Up adds every ancestor of the ' +
         'tags it carries.' + (t.note && !quiet ? '\n\n' + t.note : '');
       name.title = sel.title;
       sel.addEventListener('change', function () {
@@ -1751,7 +1603,6 @@
     return b;
   }
 
-
   // ── Is this script the one Stash has installed? ───────────────────────────
   //
   // "Reload plugins" re-reads the plugin folder on the server; it cannot replace a
@@ -1767,24 +1618,15 @@
   //
   // It catches only what a version bump makes visible. Editing the file without
   // bumping it leaves both numbers equal and this check blind - which is the practical
-  // reason the repo bumps the patch digit on every change.
-  function installedVersion() {
-    return gqlRequest('query NPTPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; });
-  }
-
+  // reason the repo bumps the patch digit on every change. The query is Core's
+  // `installedVersion`, under this plugin's own operation name.
+  //
   // Both dialogs ask the same question and disagree only about the answer: the run
   // dialog holds Proceed back, the viewer says so and carries on. The two quiet
   // outcomes are settled here, on the console next to the load banner - a matching
   // version is the boring case, and neither dialog should spend a line on it.
   function checkInstalledVersion(onMismatch) {
-    return installedVersion().then(function (installed) {
+    return C.installedVersion(PLUGIN_ID, 'NPTPluginVersion').then(function (installed) {
       if (!installed) {
         npt('[npt] version check: Stash reported no installed version; running ' +
           PLUGIN_VERSION + '.');
@@ -1853,7 +1695,7 @@
   // The dialog's own selection, kept across close and reopen only while the box is
   // ticked. In localStorage rather than in the plugin settings: it is one browser's
   // convenience, not a configuration every tab and every user of that Stash shares -
-  // and a setting would put a second answer beside the auto modes, which is exactly
+  // and a setting would put a second answer beside the auto-modes, which is exactly
   // the confusion this release removed. Re-parsed on the way out, so a hand-edited or
   // truncated value can only ever read as OFF.
   var RUN_MODES_KEY = '__GTTx__.nptRunModes';
@@ -2016,7 +1858,7 @@
     // instruction keeps the position it has always had and the limits are stated
     // beside it rather than left to be discovered.
     head.appendChild(el('div', 'npt-warn',
-      'Backing up your database before proceeding is recommended. Undo only reverses what this dialog wrote, ' +
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this dialog wrote, ' +
       'while it stays open, and cannot account for changes made elsewhere in the meantime.'));
     // Every name in this log carries a number in brackets and it is always a Stash
     // id, never a count - the counts in the log are written as `x250` or spelled out.
@@ -2030,8 +1872,8 @@
     // settings say what happens by itself, and one run is allowed to differ.
     head.appendChild(el('div', 'npt-legend',
       'Each type is planned on its own: Prune removes a tag another tag on the same ' +
-      'entity already implies, Roll Up adds every ancestor of the tags it carries, ' +
-      'Off leaves the type alone. The selection starts from the automatic modes in ' +
+      'entity already implies, Roll-Up adds every ancestor of the tags it carries, ' +
+      'Off leaves the type alone. The selection starts from the auto-modes in ' +
       'the plugin settings, with Images off - change it here and press Rescan.'));
     this.modesPanel = modesPanel(this.modes, function () { self.onModeChange(); });
     // Hidden for a scoped run rather than disabled: these selectors choose what a
@@ -2082,7 +1924,7 @@
       this.rescanBtn, this.closeBtn].forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'npt');
     document.body.appendChild(this.backdrop);
   };
 
@@ -2120,10 +1962,6 @@
       this.flush();
     }
     this.setState(this.state);
-  };
-
-  Run.prototype.focus = function () {
-    if (this.modal && this.modal.scrollIntoView) this.modal.scrollIntoView();
   };
 
   // Empty hides it. `begin()` clears it on every pass for the same reason it clears
@@ -2181,29 +2019,8 @@
     this.spin(scanning || applying || undoing);
   };
 
-  // A cursor cycling under the last log line for as long as work is in flight, and
-  // gone the moment it is not. It is a sibling of the lines rather than part of one,
-  // so it survives a flush that appends under it - `flush` moves it back to the end -
-  // and it carries no `-line` class, since it is not a log line and must not be read
-  // back as one. `state` is the single source of truth for whether it runs: every
-  // path in and out of a write goes through setState.
-  Run.prototype.spin = function (on) {
-    if (!on) {
-      if (this.spinTimer) clearInterval(this.spinTimer);
-      this.spinTimer = null;
-      if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
-      this.spinEl = null;
-      return;
-    }
-    if (!this.spinEl) {
-      this.spinEl = el('div', 'npt-spin', SPIN_FRAMES[0]);
-      var self = this, i = 0;
-      this.spinTimer = setInterval(function () {
-        self.spinEl.textContent = SPIN_FRAMES[++i % SPIN_FRAMES.length];
-      }, SPIN_MS);
-    }
-    this.logEl.appendChild(this.spinEl);
-  };
+  // The log - its cursor, lines, flush, and the Undo button's disarm - is Core's `runLog`.
+  runLog(Run.prototype, 'npt');
 
   // A run-level warning: into the log, where Copy log will carry it, and into the
   // dialog head, where it stays visible after the log has scrolled past it. Appends
@@ -2230,73 +2047,6 @@
       if (parts) self.log('INFO', partsText(parts), parts);
       self.flush();
     });
-  };
-
-  // `parts` is optional, and only the tag recap passes it: that line is rendered as
-  // spans so each tag can carry its own tooltip. `lines` keeps the plain string
-  // either way - Copy log hands over text, and a tooltip is not text.
-  Run.prototype.log = function (kind, message, parts) {
-    var line = '[' + kind + '] ' + message;
-    this.logged = (this.logged || 0) + 1;
-    this.lines.push(line);
-    // Bounded, because the copy buffer is what a library-wide pass grows without limit.
-    this.logDropped = (this.logDropped || 0) + keepLog(this.lines);
-    this.pending.push({ kind: kind, line: line, parts: parts || null });
-    this.scheduleFlush();
-  };
-
-  Run.prototype.scheduleFlush = function () {
-    var self = this;
-    if (this.flushTimer) return;
-    this.flushTimer = setTimeout(function () {
-      self.flushTimer = null;
-      self.flush();
-    }, LOG_FLUSH_MS);
-  };
-
-  // Only the tail is rendered: a first run on a large library can plan six figures
-  // of changes, and one node per change is a page that stops responding. The full
-  // log stays in `lines`, which is what Copy log exports.
-  Run.prototype.flush = function () {
-    if (!this.pending.length) return;
-    var pending = this.pending;
-    this.pending = [];
-    // Out of the way while the lines land, so the cursor is neither counted against
-    // the render cap nor left in the middle of the log.
-    if (this.spinEl && this.spinEl.parentNode) this.logEl.removeChild(this.spinEl);
-    pending.forEach(function (p) {
-      var node = el('div', 'npt-line npt-' + p.kind, p.parts ? null : p.line);
-      // The line looks exactly like every other one: the spans exist to hang a
-      // title on, and carry no styling of their own. An underline and a help cursor
-      // were tried and read as decoration on a log that has none elsewhere.
-      if (p.parts) {
-        node.appendChild(el('span', null, '[' + p.kind + '] '));
-        p.parts.forEach(function (seg) {
-          var span;
-          if (seg.href) {
-            span = el('a', 'npt-elink', seg.text);
-            span.href = seg.href;
-            span.target = linkTarget();
-            span.rel = 'noopener noreferrer';
-          } else {
-            span = el('span', null, seg.text);
-          }
-          if (seg.title) span.title = seg.title;
-          // A segment naming a tag opens the box with the tag's image above the same
-          // text; one with no image of its own is left with the `title` it already had.
-          if (seg.tip) tagTip(span, seg.tip, seg.title);
-          if (seg.ent) entityTip(span, seg.ent.type, seg.ent.id);
-          node.appendChild(span);
-        });
-      }
-      this.logEl.appendChild(node);
-    }, this);
-    while (this.logEl.childNodes && this.logEl.childNodes.length > LOG_RENDER_CAP) {
-      this.logEl.removeChild(this.logEl.firstChild);
-    }
-    if (this.spinEl) this.logEl.appendChild(this.spinEl);
-    if (typeof this.logEl.scrollHeight === 'number') this.logEl.scrollTop = this.logEl.scrollHeight;
-    this.renderProgress();
   };
 
   Run.prototype.renderProgress = function () {
@@ -2374,8 +2124,8 @@
       var types = self.scope ? [self.scope.type]
         : TYPES.filter(function (t) { return self.modes[t.key] !== MODE_OFF; });
       if (!types.length) {
-        self.log('WARN', 'Every entity type is set to Off, so there is nothing to plan. ' +
-          'Choose Prune or Roll Up for at least one type above, then press Rescan.');
+        self.log('WARN', 'Every entity-type is set to Off, so there is nothing to plan. ' +
+          'Choose Prune or Roll-Up for at least one type above, then press Rescan.');
         self.finishScan();
         return;
       }
@@ -2456,11 +2206,14 @@
     // response - so they are its wire names, prefixes and all, not the internal
     // names its source uses. They changed once; both alternatives
     // are accepted here so this check still works against an older copy.
+    // COMPAT: the sibling's unprefixed autoMergeOnSceneUpdate / autoMergeOnPerformerUpdate
+    // keys (since MergePerformerTagsToScenes 1.1.1); remove when never on its own: a sibling
+    // install may skip releases.
     if (siblingSettings.a3AutoMergeOnSceneUpdate || siblingSettings.autoMergeOnSceneUpdate) {
-      on.push('Auto Merge On Scene Updates');
+      on.push('Auto-Merge when the Scene is Saved');
     }
     if (siblingSettings.a4AutoMergeOnPerformerUpdate || siblingSettings.autoMergeOnPerformerUpdate) {
-      on.push('Auto Merge On Performer Updates');
+      on.push('Auto-Merge when the Performer is Saved');
     }
     if (!on.length) return;
 
@@ -2469,6 +2222,9 @@
         ' enabled; it will stand down while changes are applied.');
       return;
     }
+    // COMPAT: a sibling copy that predates the bulk-edit lease and never registers as a
+    // respecter (since MergePerformerTagsToScenes 1.1.0); remove when never on its own: a
+    // sibling install may skip releases.
     this.note(SIBLING_NAME + ' has ' + on.join(' and ') + ' enabled, and this copy ' +
       'is too old to stand down. It will merge performer tags back into entities this run changes. ' +
       'Turn it off for the duration, or press Rescan afterwards.');
@@ -2526,20 +2282,20 @@
   // going away mid-run.
   //
   // guarded() is the other half of that, pointed inwards: every batch is a
-  // bulk*Update, which is exactly what this plugin's own auto mode watches for, so
-  // without it a Prune task with Auto Prune enabled would re-plan each batch it had
+  // bulk*Update, which is exactly what this plugin's own auto-mode watches for, so
+  // without it a Prune task with Auto-Prune enabled would re-plan each batch it had
   // just written - and an Undo would have its reversal put straight back. The lease
   // cannot do this job: it is advisory, and we honour our own leases no more than
   // anyone else's.
   Run.prototype.runBatches = function (batches, leaseLabel, step, verb, finish) {
     var self = this;
-    var lease = acquireLease(leaseLabel);
+    var lease = C.lease(PLUGIN_ID, leaseLabel);
     var i = 0;
     var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
       ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, !self.scope);
     function done() {
       self.journalRun = null;
-      if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+      pass.finish().then(function (line) { if (line) self.log('INFO', line); });
     }
 
     function nextBatch() {
@@ -2637,7 +2393,7 @@
     // taking the second write back before the first is the only order that lands where
     // the run started. An undo is a bulk write like any other, so it announces itself
     // the same way - see runBatches, and note that guarded() matters more sharply here:
-    // an undo writes the inverse delta, so an auto mode reacting to it would put back
+    // an undo writes the inverse delta, so an auto-mode reacting to it would put back
     // exactly what the user just asked to have taken away.
     this.runBatches(this.undoable.slice().reverse(), this.taskName + ' (undo)',
       function (b) { return undoBatch(b, self, self.graph); },
@@ -2658,12 +2414,6 @@
     this.logTagSummary(this.undoneTags.REMOVE, 'removed again');
     this.setState('done');
     this.flush();
-  };
-
-  Run.prototype.disarmUndo = function () {
-    if (this.undoTimer) { clearTimeout(this.undoTimer); this.undoTimer = null; }
-    this.undoArmed = false;
-    if (this.undoBtn) this.undoBtn.textContent = 'Undo';
   };
 
   Run.prototype.stop = function () {
@@ -2720,36 +2470,10 @@
   // nothing mid-write, where both are hidden and Stop is the only way out. A key
   // that quietly abandoned a run in flight would be worse than one that does nothing.
   // The hierarchy viewer has only a Close, which this reads without a second copy.
-  function escapeButton(run) {
-    var order = [run.closeBtn, run.cancelBtn];
-    for (var i = 0; i < order.length; i++) {
-      var b = order[i];
-      if (b && !b.disabled && !hasClass(b, 'npt-hidden')) return b;
-    }
-    return null;
-  }
-
-  // On `document`, not on the modal: the modal is not focusable, so a click into the
-  // log or either of the viewer's boxes would otherwise put the key out of reach.
-  // Removed in `close()` - a dialog that has gone away must not still answer for the
-  // page, and the viewer and a run can be open one after the other.
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
-  }
+  //
+  // Core's `wireEscape`, on `document`, since the modal is not focusable. Removed in
+  // `close()` - a dialog that has gone away must not still answer for the page, and the
+  // viewer and a run can be open one after the other.
 
   Run.prototype.close = function () {
     unwireEscape(this);
@@ -2772,7 +2496,7 @@
   //
   // It writes a setting, not the library, so it carries no backup instruction: there
   // is nothing here for an Undo to reverse. What it does carry is the warning the two
-  // "Auto ..." booleans used to - a type set to Prune or Roll Up here is rewritten
+  // "Auto ..." booleans used to - a type set to Prune or Roll-Up here is rewritten
   // silently on every save, with no dialog and no review; only Undo History reverses it.
   function ModesDialog(taskName) {
     this.taskName = taskName;
@@ -2805,13 +2529,13 @@
     var head = el('div', 'npt-head');
     head.appendChild(el('div', 'npt-title', PLUGIN_SHORT_NAME + ' - ' + this.taskName));
     head.appendChild(el('div', 'npt-warn',
-      'A type set to Prune or Roll Up here is rewritten whenever Stash saves one - ' +
+      'A type set to Prune or Roll-Up here is rewritten whenever Stash saves one - ' +
       'immediately, with no dialog and no review; only ᝯㄝₓ Core\'s Undo History can ' +
       'take it back. Off is what a type does ' +
       'until you say otherwise; the tasks are unaffected either way, since the run ' +
       'dialog asks again every time.'));
     head.appendChild(el('div', 'npt-legend',
-      'Prune removes a tag another tag on the same entity already implies. Roll Up ' +
+      'Prune removes a tag another tag on the same entity already implies. Roll-Up ' +
       'adds every ancestor of the tags it carries. The exclusion filters in the plugin ' +
       'settings apply to both.'));
     this.noteEl = el('div', 'npt-note', 'Reading the current setting...');
@@ -2836,7 +2560,7 @@
     [this.saveBtn, this.cancelBtn].forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'npt');
     document.body.appendChild(this.backdrop);
     this.checkVersion();
 
@@ -3054,7 +2778,7 @@
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'npt');
     document.body.appendChild(this.backdrop);
     this.checkVersion();
     this.load();
@@ -3295,7 +3019,7 @@
       shown = 0;
       this.roots.forEach(function (rid) { shown += this.renderNode(rid, 0, null); }, this);
       this.progressEl.textContent = plural(total, 'tag') + ', ' + plural(this.roots.length, 'root') +
-        '. ' + plural(shown, 'row') + ' shown - click a tag for what Prune and Roll Up would do with it.';
+        '. ' + plural(shown, 'row') + ' shown - click a tag for what Prune and Roll-Up would do with it.';
     }
     this.renderInspector();
   };
@@ -3358,7 +3082,7 @@
     var nameEl = el('span', 'npt-tag-name', (t.name || 'unknown') + ' (' + id + ')');
     // Through `tagTip`, which draws it as a `title` and reopens it as a box with the
     // tag's picture above it wherever the tag has one.
-    tagTip(nameEl, id, tagTooltip(t, id));
+    tagTip(nameEl, id, tagTooltip(t, id, 'unknown'));
     row.appendChild(nameEl);
 
     var badges = [];
@@ -3509,12 +3233,12 @@
         'entity can imply it.');
     }
     if (anc.length) {
-      line('npt-i-body', 'Roll Up adds its ' + plural(anc.length, 'ancestor') + ' to every entity ' +
+      line('npt-i-body', 'Roll-Up adds its ' + plural(anc.length, 'ancestor') + ' to every entity ' +
         'carrying this tag.');
     } else {
-      line('npt-i-body', 'Roll Up adds nothing for this tag: it has no ancestors.');
+      line('npt-i-body', 'Roll-Up adds nothing for this tag: it has no ancestors.');
     }
-    if (prot.add) line('npt-i-body', 'Roll Up would never add this tag itself - protected: ' + prot.add + '.');
+    if (prot.add) line('npt-i-body', 'Roll-Up would never add this tag itself - protected: ' + prot.add + '.');
     if (g.cyclic[id]) {
       line('npt-i-body', 'This tag is in a hierarchy cycle. Both tasks refuse to touch it: under ' +
         'the plain rule every tag in a cycle implies every other, so all of them would be removed.');
@@ -3579,13 +3303,13 @@
   // chosen direction, immediately, with no dialog.
   //
   // That is a deliberate departure from everything else in this plugin, where
-  // nothing is written without a plan on screen and a Proceed. Auto Prune deletes
+  // nothing is written without a plan on screen and a Proceed. Auto-Prune deletes
   // tag assignments silently, one save at a time, and there is no dialog Undo out
   // here, because there is no dialog to hang one on - each save's writes are one run
   // in ᝯㄝₓ Core's Undo History, and that is the only way back. The setting
   // descriptions say so; do not soften them.
   //
-  // Which entity types are covered, and in which direction, is the one auto-mode
+  // Which entity-types are covered, and in which direction, is the one auto-mode
   // string - so a type is off, pruned or rolled up on its own. The all-off default
   // carries over unchanged: a fresh install reacts to nothing until the user has said
   // which types they have thought about, and the task dialog starts from the same
@@ -3593,7 +3317,7 @@
   //
   // Three things keep this from eating a library:
   //
-  // 1. Prune and Roll Up are exact inverses, and a type carries exactly one of them,
+  // 1. Prune and Roll-Up are exact inverses, and a type carries exactly one of them,
   //    so the incoherent combination the two global booleans allowed cannot be
   //    expressed any more. That is the point of the tri-state: the old pair had four
   //    combinations for three meanings, and the fourth had to be documented as a
@@ -3613,28 +3337,13 @@
   // not watched, only the singular and bulk forms. Stash's own UI does not use them
   // for tag edits; if that changes, they need their own branch reading ids out of
   // an array of inputs rather than one `input.ids`.
-
+  //
   // fetch resolves for HTTP 500 and for GraphQL errors returned with HTTP 200, so
-  // "the request came back" is not "the edit was saved". Inspect a clone - our
-  // handler runs before Apollo's, so the body is still unread - and treat a clone
-  // failure as success rather than skipping the reaction.
-  function mutationSucceeded(p) {
-    return p.then(function (resp) {
-      if (!resp || !resp.ok) return false;
-      var clone;
-      try {
-        clone = resp.clone();
-      } catch (e) {
-        return true;
-      }
-      return clone.json().then(
-        function (json) { return !json || !json.errors; },
-        function () { return true; }
-      );
-    }, function () { return false; });
-  }
+  // "the request came back" is not "the edit was saved": Core's `mutationSucceeded`
+  // reads a clone of the response - our handler runs before Apollo's, so the body is
+  // still unread - before a reaction runs.
 
-  var AUTO_MODES_NAME = 'Automatic mode per entity type';
+  var AUTO_MODES_NAME = 'Auto-mode per entity-type';
 
   // Settings are re-read on demand and cached, rather than polled on a timer the way
   // the sibling does. The tasks were this plugin's only entry point until now, so
@@ -3717,7 +3426,7 @@
     });
   }
 
-  // Auto mode's console lines carry the same "Name" (id) shape as the dialog's, and
+  // Auto-mode's console lines carry the same "Name" (id) shape as the dialog's, and
   // out here there is no head to put the legend in - so it is said once, before the
   // first line the user ever sees, rather than on every line or not at all. The flag
   // is module-scoped because autoSink() returns a fresh object per reaction.
@@ -3725,7 +3434,7 @@
   function autoLegend() {
     if (_autoLegendShown) return;
     _autoLegendShown = true;
-    console.info('[' + PLUGIN_ID + '] auto mode is writing. In the lines below, the number in ' +
+    console.info('[' + PLUGIN_ID + '] auto-mode is writing. In the lines below, the number in ' +
       'brackets after a name is that entity\'s or tag\'s id.');
   }
 
@@ -3777,7 +3486,7 @@
     if (!_autoExcludeWarned) {
       _autoExcludeWarned = true;
       console.warn('[npt] no tag is named "' + name + '" (exact, case-sensitive), so the ' +
-        '"Exclude entities carrying this tag" filter cannot be applied. Auto mode is doing ' +
+        '"Exclude entities carrying this tag" filter cannot be applied. Auto-mode is doing ' +
         'nothing until that setting is fixed or cleared.');
     }
     return false;
@@ -3837,7 +3546,7 @@
           // it will come back at us.
           markWritten(type, plan.map(function (e) { return String(e.id); }));
 
-          var lease = acquireLease(AUTO_MODES_NAME + ' - ' + type.token + '=' +
+          var lease = C.lease(PLUGIN_ID, AUTO_MODES_NAME + ' - ' + type.token + '=' +
             MODE_TOKEN[mode], AUTO_LEASE_TTL_MS);
           var i = 0;
           function nextBatch() {
@@ -3879,128 +3588,26 @@
 
   // ── The settings page ─────────────────────────────────────────────────────
   //
-  // This section used to carry a notice for the one configuration the old
-  // settings could express and the plugin could not honour - both auto modes ticked
-  // at once, which ran neither. The tri-state string cannot say that, so the notice
-  // is gone and what is left is the opposite job: keeping the string the user typed
-  // in the shape everything else reads.
+  // Core's `settingsPage` draws what every ᝯㄝₓ plugin's group shares: found by the
+  // setting ids Stash derives from the plugin id and each key
+  // (`plugin-NormalizeParentTags-a1AutoModes`, SettingsPluginsPanel.tsx), or by its
+  // heading on a Stash that sets none - never the Settings → Tasks group headed the
+  // same, which holds the task buttons; the description split into paragraphs behind
+  // Show more; every "summary\n\ndetail" setting cut to its summary with the rest in a
+  // hover box; the red banner when this script is not the installed one; and the
+  // README link. Everything below it on this page is this plugin's own: the auto-mode
+  // row taken over by its dialog, and the two custom-field marks.
   //
-  // Where the notice goes, found by the one hook on that page that is not a
-  // formatted display string: Stash gives every plugin setting an element id it
-  // derives from the plugin id and the setting key -
-  //
-  //   id: `plugin-${pluginID}-${setting.name}`   (SettingsPluginsPanel.tsx)
-  //
-  // so `plugin-NormalizeParentTags-a1AutoModes` is ours by construction. No
-  // version suffix, no localisation, nothing to guess. Two earlier attempts matched
-  // the group's heading text instead and both were wrong about what it says; the
-  // heading is now only a fallback, for a Stash that does not set those ids.
-  //
-  // Finding the id is also what tells us we are on the plugins settings page, so
-  // there is no route test either. It was another assumption with nothing checking
-  // it, and the ids cannot exist anywhere else.
-  function hasClass(node, name) {
-    return (' ' + String((node && node.className) || '') + ' ').indexOf(' ' + name + ' ') !== -1;
-  }
-
-  function settingElement(key) {
-    return document.getElementById('plugin-' + PLUGIN_ID + '-' + key);
-  }
-
-  // Walks up from one of our settings to the group box that contains it. The notice
-  // goes at the top of that box rather than beside the setting, because the settings
-  // themselves live inside a <Collapse> that is shut by default - a notice in there
-  // would be invisible until the user expanded the very group it is telling them to
-  // look at.
-  function ownSettingGroup() {
-    // Every key rather than one named one: a release can rename every setting the
-    // plugin has, and a single named anchor is exactly what such a rename breaks.
-    var node = null, d, key;
-    for (key in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, key)) continue;
-      node = settingElement(key);
-      if (node) break;
-    }
-    for (d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    // Fallback for a Stash that sets no setting ids: the group headed with our own
-    // name. It was the both-modes notice's fallback and it outlived that notice,
-    // because everything else this section puts on the page - the README
-    // link, the description split, the stale banner - needs the same box.
-    //
-    // Settings - Tasks heads *its* group with the same name, and that group is not
-    // this one: it holds the task buttons and no settings, so decorating it would put
-    // a README link and a split description on a page that never had either. The
-    // heading is only enough to identify us; the buttons are what say which page.
-    var heading = ownSettingGroupHeading();
-    for (node = heading, d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return hasOwnTaskButton(node) ? null : node;
-    }
-    return heading && !hasOwnTaskButton(heading.parentElement)
-      ? heading.parentElement : null;
-  }
-
-  // A plain recursive walk rather than `querySelectorAll`, like the sibling plugins'
-  // `findActionByLabel`: it is a handful of nodes, and this way the check works on any
-  // node rather than only on one a selector engine will answer for.
-  function hasOwnTaskButton(node) {
-    if (!node) return false;
-    if (node.tagName === 'BUTTON' &&
-        TASKS.indexOf(String(node.textContent || '').replace(/^\s+|\s+$/g, '')) !== -1) {
-      return true;
-    }
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) {
-      if (hasOwnTaskButton(kids[i])) return true;
-    }
-    return false;
-  }
-     // carriers named before the rest become a count
-    // circled Latin small letter i
-
-
-
-
-
-  function settingRow(key) {
-    var node = settingElement(key);
-    for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting')) return node;
-    }
-    return null;
-  }
-
-  // The two pages that show a group headed with our name do not head it the same
-  // way. Settings - Tasks passes the plugin name straight through
-  // (`heading: o.name`), but Settings - Plugins appends the version:
-  //
-  //   heading: `${plugin.name} ${plugin.version ? `(${plugin.version})` : undefined}`
-  //
-  // so the h3 there reads "Normalize Parent Tags (<version>)" - and, because that
-  // template interpolates the literal when there is no version at all, sometimes
-  // "Normalize Parent Tags undefined". Matching the bare name finds neither, which
-  // is why anything anchored on it has to strip the suffix first.
-  //
-  // Strip the suffix and compare exactly, rather than testing a prefix: a plugin
-  // called "ᝯㄝₓ Normalize Parent Tags Extra" must not be mistaken for ours.
-  function headingIsOurs(text) {
-    var t = String(text == null ? '' : text).trim();
-    if (t === PLUGIN_NAME) return true;
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
-
-  // Our own SettingGroup, found the way the task interception finds its own: by a
-  // heading carrying the plugin name. Never by position - the page lists every
-  // installed plugin, and which one we are is the only thing we can be sure of.
-  function ownSettingGroupHeading() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (headingIsOurs(nodes[i].textContent)) return nodes[i];
-    }
-    return null;
-  }
+  // The README link is the manifest's `url:` with the file name on it, under the
+  // description where the eye already is. Stash renders that URL only as an unlabelled
+  // chain icon in the header, and a description cannot carry a link: Stash passes it to
+  // React as a child, so any <a> in it is escaped and shown as text.
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/NormalizeParentTags/README.md';
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'npt', keys: Object.keys(DEFAULTS), tasks: TASKS,
+    readmeUrl: README_URL, readmeLabel: 'NormalizeParentTags/README.md', injectStyle: injectStyle,
+  });
 
   // ── The setting row, taken over by the dialog that edits it ───────────────
   //
@@ -4048,25 +3655,12 @@
   var FIELD_BTN_ID  = 'npt-modes-button';
   var _normalizedFrom = null;
 
-  // The first button in a subtree that is not one of ours. Stash's row has exactly
-  // one; ours carries `_nptOwn`, so a second tick finds theirs rather than ours.
-  function foreignButton(node) {
-    if (!node) return null;
-    if (node.tagName === 'BUTTON') return node._nptOwn ? null : node;
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) {
-      var found = foreignButton(kids[i]);
-      if (found) return found;
-    }
-    return null;
-  }
-
   function hide(node) {
     if (node && node.style) node.style.display = 'none';
   }
 
   function modeFieldTick() {
-    var row = settingRow('a1AutoModes');
+    var row = settingRow(PLUGIN_ID, 'a1AutoModes');
     if (!row) return;
 
     var line = document.getElementById(FIELD_LINE_ID);
@@ -4103,7 +3697,9 @@
         startRun(TASK_MODES);
       });
     }
-    var edit = foreignButton(row);
+    // The first button in the row that is not ours. Stash's row has exactly one; ours
+    // carries `_nptOwn`, so a second tick finds theirs rather than ours.
+    var edit = [].filter.call(row.querySelectorAll('button'), function (b) { return !b._nptOwn; })[0] || null;
     var btnHost = edit ? edit.parentNode : row;
     if (btn.parentNode !== btnHost) btnHost.appendChild(btn);
     hide(edit);
@@ -4132,349 +3728,16 @@
     saveAutoModes(canon).then(null, function () {});
   }
 
-  // Settings are only read while our own group is actually on the page, so a tab
-  // parked anywhere else in Stash costs two getElementById calls a second and no
-  // queries.
-  // ── The README link on the settings page ──────────────────────────────────
-  //
-  // Stash does render a link for `url:` in the manifest, but as an unlabelled chain
-  // icon in the group header, which is easy to miss entirely. This is the same URL
-  // with the file name on it, directly under the description where the eye already
-  // is. A description cannot carry it: Stash passes that string to React as a child
-  // (`subHeading` in Inputs.tsx), so any <a> in it is escaped and shown as text, and
-  // CSS cannot help either - generated content has no href and, in Chrome, is not
-  // even copyable.
-  //
-  // Clicking it does not fold the group: SettingGroup's onDivClick walks up from the
-  // event target and returns early for `a` and `button`.
-  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/NormalizeParentTags/README.md';
-  var README_LINK_ID = 'npt-readme-link';
-
-  // The first descendant carrying a class, in document order. This was a hand-rolled
-  // depth-capped walk until the test harness grew a class selector; the walk existed
-  // only because the fake DOM could not answer `.foo`, not because a browser cannot.
-  // `querySelector` is the same search with the same ordering, and the depth cap it
-  // drops was arbitrary rather than load-bearing.
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
-
-  // Under the description, which is inside the group header and therefore outside
-  // the <Collapse> - so it shows whether or not the group is expanded. The fallbacks
-  // are for a Stash that renders no sub-heading (an empty description) or no header
-  // row at all.
-  function readmeLinkSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub.nextSibling };
-    var header = byClass(group, 'setting');
-    var box = header && header.childNodes && header.childNodes[0];
-    if (box) return { parent: box, before: null };
-    return { parent: group, before: null };
-  }
-
-  // Paragraph spacing needs elements. Under `white-space: pre-wrap` a blank line is
-  // always one whole line-height and nothing can target it, so the description's
-  // paragraphs are rebuilt as divs and the gap becomes a margin - about a third of a
-  // line, rather than a whole empty one.
-  //
-  // Stash renders the description as a single text node; React puts that text node
-  // back on every re-render of this panel, so this runs on every tick and re-splits
-  // when it has to. `splitParagraphs` is idempotent: once the children are ours,
-  // there is no text node left to split.
-  function splitDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'npt-p')) return;   // already ours
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;                   // nothing to split
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = para.replace(/\s+/g, ' ').replace(/^ | $/g, '');
-      if (t) sub.appendChild(el('div', 'npt-p', t));
-    });
-  }
-
-  // ── Settings verbosity: a summary on the page, the rest on hover ──────────
-  //
-  // Seventeen settings averaging 220 characters is a wall. A description written as
-  // "summary\n\ndetail" now shows only its first paragraph, with the rest moved into
-  // a tooltip.
-  //
-  // Stash's own Setting renders `<h3 title={tooltip}>` (Inputs.tsx), but
-  // SettingsPluginsPanel never passes a tooltip for a plugin setting, and
-  // `PluginSetting` has no field to declare one - name, display_name, description,
-  // type is the whole type. So the slot exists, is always empty for us, and is
-  // filled from here.
-  //
-  // The split rides on the blank line the description format already supports rather
-  // than a delimiter of our own. If this script never runs - a stale browser cache,
-  // a .js that was never copied into the plugin folder - Stash renders the whole
-  // description exactly as it did before, instead of showing a raw marker.
-  //
-  // **What goes in which half is a judgement, made per setting**, which is why the
-  // 17 splits are authored by hand rather than cut at the first sentence. The box
-  // opens on focus as well as hover, so it is better reachable than a `title` was,
-  // but it still does not exist on a touch device. The auto-mode warnings in a8/a9
-  // were held in the visible half for that reason, and moved into the tooltip at the
-  // user's request; see §6.
-  var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*npt-tip-open\b/, '');
-    sub.className = (on ? cls + ' npt-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  // A class toggled from JS rather than a `:hover ~` selector, because the two
-  // triggers do not sit in one predictable place: the mark is inside the
-  // .sub-heading and the name is an <h3> somewhere above it, and a sibling
-  // combinator would depend on exactly how Stash nests the pair. This plugin has
-  // shipped broken twice on a guess about that markup (§5b), and the guess is not
-  // worth making again for a hover.
-  //
-  // The row is passed rather than the .sub-heading, and the current one looked up
-  // per event: an <h3> is Stash's element and survives the re-renders that replace
-  // everything we put in the row, so a captured reference would go stale. The flag
-  // is what stops a second pair of listeners landing on it each time we rebuild.
-  function tipTrigger(node, row) {
-    if (!node || node._nptTipWired) return;
-    node._nptTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'npt-sum')) return;    // already ours
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;                                     // nothing to hide
-    var summary = oneLine(text.slice(0, cut));
-    // Kept as paragraphs: a native tooltip honours newlines, and a description with
-    // three paragraphs run together reads worse than the wall this is replacing.
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'npt-tipped')) {
-      sub.className = ((sub.className || '') + ' npt-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'npt-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a
-    // sibling of the mark rather than a child: as a child it would sit inside an
-    // inline span and inherit its clipping and stacking.
-    var mark = el('span', 'npt-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'npt-tipbox', detail));
-    tipTrigger(mark, row);
-    // The visible summary opens it too. The mark is a small target for something
-    // every row now hides half its text behind, and the box opens *above* the
-    // .sub-heading, so it covers the name rather than the sentence being read - the
-    // one place a hover-to-open box would have been in its own way.
-    tipTrigger(sum, row);
-    // The setting's *name* opens the same box. It used to carry a plain `title`
-    // instead, so one row had two hover targets showing the same text in two
-    // different tooltips - and the browser's was exactly what the box exists to
-    // replace. Stash's own `<h3 title>` slot is left empty.
-    // querySelector by tag name is all the fake DOM implements, and all this needs.
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var k in DEFAULTS) {
-      if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    }
-  }
-
-  // The group description is in the group *header*, which is outside the <Collapse>
-  // - so it stays on screen at full height whether the group is expanded or not, and
-  // per-plugin collapse does not shorten it. Hiding all but the first paragraph is
-  // the only thing that does.
-  //
-  // A <button>, never a <span>: SettingGroup's onDivClick walks up from the event
-  // target and returns early for `a` and `button`, so anything else folds the whole
-  // group on click. A button is also the keyboard-reachable choice, which matters
-  // more here than for the tooltips - this is the half of the description that has
-  // nowhere else to be read. stopPropagation is belt and braces for a Stash that
-  // changes that early return.
-  var DESC_TOGGLE_ID = 'npt-desc-toggle';
-
-  function descCollapsed(sub) { return hasClass(sub, 'npt-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*npt-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' npt-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  function collapseDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'npt-p')) paras++;
-    if (paras < 2) return;                        // one paragraph hides nothing
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    // A re-render drops the button and the class together, so the description
-    // returns to collapsed rather than to a half-state with no way out of it.
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'npt-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes
-  // on running it after an update and nothing on screen says so. The settings
-  // heading is where the two numbers meet: Stash builds it as `${name} (${version})`
-  // from the **manifest**, read fresh from the server, while `PLUGIN_VERSION` is what
-  // this script actually is. A disagreement means the page is running code the
-  // manifest has already replaced.
-  //
-  // No query for it - the number is on the page already, and this tick runs once a
-  // second. `installedVersion` asks the server the same question, which is right for
-  // a dialog that opens once and wrong for a timer.
-  //
-  // It catches only what a version bump makes visible; editing the file without
-  // bumping leaves both numbers equal, which is the practical reason this repo bumps
-  // the patch digit on every change.
-  var STALE_ID = 'npt-stale-notice';
-
-  // The group's own h3, not a search of the page: the header row comes before the
-  // setting rows, each of which has an h3 too, and the group is already ours. That
-  // also keeps this working in the plugins that find their group by setting id and
-  // have no `headingIsOurs` at all.
-  function installedFromHeading(group) {
-    var h3 = group && group.querySelector ? group.querySelector('h3') : null;
-    var t = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? m[1].replace(/^\s+|\s+$/g, '') : null;
-  }
-
-  // Above the description rather than under it: it is the first thing in the group
-  // worth reading, and it leaves the README link's slot alone. Both sit in the group
-  // header, outside Stash's <Collapse>, so a collapsed group still shows the banner.
-  function staleSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
-    return { parent: group, before: group.firstChild };
-  }
-
-
-
-
-  function ensureStaleNotice(group) {
-    var installed = installedFromHeading(group);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, group, !!installed && installed !== PLUGIN_VERSION);
-    // No parenthesised version on the heading means Settings → Tasks, which heads its
-    // group with the bare name - not a mismatch, and nothing to say.
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = staleSlot(group);
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'npt-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
-      'the older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-
-  // Re-added rather than tracked: React re-renders this panel whenever a setting
-  // changes and drops anything we put in it, so the tick puts it back. Keyed on the
-  // id, so a re-render that kept it does not produce a second one.
-  function ensureReadmeLink() {
-    var group = ownSettingGroup();
-    if (!group) return;
-    // Both of these run on every tick, not just when the link is missing: React
-    // re-renders this panel on any settings change, and the class is the only thing
-    // making the description's paragraph breaks visible.
-    injectStyle();
-    if (!hasClass(group, 'npt-own-group')) {
-      group.className = ((group.className || '') + ' npt-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(group);
-    collapseDescription(group);   // after the split: it counts the .npt-p divs
-    tipSettings();
-    ensureStaleNotice(group);     // before the early return: the link outlives it
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'npt-readme', 'NormalizeParentTags/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noreferrer';
-    link.title = 'Open this plugin\'s documentation for the version it was published at';
-    link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
-    var slot = readmeLinkSlot(group);
-    slot.parent.insertBefore(link, slot.before);
-  }
-
-  // ── Plugin Task buttons ───────────────────────────────────────────────────
-  //
-  // `ownTaskName` decides what is ours - the same function the click interception
-  // keys on, which checks the label *and* the enclosing group's heading, so another
-  // plugin declaring a task by the same name is not repainted. It also returns the
-  // label, which is what picks amber from teal here.
-  //
-  // `btn-info` appears in `BTN_VARIANTS` and is also what Show Tag Hierarchy ends up
-  // carrying. That is safe because of the guard at the top of `paintButton`, not by
-  // accident: it returns on a button that already has the variant being applied, so
-  // the strip never runs over our own colour.
-  var BTN_VARIANTS = /\bbtn-(secondary|primary|success|info|light|dark|link)\b/g;
-
-  function paintButton(btn, variant) {
-    if (hasClass(btn, variant)) return;                        // already ours
-    var cls = String(btn.className || '').replace(BTN_VARIANTS, '');
-    btn.className = cls.replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
-  }
-
-  // Re-applied every tick rather than once: React re-renders this panel and hands
-  // back a button with Stash's own classes, and `paintButton` is a no-op on one that
-  // still carries ours.
-  function paintTaskButtons() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      var name = ownTaskName(nodes[i]);
-      if (!name) continue;
-      // Amber says "this rewrites the library", which is the run task alone: the other
-      // two edit a setting and browse a tree. Neither carries a state mark - the one
-      // that did is gone with the bar, and this page issues no settings query for it.
-      paintButton(nodes[i], name === TASK_RUN ? PLUGIN_BTN_VARIANT : READONLY_BTN_VARIANT);
-    }
-  }
-
+  // Re-applied every tick rather than once: React re-renders these panels and hands
+  // back its own elements. The task buttons are on a different tab from the settings,
+  // so they are painted whether or not our group is showing. Amber says "this rewrites
+  // the library", which is the run task alone: the other two edit a setting and browse
+  // a tree.
   function settingsTick() {
-    // The link belongs on the settings page, and the task buttons are on a different
-    // tab from either of them, so both run before anything that looks for our group.
-    ensureReadmeLink();
-    paintTaskButtons();
+    page.decorate(page.group());
+    paintTaskButtons(PLUGIN_NAME, TASKS, function (name) {
+      return name === TASK_RUN ? PLUGIN_BTN_VARIANT : READONLY_BTN_VARIANT;
+    });
     modeFieldTick();
     // Two settings name a custom field here, one per direction. From the settings cache
     // rather than the row: this plugin's own dialog writes settings that React's state
@@ -4486,30 +3749,12 @@
       });
   }
 
-
-  // The shared debug switch, read at call time so it takes effect on the next tick with
-  // no reload. `debugMode` is the name ᝯㄝₓ Core's Dev Mods sets; `debugButtons` is what it
-  // was called before that and what people have written down, so both are read.
-  //
-  // Not in Core, unlike everything else these buttons use: each copy carries its own
-  // prefix, so sharing it means a factory and four call-site edits in plugins this change
-  // is not otherwise touching. It is the next thing that should move.
-  var _gateLast = {};
-  function gateOn() { var c = coop(); return !!(c.debugMode || c.debugButtons); }
-  function gateLog(line) {
-    if (!gateOn()) return;
-    console.info('[npt gate] ' + line);
-  }
-  function gateLogOnce(channel, line) {
-    if (!gateOn()) { _gateLast = {}; return; }
-    if (_gateLast[channel] === line) return;
-    _gateLast[channel] = line;
-    console.info('[npt gate] ' + line);
-  }
+  // The `[npt gate]` console channel Dev Mods' Debug switch opens, from Core.
+  var gate = C.gate('npt'), gateLog = gate.log, gateLogOnce = gate.once;
 
   // ── Manual buttons on an entity page ──────────────────────────────────────
   //
-  // **Prune Tags and Roll Up Tags, on the entity's own edit form, disabled with a
+  // **Prune Tags and Roll-Up Tags, on the entity's own edit form, disabled with a
   // reason when they would do nothing.** Everything this plugin did was library-wide or
   // automatic; the one thing it could not do was answer "what would this entity
   // change?" without a run over everything. Every type with a page of its own gets
@@ -4544,7 +3789,7 @@
           'already implies. They are removed from the tag box in front of you; nothing is ' +
           'written until you press Stash\'s own Save.';
       } },
-    { mode: MODE_ROLLUP, cls: ROLLUP_BTN_CLASS, base: 'Roll Up Tags',
+    { mode: MODE_ROLLUP, cls: ROLLUP_BTN_CLASS, base: 'Roll-Up Tags',
       none: function (noun) {
         return 'Nothing to roll up: every parent this ' + noun + '\'s tags imply is ' +
           'already in the box.';
@@ -4602,13 +3847,16 @@
     }
   }
 
+  // COMPAT: a Stash whose `PluginApi` cannot patch `TagSelect`, where the buttons open the
+  // scoped review dialog instead (since NormalizeParentTags 5.2.0); remove when every Stash
+  // this plugin supports is confirmed to patch it.
   function stagingAvailable() { return _tagPatchInstalled; }
 
   function warnNoStagingOnce() {
     if (_warnedNoStaging) return;
     _warnedNoStaging = true;
     console.warn('[npt] this Stash does not expose PluginApi component patching, so the ' +
-      'Prune and Roll Up buttons cannot put tags into the edit form. They open the review ' +
+      'Prune and Roll-Up buttons cannot put tags into the edit form. They open the review ' +
       'dialog instead, which writes when you press Proceed.');
   }
 
@@ -4629,7 +3877,7 @@
   // once - the ctx is the same one the auto reaction builds - and the *plan* is
   // re-derived on every tick from whatever the tag box holds right now. That is the
   // `apiPrepare` shape and it is what makes these buttons live: stage a roll-up and the
-  // Roll Up button goes, take a tag out of the box by hand and it comes back.
+  // Roll-Up button goes, take a tag out of the box by hand and it comes back.
   var entityCheck = null;
 
   function checkEntity(check) {
@@ -4884,7 +4132,6 @@
     });
   }
 
-
   // A MutationObserver now, which this plugin did without for its whole life: a banner in
   // a settings panel can arrive a second late, and a button in the row the user is
   // already looking at cannot. Through the shared bus rather than an observer of its own -
@@ -4902,10 +4149,10 @@
     }
   }
 
-  // The rest of the wiring, unchanged in shape: this is
-  // banner in a settings panel, not something that has to land before the user can
-  // click it, and a second of delay after a re-render costs nothing. The timer plus
-  // the navigation hooks are enough, and they cannot fight a React re-render.
+  // The rest of the wiring: a banner in a settings panel is not something that has to
+  // land before the user can click it, and a second of delay after a re-render costs
+  // nothing. The timer plus the navigation hooks are enough, and they cannot fight a
+  // React re-render.
   if (window.addEventListener) {
     window.addEventListener('load', function () {
       npTick();
@@ -4945,42 +4192,12 @@
   // SettingGroup headed with the plugin name; another plugin is free to declare a
   // task with the same name. When the group cannot be identified the click is left
   // alone on purpose: layer 2 still blocks it, keyed on the plugin id the mutation
-  // itself carries, which is the authoritative check.
-  function ownTaskName(btn) {
-    var label = (btn.textContent || '').trim();
-    if (TASKS.indexOf(label) === -1) return null;
-    // Answer from the button's *own* SettingGroup and stop there. Testing every
-    // ancestor for an h3 - which is what this used to do - climbs past the group
-    // on a miss and into the panel holding every plugin's group, where
-    // `querySelector('h3')` answers with whichever plugin is listed first. A plugin
-    // declaring a task by the same name as ours was therefore hijacked whenever we
-    // happened to be above it, which is the one thing the heading check exists to
-    // stop. Found by the tasks-page check in `.tests/placement.test.js`.
-    //
-    // A group's first h3 is its heading: PluginTasks renders it in the header, above
-    // the per-task `Setting` rows that each carry an h3 of their own - which is also
-    // why the walk cannot simply stop at the nearest ancestor containing any h3.
-    //
-    // The any-ancestor walk survives as a fallback for a Stash that does not put
-    // `setting-group` on that box. It carries the bug above, and that is deliberate:
-    // it is the behaviour every release before this one shipped, so it can be no worse
-    // than what it replaces.
-    var node = btn;
-    var fallback = null;
-    for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-      var heading = node.querySelector ? node.querySelector('h3') : null;
-      var ours = !!heading && (heading.textContent || '').trim() === PLUGIN_NAME;
-      if (hasClass(node, 'setting-group')) return ours ? label : null;
-      if (ours) fallback = label;
-    }
-    return fallback;
-  }
-
+  // itself carries, which is the authoritative check. That test is Core's `ownTaskName`.
   document.addEventListener('click', function (event) {
     var target = event.target;
     var btn = target && target.closest ? target.closest('button') : null;
     if (!btn) return;
-    var taskName = ownTaskName(btn);
+    var taskName = ownTaskName(btn, PLUGIN_NAME, TASKS);
     if (!taskName) return;
     event.preventDefault();
     event.stopPropagation();
@@ -4988,20 +4205,8 @@
   }, true);
 
   // Layer 2: backstop for a click layer 1 did not recognise. The mutation is
-  // answered from here with a synthesized success rather than being forwarded, so
-  // the server never tries to exec a plugin that has nothing to exec.
-  function fakeOk(payload) {
-    var body = JSON.stringify(payload);
-    if (typeof Response === 'function') {
-      return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-    return {
-      ok: true, status: 200,
-      json: function () { return Promise.resolve(JSON.parse(body)); },
-      text: function () { return Promise.resolve(body); },
-      clone: function () { return fakeOk(payload); },
-    };
-  }
+  // answered from here with a synthesized success (Core's `fakeOk`) rather than being
+  // forwarded, so the server never tries to exec a plugin that has nothing to exec.
 
   var _fetch = window.fetch;
   window.fetch = function (url, opts) {
@@ -5038,7 +4243,7 @@
         invalidateAutoGraph();
       }
 
-      // Our own settings being saved. Auto mode caches them for
+      // Our own settings being saved. Auto-mode caches them for
       // AUTO_SETTINGS_TTL_MS, so without this, turning a mode on and immediately
       // saving an entity would be governed by the old settings for up to ten
       // seconds. Two details: re-read only once the mutation has landed, or the old
@@ -5066,7 +4271,7 @@
           : (input.id != null ? [input.id] : null);
         if (!ids || !ids.length) return;
         // Whether to stand down for someone else's lease is decided inside
-        // autoNormalize, once the settings say an auto mode is actually on - asking
+        // autoNormalize, once the settings say an auto-mode is actually on - asking
         // here would announce "standing down" for a plugin that is not running.
         mutationSucceeded(p).then(function (ok) {
           if (ok) autoReact(type, ids);

@@ -26,39 +26,32 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[tbc] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[tbc] ᝯㄝₓ Tag Bundle Clipboard cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
-  var pickControl = C.pickControl, findEditContainer = C.findEditContainer,
-    coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
-    linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
-    anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    computedStyleOf = C.computedStyleOf, findActionByLabel = C.findActionByLabel,
-    borderingAction = C.borderingAction, pxOf = C.pxOf, sideMargin = C.sideMargin,
-    neighbourGap = C.neighbourGap, stashButtonMargins = C.stashButtonMargins,
-    fillNeighbourGaps = C.fillNeighbourGaps, ensureRowSpacing = C.ensureRowSpacing,
-    applyButtonSpacing = C.applyButtonSpacing, insertOrdered = C.insertOrdered,
-    insertBeforeImportantAction = C.insertBeforeImportantAction;
+  var hasOwn = C.hasOwn, el = C.el, byClass = C.byClass, gqlRequest = C.gqlRequest,
+    tipText = C.tipText, displayName = C.displayName, pickControl = C.pickControl,
+    findEditContainer = C.findEditContainer, coop = C.coop, domBus = C.domBus, plural = C.plural,
+    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTip = C.tagTip,
+    staleReloadButton = C.staleReloadButton, ensureRowSpacing = C.ensureRowSpacing,
+    insertBeforeImportantAction = C.insertBeforeImportantAction,
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape;
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
 
   var PLUGIN_ID   = 'TagBundleClipboard';
   var PLUGIN_NAME = 'ᝯㄝₓ Tag Bundle Clipboard';
   // The name the dialog wears. `PLUGIN_NAME` is the manifest's, and it has to stay
-  // byte-identical to the `.yml` because `ownSettingGroup`'s fallback and
-  // `headingIsOurs` find this plugin's block on the settings page by matching that
-  // heading. This one is free to be short; here it already fits, which is fine - the
-  // constant is what makes every head read from one expression.
+  // byte-identical to the `.yml` because Core's `settingsPage` falls back to finding
+  // this plugin's block on the settings page by matching that heading. This one is free
+  // to be short; here it already fits, which is fine - the constant is what makes every
+  // head read from one expression.
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Tag Bundle Clipboard';
 
   // The one version that proves anything. The settings page reads the manifest over
@@ -72,7 +65,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '3.0.0';
+  var PLUGIN_VERSION = '3.0.4';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -91,9 +84,7 @@
     'newer than the script your browser has cached.');
 
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/TagBundleClipboard/README.md';
-  var README_LINK_ID = 'tbc-readme-link';
-  var DESC_TOGGLE_ID = 'tbc-desc-toggle';
-  var STYLE_ID       = 'tbc-style';
+  var STYLE_ID = 'tbc-style';
 
   // The repo-wide colour convention: amber for a control that writes, teal for one
   // that only reads. This plugin has one of each, which is unusual here and is the
@@ -117,15 +108,6 @@
   var DEFAULT_BUNDLES = 5;
   var MIN_BUNDLES = 1;
   var MAX_BUNDLES = 50;
-
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-  }
-
-
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').replace(/^ | $/g, '');
-  }
 
   // ── The six entities ──────────────────────────────────────────────────────
   //
@@ -185,23 +167,6 @@
     return null;
   }
 
-  function firstBasename(files) {
-    if (!files) return null;
-    for (var i = 0; i < files.length; i++) {
-      if (files[i] && files[i].basename) return files[i].basename;
-    }
-    return null;
-  }
-
-  // The display name, reading whichever of the five fields is present rather than
-  // switching on the type - a per-type branch there is what let galleries and images
-  // log as "untitled" in a sibling for three releases.
-  function displayName(ent) {
-    if (!ent) return null;
-    return ent.title || ent.name || firstBasename(ent.files) ||
-      firstBasename(ent.visual_files) || (ent.folder && ent.folder.basename) || null;
-  }
-
   // `Scene "Cool Shoot" (42)`. The one shape every label in this plugin takes, so a
   // bundle in the picker and an entity in a log line read the same way.
   function entityLabel(type, ent, id) {
@@ -243,10 +208,6 @@
     return Math.max(MIN_BUNDLES, Math.min(MAX_BUNDLES, n));
   }
 
-
-
-
-
   // **Three of the five shared mechanisms are correctly left alone, and each absence
   // is a rule rather than an omission:**
   //
@@ -270,39 +231,15 @@
 
   // ── Button gating diagnostics ────────────────────────────────────────────
   //
-  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true`, which is typed into the
-  // browser console: no setting, no reload, no file edit, and the flag is read at call
-  // time so it takes effect on the next tick. On the shared object rather than a global
-  // of our own because every plugin here that draws a button into these rows answers to
-  // it, and "why is this button missing" is rarely a question about only one of them.
-  //
-  // Deduplicated per channel: the tick that draws these buttons runs every second and
-  // on every DOM mutation burst, so an undeduplicated line would emit forever on a page
-  // nobody is touching. What is worth seeing is the moment an outcome changes. Turning
-  // the flag off clears the channels, so switching it back on restates the current
-  // position rather than staying silent until something moves.
-  var _gateLast = {};
-  function gateLogOnce(channel, line) {
-    if (!coop().debugButtons) { _gateLast = {}; return; }
-    if (_gateLast[channel] === line) return;
-    _gateLast[channel] = line;
-    console.info('[tbc gate] ' + line);
-  }
+  // Core's `[tbc gate]` channel: off unless `__GTTx__.StashPluginCoop.debugButtons = true`
+  // is typed into the browser console (or Dev Mods' Debug is on), read at call time so it
+  // takes effect on the next tick. On the shared object because every plugin here that
+  // draws a button into these rows answers to it, and "why is this button missing" is
+  // rarely a question about only one of them. `once` prints a channel's line only when it
+  // changes: the tick runs every second and on every DOM mutation burst.
+  var gate = C.gate('tbc');
 
-  // ── GraphQL ───────────────────────────────────────────────────────────────
-
-  function gqlRequest(query, variables) {
-    return fetch('/graphql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query, variables: variables }),
-    })
-      .then(function (resp) { return resp.json(); })
-      .then(function (json) {
-        if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
-        return json.data;
-      });
-  }
+  // ── Settings, read ────────────────────────────────────────────────────────
 
   function loadSettings() {
     return pluginConfig().then(function (data) {
@@ -373,7 +310,7 @@
   function validBundle(b) {
     return !!b && typeof b === 'object' && b.v === 1 &&
       typeof b.type === 'string' && hasOwn(ENTITIES, b.type) &&
-      b.id != null && Object.prototype.toString.call(b.tags) === '[object Array]';
+      b.id != null && Array.isArray(b.tags);
   }
 
   function loadBundles() {
@@ -383,7 +320,7 @@
       var raw = store.getItem(KEY);
       if (!raw) return [];
       var list = JSON.parse(raw);
-      if (Object.prototype.toString.call(list) !== '[object Array]') return [];
+      if (!Array.isArray(list)) return [];
       return list.filter(validBundle);
     } catch (e) {
       return [];
@@ -427,7 +364,7 @@
   // Fetched once, on the first dialog that needs it, and kept for the life of the
   // page. It buys two things at once, which is why it is one query rather than two:
   // the hover text on a tag row (aliases, parents, children, description) and the
-  // ancestor/descendant walks Prune and Roll Up are defined in terms of.
+  // ancestor/descendant walks Prune and Roll-Up are defined in terms of.
   //
   // The whole table rather than `findTags(ids:)` for the bundle's own tags, because
   // both of those need tags the bundle does not contain - a parent two levels up, a
@@ -501,7 +438,7 @@
     var children = (_graph.children[String(tag.id)] || []).map(graphName)
       .filter(function (n) { return !!n; }).sort();
     if (children.length) lines.push('Children: ' + children.join(', '));
-    if (g.description) lines.push('', oneLine(g.description));
+    if (g.description) lines.push('', tipText(g.description));
     return lines.join('\n');
   }
 
@@ -524,7 +461,7 @@
   // answer nobody has to think about, and it is where every page starts.
   // ── NormalizeParentTags' exclusion rules, mirrored ────────────────────────
   //
-  // **Prune and Roll Up are only offered where `NormalizeParentTags` is loaded in this
+  // **Prune and Roll-Up are only offered where `NormalizeParentTags` is loaded in this
   // page, and they are computed by it rather than here.** Both halves are the same
   // decision: these two operations are that plugin's, and a borrowed operation that
   // ignored the owner's "never touch this tag" settings would be worse than not
@@ -541,7 +478,7 @@
   //   - a new exclusion filter over there applies here the day it ships, with nothing
   //     to update and nothing to warn about;
   //   - `autoMode` is a **question** rather than a settings read, so the day that
-  //     plugin splits its two auto toggles into a mode per entity type, this file does
+  //     plugin splits its two auto toggles into a mode per entity-type, this file does
   //     not care;
   //   - the hierarchy query here stops paying for `custom_fields`, which was only ever
   //     fetched to answer a filter this file no longer evaluates.
@@ -700,7 +637,7 @@
     //
     //   add     blue,  ticked, live    - you picked it
     //   off     red,   clear,  live    - you unpicked it
-    //   rolled  amber, ticked, fixed   - Roll Up implies it, so it goes on regardless
+    //   rolled  amber, ticked, fixed   - Roll-Up implies it, so it goes on regardless
     //   pruned  grey,  clear,  fixed   - Prune found it redundant
     //   have    grey,  ticked, fixed   - the entity already carries it
     //
@@ -786,7 +723,7 @@
     // what anything does on its own, and marking everything would mark nothing.
     //
     // Keyed on the id SettingsPluginsPanel.tsx builds from the plugin id and the
-    // setting key, the same anchor `settingElement` uses, rather than on position or
+    // setting key, the same anchor Core's `settingElement` uses, rather than on position or
     // heading text. Two shapes because the switch is Stash's to render: `::before` is
     // the track of the react-bootstrap Form.Switch it renders today, and `accent-color`
     // covers a plain checkbox if that ever changes.
@@ -802,26 +739,11 @@
     (document.head || document.body || document.documentElement).appendChild(style);
   }
 
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
   function button(label, className) {
     var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
     b.type = 'button';
     return b;
   }
-
 
   // ── Putting tags into the edit form ───────────────────────────────────────
   //
@@ -863,6 +785,8 @@
     }
   }
 
+  // COMPAT: a Stash with no PluginApi component patching, older than the 0.31.0 this plugin
+  // requires (since TBC 0.0.1); remove when never on its own: Stash does not enforce the floor.
   var _warnedNoPatch = false;
   function warnNoPatchOnce() {
     if (_patchInstalled || _warnedNoPatch) return;
@@ -870,10 +794,6 @@
     console.warn('[tbc] this Stash does not expose PluginApi component patching, so there ' +
       'is no way to put tags into an edit form. The "📋Tags..." button is not shown. ' +
       '"⮺ Tags" still works, and the bundles are waiting for a Stash that can paste them.');
-  }
-
-  function idsOf(items) {
-    return (items || []).map(function (t) { return String(t.id); }).sort().join(',');
   }
 
   // Which capture is the control in front of the user: ᝯㄝₓ Core's rule, because getting
@@ -994,33 +914,6 @@
 
   var _active = null;
 
-  // Escape acts through whichever of Cancel/Close the footer is actually showing, never
-  // by calling `close()` itself. The footer is the dialog's own statement of what it
-  // will let you do right now, so routing the key through it means the key can never
-  // reach a button that is hidden or disabled.
-  function escapeButton(run) {
-    var order = [run.closeBtn, run.cancelBtn];
-    for (var i = 0; i < order.length; i++) {
-      var b = order[i];
-      if (b && !b.disabled && !hasClass(b, 'tbc-hidden')) return b;
-    }
-    return null;
-  }
-
-  // On `document`, not on the modal: the modal is not focusable, so a click into the
-  // log would otherwise put the key out of reach. Removed in `close()` - a dialog that
-  // has gone away must not still be answering for the page.
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
   // The planner `prepare` hands back is a **snapshot** of the sibling's settings and
   // hierarchy, bound once so that `plan` can be synchronous - which is what lets a
   // checkbox re-plan on the tick rather than on a round trip. The cost of that trade is
@@ -1055,13 +948,6 @@
     run._onShow = null;
   }
 
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
-  }
-
   function openPaste(type, id, label) {
     if (_active) return _active;
     _active = new PasteRun(type, id, label);
@@ -1078,7 +964,9 @@
     this._undo = [];          // one snapshot of the form's tag list per Add
     injectStyle();
     this.build();
-    wireEscape(this);
+    // Escape clicks whichever of Close/Cancel the footer shows, so it can never reach a
+    // hidden or disabled button; removed in `close()`.
+    wireEscape(this, 'tbc');
     wireRefresh(this);
     this.render();
     // The hierarchy is only wanted for the hover text and the two redundancy modes,
@@ -1101,20 +989,22 @@
       _npt = r[1];
       if (r[2]) { self.scope = r[2]; self.setTitle(); }
       if (!r[0]) {
-        self.log('WARN', 'the tag hierarchy could not be read, so Prune and Roll Up are ' +
+        self.log('WARN', 'the tag hierarchy could not be read, so Prune and Roll-Up are ' +
           'unavailable and a tag hover shows its name only');
       } else if (!nptPresent()) {
-        self.log('INFO', 'Prune and Roll Up are not offered: they are ' + NPT_NAME +
+        self.log('INFO', 'Prune and Roll-Up are not offered: they are ' + NPT_NAME +
           '’s operations, and it is not running on this page.');
       } else if (!api) {
+        // COMPAT: a NormalizeParentTags older than 3.2.0, which publishes no `prepare` (since TBC
+        // 0.5.0); remove when never on its own: that plugin is installed and upgraded separately.
         // Installed and running, but from before it published a planner. Naming the
         // version is the whole of the fix, and it is a fact about today rather than a
         // changelog: this dialog cannot compute those two operations itself any more.
-        self.log('INFO', 'Prune and Roll Up are not offered: they are computed by ' +
+        self.log('INFO', 'Prune and Roll-Up are not offered: they are computed by ' +
           NPT_NAME + ', and the copy running here is older than ' + NPT_API_MIN +
           ', which is the release that lets another plugin ask it.');
       } else if (!_npt) {
-        self.log('WARN', NPT_NAME + ' could not answer, so Prune and Roll Up are ' +
+        self.log('WARN', NPT_NAME + ' could not answer, so Prune and Roll-Up are ' +
           'unavailable. Its own settings or hierarchy read failed - check the console.');
       }
       // Outside that chain on purpose: it is about what happens on Save, so it holds
@@ -1159,7 +1049,7 @@
       'decided instead - grey and ticked for a tag this ' +
       (ENTITIES[this.type] ? ENTITIES[this.type].label : 'entity') +
       ' already carries, grey and clear for one Prune found redundant, amber and ' +
-      'ticked for one Roll Up brings in. Hover a tag for its aliases, parents, ' +
+      'ticked for one Roll-Up brings in. Hover a tag for its aliases, parents, ' +
       'children and description.'));
     this.modal.appendChild(head);
 
@@ -1201,7 +1091,7 @@
     });
     this.modeSel.value = _mode;
     this.modeSel.title = 'Prune drops a tag the entity will already imply through one ' +
-      'of its descendants. Roll Up adds every ancestor of a tag you are adding. ' +
+      'of its descendants. Roll-Up adds every ancestor of a tag you are adding. ' +
       'Either way nothing already on the entity is removed.';
     this.modeSel.addEventListener('change', function () {
       _mode = self.modeSel.value;
@@ -1213,7 +1103,7 @@
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.closeBtn = button('Close');
     this.closeBtn.addEventListener('click', function () { self.close(); });
-    // Declared so `escapeButton` can look for it without a special case; this dialog
+    // Declared so `wireEscape` can look for it without a special case; this dialog
     // has no mid-write state, so it is never shown.
     this.cancelBtn = null;
     foot.appendChild(this.addBtn);
@@ -1256,7 +1146,7 @@
   //
   // Two things follow, and the second is the reason this is one method and not two:
   //
-  //   - **The dropdown is not offered.** Choosing between Prune and Roll Up for this
+  //   - **The dropdown is not offered.** Choosing between Prune and Roll-Up for this
   //     paste is choosing between two operations that plugin is about to overrule
   //     anyway. It already has the answer, applied to every save rather than this one.
   //   - **The warning fires whatever the dropdown said**, because it is about the tags
@@ -1440,7 +1330,7 @@
   // who decided. `add` and `off` are the user's and stay live; `have`, `pruned` and
   // `rolled` are decided for them and are fixed.
   //
-  // Recomputed on every tick of a checkbox, because Prune and Roll Up are defined
+  // Recomputed on every tick of a checkbox, because Prune and Roll-Up are defined
   // against *the current selection*: unticking one tag can make its parent stop being
   // redundant, and that has to show immediately rather than at the press.
   //
@@ -1507,9 +1397,9 @@
         if (!known) continue;
         var existing = byId[a];
         // An ancestor the entity already carries reads as already-there, whether it
-        // was in the bundle or is only on this list because Roll Up reached it:
+        // was in the bundle or is only on this list because Roll-Up reached it:
         // already-on-target wins over rolled-up, and it is the truer of the two -
-        // Roll Up has nothing to add where the tag is already on. It wins over
+        // Roll-Up has nothing to add where the tag is already on. It wins over
         // protected too, which is why this is decided here rather than read off the
         // plan: that plugin has no way of knowing what the target already holds.
         if (haveMap[a]) { if (!existing) put({ id: a, name: known.name }, 'have'); continue; }
@@ -1519,10 +1409,10 @@
           // bundle it is not listed at all - a row for a tag nothing will do anything
           // with is noise.
           if (existing) existing.protect = NPT_NAME + ' never adds this tag (' + block +
-            '), so Roll Up leaves it out.';
+            '), so Roll-Up leaves it out.';
           continue;
         }
-        // Roll Up overrides an unticked box on purpose: the ancestor is implied by
+        // Roll-Up overrides an unticked box on purpose: the ancestor is implied by
         // a tag that *is* going on, so leaving it out would not honour the mode.
         if (existing) existing.state = 'rolled';
         else put({ id: a, name: known.name }, 'rolled');
@@ -1530,7 +1420,7 @@
     }
 
     // The user's order: what you can still change first (on, then off), then what was
-    // decided for you (Prune/Roll Up, then already-there). Within a group, Stash's own
+    // decided for you (Prune/Roll-Up, then already-there). Within a group, Stash's own
     // sort, so a list here reads like a list anywhere else in the app.
     var rank = { add: 0, off: 1, rolled: 2, pruned: 2, have: 3 };
     rows.sort(function (a, b) {
@@ -1573,7 +1463,7 @@
     if (live) {
       box.addEventListener('change', function () {
         self.checked[r.key] = !!box.checked;
-        // A full render, not just the counters: Prune and Roll Up both depend on this
+        // A full render, not just the counters: Prune and Roll-Up both depend on this
         // box, so its neighbours' states and the list's order can change with it.
         self.render();
       });
@@ -1586,7 +1476,7 @@
   };
 
   // The bundle's own tags the user decides on: not the ones the entity already has, and
-  // not the ancestors Roll Up brings, which follow their descendants' ticks. A pruned
+  // not the ancestors Roll-Up brings, which follow their descendants' ticks. A pruned
   // tag is one of them - its tick still says whether it is wanted.
   PasteRun.prototype.ownRows = function () {
     return (this._rows || []).filter(function (r) {
@@ -1600,7 +1490,7 @@
     this.render();
   };
 
-  // What Add would put in the box: the live ticks and the tags Roll Up brings with
+  // What Add would put in the box: the live ticks and the tags Roll-Up brings with
   // them, in the order the list shows.
   //
   // **A missing control means nothing is pickable, not that the entity is empty.**
@@ -1708,348 +1598,32 @@
   // while the browser is still running the one before it, and every surface Stash
   // renders - the version beside the plugin name included - shows the new number,
   // because they all come from the manifest over GraphQL. Comparing the two is the
-  // only way the script can notice it is the stale one.
-  //
-  // Resolves to null wherever the answer is unknown: a Stash too old for the field, a
-  // plugin it cannot see, a failed request. Unknown is not a mismatch.
-  function installedVersion() {
-    return gqlRequest('query TBCPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; });
-  }
-
+  // only way the script can notice it is the stale one. Core's `installedVersion`
+  // resolves to null wherever the answer is unknown, and unknown is not a mismatch.
   function checkInstalledVersion(onMismatch) {
-    installedVersion().then(function (installed) {
+    C.installedVersion(PLUGIN_ID, 'TBCPluginVersion').then(function (installed) {
       if (!installed || installed === PLUGIN_VERSION) return;
       onMismatch(installed);
     });
   }
 
   // ── The settings page ─────────────────────────────────────────────────────
-
-  function hasClass(node, name) {
-    return (' ' + String((node && node.className) || '') + ' ').indexOf(' ' + name + ' ') !== -1;
-  }
-
-  // SettingsPluginsPanel.tsx gives every plugin setting an id built from the plugin id
-  // and the setting key - `plugin-TagBundleClipboard-a1MaxBundles`. That is ours by
-  // construction: no version suffix, no localisation, nothing formatted for display.
-  // Two plugins here shipped this broken by matching heading text instead, twice, so
-  // the ids are the anchor and the heading is only a fallback.
-  function settingElement(key) {
-    return document.getElementById('plugin-' + PLUGIN_ID + '-' + key);
-  }
-
-  // Walks up from any one of our settings to the group box that contains it. Trying
-  // every key rather than a named one means removing or renaming a setting cannot
-  // quietly break the anchor - but a release that renames them *all* can, and the
-  // first casualty of that is the stale-script banner, which is the one thing on this
-  // page such a release needed to show. So the group headed with our own name is the
-  // fallback, inside this function rather than OR'd in by each caller.
   //
-  // The three sibling plugins guard that fallback with a `hasOwnTaskButton` check,
-  // because Settings - Tasks heads *its* group with the same name and decorating it
-  // would destroy the task button. This plugin declares no `tasks:`, so there is no
-  // such group for the heading match to find; adding one means adding the guard, and
-  // `.tests/tagclip.test.js` pins the pair together.
-  function ownSettingGroup() {
-    var node = null, d;
-    for (var key in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, key)) continue;
-      node = settingElement(key);
-      if (node) break;
-    }
-    for (d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    var heading = ownSettingGroupHeading();
-    for (node = heading, d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    return heading ? heading.parentElement : null;
-  }
-
-  function settingRow(key) {
-    var node = settingElement(key);
-    for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting')) return node;
-    }
-    return null;
-  }
-
-  // The two pages that show a group headed with our name do not head it the same way.
-  // Settings - Tasks passes the plugin name straight through, but Settings - Plugins
-  // appends the version:
-  //
-  //   heading: `${plugin.name} ${plugin.version ? `(${plugin.version})` : undefined}`
-  //
-  // so the h3 there reads "... (<version>)" - and, because that template interpolates the
-  // literal when there is no version at all, sometimes "... undefined".
-  //
-  // Strip the suffix and compare exactly, rather than testing a prefix: a plugin whose
-  // name merely starts with ours must not be mistaken for us.
-  // The h3 our group is headed with, for `ownSettingGroup`'s fallback.
-  function ownSettingGroupHeading() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (headingIsOurs(nodes[i].textContent)) return nodes[i];
-    }
-    return null;
-  }
-
-  function headingIsOurs(text) {
-    var t = String(text == null ? '' : text).trim();
-    if (t === PLUGIN_NAME) return true;
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
-
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
-
-  function readmeLinkSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub.nextSibling };
-    var header = byClass(group, 'setting');
-    var box = header && header.childNodes && header.childNodes[0];
-    if (box) return { parent: box, before: null };
-    return { parent: group, before: null };
-  }
-
-  // Paragraph spacing needs elements. Under `white-space: pre-wrap` a blank line is
-  // always one whole line-height and nothing can target it, so the description's
-  // paragraphs are rebuilt as divs and the gap becomes a margin - about a third of a
-  // line, rather than a whole empty one.
-  //
-  // Stash renders the description as a single text node; React puts that text node back
-  // on every re-render of this panel, so this runs on every tick and re-splits when it
-  // has to. It is idempotent: once the children are ours, there is no text node left.
-  function splitDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'tbc-p')) return;   // already ours
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;                   // nothing to split
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = oneLine(para);
-      if (t) sub.appendChild(el('div', 'tbc-p', t));
-    });
-  }
-
-  // ── Settings verbosity: a summary on the page, the rest on hover ──────────
-  //
-  // A description written as "summary\n\ndetail" shows only its first paragraph, with
-  // the rest moved into a tooltip. Stash's own Setting renders `<h3 title={tooltip}>`,
-  // but SettingsPluginsPanel never passes a tooltip for a plugin setting and
-  // `PluginSetting` has no field to declare one - so the slot exists, is always empty
-  // for us, and is filled from here.
-  //
-  // The split rides on the blank line the description format already supports rather
-  // than a delimiter of our own. If this script never runs, Stash renders the whole
-  // description exactly as it did before, instead of showing a raw marker.
-  var TIP_MARK = 'ⓘ';                  // circled Latin small letter i
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*tbc-tip-open\b/, '');
-    sub.className = (on ? cls + ' tbc-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  // A class toggled from JS rather than a `:hover ~` selector, because the triggers do
-  // not sit in one predictable place: the mark is inside the .sub-heading and the name
-  // is an <h3> somewhere above it, and a sibling combinator would depend on exactly how
-  // Stash nests the pair.
-  //
-  // The row is passed rather than the .sub-heading, and the current one looked up per
-  // event: an <h3> is Stash's element and survives the re-renders that replace
-  // everything we put in the row, so a captured reference would go stale. The flag is
-  // what stops a second pair of listeners landing on it each time we rebuild.
-  function tipTrigger(node, row) {
-    if (!node || node._tbcTipWired) return;
-    node._tbcTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'tbc-sum')) return;   // already ours
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;                                    // nothing to hide
-    var summary = oneLine(text.slice(0, cut));
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'tbc-tipped')) {
-      sub.className = ((sub.className || '') + ' tbc-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'tbc-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a
-    // sibling of the mark rather than a child: as a child it would sit inside an inline
-    // span and inherit its clipping and stacking.
-    var mark = el('span', 'tbc-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'tbc-tipbox', detail));
-    tipTrigger(mark, row);
-    tipTrigger(sum, row);
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var k in DEFAULTS) {
-      if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    }
-  }
-
-  // The group description is in the group *header*, which is outside the <Collapse> -
-  // so it stays on screen at full height whether the group is expanded or not, and
-  // per-plugin collapse does not shorten it. Hiding all but the first paragraph is the
-  // only thing that does.
-  //
-  // A <button>, never a <span>: SettingGroup's onDivClick walks up from the event
-  // target and returns early for `a` and `button`, so anything else folds the whole
-  // group on click.
-  function descCollapsed(sub) { return hasClass(sub, 'tbc-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*tbc-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' tbc-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  function collapseDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'tbc-p')) paras++;
-    if (paras < 2) return;                        // one paragraph hides nothing
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    // A re-render drops the button and the class together, so the description returns
-    // to collapsed rather than to a half-state with no way out of it.
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'tbc-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes on
-  // running it after an update and nothing on screen says so. The settings heading is
-  // where the two numbers meet: Stash builds it as `${name} (${version})` from the
-  // **manifest**, read fresh from the server, while `PLUGIN_VERSION` is what this
-  // script actually is.
-  //
-  // No query for it - the number is on the page already, and this tick runs once a
-  // second. `installedVersion` asks the server the same question, which is right for a
-  // dialog that opens once and wrong for a timer.
-  var STALE_ID = 'tbc-stale-notice';
-
-  // The group's own h3, not a search of the page: the header row comes before the
-  // setting rows, each of which has an h3 too, and the group is already ours.
-  function installedFromHeading(group) {
-    var h3 = group && group.querySelector ? group.querySelector('h3') : null;
-    var t = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? m[1].replace(/^\s+|\s+$/g, '') : null;
-  }
-
-  function staleSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
-    return { parent: group, before: group.firstChild };
-  }
-
-
-
-
-  function ensureStaleNotice(group) {
-    var installed = installedFromHeading(group);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, group, !!installed && installed !== PLUGIN_VERSION);
-    // No parenthesised version on the heading means Settings - Tasks, which heads its
-    // group with the bare name - not a mismatch, and nothing to say.
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = staleSlot(group);
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'tbc-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
-      'the older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-
-  // Re-added rather than tracked: React re-renders this panel whenever a setting
-  // changes and drops anything we put in it, so the tick puts it back. Keyed on the id,
-  // so a re-render that kept it does not produce a second one.
-  function ensureReadmeLink() {
-    var group = ownSettingGroup();
-    if (!group) return;
-    // All of these run on every tick, not just when the link is missing: React
-    // re-renders this panel on any settings change, and the class is the only thing
-    // making the description's paragraph breaks visible.
-    injectStyle();
-    if (!hasClass(group, 'tbc-own-group')) {
-      group.className = ((group.className || '') + ' tbc-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(group);
-    collapseDescription(group);   // after the split: it counts the .tbc-p divs
-    tipSettings();
-    ensureStaleNotice(group);     // before the early return: the link outlives it
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'tbc-readme', 'TagBundleClipboard/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noreferrer';
-    link.title = 'Open this plugin’s documentation';
-    link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
-    var slot = readmeLinkSlot(group);
-    slot.parent.insertBefore(link, slot.before);
-  }
+  // Core's `settingsPage`: the group found by our setting ids with the heading as
+  // fallback, the description split and collapsed, each setting's detail behind a tip,
+  // the stale-script banner read off the heading, and the README link. `tasks` is empty
+  // because this plugin declares none, so no Settings - Tasks group shares our heading.
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'tbc', keys: Object.keys(DEFAULTS), tasks: [],
+    readmeUrl: README_URL, readmeLabel: 'TagBundleClipboard/README.md', injectStyle: injectStyle,
+  });
 
   // No MutationObserver here, unlike the button injection: this is decoration in a
   // settings panel, not something that has to land before the user can click it, and a
   // second of delay after a re-render costs nothing.
   function settingsTick() {
-    ensureReadmeLink();
+    page.decorate(page.group());
   }
 
   // ── Where a button goes ───────────────────────────────────────────────────
@@ -2126,25 +1700,6 @@
   function findCopyContainer() {
     return findDetailContainer() || ensureTabStripRow();
   }
-
-
-
-
-
-
-
-  // The index of our button among the container's children, read once from a single
-  // `childNodes` snapshot: a real `NodeList` is live.
-  function childIndex(kids, btn) {
-    for (var i = 0; i < kids.length; i++) { if (kids[i] === btn) return i; }
-    return -1;
-  }
-
-
-
-
-
-
 
   // ── The two buttons ───────────────────────────────────────────────────────
 
@@ -2292,13 +1847,13 @@
   function buttonsTick() {
     var rt = currentRoute();
     if (!rt) {
-      gateLogOnce('route', 'not on a Scene/Image/Gallery/Performer/Studio/Group page');
+      gate.once('route', 'not on a Scene/Image/Gallery/Performer/Studio/Group page');
       clearButtons(COPY_BTN_ID);
       clearButtons(PASTE_BTN_ID);
       return;
     }
     injectStyle();
-    gateLogOnce('route', 'on ' + ENTITIES[rt.type].label + ' ' + rt.id);
+    gate.once('route', 'on ' + ENTITIES[rt.type].label + ' ' + rt.id);
 
     // The copy button, on the detail view.
     var copyBox = findCopyContainer();
@@ -2309,10 +1864,10 @@
     _copyRoute = here;
     if (copyBox) probeCopy(rt);
     if (copyBox && copyEmpty(rt)) {
-      gateLogOnce('copy', ENTITIES[rt.type].label + ' ' + rt.id + ' carries no tags - "⮺ Tags" not shown');
+      gate.once('copy', ENTITIES[rt.type].label + ' ' + rt.id + ' carries no tags - "⮺ Tags" not shown');
       if (copy && copy.parentNode) copy.parentNode.removeChild(copy);
     } else if (!copyBox) {
-      gateLogOnce('copy', 'no detail button row or tab strip on ' + ENTITIES[rt.type].label +
+      gate.once('copy', 'no detail button row or tab strip on ' + ENTITIES[rt.type].label +
         ' - "⮺ Tags" not shown');
       if (copy && copy.parentNode) copy.parentNode.removeChild(copy);
     } else {
@@ -2326,7 +1881,7 @@
         ensureRowSpacing(copyBox);
         insertBeforeImportantAction(copyBox, copy);
       }
-      gateLogOnce('copy', '"⮺ Tags" shown on ' + ENTITIES[rt.type].label + ' ' + rt.id);
+      gate.once('copy', '"⮺ Tags" shown on ' + ENTITIES[rt.type].label + ' ' + rt.id);
     }
 
     // The paste button, on the edit form. It needs somewhere to put the tags, so a
@@ -2336,13 +1891,13 @@
     var paste = document.getElementById(PASTE_BTN_ID);
     if (!_patchInstalled) {
       warnNoPatchOnce();
-      gateLogOnce('paste', 'PluginApi component patching is unavailable - "📋Tags..." not shown');
+      gate.once('paste', 'PluginApi component patching is unavailable - "📋Tags..." not shown');
       if (paste && paste.parentNode) paste.parentNode.removeChild(paste);
       return;
     }
     var editBox = findEditContainer();
     if (!editBox) {
-      gateLogOnce('paste', 'no edit form open on ' + ENTITIES[rt.type].label +
+      gate.once('paste', 'no edit form open on ' + ENTITIES[rt.type].label +
         ' - "📋Tags..." not shown');
       if (paste && paste.parentNode) paste.parentNode.removeChild(paste);
       return;
@@ -2357,7 +1912,7 @@
       ensureRowSpacing(editBox);
       insertBeforeImportantAction(editBox, paste);
     }
-    gateLogOnce('paste', '"📋Tags..." shown on ' + ENTITIES[rt.type].label + ' ' + rt.id);
+    gate.once('paste', '"📋Tags..." shown on ' + ENTITIES[rt.type].label + ' ' + rt.id);
   }
 
   // ── Wiring ────────────────────────────────────────────────────────────────

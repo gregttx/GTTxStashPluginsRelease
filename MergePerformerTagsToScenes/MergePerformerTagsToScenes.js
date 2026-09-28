@@ -15,40 +15,30 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[cpt2s] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[cpt2s] ᝯㄝₓ Merge Performer Tags To Scenes cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
-  var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
-    coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
-    keepLog = C.keepLog, droppedLine = C.droppedLine,
-    linkTarget = C.linkTarget, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen,
-    tipClose = C.tipClose, tagTip = C.tagTip, tipText = C.tipText, tagTipNames = C.tagTipNames,
-    tagLinkTitle = C.tagLinkTitle, entityTipStars = C.entityTipStars,
-    entityTipCountry = C.entityTipCountry, entityTipGender = C.entityTipGender,
-    entityTipLines = C.entityTipLines, entityTipDetail = C.entityTipDetail,
-    entityTip = C.entityTip, cfTipCarriers = C.cfTipCarriers, cfTipTitle = C.cfTipTitle,
-    cfTipLoad = C.cfTipLoad, cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen,
-    cfTipArm = C.cfTipArm, cfTipTick = C.cfTipTick, anyStale = C.anyStale,
-    reloadUiAnchor = C.reloadUiAnchor, ensureReloadUiButton = C.ensureReloadUiButton,
-    staleReloadButton = C.staleReloadButton, computedStyleOf = C.computedStyleOf,
-    findActionByLabel = C.findActionByLabel, borderingAction = C.borderingAction,
-    pxOf = C.pxOf, sideMargin = C.sideMargin, neighbourGap = C.neighbourGap,
-    nonZeroLength = C.nonZeroLength, stashButtonMargins = C.stashButtonMargins,
-    fillNeighbourGaps = C.fillNeighbourGaps, ensureRowSpacing = C.ensureRowSpacing,
-    applyButtonSpacing = C.applyButtonSpacing, insertOrdered = C.insertOrdered,
+  var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass,
+    gqlRequest = C.gqlRequest, settingElement = C.settingElement, settingRow = C.settingRow,
+    stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
+    coop = C.coop, domBus = C.domBus, plural = C.plural, copyToClipboard = C.copyToClipboard,
+    keepLog = C.keepLog, droppedLine = C.droppedLine, linkTarget = C.linkTarget,
+    tagTip = C.tagTip, tipText = C.tipText, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
+    cfTipTick = C.cfTipTick, ensureReloadUiButton = C.ensureReloadUiButton,
+    staleReloadButton = C.staleReloadButton, insertOrdered = C.insertOrdered,
     insertBeforeImportantAction = C.insertBeforeImportantAction,
-    entityTipName = C.entityTipName,
-    hasClass = C.hasClass;
+    fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, paintButton = C.paintButton;
+  var tagHasDetail = C.tagHasDetail, tagTooltip = C.tagTooltip, lowerId = C.lowerId, partsText = C.partsText;
+  var runLog = C.runLog, TASK_LOG_CAP = C.runLogCap;   // log lines kept in the DOM; all stay in `lines`
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
 
   var PLUGIN_ID           = 'MergePerformerTagsToScenes';
   var PLUGIN_NAME         = 'ᝯㄝₓ Merge Performer Tags To Scenes';
@@ -57,7 +47,7 @@
   // enough to crowd out the task, the path and the entity that follow it in a scoped
   // title. Here it already fits, so the two are the same string. The constant exists
   // anyway, so the head reads identically in both plugins and a future rename has one
-  // place to happen; `PLUGIN_NAME` stays the manifest's, since `ownSettingGroup`
+  // place to happen; `PLUGIN_NAME` stays the manifest's, since `page.group()`
   // matches the settings page's heading against it.
   var PLUGIN_SHORT_NAME   = PLUGIN_NAME;
   var SIBLING_ID          = 'NormalizeParentTags';
@@ -79,7 +69,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '5.0.0';
+  var PLUGIN_VERSION      = '5.0.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -133,15 +123,8 @@
   var TASK_MERGE_ALL   = 'Merge Performer Tags into All Their Scenes...';
   var TASKS            = [TASK_MERGE_ALL];
   var TASK_PAGE_SIZE   = 500;   // performers per page while walking the library
-  var TASK_LOG_CAP     = 1000;  // log lines kept in the DOM; all of them stay in memory
-  var TASK_FLUSH_MS    = 100;
   var TASK_UNDO_CHUNK  = 100;   // scene ids per undo mutation
   var TASK_UNDO_ARM_MS = 4000;  // how long Undo stays armed for its second click
-  // The busy cursor under the last log line. The counters say how far a pass has
-  // got; this says it is still going, which is the question a walk that spends
-  // seconds on one page of performers leaves unanswered.
-  var SPIN_FRAMES      = ['▙', '▛', '▜', '▟'];
-  var SPIN_MS          = 125;   // one four-frame cycle at 2Hz
 
   var settings = {
     showManualMergeButtons: false,
@@ -176,54 +159,13 @@
   // the protocol is not ours alone, and a bulk run that does not announce itself is
   // the case a third plugin could not defend against.
 
-
-
-
-
   // ── Button gating diagnostics ────────────────────────────────────────────
   //
-  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true`, typed into the browser console:
-  // no setting, no reload, no file edit, and read at call time so it takes effect on the
-  // next tick. On the shared object rather than a global of our own, so the one switch
-  // also turns on `PropagateTagsAndPerformers`' - both plugins draw buttons into these
-  // same rows, and "why is this button missing" is rarely a question about only one.
-  //
-  // `gateLog` fires every time, and its callers are the eligibility probes, which run
-  // once per entity and again after each save that invalidates them - seeing the same
-  // answer twice is the point, since it says the re-check ran. `gateLogOnce` is for the
-  // tick-driven states: `tick()` runs every second and on every DOM mutation burst, so
-  // an undeduplicated line there would emit forever on an untouched page. Turning the
-  // flag off clears the channels, so switching it back on restates the current position.
-  var _gateLast = {};
-  function gateLog(line) {
-    if (!coop().debugButtons) return;
-    console.info('[cpt2s gate] ' + line);
-  }
-  function gateLogOnce(channel, line) {
-    if (!coop().debugButtons) { _gateLast = {}; return; }
-    if (_gateLast[channel] === line) return;
-    _gateLast[channel] = line;
-    console.info('[cpt2s gate] ' + line);
-  }
-
-  // Identical to NormalizeParentTags' acquireLease, deliberately: renew per unit of
-  // work rather than taking one long lease, and release in every outcome so an error
-  // or a Stop cannot leave a reactive plugin standing down. The expiry is the
-  // backstop for the outcome neither can catch - the tab going away mid-run.
-  var LEASE_TTL_MS = 300000;
-
-  function acquireLease(label) {
-    var c = coop();
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + LEASE_TTL_MS };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + LEASE_TTL_MS; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
+  // Core's `[cpt2s gate]` channel, off unless `__GTTx__.StashPluginCoop.debugButtons =
+  // true` is typed into the browser console. `gateLog` fires every time - its callers are
+  // the eligibility probes, and seeing the same answer twice says the re-check ran;
+  // `gateLogOnce` is for the tick-driven states, which would otherwise emit every second.
+  var gate = C.gate('cpt2s'), gateLog = gate.log, gateLogOnce = gate.once;
 
   // Registered at load so a bulk plugin can tell "will stand down" apart from "too
   // old to know about leases" and warn the user accordingly.
@@ -269,6 +211,9 @@
   // Staging is the default, but it needs PluginApi. Where that is missing the button
   // falls back to merging and saving, because the user never opted into review — they
   // just get the behaviour their Stash can support.
+  // COMPAT: a Stash with no `PluginApi.patch`, before Stash 0.31.0
+  // (since MergePerformerTagsToScenes 0.8.0); remove when never on its own: it is also what
+  // runs if a Stash drops that API.
   function stagingActive() {
     return !settings.saveTagsImmediately && _tagPatchInstalled;
   }
@@ -314,10 +259,6 @@
     );
   }
 
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-  }
-
   function getPerformerId() {
     var m = window.location.pathname.match(/^\/performers\/(\d+)(?:\/|$)/);
     return m ? m[1] : null;
@@ -328,26 +269,11 @@
     return m ? m[1] : null;
   }
 
-  function gqlRequest(query, variables) {
-    return fetch('/graphql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query, variables: variables }),
-    })
-      .then(function (resp) { return resp.json(); })
-      .then(function (json) {
-        if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
-        return json.data;
-      });
-  }
-
-  // Undo History, where ᝯㄝₓ Core keeps one: a merge is, per scene, the tags it added -
+  // Undo History, which ᝯㄝₓ Core keeps: a merge is, per scene, the tags it added -
   // recorded as that delta, which an undo checks are still there and takes off again,
   // whatever else the scene gained since.
   function journalPass(label, libraryWide) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide });
   }
 
   function journalTags(scene, added, removing) {
@@ -681,10 +607,8 @@
         return updateSceneTags(sceneId, plan.existingIds.concat(plan.missing)).then(function () {
           logMerges(plan.missing.map(function (id) { return plan.tagById[id]; }), scene, sceneId, 'saved');
           var pass = shared || journalPass('Tags merged into one scene');
-          if (pass) {
-            pass.entries([journalTags({ id: sceneId, title: scene.title, files: scene.files }, plan.missing, false)]);
-            if (!shared) pass.finish();
-          }
+          pass.entries([journalTags({ id: sceneId, title: scene.title, files: scene.files }, plan.missing, false)]);
+          if (!shared) pass.finish();
           return true;
         });
       });
@@ -736,10 +660,6 @@
       console.warn('[cpt2s] could not patch TagSelect:', e);
       return false;
     }
-  }
-
-  function idsOf(tags) {
-    return (tags || []).map(function (t) { return t.id; }).sort().join(',');
   }
 
   // **The newest capture for this page is the live control, and nothing else is.** This
@@ -883,7 +803,7 @@
                 .catch(makeSceneFailureHandler(scene))
                 .then(next);
             }
-            if (pass) pass.finish();
+            pass.finish();
             // Report failures only after every scene has been attempted, so one bad
             // scene cannot silently cancel the rest of the run.
             if (failed) {
@@ -905,7 +825,7 @@
           // is never logged as merged.
           function makeSceneLogger(scene, mergedIds) {
             return function () {
-              if (pass) pass.entries([journalTags(scene, mergedIds, false)]);
+              pass.entries([journalTags(scene, mergedIds, false)]);
               logMerges(mergedIds.map(function (id) { return perfTagById[id]; }),
                 scene, scene.id, 'saved');
             };
@@ -929,7 +849,7 @@
   // overlapping the next call.
   // The manifest's setting keys, each mapped to the plugin's own name for it. One
   // table rather than the three hand-kept lists this replaced - the unpacking below,
-  // the tooltip list, and the pair of keys `ownSettingGroup` anchored on - because a
+  // the tooltip list, and the pair of keys the settings group is found by - because a
   // key missing from any one of them failed silently: no tooltip, or an anchor that a
   // rename could quietly break. `.tests/version.test.js` fails if the `.yml` declares a
   // key this does not name.
@@ -1142,7 +1062,7 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#a7b6c2;cursor:help;}' +
+    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -1174,25 +1094,6 @@
     style.id = TASK_STYLE_ID;
     style.textContent = TASK_CSS;
     (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-
-
-
-
-
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
   }
 
   function taskButton(label, className) {
@@ -1235,73 +1136,6 @@
     return ((t.sort_name || '').trim()) || t.name || '';
   }
 
-  function taskLowerId(a, b) {
-    var na = parseInt(a, 10), nb = parseInt(b, 10);
-    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na < nb;
-    return String(a) < String(b);
-  }
-
-  var TIP_ALIASES = 8;        // aliases named in a tooltip before the rest are a count
-  var TIP_ALIAS_CHARS = 120;  // and the width that can cut the list shorter still
-  var TIP_DESC_CHARS = 240;   // how much of a description the excerpt carries
-
-  // Free text arrives with newlines and runs of spaces in it, and a tooltip line is
-  // one line however the description was written.
-  function taskOneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
-  }
-
-  // Cut on the last space before the limit so a word is never sliced in half - unless
-  // the only space is near the start, where honouring it would throw most of the
-  // excerpt away.
-  function taskExcerpt(text, max) {
-    var s = taskOneLine(text);
-    if (s.length <= max) return s;
-    var cut = s.slice(0, max);
-    var space = cut.lastIndexOf(' ');
-    if (space > max * 0.6) cut = cut.slice(0, space);
-    return cut.replace(/[\s,;:.\-]+$/, '') + '…';
-  }
-
-  // The recap names a tag; this says what the tag *is*. Both free-text fields are
-  // capped, and the tail of the alias list is counted rather than dropped - a
-  // shortened list that does not say it is shortened reads as a complete one. Same
-  // shape as NormalizeParentTags' tagTooltip, separate because the plugins share no
-  // module; keep the two readable against each other.
-  function taskAliasList(t) {
-    return (((t && t.aliases) || []).map(taskOneLine)).filter(function (a) { return !!a; });
-  }
-
-  // Whether the tag has anything to say that the recap does not already show. The
-  // span already reads `"Tattoo" (11) x18`, so a tooltip repeating the name and id
-  // would open on a hover only to repeat the line underneath it - and since nothing
-  // marks which tags have one, every hover that does open had better say something
-  // new. (The sibling's tree rows tooltip unconditionally, because there the full
-  // name is itself information: a long one is cut off by the row.)
-  function taskTagHasDetail(t) {
-    return !!(taskAliasList(t).length || taskOneLine(t && t.description));
-  }
-
-  function taskTagTooltip(t, id) {
-    var lines = [taskOneLine((t && t.name) || 'unnamed'), 'tag id ' + id];
-
-    var aliases = taskAliasList(t);
-    if (aliases.length) {
-      var shown = [], used = 0;
-      for (var i = 0; i < aliases.length; i++) {
-        if (shown.length && (shown.length >= TIP_ALIASES || used + aliases[i].length > TIP_ALIAS_CHARS)) break;
-        shown.push(shown.length ? aliases[i] : taskExcerpt(aliases[i], TIP_ALIAS_CHARS));
-        used += aliases[i].length + 2;
-      }
-      var rest = aliases.length - shown.length;
-      lines.push('Aliases: ' + shown.join(', ') + (rest > 0 ? ', and ' + rest + ' more' : ''));
-    }
-
-    var desc = taskOneLine(t && t.description);
-    if (desc) lines.push('Description: ' + taskExcerpt(desc, TIP_DESC_CHARS));
-    return lines.join('\n');
-  }
-
   // The per-scene lines answer "what happened to this scene". This answers "which
   // tags did this run move, and onto how many scenes" - the question worth asking
   // before approving a library-wide merge, and one a six-figure log cannot be read
@@ -1319,7 +1153,7 @@
     ids.sort(function (a, b) {
       var c = taskCollate(taskTagSortKey(tagsById[a]), taskTagSortKey(tagsById[b]));
       if (c) return c;
-      return taskLowerId(a, b) ? -1 : 1;
+      return lowerId(a, b) ? -1 : 1;
     });
     var parts = [{ text: plural(ids.length, 'tag') + ' ' + verb + ': ' }];
     ids.forEach(function (tid, i) {
@@ -1327,21 +1161,17 @@
       var d = detail && hasOwn(detail, tid) ? detail[tid] : null;
       // The name is the link and the count is not: `x18` is this run's arithmetic rather
       // than part of what the tag is called, and underlining it would say otherwise. Two
-      // segments, so `taskPartsText` still produces the line it always did.
+      // segments, so `partsText` still produces the line it always did.
       parts.push({
         text: '"' + ((t && t.name) || 'unnamed') + '" (' + tid + ')',
         href: entityHref('tags', tid),
-        title: d && taskTagHasDetail(d) ? taskTagTooltip(d, tid) : null,
+        title: d && tagHasDetail(d) ? tagTooltip(d, tid, 'unnamed') : null,
         tip: tid,
       });
       parts.push({ text: ' x' + counts[tid] });
       if (i < ids.length - 1) parts.push({ text: ', ' });
     });
     return parts;
-  }
-
-  function taskPartsText(parts) {
-    return parts.map(function (p) { return p.text; }).join('');
   }
 
   function performerLabel(p) {
@@ -1369,7 +1199,6 @@
       ent: { type: key, id: String(id) } };
   }
 
-
   // What a scoped run's title calls the entity the click was made on. Reuses the two
   // label functions the log already writes, so a title and a log line can never
   // disagree about how an entity is named.
@@ -1391,31 +1220,6 @@
     }, function () {
       return kind + ' ' + id;
     });
-  }
-
-  // What Stash has installed, as opposed to what this file says it is. "Reload
-  // plugins" re-reads the plugin folder on the server but cannot replace a script
-  // this page already executed, so the manifest can say one version while the browser
-  // runs the one before it — and every version Stash renders comes from that
-  // manifest. Comparing the
-  // two is the only way the script can notice it is the stale one. The sibling has
-  // the same check; see its §5 for the reasoning, and the repo-root AGENTS.md for
-  // why the two are separate implementations.
-  //
-  // Resolves to null wherever the answer is unknown - a Stash too old for the field,
-  // a plugin it cannot see, a failed request - because unknown is not a mismatch and
-  // a run must not be blocked by one more query failing. It catches only what a
-  // version bump makes visible: editing the file without bumping it leaves both
-  // numbers equal and this check blind.
-  function installedVersion() {
-    return gqlRequest('query CPT2SPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; });
   }
 
   var _activeTask = null;
@@ -1519,7 +1323,7 @@
     // it takes back what this dialog itself added - and it is not a restore, so the
     // backup instruction stays and its limits are stated beside it.
     head.appendChild(el('div', 'cpt2s-warn',
-      'The merge only ever adds tags. Backing up your database before proceeding is recommended: Undo only ' +
+      'The merge only ever adds tags. Backing up your database before proceeding is strongly recommended: Undo only ' +
       'reverses what this dialog added, while it stays open, and cannot account for changes made ' +
       'elsewhere in the meantime.'));
     // Same legend as NormalizeParentTags', because the log lines are the same shape:
@@ -1569,13 +1373,9 @@
       this.rescanBtn, this.closeBtn].forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'cpt2s');
     document.body.appendChild(this.backdrop);
     this.begin();
-  };
-
-  TaskRun.prototype.focus = function () {
-    if (this.modal && this.modal.scrollIntoView) this.modal.scrollIntoView();
   };
 
   // Empty hides it. `begin()` clears it on every pass for the same reason it clears
@@ -1624,29 +1424,8 @@
     this.spin(scanning || applying || undoing);
   };
 
-  // A cursor cycling under the last log line for as long as work is in flight, and
-  // gone the moment it is not. It is a sibling of the lines rather than part of one,
-  // so it survives a flush that appends under it - `flush` moves it back to the end -
-  // and it carries no `-line` class, since it is not a log line and must not be read
-  // back as one. `state` is the single source of truth for whether it runs: every
-  // path in and out of a write goes through setState.
-  TaskRun.prototype.spin = function (on) {
-    if (!on) {
-      if (this.spinTimer) clearInterval(this.spinTimer);
-      this.spinTimer = null;
-      if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
-      this.spinEl = null;
-      return;
-    }
-    if (!this.spinEl) {
-      this.spinEl = el('div', 'cpt2s-spin', SPIN_FRAMES[0]);
-      var self = this, i = 0;
-      this.spinTimer = setInterval(function () {
-        self.spinEl.textContent = SPIN_FRAMES[++i % SPIN_FRAMES.length];
-      }, SPIN_MS);
-    }
-    this.logEl.appendChild(this.spinEl);
-  };
+  // The log - its cursor, lines, flush, and the Undo button's disarm - is Core's `runLog`.
+  runLog(TaskRun.prototype, 'cpt2s');
 
   // A run-level warning: into the log, where Copy log will carry it, and into the
   // dialog head, where it stays visible after the log has scrolled past it. Appends
@@ -1690,77 +1469,9 @@
     return this.loadTagDetail(counts).then(function () {
       if (self.pass !== pass) return;
       var parts = taskTagSummaryParts(counts, self.tagsById, verb, self.tagDetail);
-      if (parts) self.log('INFO', taskPartsText(parts), parts);
+      if (parts) self.log('INFO', partsText(parts), parts);
       self.flush();
     });
-  };
-
-  // `parts` is optional, and only the tag recap passes it: the line is rendered as
-  // spans so each tag can carry its own tooltip. `lines` keeps the plain string
-  // either way - Copy log hands over text, and a tooltip is not text.
-  TaskRun.prototype.log = function (kind, message, parts) {
-    var line = '[' + kind + '] ' + message;
-    this.logged = (this.logged || 0) + 1;
-    this.lines.push(line);
-    // Bounded, because the copy buffer is what a library-wide pass grows without limit.
-    this.logDropped = (this.logDropped || 0) + keepLog(this.lines);
-    this.pending.push({ kind: kind, line: line, parts: parts || null });
-    this.scheduleFlush();
-  };
-
-  TaskRun.prototype.scheduleFlush = function () {
-    var self = this;
-    if (this.flushTimer) return;
-    this.flushTimer = setTimeout(function () {
-      self.flushTimer = null;
-      self.flush();
-    }, TASK_FLUSH_MS);
-  };
-
-  // Only the tail is rendered. A first run over a large library can plan six figures
-  // of scenes, and one node per line is a tab that stops responding; the full log
-  // stays in `lines`, which is what Copy log exports.
-  TaskRun.prototype.flush = function () {
-    if (!this.pending.length) return;
-    var pending = this.pending;
-    this.pending = [];
-    // Out of the way while the lines land, so the cursor is neither counted against
-    // the render cap nor left in the middle of the log.
-    if (this.spinEl && this.spinEl.parentNode) this.logEl.removeChild(this.spinEl);
-    pending.forEach(function (p) {
-      var node = el('div', 'cpt2s-line cpt2s-' + p.kind, p.parts ? null : p.line);
-      // The line looks exactly like every other one: the spans exist to hang a
-      // title on, and carry no styling of their own. An underline and a help cursor
-      // were tried and read as decoration on a log that has none elsewhere.
-      if (p.parts) {
-        node.appendChild(el('span', null, '[' + p.kind + '] '));
-        p.parts.forEach(function (seg) {
-          var span;
-          if (seg.href) {
-            span = el('a', 'cpt2s-elink', seg.text);
-            span.href = seg.href;
-            span.target = linkTarget();
-            span.rel = 'noopener noreferrer';
-          } else {
-            span = el('span', null, seg.text);
-          }
-          if (seg.title) span.title = seg.title;
-          // A segment naming a tag opens the box with the tag's image above the same
-          // text; one with no image of its own is left with the `title` it already had.
-          if (seg.tip) tagTip(span, seg.tip, seg.title);
-          // Anything else with a page of its own opens a card that says which one it is.
-          if (seg.ent) entityTip(span, seg.ent.type, seg.ent.id);
-          node.appendChild(span);
-        });
-      }
-      this.logEl.appendChild(node);
-    }, this);
-    while (this.logEl.childNodes && this.logEl.childNodes.length > TASK_LOG_CAP) {
-      this.logEl.removeChild(this.logEl.firstChild);
-    }
-    if (this.spinEl) this.logEl.appendChild(this.spinEl);
-    if (typeof this.logEl.scrollHeight === 'number') this.logEl.scrollTop = this.logEl.scrollHeight;
-    this.renderProgress();
   };
 
   TaskRun.prototype.renderProgress = function () {
@@ -1825,14 +1536,14 @@
     });
   };
 
-  // NormalizeParentTags' automatic modes, as its settings actually spell them.
-  // Today that is one string carrying a mode per entity type ("SCENES=PRUNE,
+  // NormalizeParentTags' auto-modes, as its settings actually spell them.
+  // Today that is one string carrying a mode per entity-type ("SCENES=PRUNE,
   // IMAGES=ROLLUP"), so both directions can be on at once for different types; the
   // pair of booleans it replaced covered every type it was enabled for, where both at
   // once was that plugin's own documented no-op.
   //
   // Read by name rather than through its `coop().api`, like the rest of this check:
-  // the API answers for one entity type at a time and needs the plugin to be running
+  // the API answers for one entity-type at a time and needs the plugin to be running
   // in this page, and what this warning is about is a setting that may be set while
   // the plugin is disabled. It renamed every key it had at once, which is why the old
   // pair is still read - an install that has not been touched since then still
@@ -1845,6 +1556,9 @@
         rollup: /=\s*roll[\s_-]*up\b/i.test(modes),
       };
     }
+    // COMPAT: `a8AutoPruneOnUpdate` / `a9AutoRollUpOnUpdate`, the sibling's boolean pair before
+    // its one `a1AutoModes` string (since NormalizeParentTags 4.0.0); remove when never on its
+    // own: an install that has not saved that plugin's settings since still carries the pair.
     var prune = !!(ps && ps.a8AutoPruneOnUpdate), rollup = !!(ps && ps.a9AutoRollUpOnUpdate);
     if (prune === rollup) return { prune: false, rollup: false };
     return { prune: prune, rollup: rollup };
@@ -1854,7 +1568,7 @@
   // of the shared settings response and says whether we will stand down, and it has
   // reactive modes worth the same treatment in reverse. Both of its
   // directions collide with a merge - Prune strips the parent tags we add straight
-  // back out, Roll Up piles more ancestors on top - so the warning names which.
+  // back out, Roll-Up piles more ancestors on top - so the warning names which.
   //
   // Unlike its version, this reads the last loaded copy rather than reloading: the
   // task shares `settings` with the rest of the plugin, which is refreshed on
@@ -1871,11 +1585,11 @@
     // the pair of booleans it used to keep could not express, and which this once read
     // as "no mode is running".
     var mode = auto.prune && auto.rollup
-      ? 'automatic Prune and Roll Up'
-      : (auto.prune ? 'automatic Prune' : 'automatic Roll Up');
+      ? 'Auto-Prune and Auto-Roll-Up'
+      : (auto.prune ? 'Auto-Prune' : 'Auto-Roll-Up');
     var effect = auto.prune && auto.rollup
       ? 'it will rewrite the tags this merge adds - removing the ones a more specific tag ' +
-        'on the same scene implies, or adding every ancestor, depending on the entity type'
+        'on the same scene implies, or adding every ancestor, depending on the entity-type'
       : (auto.prune
         ? 'it will remove the parent tags this merge adds, wherever a more specific tag on the ' +
           'same scene already implies them'
@@ -1922,7 +1636,7 @@
     if ((settings.excludeSceneWithTagName || '').trim()) {
       on.push('scenes tagged "' + settings.excludeSceneWithTagName.trim() + '" are skipped');
     }
-    if (settings.excludeTagWithIgnoreAutoTag) on.push('tags set to Ignore auto tag are not merged');
+    if (settings.excludeTagWithIgnoreAutoTag) on.push('tags set to Ignore Auto Tag are not merged');
     if ((settings.excludeTagWithCustomFieldName || '').trim()) {
       on.push('tags with the custom field "' + settings.excludeTagWithCustomFieldName.trim() +
         '" are not merged');
@@ -2026,7 +1740,7 @@
       if (!perfTags.length) {
         var none = [{ text: 'Performer ' }, entSeg('performers', p.id, performerLabel(p)),
           { text: ' carries no mergeable tags - they have none, or every one is excluded.' }];
-        self.log('INFO', taskPartsText(none), none);
+        self.log('INFO', partsText(none), none);
         self.renderProgress();
         return null;
       }
@@ -2060,7 +1774,7 @@
       if (sceneIsExcluded(scene, exclTagId)) {
         var skip = [{ text: 'Scene ' }, entSeg('scenes', scene.id, sceneLogLabel(scene, scene.id)),
           { text: ' is excluded by a filter (Organized, or the exclusion tag). Nothing to merge.' }];
-        self.log('INFO', taskPartsText(skip), skip);
+        self.log('INFO', partsText(skip), skip);
         self.renderProgress();
         return;
       }
@@ -2151,7 +1865,7 @@
   TaskRun.prototype.sceneQueryFailed = function (p, e) {
     var bad = [{ text: 'Performer ' }, entSeg('performers', p.id, performerLabel(p)),
       { text: ': listing scenes failed: ' + (e && e.message ? e.message : e) }];
-    this.log('ERROR', taskPartsText(bad), bad);
+    this.log('ERROR', partsText(bad), bad);
     this.errors++;
   };
 
@@ -2201,9 +1915,9 @@
         parts.push(entSeg('tags', t.id, '"' + (t.name || 'unnamed') + '" (' + t.id + ')'));
         if (i < added.length - 1) parts.push({ text: ', ' });
       });
-      // `taskPartsText` is what goes into `lines`, so Copy log hands over exactly the
+      // `partsText` is what goes into `lines`, so Copy log hands over exactly the
       // text it always did - a link and a card are not text.
-      this.log('MERGE', taskPartsText(parts), parts);
+      this.log('MERGE', partsText(parts), parts);
     }
   };
 
@@ -2212,7 +1926,7 @@
   // this dialog is open - which is what they do after seeing the warning.
   TaskRun.prototype.checkVersion = function () {
     var self = this;
-    return installedVersion().then(function (installed) {
+    return C.installedVersion(PLUGIN_ID, 'CPT2SPluginVersion').then(function (installed) {
       // The two quiet outcomes go to the console, beside the load banner, rather than
       // into the log: this log is about the library, a matching version is the boring
       // case, and a line arriving whenever one small query resolves would land in a
@@ -2281,13 +1995,13 @@
   // Progress is rendered by `applyEntry`/`undoBatch` themselves, not from here.
   TaskRun.prototype.runUnits = function (units, leaseLabel, step, verb, finish) {
     var self = this;
-    var lease = acquireLease(leaseLabel);
+    var lease = C.lease(PLUGIN_ID, leaseLabel);
     var i = 0;
     var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
       ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, true);
     var recorded = function () {
       self.journalRun = null;
-      if (pass) pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+      pass.finish().then(function (line) { if (line) self.log('INFO', line); });
     };
 
     guarded(function () {
@@ -2354,13 +2068,13 @@
         parts.push(entSeg('performers', f.id, f.label));
         if (i < entry.from.length - 1) parts.push({ text: ', ' });
       });
-      self.log('MERGE', taskPartsText(parts), parts);
+      self.log('MERGE', partsText(parts), parts);
       self.renderProgress();
     }, function (e) {
       var failed = [{ text: 'Scene ' },
         entSeg('scenes', entry.scene.id, sceneLogLabel(entry.scene, entry.scene.id)),
         { text: ' update failed: ' + (e && e.message ? e.message : e) }];
-      self.log('ERROR', taskPartsText(failed), failed);
+      self.log('ERROR', partsText(failed), failed);
       self.errors++;
     });
   };
@@ -2493,7 +2207,7 @@
         var back = [{ text: 'Undo - Scene ' },
           entSeg('scenes', entry.scene.id, sceneLogLabel(entry.scene, entry.scene.id)),
           { text: ' - ' + plural(entry.tagIds.length, 'tag') + ' removed again' }];
-        self.log('MERGE', taskPartsText(back), back);
+        self.log('MERGE', partsText(back), back);
       });
       self.renderProgress();
     }, function (e) {
@@ -2518,12 +2232,6 @@
 
     // Same reasoning as finishApply, through the same function.
     this.evictWritten();
-  };
-
-  TaskRun.prototype.disarmUndo = function () {
-    if (this.undoTimer) { clearTimeout(this.undoTimer); this.undoTimer = null; }
-    this.undoArmed = false;
-    if (this.undoBtn) this.undoBtn.textContent = 'Undo';
   };
 
   TaskRun.prototype.stop = function () {
@@ -2565,72 +2273,12 @@
   TaskRun.prototype.copy = function () {
     var text = [droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n');
     var self = this;
-    function done(ok) {
+    copyToClipboard(text, function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
-    }
-    var nav = window.navigator;
-    if (nav && nav.clipboard && nav.clipboard.writeText) {
-      nav.clipboard.writeText(text).then(function () { done(true); }, function () { done(fallback()); });
-      return;
-    }
-    done(fallback());
-
-    // Stash is commonly served over plain HTTP on a LAN, where the async clipboard
-    // API is not available at all.
-    function fallback() {
-      try {
-        var ta = document.createElement('textarea');
-        ta.value = text;
-        document.body.appendChild(ta);
-        if (ta.select) ta.select();
-        var ok = document.execCommand ? document.execCommand('copy') : false;
-        document.body.removeChild(ta);
-        return ok;
-      } catch (e) {
-        return false;
-      }
-    }
+    });
   };
-
-  // ── Escape ────────────────────────────────────────────────────────────────
-  //
-  // Escape acts through whichever of Cancel/Close the footer is actually showing,
-  // never by calling `close()` itself. The footer is the dialog's own statement of
-  // what it will let you do right now, so routing the key through it means the key
-  // can never reach a button that is hidden or disabled - and in particular does
-  // nothing mid-write, where both are hidden and Stop is the only way out. A key
-  // that quietly abandoned a run in flight would be worse than one that does nothing.
-  function escapeButton(run) {
-    var order = [run.closeBtn, run.cancelBtn];
-    for (var i = 0; i < order.length; i++) {
-      var b = order[i];
-      if (b && !b.disabled && !hasClass(b, 'cpt2s-hidden')) return b;
-    }
-    return null;
-  }
-
-  // On `document`, not on the modal: the modal is not focusable, so a click into the
-  // log would otherwise put the key out of reach. Removed in `close()` - a dialog that
-  // has gone away must not still be answering for the page.
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
-  }
 
   TaskRun.prototype.close = function () {
     unwireEscape(this);
@@ -2660,87 +2308,22 @@
   // SettingGroup headed with the plugin name; another plugin may declare a task by
   // the same name. Where the group cannot be identified the click is left alone:
   // layer 2 still catches it, keyed on the plugin id in the mutation itself.
-  function ownTaskName(btn) {
-    var label = (btn.textContent || '').trim();
-    if (TASKS.indexOf(label) === -1) return null;
-    // Answer from the button's *own* SettingGroup and stop there. Testing every
-    // ancestor for an h3 - which is what this used to do - climbs past the group
-    // on a miss and into the panel holding every plugin's group, where
-    // `querySelector('h3')` answers with whichever plugin is listed first. A plugin
-    // declaring a task by the same name as ours was therefore hijacked whenever we
-    // happened to be above it, which is the one thing the heading check exists to
-    // stop. Found by the tasks-page check in `.tests/placement.test.js`.
-    //
-    // A group's first h3 is its heading: PluginTasks renders it in the header, above
-    // the per-task `Setting` rows that each carry an h3 of their own - which is also
-    // why the walk cannot simply stop at the nearest ancestor containing any h3.
-    //
-    // The any-ancestor walk survives as a fallback for a Stash that does not put
-    // `setting-group` on that box. It carries the bug above, and that is deliberate:
-    // it is the behaviour every release before this one shipped, so it can be no worse
-    // than what it replaces.
-    var node = btn;
-    var fallback = null;
-    for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-      var heading = node.querySelector ? node.querySelector('h3') : null;
-      var ours = !!heading && (heading.textContent || '').trim() === PLUGIN_NAME;
-      if (hasClass(node, 'setting-group')) return ours ? label : null;
-      if (ours) fallback = label;
-    }
-    return fallback;
-  }
-
   document.addEventListener('click', function (event) {
     var target = event.target;
     var btn = target && target.closest ? target.closest('button') : null;
     if (!btn) return;
-    var taskName = ownTaskName(btn);
+    var taskName = C.ownTaskName(btn, PLUGIN_NAME, TASKS);
     if (!taskName) return;
     event.preventDefault();
     event.stopPropagation();
     startTaskRun(taskName);
   }, true);
 
-  // Layer 2 lives in the fetch wrapper below; this builds the response it answers
-  // with, so the mutation is never forwarded to a server that has nothing to exec.
-  function fakeOk(payload) {
-    var body = JSON.stringify(payload);
-    if (typeof Response === 'function') {
-      return new Response(body, { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-    return {
-      ok: true, status: 200,
-      json: function () { return Promise.resolve(JSON.parse(body)); },
-      text: function () { return Promise.resolve(body); },
-      clone: function () { return fakeOk(payload); },
-    };
-  }
-
   // ── Fetch interception for auto-merge ─────────────────────────────────────
   //
   // Wraps window.fetch to detect sceneUpdate / performerUpdate mutations from
   // Stash itself. _mergeDepth guards against recursion when our own merge work
   // fires a sceneUpdate mutation.
-
-  // fetch resolves for HTTP 500 and for GraphQL errors returned with HTTP 200, so
-  // "the request came back" is not "the edit was saved". Inspect a clone of the
-  // response before acting on it — our handler is attached before Apollo's, so the
-  // body is still unread at this point.
-  function mutationSucceeded(p) {
-    return p.then(function (resp) {
-      if (!resp || !resp.ok) return false;
-      var clone;
-      try {
-        clone = resp.clone();
-      } catch (e) {
-        return true; // body already consumed; assume success rather than skipping
-      }
-      return clone.json().then(
-        function (json) { return !json || !json.errors; },
-        function () { return true; }
-      );
-    }, function () { return false; });
-  }
 
   var _fetch = window.fetch;
   window.fetch = function (url, opts) {
@@ -2784,7 +2367,7 @@
             var pass = journalPass('Tags merged into bulk-edited scenes');
             function nextScene() {
               if (i >= bulkSceneIds.length) {
-                if (pass) pass.finish();
+                pass.finish();
                 refreshSceneList();
                 return;
               }
@@ -2972,18 +2555,6 @@
     }
     return null;
   }
-
-
-
-
-
-
-
-
-
-
-
-
 
   function removePerformerButton() {
     var existing = document.querySelector('.' + PERFORMER_BTN_CLASS);
@@ -3326,93 +2897,20 @@
     if (Date.now() > _gotoEditDeadline) clearGotoEdit();
   }
 
-  // ── The README link on the settings page ──────────────────────────────────
+  // ── The settings group ────────────────────────────────────────────────────
   //
-  // Stash does render a link for `url:` in the manifest, but as an unlabelled chain
-  // icon in the group header, which is easy to miss. This is the same URL with the
-  // file name on it, directly under the description. The description itself cannot
-  // carry it: Stash passes that string to React as a child (`subHeading` in
-  // Inputs.tsx), so an <a> in it is escaped and shown as text, and CSS cannot help -
-  // generated content has no href.
-  //
-  // Clicking it does not fold the group: SettingGroup's onDivClick walks up from the
-  // event target and returns early for `a` and `button`.
-  //
-  // The sibling has the same feature, anchored the same way, for the same reason
-  // there are two of everything here: the plugins share no module.
+  // Core's `settingsPage` finds the group, splits the description behind Show more,
+  // reduces each multi-paragraph setting to its summary, shows the stale-script banner
+  // and adds the labelled README link. It reads the heading through `headingText`,
+  // because the superseded notice below sits inside that h3.
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/MergePerformerTagsToScenes/README.md';
-  var README_LINK_ID = 'cpt2s-readme-link';
 
-  // The first descendant carrying a class, in document order. This was a hand-rolled
-  // depth-capped walk until the test harness grew a class selector; the walk existed
-  // only because the fake DOM could not answer `.foo`, not because a browser cannot.
-  // `querySelector` is the same search with the same ordering, and the depth cap it
-  // drops was arbitrary rather than load-bearing.
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
-
-  // Stash gives every plugin setting an element id built from the plugin id and the
-  // setting key - `plugin-MergePerformerTagsToScenes-a1ShowManualMergeButtons` - so
-  // it is ours by construction, with no heading text to match and nothing formatted
-  // for display. Finding one is also what says the plugins settings page is showing.
-  // See §2 of NormalizeParentTags' AGENTS.md: matching the heading instead shipped
-  // broken twice over there.
-  function ownSettingGroup() {
-    var node = null, d, key;
-    for (key in SETTING_MAP) {
-      if (!hasOwn(SETTING_MAP, key)) continue;
-      node = settingElement(key);
-      if (node) break;
-    }
-    for (d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    // Fallback: the group headed with our own name. The ids are still the anchor,
-    // but they are only ours *while they exist* - a release that renames every key
-    // leaves this code unable to find its own group, and the first casualty is the
-    // stale-script banner, which is the one thing on this page that release needed to
-    // show. NormalizeParentTags renamed all nine of its keys at once and its own
-    // banner went silent in every tab that had not been reloaded.
-    //
-    // Settings - Tasks heads *its* group with the same name, and that group is not
-    // this one: it holds the task buttons and no settings, so decorating it would put
-    // a README link and a split description on a page that never had either - and the
-    // link lands inside the task button, replacing the label `ownTaskName` matches on.
-    // The heading identifies us; the buttons say which page.
-    var heading = ownSettingGroupHeading();
-    for (node = heading, d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return hasOwnTaskButton(node) ? null : node;
-    }
-    return heading && !hasOwnTaskButton(heading.parentElement)
-      ? heading.parentElement : null;
-  }
-
-  // The two pages that show a group headed with our name do not head it the same
-  // way. Settings - Tasks passes the plugin name straight through
-  // (`heading: o.name`), but Settings - Plugins appends the version:
-  //
-  //   heading: `${plugin.name} ${plugin.version ? `(${plugin.version})` : undefined}`
-  //
-  // so the h3 there reads "... (<version>)" - and, because that template interpolates the
-  // literal when there is no version at all, sometimes "... undefined".
-  //
-  // Strip the suffix and compare exactly, rather than testing a prefix: a plugin whose
-  // name merely starts with ours must not be mistaken for us.
-  // The group heading's own text, with anything this plugin has put *inside* the h3
-  // left out - today the superseded notice, which sits at the end of that line. Both
-  // readers of this heading are exact: `headingIsOurs` compares the whole string, and
-  // `installedFromHeading` matches a parenthesised version anchored at the end. An
-  // injected node breaks both silently - the settings group stops being findable by
-  // heading, and the stale-script banner stops finding the installed version - so
-  // nothing may read `h3.textContent` directly.
   // The group heading's own text, with the superseded notice - which sits inside that
-  // h3, after the name - left out. Both readers of this heading are exact:
-  // `headingIsOurs` compares the whole string, and `installedFromHeading` matches a
-  // parenthesised version anchored at the end. An injected node breaks both silently:
-  // the settings group stops being findable by heading, and the stale-script banner
-  // stops finding the installed version. So nothing reads `h3.textContent` directly.
+  // h3, after the name - left out. Both readers of this heading are exact: the name
+  // match compares the whole string, and the installed version is a parenthesised
+  // number anchored at the end. An injected node breaks both silently: the settings
+  // group stops being findable by heading, and the stale-script banner stops finding
+  // the installed version. So nothing reads `h3.textContent` directly.
   function headingText(h3) {
     if (!h3) return '';
     var mine = document.getElementById(SUPERSEDED_ID);
@@ -3422,284 +2920,12 @@
     return h3.textContent == null ? '' : String(h3.textContent);
   }
 
-  function headingIsOurs(text) {
-    var t = String(text == null ? '' : text).trim();
-    if (t === PLUGIN_NAME) return true;
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
-
-  function ownSettingGroupHeading() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (headingIsOurs(headingText(nodes[i]))) return nodes[i];
-    }
-    return null;
-  }
-
-  // A plain recursive walk rather than `querySelectorAll('button')`: this runs against
-  // a group that may be anywhere in the page's own markup, and matching on the task
-  // captions is the only thing that identifies the Tasks page from inside it.
-  function hasOwnTaskButton(node) {
-    if (!node) return false;
-    if (node.tagName === 'BUTTON' &&
-        TASKS.indexOf(String(node.textContent || '').replace(/^\s+|\s+$/g, '')) !== -1) {
-      return true;
-    }
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) {
-      if (hasOwnTaskButton(kids[i])) return true;
-    }
-    return false;
-  }
-
-  // Under the description, which is in the group header and therefore outside the
-  // <Collapse> - so it shows whether or not the group is expanded.
-  function readmeLinkSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub.nextSibling };
-    var header = byClass(group, 'setting');
-    var box = header && header.childNodes && header.childNodes[0];
-    if (box) return { parent: box, before: null };
-    return { parent: group, before: null };
-  }
-
-  // Paragraph spacing needs elements. Under `white-space: pre-wrap` a blank line is
-  // always one whole line-height and nothing can target it, so the description's
-  // paragraphs are rebuilt as divs and the gap becomes a margin - about a third of a
-  // line, rather than a whole empty one.
-  //
-  // Stash renders the description as a single text node; React puts that text node
-  // back on every re-render of this panel, so this runs on every tick and re-splits
-  // when it has to. `splitParagraphs` is idempotent: once the children are ours,
-  // there is no text node left to split.
-  function splitDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'cpt2s-p')) return;   // already ours
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;                   // nothing to split
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = para.replace(/\s+/g, ' ').replace(/^ | $/g, '');
-      if (t) sub.appendChild(el('div', 'cpt2s-p', t));
-    });
-  }
-
-  // ── Settings verbosity: a summary on the page, the rest on hover ──────────
-  //
-  // A description written as "summary\n\ndetail" shows only its first paragraph,
-  // with the rest moved into a tooltip. The sibling plugin's AGENTS.md §6 carries
-  // the full reasoning; the parts that matter here:
-  //
-  // Stash's own Setting renders `<h3 title={tooltip}>` (Inputs.tsx), but
-  // SettingsPluginsPanel never passes a tooltip for a plugin setting, and
-  // `PluginSetting` has no field to declare one - name, display_name, description,
-  // type is the whole type. So the slot exists, is always empty for us, and the
-  // tooltip is built here instead.
-  //
-  // The split rides on the blank line the description format already supports rather
-  // than a delimiter of our own. If this script never runs - a stale browser cache,
-  // a .js that was never copied into the plugin folder - Stash renders the whole
-  // description exactly as before, instead of showing a raw marker.
-  //
-  // **What goes in which half is a judgement, made per setting.** The box opens on
-  // focus as well as hover, so it is better reachable than a `title` was, but it
-  // still does not exist on a touch device.
-  var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
-
-  function settingElement(key) {
-    return document.getElementById('plugin-' + PLUGIN_ID + '-' + key);
-  }
-
-  // The `.setting` row a given setting lives in. `settingElement` returns the input
-  // itself - Stash puts the id on the Form.Switch, not on the row - so this walks up
-  // to the row. ' setting ' is matched with its spaces so that "setting-group" is not
-  // mistaken for it.
-  function settingRow(key) {
-    var node = settingElement(key);
-    for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting')) return node;
-    }
-    return null;
-  }
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*cpt2s-tip-open\b/, '');
-    sub.className = (on ? cls + ' cpt2s-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  // A class toggled from JS rather than a `:hover ~` selector, because the triggers
-  // do not sit in one predictable place: the mark and the summary are inside the
-  // .sub-heading and the name is an <h3> somewhere above it, and a sibling
-  // combinator would depend on exactly how Stash nests them.
-  //
-  // The row is passed rather than the .sub-heading, and the current one looked up
-  // per event: an <h3> is Stash's element and survives the re-renders that replace
-  // everything we put in the row, so a captured reference would go stale. The flag
-  // is what stops a second pair of listeners landing on it each time we rebuild.
-  function tipTrigger(node, row) {
-    if (!node || node._cpt2sTipWired) return;
-    node._cpt2sTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'cpt2s-sum')) return;   // already ours
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;                                              // nothing to hide
-    var summary = taskOneLine(text.slice(0, cut));
-    // Kept as paragraphs: white-space:pre-wrap on the box honours them, and three
-    // paragraphs run together read worse than the wall this is replacing.
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(taskOneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'cpt2s-tipped')) {
-      sub.className = ((sub.className || '') + ' cpt2s-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'cpt2s-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a
-    // sibling of the mark rather than a child: as a child it would sit inside an
-    // inline span and inherit its clipping and stacking.
-    var mark = el('span', 'cpt2s-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'cpt2s-tipbox', detail));
-    tipTrigger(mark, row);
-    // The visible summary opens it too - the mark is a small target - and so does
-    // the setting's name. Stash's own `<h3 title>` slot is left empty: a `title`
-    // there would put the same words in the small browser tooltip this replaces.
-    tipTrigger(sum, row);
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var key in SETTING_MAP) if (hasOwn(SETTING_MAP, key)) tipSetting(key);
-  }
-
-  // The group description is in the group *header*, which is outside the <Collapse>
-  // - so it stays on screen at full height whether the group is expanded or not, and
-  // per-plugin collapse does not shorten it. Hiding all but the first paragraph is
-  // the only thing that does.
-  //
-  // A <button>, never a <span>: SettingGroup's onDivClick walks up from the event
-  // target and returns early for `a` and `button`, so anything else folds the whole
-  // group on click. A button is also the keyboard-reachable choice, which matters
-  // more here than for the tooltips - this is the half of the description that has
-  // nowhere else to be read.
-  var DESC_TOGGLE_ID = 'cpt2s-desc-toggle';
-
-  function descCollapsed(sub) { return hasClass(sub, 'cpt2s-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*cpt2s-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' cpt2s-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  function collapseDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'cpt2s-p')) paras++;
-    if (paras < 2) return;                        // one paragraph hides nothing
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    // A re-render drops the button and the class together, so the description
-    // returns to collapsed rather than to a half-state with no way out of it.
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'cpt2s-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  // Re-added rather than tracked: React re-renders this panel whenever a setting
-  // changes and drops anything we put in it, so the tick puts it back. Keyed on the
-  // id, so a re-render that kept it does not produce a second one.
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes
-  // on running it after an update and nothing on screen says so. The settings
-  // heading is where the two numbers meet: Stash builds it as `${name} (${version})`
-  // from the **manifest**, read fresh from the server, while `PLUGIN_VERSION` is what
-  // this script actually is. A disagreement means the page is running code the
-  // manifest has already replaced.
-  //
-  // No query for it - the number is on the page already, and this tick runs once a
-  // second. `installedVersion` asks the server the same question, which is right for
-  // a dialog that opens once and wrong for a timer.
-  //
-  // It catches only what a version bump makes visible; editing the file without
-  // bumping leaves both numbers equal, which is the practical reason this repo bumps
-  // the patch digit on every change.
-  var STALE_ID = 'cpt2s-stale-notice';
-
-  // The group's own h3, not a search of the page: the header row comes before the
-  // setting rows, each of which has an h3 too, and the group is already ours.
-  function installedFromHeading(group) {
-    var h3 = group && group.querySelector ? group.querySelector('h3') : null;
-    var t = headingText(h3).replace(/^\s+|\s+$/g, '');
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? m[1].replace(/^\s+|\s+$/g, '') : null;
-  }
-
-  // Above the description rather than under it: it is the first thing in the group
-  // worth reading, and it leaves the README link's slot alone. Both sit in the group
-  // header, outside Stash's <Collapse>, so a collapsed group still shows the banner.
-  function staleSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
-    return { parent: group, before: group.firstChild };
-  }
-
-
-
-
-  function ensureStaleNotice(group) {
-    var installed = installedFromHeading(group);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, group, !!installed && installed !== PLUGIN_VERSION);
-    // No parenthesised version on the heading means Settings → Tasks, which heads its
-    // group with the bare name - not a mismatch, and nothing to say.
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = staleSlot(group);
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'cpt2s-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
-      'the older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'cpt2s', keys: Object.keys(SETTING_MAP), tasks: TASKS, readmeUrl: README_URL,
+    readmeLabel: 'MergePerformerTagsToScenes/README.md', injectStyle: taskInjectStyle,
+    headingText: headingText,
+  });
 
   // ── "PropagateTagsAndPerformers has taken this over" ──────────────────────
   //
@@ -3761,8 +2987,9 @@
     SUPERSEDER_PATH_RE.lastIndex = 0;
     while ((m = SUPERSEDER_PATH_RE.exec(text)) !== null) word = m[1].toUpperCase();
     if (word) return word !== 'OFF';
-    // An install predating that string still has the boolean it replaced, and a
-    // plugin that is disabled never runs the migration that would move it across.
+    // COMPAT: `b1TagsPerformersToScenes`, the path's boolean before that plugin's `b1Paths`
+    // string (since PropagateTagsAndPerformers 3.0.0); remove when never on its own: a copy that
+    // stays disabled never runs the migration that would move it across.
     return !text.replace(/^\s+|\s+$/g, '') && !!raw.b1TagsPerformersToScenes;
   }
 
@@ -3780,40 +3007,17 @@
     return true;
   }
 
-  // Stash's own link for the manifest's `url:` - the unlabelled chain icon on the
-  // heading line - found as the first anchor in the group that is not the labelled
-  // one this plugin injects under the description. Excluded by id rather than by
-  // position: ours is added later in this same tick on the first pass and is already
-  // there on every one after, so document order says nothing about which is which.
-  function stashUrlLink(group) {
-    var found = null;
-    (function walk(n) {
-      var kids = n.childNodes || [];
-      for (var i = 0; i < kids.length && !found; i++) {
-        var k = kids[i];
-        if (k.tagName === 'A' && k.id !== README_LINK_ID) { found = k; return; }
-        walk(k);
-      }
-    })(group);
-    return found;
-  }
-
   // Inside the group's own h3, after the name: an <h3> is a block, so a sibling of it
   // would land on the next line however the notice itself is displayed, and this has
   // to be *on* the title's line. `headingText` is what keeps that from breaking the
-  // two things that read this heading.
-  //
-  // Three fallbacks, none of the anchors ours: Stash's `url:` link icon, then the
-  // Enable/Disable button found by its caption the way a row's Delete is, then the
-  // stale banner's slot above the description. The notice appears either way.
+  // two things that read this heading. A group with no h3 gets the stale banner's slot,
+  // above the description.
   function supersededSlot(group) {
     var h3 = group.querySelector ? group.querySelector('h3') : null;
     if (h3) return { parent: h3, before: null };
-    var link = stashUrlLink(group);
-    if (link && link.parentNode) return { parent: link.parentNode, before: link };
-    var btn = findActionByLabel(group, 'Disable') || findActionByLabel(group, 'Enable');
-    if (btn && btn.parentNode) return { parent: btn.parentNode, before: btn };
-    return staleSlot(group);
+    var sub = byClass(group, 'sub-heading');
+    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
+    return { parent: group, before: group.firstChild };
   }
 
   function ensureSupersededNotice(group) {
@@ -3850,11 +3054,6 @@
     }
     slot.parent.insertBefore(box, slot.before);
   }
-    // circled Latin small letter i
-
-
-
-
 
   var EXCL_LINK_ID = 'cpt2s-exclusion-tag';
   var EXCL_MARK = '🔗';      // link symbol
@@ -3878,11 +3077,11 @@
 
   function exclusionTagTick() {
     var key = 'b1ExcludeSceneWithTagName';
-    if (!settingRow(key)) return;
+    if (!settingRow(PLUGIN_ID, key)) return;
     var name = (settings.excludeSceneWithTagName || '').trim();
     if (!name) { dropExclusionLink(); return; }
     lookupExclusionTag(name).then(function (tag) {
-      var row = settingRow(key);
+      var row = settingRow(PLUGIN_ID, key);
       if (!row || name !== _exclFor) return;      // the box moved on while we asked
       if (!tag) { dropExclusionLink(); return; }
       var node = document.getElementById(EXCL_LINK_ID);
@@ -3910,68 +3109,22 @@
   }
 
   function ensureReadmeLink() {
-    var group = ownSettingGroup();
+    var group = page.group();
     if (!group) return;
-    // Both of these run on every tick, not just when the link is missing: React
-    // re-renders this panel on any settings change, and the class is the only thing
-    // making the description's paragraph breaks visible.
-    taskInjectStyle();
-    if (!hasClass(group, 'cpt2s-own-group')) {
-      group.className = ((group.className || '') + ' cpt2s-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(group);
-    collapseDescription(group);   // after the split: it counts the .cpt2s-p divs
-    tipSettings();
+    page.decorate(group);
     exclusionTagTick();
     cfTipTick(PLUGIN_ID, 'c2ExcludeTagWithCustomFieldName',
       String(settings.excludeTagWithCustomFieldName || '').replace(/^\s+|\s+$/g, ''));
-    ensureStaleNotice(group);     // before the early return: the link outlives it
     ensureSupersededNotice(group);
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'cpt2s-readme', 'MergePerformerTagsToScenes/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noreferrer';
-    link.title = 'Open this plugin\'s documentation for the version it was published at';
-    link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
-    var slot = readmeLinkSlot(group);
-    slot.parent.insertBefore(link, slot.before);
   }
 
   // ── Plugin Task buttons ───────────────────────────────────────────────────
   //
   // Settings - Tasks - Plugin Tasks renders every task of every plugin with the same
   // `btn-secondary`, so nothing on that page says which buttons rewrite the library.
-  // Repainting ours in the same amber as its page buttons is the whole change.
-  //
-  // `ownTaskName` decides what is ours - the same function the click interception
-  // keys on, which checks the label *and* the enclosing group's heading, so another
-  // plugin declaring a task by the same name is not repainted.
-  //
-  // Swapping Bootstrap's variant class rather than writing a colour: `btn-warning`
-  // brings Stash's hover, focus and active states with it, which a background-color
-  // of ours would have to restate and then keep in step with the theme.
-  //
-  // `btn-warning` is deliberately not in the strip list - it is what we add, and the
-  // guard in `paintButton` returns before any of this once it is there.
-  var BTN_VARIANTS = /\bbtn-(secondary|primary|success|info|light|dark|link)\b/g;
-
-  function paintButton(btn, variant) {
-    if (hasClass(btn, variant)) return;                        // already ours
-    var cls = String(btn.className || '').replace(BTN_VARIANTS, '');
-    btn.className = cls.replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
-  }
-
-  // Re-applied every tick rather than once: React re-renders this panel and hands
-  // back a button with Stash's own classes, and `paintButton` is a no-op on one that
-  // still carries ours.
-  function paintTaskButtons() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (ownTaskName(nodes[i])) paintButton(nodes[i], PLUGIN_BTN_VARIANT);
-    }
-  }
+  // Core's `paintTaskButtons` repaints ours amber every tick - React hands the button
+  // back with Stash's own classes on a re-render - deciding what is ours with the same
+  // `ownTaskName` the click interception keys on.
 
   function tick() {
     maybeGoToEdit();
@@ -3980,7 +3133,7 @@
     // Costs two getElementById calls off the settings page, which is where this tab
     // spends none of its time; no query, no observer of its own.
     ensureReadmeLink();
-    paintTaskButtons();
+    C.paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
   }
 
   // The MutationObserver watches the whole SPA subtree, which churns constantly

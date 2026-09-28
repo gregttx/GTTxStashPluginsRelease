@@ -1,6 +1,6 @@
 // Entity Name Maintainer
 //
-// Requires Stash 0.31.0 or newer: `custom_fields` on the seven entity types is one of
+// Requires Stash 0.31.0 or newer: `custom_fields` on the seven entity-types is one of
 // the places this plugin looks, and `CustomFieldsInput` on their update mutations is
 // how it writes there.
 //
@@ -36,34 +36,30 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[enm] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[enm] ᝯㄝₓ Entity Name Maintainer cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
-  var showDefaults = C.showDefaults, caseSensitive = C.caseSensitive, fold = C.fold, coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
-    tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
-    entityTipCountry = C.entityTipCountry, entityTipGender = C.entityTipGender,
-    entityTipLines = C.entityTipLines, entityTipDetail = C.entityTipDetail,
-    entityTip = C.entityTip, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    entityTipName = C.entityTipName,
-    tagLinkTitle = C.tagLinkTitle;
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
+  var showDefaults = C.showDefaults, caseSensitive = C.caseSensitive, fold = C.fold, coop = C.coop,
+    fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    holdWidth = C.holdWidth, entityTip = C.entityTip, staleReloadButton = C.staleReloadButton,
+    hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, paintButton = C.paintButton,
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, foreignLease = C.foreignLease,
+    displayName = C.displayName, occurrences = C.occurrences, context = C.matchContext;
 
   var PLUGIN_ID   = 'EntityNameMaintainer';
   var PLUGIN_NAME = 'ᝯㄝₓ Entity Name Maintainer';
   // The name the dialog head wears. `PLUGIN_NAME` is the manifest's and has to stay
-  // byte-identical to the `.yml`, because `ownParts`' heading match finds this plugin's
-  // block on the settings page with it. This one is free to be short - and is not: the
+  // byte-identical to the `.yml`, because Core's `settingsPage` heading match finds this
+  // plugin's block on the settings page with it. This one is free to be short - and is not: the
   // head names the entity and its id after it, which fits, and a head reading a name the
   // settings page never shows reads as a different plugin. `NormalizeParentTags` makes
   // the same call the same way.
@@ -78,7 +74,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '3.0.0';
+  var PLUGIN_VERSION = '3.0.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -95,9 +91,6 @@
 
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/EntityNameMaintainer/README.md';
   var STYLE_ID       = 'enm-style';
-  var README_LINK_ID = 'enm-readme-link';
-  var DESC_TOGGLE_ID = 'enm-desc-toggle';
-  var STALE_ID       = 'enm-stale-notice';
 
   // Amber for the buttons that write, and for the filter toggles while they are on.
   // See "one colour for a plugin wrote this" in the repo-root AGENTS.md.
@@ -105,104 +98,30 @@
 
   var READ_PAGE    = 500;    // entities per page of the scan
   var WRITE_CHUNK  = 25;     // entities written per batch, so Undo and the log stay live
-  var LEASE_TTL_MS = 300000;
   var TICK_MS      = 1000;
-  var CONTEXT      = 48;     // characters of surrounding text shown either side of a hit
-  var ELLIPSIS     = '…';
   // The busy cursor under the last line of the log. The counters say how far a scan or
   // a write has got; this says it is still going.
-  var SPIN_FRAMES = ['▙', '▛', '▜', '▟'];
-  var SPIN_MS = 125;           // one four-frame cycle at 2Hz
+  var SPIN_FRAMES = C.runSpinFrames, SPIN_MS = C.runSpinMs;   // Core's, as its run log draws them
   // How long Close stays armed after the first press. Long enough to read the
   // question and to reach the button, short enough that a user who has looked away does
   // not come back to one still waiting to close.
   var CLOSE_CONFIRM_SECONDS = 5;
 
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-  }
-
-
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').replace(/^ | $/g, '');
-  }
-
-  // Newlines and runs of space collapsed, but nothing trimmed: this is for the text
-  // *around* a match, where the space either side of it is part of what the line shows.
-  function flatten(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ');
-  }
-
   function trim(text) {
     return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
   }
 
-  // ── The seven entity types ────────────────────────────────────────────────
+  // ── The seven entity-types ────────────────────────────────────────────────
   //
-  // `fields` is a list of *candidates*, not a promise: which of them the running Stash
-  // actually has is settled by one introspection query at the start of every scan (see
-  // `describeFields`). A schema this plugin guessed wrong about would otherwise fail
-  // the whole query and report as "nothing found", which is the one failure mode a
-  // search tool must not have.
-  //
-  //   nameField  the field a rename moves, and so the one the fetch wrapper watches
-  //   extra      the display fields that are not searchable text - a file's basename,
-  //              a gallery's folder - so a hit can name an entity with no title
-  //   update     the single-entity mutation; there is no bulk input carrying free text
-  var ENTITIES = {
-    scenes: {
-      key: 'scenes', label: 'Scene', plural: 'Scenes', gqlType: 'Scene',
-      find: 'findScenes', list: 'scenes', one: 'findScene', route: '/scenes/',
-      update: 'sceneUpdate', updateInput: 'SceneUpdateInput', nameField: 'title',
-      extra: 'files { basename }',
-      fields: ['title', 'code', 'details', 'director', 'urls', 'custom_fields'],
-    },
-    images: {
-      key: 'images', label: 'Image', plural: 'Images', gqlType: 'Image',
-      find: 'findImages', list: 'images', one: 'findImage', route: '/images/',
-      update: 'imageUpdate', updateInput: 'ImageUpdateInput', nameField: 'title',
-      extra: 'visual_files { ... on ImageFile { basename } ... on VideoFile { basename } }',
-      fields: ['title', 'code', 'details', 'photographer', 'urls', 'custom_fields'],
-    },
-    galleries: {
-      key: 'galleries', label: 'Gallery', plural: 'Galleries', gqlType: 'Gallery',
-      find: 'findGalleries', list: 'galleries', one: 'findGallery', route: '/galleries/',
-      update: 'galleryUpdate', updateInput: 'GalleryUpdateInput', nameField: 'title',
-      extra: 'files { basename } folder { basename }',
-      fields: ['title', 'code', 'details', 'photographer', 'urls', 'custom_fields'],
-    },
-    performers: {
-      key: 'performers', label: 'Performer', plural: 'Performers', gqlType: 'Performer',
-      find: 'findPerformers', list: 'performers', one: 'findPerformer', route: '/performers/',
-      update: 'performerUpdate', updateInput: 'PerformerUpdateInput', nameField: 'name',
-      extra: '',
-      fields: ['name', 'disambiguation', 'alias_list', 'details', 'urls', 'tattoos',
-        'piercings', 'measurements', 'career_length', 'custom_fields'],
-    },
-    studios: {
-      key: 'studios', label: 'Studio', plural: 'Studios', gqlType: 'Studio',
-      find: 'findStudios', list: 'studios', one: 'findStudio', route: '/studios/',
-      update: 'studioUpdate', updateInput: 'StudioUpdateInput', nameField: 'name',
-      extra: '',
-      fields: ['name', 'aliases', 'details', 'urls', 'custom_fields'],
-    },
-    groups: {
-      key: 'groups', label: 'Group', plural: 'Groups', gqlType: 'Group',
-      find: 'findGroups', list: 'groups', one: 'findGroup', route: '/groups/',
-      update: 'groupUpdate', updateInput: 'GroupUpdateInput', nameField: 'name',
-      extra: '',
-      fields: ['name', 'aliases', 'synopsis', 'director', 'urls', 'custom_fields'],
-    },
-    tags: {
-      key: 'tags', label: 'Tag', plural: 'Tags', gqlType: 'Tag',
-      find: 'findTags', list: 'tags', one: 'findTag', route: '/tags/',
-      update: 'tagUpdate', updateInput: 'TagUpdateInput', nameField: 'name',
-      extra: '',
-      fields: ['name', 'aliases', 'description', 'custom_fields'],
-    },
-  };
-
-  var TYPE_ORDER = ['scenes', 'images', 'galleries', 'performers', 'studios', 'groups', 'tags'];
+  // Core's `entityTypes`: the table (`fields` are candidates, settled against the running
+  // Stash by `describeFields`), the order the scan walks it in, one label per field, and
+  // the `ENM_Shapes` and `ENM_Scan` queries. `nameField` is the field a rename moves, and
+  // so the one the fetch wrapper watches; `mutation` is the single-entity update, since
+  // there is no bulk input carrying free text. Its queries go through this plugin's own
+  // `gqlRequest`, marked `__enm`, so the fetch wrapper lets them past.
+  var TEXT = C.entityTypes('ENM', gqlRequest);
+  var ENTITIES = TEXT.types, TYPE_ORDER = TEXT.order, FIELD_LABEL = TEXT.fieldLabel;
+  var describeFields = TEXT.describeFields, pageQuery = TEXT.pageQuery;
 
   // An eighth "type" that is not one: the descriptions `CustomFieldsBulkEditor` keeps for
   // custom fields. They are prose the user wrote about a field, they mention names, and a
@@ -228,29 +147,22 @@
     noId: true,
   };
 
-  // The label a filter row and a hit line both wear. One label per *concept*, shared
-  // across types on purpose: Details means the same thing on a Scene and on a
-  // Performer, and a user turning it off means both.
-  var FIELD_LABEL = {
-    title: 'Title', name: 'Name', code: 'Code', details: 'Details',
-    description: 'Description', synopsis: 'Synopsis', director: 'Director',
-    photographer: 'Photographer', urls: 'URLs', aliases: 'Aliases',
-    alias_list: 'Aliases', disambiguation: 'Disambiguation', tattoos: 'Tattoos',
-    piercings: 'Piercings', measurements: 'Measurements', career_length: 'Career length',
-  };
   var CF_NAME_LABEL  = 'Custom field name';
   var CF_VALUE_LABEL = 'Custom field value';
 
   // Which mutation on which type a rename arrives as, keyed by mutation name so the
   // fetch wrapper can look one up without walking the table.
   var BY_MUTATION = {};
-  TYPE_ORDER.forEach(function (k) { BY_MUTATION[ENTITIES[k].update] = ENTITIES[k]; });
+  TYPE_ORDER.forEach(function (k) { BY_MUTATION[ENTITIES[k].mutation] = ENTITIES[k]; });
 
   // `CustomFieldsBulkEditor` keeps every custom field's *description* in one tag's own
   // description, as JSON. That is another plugin's plumbing rather than the user's
   // prose, and a text replacement inside it would rewrite JSON by hand - which is
   // exactly the way to break it. The tag marks itself with a custom field, so it can
   // be recognised whatever the user has renamed it to, and it is skipped whole.
+  // COMPAT: `cfbe_desc_store`, the marker's name before CustomFieldsBulkEditor 2.0.1 renamed it
+  // (since CustomFieldsBulkEditor 2.0.1); remove when no store can still wear it - never on its
+  // own: CustomFieldsBulkEditor upgrades a store only the next time its own dialog finds it.
   var CFBE_STORE_FIELDS = ['ᱜ╦╦🞮_🛂🧲_🛠🛈🖫_desc_store', 'cfbe_desc_store'];
   var CFBE_ID = 'CustomFieldsBulkEditor';
   var CFBE_NAME = 'ᝯㄝₓ Custom Fields Bulk Editor';
@@ -261,6 +173,9 @@
   // "there are no descriptions to search here".
   function cfbeApi() {
     var api = (coop().api || {})[CFBE_ID];
+    // COMPAT: a CustomFieldsBulkEditor that publishes no `descriptions()` / `updateDescriptions()`,
+    // before its 2.10.0 (since EntityNameMaintainer 0.1.0); remove when this plugin requires
+    // CustomFieldsBulkEditor 2.10.0 or newer - the `!api` check for an absent one stays.
     if (!api || typeof api.descriptions !== 'function' ||
         typeof api.updateDescriptions !== 'function') return null;
     return api;
@@ -286,7 +201,6 @@
     if (!(n > 0)) n = parseInt(DEFAULTS[key], 10);
     return n;
   }
-
 
   // Both halves of the protocol, and this plugin needs both. It **reacts**: a rename
   // arriving while a sibling holds a lease is one of hundreds that bulk run is about to
@@ -316,7 +230,7 @@
       if (ENTITIES[TYPE_ORDER[i]].label.toLowerCase() === String(opts.type)) spec = ENTITIES[TYPE_ORDER[i]];
     }
     if (!spec) return 0;
-    var list = Object.prototype.toString.call(opts.renames) === '[object Array]' ? opts.renames : [opts];
+    var list = Array.isArray(opts.renames) ? opts.renames : [opts];
     var batch = {}, taken = [];
     list.forEach(function (r) {
       if (!r || r.id == null || typeof r.from !== 'string' || typeof r.to !== 'string' || r.from === r.to) return;
@@ -331,16 +245,17 @@
     return taken.length;
   }
 
-  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true`, typed into the browser
-  // console: no setting, no reload, and read at call time so it takes effect on the next
-  // rename. The shared switch rather than one of our own, because the question it answers -
-  // "why did nothing happen when I renamed that" - is the same shape as "why is this button
-  // not there", and a user in DevTools should have one thing to type.
+  // Core's `[enm gate]` channel: off unless Dev Mods' Debug switch is on or
+  // `__GTTx__.StashPluginCoop.debugButtons = true` is typed into the browser console - no
+  // setting, no reload, and read at call time so it takes effect on the next rename. The
+  // shared switch rather than one of our own, because the question it answers - "why did
+  // nothing happen when I renamed that" - is the same shape as "why is this button not
+  // there", and a user in DevTools should have one thing to type.
   //
   // A rename is a user action rather than a tick, so these are **not** deduplicated: one
   // line per save is the point. The one exception is the unreadable-body line, which could
   // otherwise fire on every request the page makes.
-  var _gateLast = {};
+  var gate = C.gate('enm');
 
   // **And a ring of the same lines, kept whether or not anything is switched on.**
   //
@@ -358,54 +273,9 @@
   var _stats = { fetches: 0, readable: 0, graphql: 0, matched: 0 };
 
   function trace(line) {
-    var t = new Date();
-    _trace.push(('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2) +
-      ':' + ('0' + t.getSeconds()).slice(-2) + '  ' + line);
+    _trace.push(new Date().toTimeString().slice(0, 8) + '  ' + line);
     if (_trace.length > TRACE_MAX) _trace.shift();
-    gateLog(line);
-  }
-
-  function gateLog(line) {
-    if (!coop().debugButtons) { _gateLast = {}; return; }
-    console.info('[enm gate] ' + line);
-  }
-
-  function gateOnce(channel, line) {
-    if (!coop().debugButtons) { _gateLast = {}; return; }
-    if (_gateLast[channel] === line) return;
-    _gateLast[channel] = line;
-    console.info('[enm gate] ' + line);
-  }
-
-  // A bulk run announces itself for the duration of its writes, so a reactive plugin in
-  // the same tab stands down rather than reacting to every entity we touch. Advisory,
-  // always expiring, per tab - see the repo-root AGENTS.md.
-  function acquireLease(label, ttl) {
-    var c = coop();
-    var ms = ttl || LEASE_TTL_MS;
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + ms };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + ms; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
-
-  // Someone else's lease, still live. Expired ones are dropped on the way past: a tab
-  // that crashed mid-run must not disable this plugin until the next reload.
-  function foreignLease() {
-    var c = coop();
-    var now = Date.now();
-    for (var i = c.leases.length - 1; i >= 0; i--) {
-      if (c.leases[i].until <= now) c.leases.splice(i, 1);
-    }
-    for (var j = 0; j < c.leases.length; j++) {
-      if (c.leases[j].owner !== PLUGIN_ID) return c.leases[j];
-    }
-    return null;
+    gate.log(line);
   }
 
   // ── GraphQL ───────────────────────────────────────────────────────────────
@@ -486,13 +356,11 @@
 
   // Shown on Stash's settings page from its first paint, by the same rule (Core's
   // `showDefaults`); the seed above is what writes them.
-  if (typeof showDefaults === 'function') {
-    showDefaults(PLUGIN_ID, function () {
-      var out = {};
-      for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) out[k] = DEFAULTS[k];
-      return out;
-    });
-  }
+  showDefaults(PLUGIN_ID, function () {
+    var out = {};
+    for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) out[k] = DEFAULTS[k];
+    return out;
+  });
 
   // ── Styles ────────────────────────────────────────────────────────────────
 
@@ -558,7 +426,7 @@
     '.enm-modal.enm-tall{height:88vh;}' +
     // ── This dialog's own ───────────────────────────────────────────────────
     //
-    // The filter strip wraps: there is one toggle per entity type and one per attribute
+    // The filter strip wraps: there is one toggle per entity-type and one per attribute
     // name, and on a narrow window those are several lines. `.enm-search` is pinned
     // across the plugins, so the wrap is a modifier beside it.
     '.enm-search-wrap{flex-wrap:wrap;}' +
@@ -667,169 +535,22 @@
     (document.head || document.body || document.documentElement).appendChild(style);
   }
 
-
-
-
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
+  // Local: Core has a `button` of its own but does not export it.
   function button(label, className) {
     var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
     b.type = 'button';
     return b;
   }
 
-  function hasClass(node, name) {
-    return !!node && (' ' + (node.className || '') + ' ').indexOf(' ' + name + ' ') !== -1;
-  }
-
-  // Swaps one Bootstrap variant for another in place, so a toggle can go amber and back
-  // without losing `btn` or `btn-sm`.
-  function paintButton(btn, variant) {
-    btn.className = String(btn.className || '')
-      .replace(/\bbtn-(secondary|warning|info|primary|success|light|dark|link)\b/g, '')
-      .replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
-  }
-
-  // ── Is this script the one Stash has installed? ───────────────────────────
-  //
-  // "Reload plugins" re-reads the plugin folder on the server; it cannot replace a
-  // script this page already fetched and executed. Comparing the two numbers is the
-  // only way the script can notice it is the stale one.
-  //
-  // Resolves to null wherever the answer is unknown - a Stash too old for the field, a
-  // plugin it cannot see, a failed request. Unknown is not a mismatch.
-  function installedVersion() {
-    return gqlRequest('query ENMPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; });
-  }
-
-  // ── Naming an entity ──────────────────────────────────────────────────────
-  //
-  // Whichever of the display fields is present, rather than a branch per type: a
-  // per-type branch is what let galleries and images log as "untitled" in a sibling for
-  // three releases.
-  function firstBasename(files) {
-    for (var i = 0; files && i < files.length; i++) {
-      if (files[i] && files[i].basename) return files[i].basename;
-    }
-    return null;
-  }
-
-  function displayName(ent) {
-    if (!ent) return null;
-    return ent.title || ent.name || firstBasename(ent.files) || firstBasename(ent.visual_files) ||
-      (ent.folder && ent.folder.basename) || null;
-  }
-
-
-  // ── What the running Stash actually stores ────────────────────────────────
-  //
-  // One introspection query settles, for every candidate field in the table above,
-  // whether the server has it and whether it is a string, a list of strings or the
-  // custom-field map. A field this plugin guessed wrong about is dropped rather than
-  // failing the whole scan query, which is the difference between "your Stash calls it
-  // something else" and "nothing in your library mentions that name".
-  //
-  // Cached for the life of the page: the schema cannot change without a restart, and a
-  // rename is exactly when nobody wants to wait for eight round trips.
-  var _shapes = null;
-
-  function unwrap(t) {
-    // NON_NULL and LIST wrappers carry the real type in `ofType`. `[String!]!` is four
-    // deep - NON_NULL, LIST, NON_NULL, SCALAR - which is what the query has to ask for.
-    var kind = null;
-    while (t) {
-      if (t.kind === 'LIST') kind = 'list';
-      if (t.kind === 'SCALAR' || t.kind === 'OBJECT' || t.kind === 'ENUM') {
-        return { kind: kind || (t.name === 'Map' ? 'map' : 'string'), name: t.name };
-      }
-      t = t.ofType;
-    }
-    return { kind: kind || 'string', name: null };
-  }
-
-  function describeFields() {
-    if (_shapes) return Promise.resolve(_shapes);
-    var parts = TYPE_ORDER.map(function (k) {
-      return k + ': __type(name: "' + ENTITIES[k].gqlType + '") { fields { name type ' +
-        '{ kind name ofType { kind name ofType { kind name ofType { kind name } } } } } }';
-    });
-    return gqlRequest('query ENM_Shapes { ' + parts.join(' ') + ' }', null)
-      .then(function (data) {
-        var out = {};
-        TYPE_ORDER.forEach(function (k) {
-          var known = {};
-          ((data[k] || {}).fields || []).forEach(function (f) { known[f.name] = f.type; });
-          var keep = [];
-          ENTITIES[k].fields.forEach(function (name) {
-            if (!hasOwn(known, name)) return;
-            var shape = unwrap(known[name]);
-            // A String scalar, a list of them, or the custom-field Map. Anything else
-            // wearing a name we asked for - a date, a number, an object - is not text
-            // and has no business in a text search.
-            if (name === 'custom_fields') {
-              if (shape.name === 'Map') keep.push({ name: name, kind: 'map' });
-              return;
-            }
-            if (shape.name !== 'String') return;
-            keep.push({ name: name, kind: shape.kind === 'list' ? 'list' : 'string' });
-          });
-          out[k] = keep;
-        });
-        _shapes = out;
-        return out;
-      });
-  }
-
   // ── Finding the old name in a string ──────────────────────────────────────
   //
-  // Case-insensitively, because a name written in prose is written the way the sentence
-  // wanted it, and a hit the user can see and untick is better than a miss they cannot.
+  // Core's `occurrences`: case-insensitively unless Match case is on, because a name
+  // written in prose is written the way the sentence wanted it, and a hit the user can
+  // see and untick is better than a miss they cannot. A field whose fold changes length
+  // comes back empty and marked `refused`, and the scan says which.
   // ponytail: plain substring, so a short name matches inside a longer word ("Ann" in
   // "Anna"); the context on every line and the per-line tick are what that relies on.
   // A word-boundary mode is the upgrade if short names turn out to be common.
-  //
-  // Case is folded by Core's `fold`, which keeps the length - 'İ' is taken to 'i' before
-  // `toLowerCase()`, which would make it two units. **A field whose fold still changes
-  // length is refused rather than searched**: a position recorded against the folded
-  // string would not point at the same character in the original, and everything
-  // downstream slices the *original* at those offsets - the context on a hit line, and
-  // the splice `replaceAt` writes back. A field not searched is survivable; a field
-  // rewritten with the new name in the wrong place is what this plugin exists not to do.
-  // A refused field comes back empty and marked `refused`, so the scan can say which.
-  // `matchCase` compares the text as it is, which folds nothing and so refuses nothing.
-  function occurrences(text, needle, matchCase) {
-    var out = [];
-    if (!needle) return out;
-    var raw = String(text);
-    var hay = matchCase ? raw : fold(raw);
-    if (hay.length !== raw.length) { out.refused = true; return out; }
-    var n = matchCase ? needle : fold(needle);
-    var i = 0;
-    while ((i = hay.indexOf(n, i)) !== -1) {
-      out.push(i);
-      i += n.length;
-    }
-    return out;
-  }
 
   // Only the occurrences named in `positions` - which is what makes a per-line tick
   // mean anything.
@@ -841,33 +562,6 @@
       last = p + len;
     });
     return out + String(text).slice(last);
-  }
-
-  // The three pieces a hit line is drawn from. Whitespace is collapsed: a details field
-  // is prose with newlines in it, and a log line is one line.
-  function context(text, at, len) {
-    var s = String(text);
-    var from = Math.max(0, at - CONTEXT);
-    var to = Math.min(s.length, at + len + CONTEXT);
-    return {
-      pre: (from > 0 ? ELLIPSIS : '') + flatten(s.slice(from, at)),
-      hit: flatten(s.slice(at, at + len)),
-      post: flatten(s.slice(at + len, to)) + (to < s.length ? ELLIPSIS : ''),
-    };
-  }
-
-  // ── The scan ──────────────────────────────────────────────────────────────
-  //
-  // One page of one type at a time, so the progress line means something and a stop
-  // threshold can end it early. `sort: "id"` so the pages are stable while it runs.
-  function pageQuery(spec, shapes) {
-    var sel = ['id'];
-    shapes.forEach(function (f) { sel.push(f.name); });
-    // `extra` holds only the display fields that are *not* in the table above, so
-    // nothing is ever selected twice - which GraphQL refuses outright.
-    if (spec.extra) sel.push(spec.extra);
-    return 'query ENM_Scan($f: FindFilterType) { ' + spec.find + '(filter: $f) { count ' +
-      spec.list + ' { ' + sel.join(' ') + ' } } }';
   }
 
   // A match written in another case than the old name - "jane doe" for "Jane Doe" - is
@@ -1024,7 +718,7 @@
     // Every occurrence found, in scan order. `checked` is the user's own answer and is
     // never touched by a filter - see `enabled`.
     this.hits = [];
-    // Which entity types and which attribute names the filters are letting through.
+    // Which entity-types and which attribute names the filters are letting through.
     // Both start all-on and are rebuilt from what the scan actually found.
     this.typeOn = {};
     this.attrOn = {};
@@ -1082,7 +776,7 @@
     this.staleEl = el('div', 'enm-stale enm-hidden', '');
     head.appendChild(this.staleEl);
     head.appendChild(el('div', 'enm-warn',
-      'Backing up your database before proceeding is recommended. Undo only reverses what this dialog wrote, ' +
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this dialog wrote, ' +
       'while it stays open, and cannot account for changes made elsewhere in the meantime.'));
     var legend = el('div', 'enm-legend');
     legend.appendChild(el('span', null,
@@ -1195,7 +889,7 @@
     foot.appendChild(this.selAllBtn);
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'enm', escapeButton);
     document.body.appendChild(this.backdrop);
     // A handed-over rename is shown once its scan has found something to show: one
     // that mentions nothing closes unseen, and a sibling handing three over does not
@@ -1664,7 +1358,7 @@
 
   Run.prototype.checkVersion = function () {
     var self = this;
-    installedVersion().then(function (installed) {
+    C.installedVersion(PLUGIN_ID, 'ENMPluginVersion').then(function (installed) {
       if (!installed || installed === PLUGIN_VERSION) { self.showStale(''); return; }
       self.stale = true;
       var msg = '⚠ This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
@@ -1706,7 +1400,7 @@
     types.sort(function (a, b) { return typeRank(a) - typeRank(b); });
     attrs.sort();
 
-    this.typeRow.appendChild(el('span', 'enm-label', 'Entity types'));
+    this.typeRow.appendChild(el('span', 'enm-label', 'Entity-types'));
     types.forEach(function (k) {
       self.typeOn[k] = true;
       self.typeRow.appendChild(self.toggle(ENTITIES[k].plural, self.typeOn, k));
@@ -1953,7 +1647,7 @@
     var self = this;
     var p = this.plan();
     if (!p.entities.length) return;
-    var other = foreignLease();
+    var other = foreignLease(PLUGIN_ID);
     if (other) {
       this.note('Another plugin is applying bulk changes right now (' + other.owner + ' - ' +
         other.label + '). Running both at once means each may undo part of the other.');
@@ -1962,7 +1656,7 @@
     this.msg('INFO', 'Replacing "' + this.oldName + '" with "' + p.to + '" in ' +
       plural(this.enabledHits().length, 'place') + ' across ' +
       plural(p.entities.length, 'entity', 'entities') + '.');
-    var lease = acquireLease('Entity name replacement');
+    var lease = C.lease(PLUGIN_ID, 'Entity name replacement');
     // Read again at the press: a lock added since the scan still holds.
     fieldLocks().then(function (locks) { self.locks = locks; })
       .then(function () { return self.writeAll(p, function (ent) { return self.buildUpdate(p, ent); }); })
@@ -1990,7 +1684,7 @@
     var self = this;
     if (ent.typeKey === DESC_KEY) return this.buildDescriptionUpdate(p, ent);
     var spec = ENTITIES[ent.typeKey];
-    var fields = (_shapes[ent.typeKey] || []).map(function (f) { return f.name; });
+    var fields = (TEXT.cachedFields()[ent.typeKey] || []).map(function (f) { return f.name; });
     return gqlRequest('query ENM_One($id: ID!) { ' + spec.one + '(id: $id) { id ' +
       fields.join(' ') + ' } }', { id: ent.entId }).then(function (data) {
       var live = data[spec.one];
@@ -2155,15 +1849,13 @@
   // how a write of this plugin's is told from a replay of one, in a Stash log and in
   // this repo's own suites. The fork stays about *who writes*, not about which of the
   // two this is.
-  // Undo History, where ᝯㄝₓ Core keeps one: an entity's text rewritten is recorded from
+  // Undo History, which ᝯㄝₓ Core keeps: an entity's text rewritten is recorded from
   // the input sent and the one that puts it back. A job with a writer of its own - the
   // custom field descriptions, which live in another plugin's store - is not an entity
   // write, and is left to that store. Library-wide for the replacement and its Undo; a
   // cancelled rename is one entity, whose image entry is kept.
   function journalPass(label, one) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !one }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !one });
   }
 
   function journalJob(pass, job, name, forward, back) {
@@ -2173,8 +1865,8 @@
 
   function sendJob(job, input, op) {
     if (job.write) return job.write(input);
-    return gqlRequest('mutation ' + op + '($input: ' + job.spec.updateInput + '!) { ' +
-      job.spec.update + '(input: $input) { id } }', { input: input });
+    return gqlRequest('mutation ' + op + '($input: ' + job.spec.input + '!) { ' +
+      job.spec.mutation + '(input: $input) { id } }', { input: input });
   }
 
   // Batched so the log and the counters stay live on a long run, and so a failure is one
@@ -2186,7 +1878,7 @@
 
     function batch(i) {
       if (i >= list.length) {
-        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         return Promise.resolve();
       }
       var slice = list.slice(i, i + WRITE_CHUNK);
@@ -2199,7 +1891,7 @@
             // The undo entry carries the writer as well as the values, so replaying it
             // does not have to work out again who owns the thing being put back.
             self.changes.push({ spec: job.spec, input: job.before, write: job.write,
-              label: what, run: pass && !job.write ? pass.id : null });
+              label: what, run: !job.write ? pass.id : null });
             journalJob(pass, job, ent.entName, job.input, job.before);
             job.hits.forEach(function (h) { h.done = true; });
             self.msg('INFO', what + ': ' + plural(job.count, 'occurrence') + ' replaced.');
@@ -2227,14 +1919,14 @@
     this.setState('undoing');
     this.msg('INFO', 'Putting back what ' + plural(jobs.length, 'entity', 'entities') +
       ' held before.');
-    var lease = acquireLease('Entity name replacement (undo)');
+    var lease = C.lease(PLUGIN_ID, 'Entity name replacement (undo)');
     var undone = 0;
     var failed = 0;
     var pass = journalPass('Name replacement, undone');
 
     function step(i) {
       if (i >= jobs.length) {
-        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         return Promise.resolve();
       }
       var job = jobs[i];
@@ -2242,7 +1934,7 @@
         .then(function () {
           undone++;
           // Recorded from the replacement's own run in the history, reversed.
-          if (pass && job.run && job.spec) pass.reverse(job.run, job.spec.key, job.input.id);
+          if (job.run && job.spec) pass.reverse(job.run, job.spec.key, job.input.id);
         }, function (e) {
           failed++;
           self.msg('ERROR', job.label + ': ' + (e && e.message ? e.message : String(e)));
@@ -2269,7 +1961,7 @@
     var self = this;
     this.setState('reverting');
     this.msg('INFO', 'Putting "' + this.newName + '" back to "' + this.oldName + '".');
-    var lease = acquireLease('Entity rename (cancel)');
+    var lease = C.lease(PLUGIN_ID, 'Entity rename (cancel)');
     // Re-read immediately before writing, like every other write here: a name that has
     // moved again since this dialog opened is not this dialog's to put back, and saying
     // so beats writing over somebody else's edit.
@@ -2291,7 +1983,7 @@
           var back = { id: self.id };
           back[self.spec.nameField] = self.newName;
           journalJob(pass, { spec: self.spec }, self.oldName, input, back);
-          if (pass) pass.finish();
+          pass.finish();
           return null;
         }, function (err) { return err; })
         .then(function (err) {
@@ -2321,34 +2013,16 @@
 
   // ── Escape ────────────────────────────────────────────────────────────────
   //
-  // Escape acts through whichever of the footer's exits is actually showing and
-  // enabled, never by calling `close()` itself. The footer is the dialog's own statement
-  // of what it will let you do right now, so the key can never reach a button that is
-  // hidden or disabled - and in particular does nothing mid-write.
-  // `closeBtn` and never `cancelBtn`, which is where this differs from the siblings'
-  // copy of the same function: their Cancel abandons a plan, and this one writes. A key
-  // press must not reach a control that changes the library.
+  // Core's `wireEscape`, with this dialog's own `pick`. Escape acts through a footer exit
+  // that is actually showing and enabled, never by calling `close()` itself: the footer is
+  // the dialog's own statement of what it will let you do right now, so the key can never
+  // reach a button that is hidden or disabled - and in particular does nothing mid-write.
+  // `closeBtn` and never `cancelBtn`, which is where this differs from Core's default pick:
+  // the siblings' Cancel abandons a plan, and this one writes. A key press must not reach a
+  // control that changes the library.
   function escapeButton(run) {
     var b = run.closeBtn;
     return b && !b.disabled && !hasClass(b, 'enm-hidden') ? b : null;
-  }
-
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
   }
 
   // ── Closing throws away a listing that cannot be got back ─────────────────
@@ -2482,7 +2156,7 @@
       // Not an error: most requests a page makes are not this. Worth one line under the
       // debug switch, because `fetch(new Request(...))` carries its body on the request
       // rather than on `init`, and that is where it would show up.
-      gateOnce('body', 'a request went past with no readable body on init; if renames are ' +
+      gate.once('body', 'a request went past with no readable body on init; if renames are ' +
         'not being noticed at all, this is why.');
       return [];
     }
@@ -2490,7 +2164,7 @@
     var parsed;
     try { parsed = JSON.parse(init.body); } catch (e) { return []; }
     if (!parsed) return [];
-    var ops = Object.prototype.toString.call(parsed) === '[object Array]' ? parsed : [parsed];
+    var ops = Array.isArray(parsed) ? parsed : [parsed];
     if (ops.length && typeof ops[0].query === 'string') _stats.graphql++;
     return ops;
   }
@@ -2531,13 +2205,13 @@
         // The variable *names* only - never their values, which are the user's data. What
         // this has to distinguish is a client that puts the entity in `variables.input`
         // from one that names it something else or writes it into the query text.
-        trace(spec.update + ' posted with no id in variables.input. Variables carried: [' +
+        trace(spec.mutation + ' posted with no id in variables.input. Variables carried: [' +
           keysOf(body.variables) + '].');
         return null;
       }
       var to = input[spec.nameField];
       if (typeof to !== 'string') {
-        trace(spec.update + ' for ' + spec.label + ' ' + input.id + ' carries no ' +
+        trace(spec.mutation + ' for ' + spec.label + ' ' + input.id + ' carries no ' +
           spec.nameField + '. Input carried: [' + keysOf(input) + '].');
         return null;
       }
@@ -2595,7 +2269,7 @@
   //   - A **bulk run** the user started elsewhere is holding its lease before the write
   //     goes out. It is renaming many things, and a dialog per rename is the worst
   //     possible answer, so this stands down.
-  //   - A **sibling reacting to this very save** - NormalizeParentTags' auto prune or
+  //   - A **sibling reacting to this very save** - NormalizeParentTags' auto-prune or
   //     roll-up, MergePerformerTagsToScenes' auto-merge - takes its lease *after* the
   //     response, in the same instant this would. Sampled here it looked identical to a
   //     bulk run, so the dialog silently never opened; and whether the sibling reacts at
@@ -2641,8 +2315,8 @@
       var rename = renameOf(init);
       if (!rename) return orig(input, init);
       // Sampled here, before the write goes out - see `onRename`.
-      var held = foreignLease();
-      trace(rename.spec.update + ' for ' + rename.spec.label + ' ' + rename.id +
+      var held = foreignLease(PLUGIN_ID);
+      trace(rename.spec.mutation + ' for ' + rename.spec.label + ' ' + rename.id +
         ' posts ' + rename.spec.nameField + ' as "' + rename.to + '"' +
         (held ? '; ' + held.owner + ' already holds a lease (' + held.label + ')' : '') + '.');
       var before = null, stale = null;
@@ -2689,246 +2363,17 @@
 
   // ── The settings page ─────────────────────────────────────────────────────
   //
-  // The group gets the siblings' description treatment - a one-line summary, the rest
-  // behind **Show more**, and a labelled link to the README under it - and each setting
-  // row the per-setting hover box.
-  //
-  // The `plugin-<id>-<key>` ids Stash builds are ours by construction and are the
-  // anchor; the heading is the fallback, because a plugin whose only route in is a
-  // heading loses its whole settings page to a rename.
-  function headingIsOurs(text) {
-    var t = trim(text);
-    if (t === PLUGIN_NAME) return true;
-    // Settings → Plugins appends the version - `${name} ${version ? `(${v})` : undefined}`
-    // - and interpolates the literal `undefined` when a plugin has no version at all.
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
+  // Core's shared treatment: the description split with the rest behind **Show more**, a
+  // labelled README link under it, the per-setting hover box, and the stale-script banner.
+  // The group is found from the `plugin-<id>-<key>` ids over `DEFAULTS`, the heading the
+  // fallback.
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'enm', keys: Object.keys(DEFAULTS), tasks: [], readmeUrl: README_URL,
+    readmeLabel: 'EntityNameMaintainer/README.md', injectStyle: injectStyle,
+  });
 
-  function settingElement(key) {
-    return document.getElementById('plugin-' + PLUGIN_ID + '-' + key);
-  }
-
-  function settingRow(key) {
-    var node = settingElement(key);
-    for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting')) return node;
-    }
-    return null;
-  }
-
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
-
-  // The group and the description, found from one of our own setting rows where there
-  // is one and from our heading otherwise. The description is required to be in the
-  // same `.setting` row as the heading: Settings → Tasks heads its group with the
-  // plugin name too and gives every task row a `.sub-heading` of its own, so anything
-  // looser decorates the wrong panel.
-  function ownParts() {
-    var anchors = [];
-    for (var k in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, k)) continue;
-      var e = settingElement(k);
-      if (e) { anchors.push(e); break; }
-    }
-    var heads = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < heads.length; i++) {
-      if (headingIsOurs(heads[i].textContent)) anchors.push(heads[i]);
-    }
-    for (var a = 0; a < anchors.length; a++) {
-      var node = anchors[a];
-      for (var d = 0; node && d < 12; d++, node = node.parentElement) {
-        if (!hasClass(node, 'setting-group')) continue;
-        var heading = node.querySelector ? node.querySelector('h3') : null;
-        var header = null;
-        var rows = node.querySelectorAll ? node.querySelectorAll('.setting') : [];
-        for (var r = 0; r < rows.length; r++) {
-          if (rows[r].querySelector && rows[r].querySelector('h3') === heading) {
-            header = rows[r];
-            break;
-          }
-        }
-        var sub = header ? byClass(header, 'sub-heading') : null;
-        if (sub && heading && headingIsOurs(heading.textContent)) {
-          return { group: node, sub: sub, heading: heading };
-        }
-        break;
-      }
-    }
-    return null;
-  }
-
-  // Stash puts the text back on every re-render of this panel, so this runs on every
-  // tick and re-splits when it has to. Idempotent: once the children are ours there is
-  // no text node left to split.
-  function splitDescription(sub) {
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'enm-p')) return;
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = oneLine(para);
-      if (t) sub.appendChild(el('div', 'enm-p', t));
-    });
-  }
-
-  function descCollapsed(sub) { return hasClass(sub, 'enm-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*enm-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' enm-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  // The toggle is a `<button>` rather than a span: `SettingGroup`'s `onDivClick` walks
-  // up from the event target and returns early only for `a` and `button`, so anything
-  // else would fold the whole group on click.
-  function collapseDescription(sub) {
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'enm-p')) paras++;
-    if (paras < 2) return;
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'enm-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  function readmeLinkSlot(sub) {
-    return { parent: sub.parentNode, before: sub.nextSibling };
-  }
-
-  var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*enm-tip-open\b/, '');
-    sub.className = (on ? cls + ' enm-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  // The row is passed rather than the .sub-heading, and the current one looked up per
-  // event: an <h3> is Stash's element and survives the re-renders that replace
-  // everything we put in the row, so a captured reference would go stale.
-  function tipTrigger(node, row) {
-    if (!node || node._enmTipWired) return;
-    node._enmTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'enm-sum')) return;
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;
-    var summary = oneLine(text.slice(0, cut));
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'enm-tipped')) {
-      sub.className = ((sub.className || '') + ' enm-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'enm-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a sibling
-    // of the mark rather than a child: as a child it would sit inside an inline span and
-    // inherit its clipping and stacking.
-    var mark = el('span', 'enm-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'enm-tipbox', detail));
-    tipTrigger(mark, row);
-    tipTrigger(sum, row);
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var k in DEFAULTS) {
-      if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    }
-  }
-
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes on
-  // running it after an update and nothing on screen says so. The settings heading is
-  // where the two numbers meet: Stash builds it as `${name} (${version})` from the
-  // manifest, read fresh from the server, while `PLUGIN_VERSION` is what this script
-  // actually is.
-  function installedFromHeading(heading) {
-    var t = heading ? trim(heading.textContent) : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? trim(m[1]) : null;
-  }
-
-
-
-
-  function ensureStaleNotice(parts) {
-    var installed = installedFromHeading(parts.heading);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, parts.group, !!installed && installed !== PLUGIN_VERSION);
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = { parent: parts.sub.parentNode, before: parts.sub };
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'enm-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached the ' +
-      'older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-
-  function settingsTick() {
-    var parts = ownParts();
-    if (!parts) return;
-    injectStyle();
-    if (!hasClass(parts.group, 'enm-own-group')) {
-      parts.group.className = ((parts.group.className || '') + ' enm-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(parts.sub);
-    collapseDescription(parts.sub);   // after the split: it counts the .enm-p divs
-    tipSettings();
-    ensureStaleNotice(parts);         // before the early return: the link outlives it
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'enm-readme', 'EntityNameMaintainer/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noopener noreferrer';
-    link.title = 'Open this plugin\'s documentation';
-    var slot = readmeLinkSlot(parts.sub);
-    slot.parent.insertBefore(link, slot.before);
-  }
+  function settingsTick() { page.decorate(page.group()); }
 
   // ── Ticking ───────────────────────────────────────────────────────────────
   //

@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '4.0.0';
+  var PLUGIN_VERSION = '4.3.1';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -148,6 +148,13 @@
 
   function hasClass(node, name) {
     return (' ' + String((node && node.className) || '') + ' ').indexOf(' ' + name + ' ') !== -1;
+  }
+
+  // `cls` taken off `node`, and put back on where `on`; the node's other classes are left as
+  // they are. Not `classList`: the suites' fake DOM has none.
+  function toggleClass(node, cls, on) {
+    var c = String(node.className || '').replace(new RegExp('\\s*\\b' + cls + '\\b', 'g'), '');
+    node.className = (on ? c + ' ' + cls : c).replace(/^\s+/, '');
   }
 
   function el(tag, className, text) {
@@ -534,6 +541,14 @@
   // second: a block reading the node would be handed the browser's own tooltip back, on
   // top of the open box, one tick after opening it. So the text lives here, and the
   // `title` carries it for exactly as long as the box does not.
+  // Hover and keyboard focus open the same thing, and leaving either closes it.
+  function hoverFocus(n, on, off) {
+    n.addEventListener('mouseenter', on);
+    n.addEventListener('mouseleave', off);
+    n.addEventListener('focus', on);
+    n.addEventListener('blur', off);
+  }
+
   function tagTip(node, id, text) {
     if (!node || !id || !text || !node.addEventListener) return;
     node._gttxTagTipText = text;
@@ -555,12 +570,204 @@
       node.title = node._gttxTagTipText;
       tipClose();
     };
-    node.addEventListener('mouseenter', open);
-    node.addEventListener('mouseleave', shut);
-    node.addEventListener('focus', open);
-    node.addEventListener('blur', shut);
+    hoverFocus(node, open, shut);
   }
 
+
+  // ── Glossary tooltips ─────────────────────────────────────────────────────
+  //
+  // An uncommon term gets a dotted underline and the shared tip box with its meaning, once
+  // per scope: each ᝯㄝₓ group on Settings → Plugins and Settings → Tasks, and the head of
+  // each ᝯㄝₓ dialog. The dialogs need nothing of their own - they all build the same
+  // `<prefix>-modal` / `<prefix>-head` chrome, so the tick finds them the way it finds the
+  // settings groups. Only where the word carries the glossary's meaning: a dashed compound
+  // matches anywhere, a single word only inside a phrase GLOSSARY.src.yml lists for it, and
+  // never inside a plugin's name - "Normalize Parent Tags" is not about a parent. Opens on
+  // hover, focus and tap; a second tap, or a tap anywhere else, closes it.
+  //
+  // `glossaryFind` is the whole matcher and holds no DOM, so `.tools/build.js` loads this
+  // file and runs the same function over the READMEs: one set of rules for every place a
+  // tooltip is drawn.
+  //
+  // The terms are not in this file. `glossary.gen.js`, generated from GLOSSARY.src.yml, puts
+  // them on `window.__GTTx__.glossary` and does nothing else, and this reads them when it
+  // first needs them - so neither file cares which of the two Stash runs first. A table in
+  // a format this copy does not know, which is a browser holding one of the two files from
+  // an older release, draws no tooltips rather than wrong ones.
+  var GLOSSARY_FORMAT = 1;
+
+
+  var GLOSS_CLASS = 'gttx-gloss';
+  var GLOSS_PREFIXES = ['gttxcore', 'npt', 'cpt2s', 'ptp2re', 'cfbe', 'enm', 'fretc', 'sfm', 'svr', 'tbc'];
+  var GLOSS_SKIP_TAGS = /^(A|BUTTON|INPUT|TEXTAREA|SELECT|OPTION|LABEL|H1|H2|H3|H4|H5|H6|CODE|PRE|SCRIPT|STYLE)$/;
+  // The setting row's hover box and its ⓘ mark, a dialog's title and log, and a mark
+  // already drawn. `-tip` is matched whole, so a row's `-tipped` summary is still read.
+  var GLOSS_SKIP_CLASS = /(^|\s)(gttx-gloss|[a-z0-9]+-(tipbox|tip|title|log))(\s|$)/;
+  var _gloss = null, _glossFrom = null;
+
+  // The compiled table, or null while there is none this copy can read. Compiled again
+  // only when a different table arrives.
+  function glossaryCompiled() {
+    var data = (window.__GTTx__ || {}).glossary;
+    if (!data || data.format !== GLOSSARY_FORMAT || !data.terms || !data.names) return null;
+    if (_gloss && _glossFrom === data) return _gloss;
+    _glossFrom = data;
+    // A name broken across two lines of a README is still the name.
+    var names = data.names.map(function (n) { return n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s+'); });
+    _gloss = {
+      // Case-sensitive: "Propagate" is the plugin, "propagate" the term.
+      names: names.length ? new RegExp(names.join('|'), 'g') : null,
+      terms: data.terms.map(function (t) {
+        return {
+          id: t.id, tip: t.tip, res: t.re.map(function (src) { return new RegExp(src, 'i'); }),
+          not: (t.not || []).map(function (src) { return new RegExp(src, 'gi'); }),
+        };
+      }),
+    };
+    return _gloss;
+  }
+
+  // The earliest place in `text` where a term not yet in `used` carries its meaning:
+  // `{ id, tip, start, end }`, or null. Plugin names are blanked first, same length, so
+  // what is found still indexes the text as given.
+  function glossaryFind(text, used) {
+    var g = glossaryCompiled();
+    if (!g) return null;
+    var t = String(text == null ? '' : text);
+    if (g.names) t = t.replace(g.names, function (m) { return new Array(m.length + 1).join('\u0001'); });
+    var best = null;
+    var blank = function (m) { return new Array(m.length + 1).join('\u0001'); };
+    g.terms.forEach(function (term) {
+      if (used && used[term.id]) return;
+      var tt = t;
+      term.not.forEach(function (re) { tt = tt.replace(re, blank); });
+      term.res.forEach(function (re) {
+        var m = re.exec(tt);
+        if (!m) return;
+        var start = m.index + m[1].length + m[2].length;
+        if (!best || start < best.start) best = { id: term.id, tip: term.tip, start: start, end: start + m[3].length };
+      });
+    });
+    return best;
+  }
+
+  function glossarySkip(node) {
+    return !!node && node.nodeType !== 3 &&
+      (GLOSS_SKIP_TAGS.test(String(node.tagName || '')) || GLOSS_SKIP_CLASS.test(String(node.className || '')));
+  }
+
+  function glossaryOpen(mark) {
+    tipOpen(mark, mark._gttxGlossTip, null);
+  }
+
+  function glossaryIsOpen(mark) {
+    var box = document.getElementById(TIP_BOX_ID);
+    return !!box && box._gttxFor === mark && hasClass(box, 'gttx-tip-open');
+  }
+
+  function glossaryNode(hit, word) {
+    var mark = el('span', GLOSS_CLASS, word);
+    mark.setAttribute('data-gloss', hit.id);
+    mark._gttxGlossTip = hit.tip;
+    mark.tabIndex = 0;
+    hoverFocus(mark, function () { glossaryOpen(mark); }, tipClose);
+    // A tap: no hover on a touch screen, so the tap is what opens it - and it goes no
+    // further, since the term can sit inside a row whose own click does something.
+    mark.addEventListener('click', function (e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (e && e.stopPropagation) e.stopPropagation();
+      if (glossaryIsOpen(mark)) tipClose(); else glossaryOpen(mark);
+    });
+    return mark;
+  }
+
+  // One text node: every term still unused in the scope, earliest first, each split out
+  // into a mark with the text either side left as text nodes.
+  function glossaryMarkText(node, used) {
+    var n = 0;
+    while (node && node.parentNode) {
+      var text = node.textContent || '';
+      var hit = glossaryFind(text, used);
+      if (!hit) break;
+      var parent = node.parentNode;
+      var after = document.createTextNode(text.slice(hit.end));
+      parent.insertBefore(document.createTextNode(text.slice(0, hit.start)), node);
+      parent.insertBefore(glossaryNode(hit, text.slice(hit.start, hit.end)), node);
+      parent.insertBefore(after, node);
+      parent.removeChild(node);
+      used[hit.id] = true;
+      n++;
+      node = after;
+    }
+    return n;
+  }
+
+  function glossaryMarkNode(node, used) {
+    if (!node || glossarySkip(node)) return 0;
+    if (node.nodeType === 3) return glossaryMarkText(node, used);
+    var kids = node.childNodes || [];
+    // An element holding only text and no nodes - the text lives on the element itself
+    // rather than in a child - is given a text node of its own first.
+    if (!kids.length) {
+      var own = node.textContent || '';
+      if (!own || !glossaryFind(own, used)) return 0;       // nothing to mark: left as it is
+      node.textContent = '';
+      return glossaryMarkText(node.appendChild(document.createTextNode(own)), used);
+    }
+    var list = [];
+    for (var i = 0; i < kids.length; i++) list.push(kids[i]);
+    var n = 0;
+    for (var j = 0; j < list.length; j++) n += glossaryMarkNode(list[j], used);
+    return n;
+  }
+
+  function glossaryUsed(node, used) {
+    if (!node || node.nodeType === 3) return used;
+    if (hasClass(node, GLOSS_CLASS) && node.getAttribute) used[node.getAttribute('data-gloss')] = true;
+    var kids = node.childNodes || [];
+    for (var i = 0; i < kids.length; i++) glossaryUsed(kids[i], used);
+    return used;
+  }
+
+  // One scope: what is already marked in it counts as used, so a term is marked once
+  // however many ticks pass. A root whose text has not changed since it was last read is
+  // not read again - the matcher over every description, every second, is the cost this
+  // avoids - and one that was re-rendered is, which is how a mark comes back after a
+  // description is redrawn.
+  function glossaryMark(scope, roots) {
+    if (!scope || !glossaryCompiled()) return 0;
+    var used = glossaryUsed(scope, {});
+    var n = 0;
+    for (var i = 0; roots && i < roots.length; i++) {
+      var root = roots[i];
+      var text = root && root.textContent;
+      if (!root || root._gttxGlossRead === text) continue;
+      n += glossaryMarkNode(root, used);
+      root._gttxGlossRead = root.textContent;
+    }
+    return n;
+  }
+
+  function glossaryTick() {
+    if (!document.querySelectorAll || !glossaryCompiled()) return;
+    var prefix = PLUGIN_NAME.split(' ')[0];
+    var groups = document.querySelectorAll('.setting-group');
+    for (var i = 0; i < groups.length; i++) {
+      var h3 = groups[i].querySelector ? groups[i].querySelector('h3') : null;
+      var name = String(h3 ? h3.textContent : '').replace(/^\s+/, '');
+      if (name.indexOf(prefix) === 0) glossaryMark(groups[i], groups[i].querySelectorAll('.sub-heading'));
+    }
+    GLOSS_PREFIXES.forEach(function (p) {
+      var modals = document.querySelectorAll('.' + p + '-modal');
+      for (var j = 0; j < modals.length; j++) glossaryMark(modals[j], modals[j].querySelectorAll('.' + p + '-head'));
+    });
+  }
+
+  // A tap anywhere but the term closes a glossary tip it opened; any other tip is left.
+  function glossaryOutsideTap(e) {
+    var box = document.getElementById(TIP_BOX_ID);
+    if (box && box._gttxFor && hasClass(box._gttxFor, GLOSS_CLASS) && e && e.target !== box._gttxFor) tipClose();
+  }
 
   // ── The tooltip a resolved tag's link carries ─────────────────────────────
   //
@@ -584,7 +791,7 @@
   var TAG_TIP_NAMES = 8;      // names listed before the rest become a count
 
   function tipText(v) {
-    return String(v == null ? '' : v).replace(/\s+/g, ' ').replace(/^ | $/g, '');
+    return String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
   }
 
   function tagTipNames(list) {
@@ -615,6 +822,78 @@
     lines.push(linkTarget() ? 'Click to open it in a new tab.' : 'Click to open it.');
     return lines.join('\n');
   }
+
+  // ── A tag named in a run's log ────────────────────────────────────────────
+  //
+  // The tooltip on a tag a run dialog's recap or a tree row names: what a name and an id
+  // cannot say - the aliases and description that tell two similarly named tags apart.
+  // Unlike `tagLinkTitle` it opens with the name and id, since a tree row cuts a long
+  // name off, and it caps the alias list by width as well as by count.
+  var TIP_ALIASES = 8;        // aliases named in a tooltip before the rest are a count
+  var TIP_ALIAS_CHARS = 120;  // and the width that can cut the list shorter still
+
+  // Cut on the last space before the limit so a word is never sliced in half - unless
+  // the only space is near the start, where honouring it would throw most of the
+  // excerpt away and say less than the blunt cut would.
+  function excerpt(text, max) {
+    var s = tipText(text);
+    if (s.length <= max) return s;
+    var cut = s.slice(0, max);
+    var space = cut.lastIndexOf(' ');
+    if (space > max * 0.6) cut = cut.slice(0, space);
+    return cut.replace(/[\s,;:.\-]+$/, '') + '…';
+  }
+
+  function aliasList(t) {
+    return (((t && t.aliases) || []).map(tipText)).filter(function (a) { return !!a; });
+  }
+
+  // Whether a tag has anything to say beyond its name and id. A recap's spans already
+  // carry both, so a tooltip there would open on a hover and repeat the line underneath
+  // it - and since nothing marks which tags have one, every hover that does open had
+  // better say something new.
+  function tagHasDetail(t) {
+    return !!(aliasList(t).length || tipText(t && t.description));
+  }
+
+  // Both lists are capped rather than rendered whole, and the tail is counted rather than
+  // dropped, so a truncated list still says there is more. `unnamed` is what a tag with
+  // no name is called: each caller keeps the word its own log uses.
+  function tagTooltip(t, id, unnamed) {
+    var lines = [tipText((t && t.name) || unnamed), 'tag id ' + id];
+
+    var aliases = aliasList(t);
+    if (aliases.length) {
+      var shown = [], used = 0;
+      for (var i = 0; i < aliases.length; i++) {
+        // The first alias is always named, excerpted if it has to be: "and 3 more"
+        // on its own would leave the tooltip listing nothing at all.
+        if (shown.length && (shown.length >= TIP_ALIASES || used + aliases[i].length > TIP_ALIAS_CHARS)) break;
+        shown.push(shown.length ? aliases[i] : excerpt(aliases[i], TIP_ALIAS_CHARS));
+        used += aliases[i].length + 2;
+      }
+      var rest = aliases.length - shown.length;
+      lines.push('Aliases: ' + shown.join(', ') + (rest > 0 ? ', and ' + rest + ' more' : ''));
+    }
+
+    var desc = tipText(t && t.description);
+    if (desc) lines.push('Description: ' + excerpt(desc, TIP_DESC_CHARS));
+    return lines.join('\n');
+  }
+
+  // Compare ids as numbers where both parse, so 9 sorts below 10, and fall back to a
+  // string compare so the order is total whatever Stash hands over.
+  function lowerId(a, b) {
+    var na = parseInt(a, 10), nb = parseInt(b, 10);
+    if (!isNaN(na) && !isNaN(nb) && na !== nb) return na < nb;
+    return String(a) < String(b);
+  }
+
+  // A log line built as parts, as the plain text Copy log hands over.
+  function partsText(parts) {
+    return parts.map(function (p) { return p.text; }).join('');
+  }
+
   // ── The card an entity's name opens ───────────────────────────────────────
   //
   // A listing here names entities the user has not opened - a scene by its title, a
@@ -756,6 +1035,17 @@
     return lines.join('\n');
   }
 
+  // A scene's card and an image's say the same things.
+  function mediaTipText(label) {
+    return function (o, id) {
+      return entityTipLines(label, entityTipName(o), id, [
+        ['Date', o.date], ['Studio', (o.studio || {}).name],
+        ['Performers', tagTipNames(o.performers)], ['Tags', tagTipNames(o.tags)],
+        ['Rating', entityTipStars(o.rating100)],
+        ['Organized', o.organized ? 'yes' : null]]);
+    };
+  }
+
   // Keyed by the plural Stash puts in a URL, which is what every plugin here already
   // calls a type. `fields` is read off `graphql/schema/types/*` rather than guessed: a
   // wrong name fails the whole query for that type, and an absent card is indistinguish-
@@ -766,13 +1056,7 @@
       fields: 'title date rating100 organized studio { name } performers { name } ' +
         'tags { name } files { basename } paths { screenshot }',
       img: function (o) { return (o.paths || {}).screenshot; },
-      text: function (o, id) {
-        return entityTipLines('Scene', entityTipName(o), id, [
-          ['Date', o.date], ['Studio', (o.studio || {}).name],
-          ['Performers', tagTipNames(o.performers)], ['Tags', tagTipNames(o.tags)],
-          ['Rating', entityTipStars(o.rating100)],
-          ['Organized', o.organized ? 'yes' : null]]);
-      },
+      text: mediaTipText('Scene'),
     },
     images: {
       one: 'findImage',
@@ -780,13 +1064,7 @@
         'tags { name } visual_files { ... on ImageFile { basename } ' +
         '... on VideoFile { basename } } paths { thumbnail }',
       img: function (o) { return (o.paths || {}).thumbnail; },
-      text: function (o, id) {
-        return entityTipLines('Image', entityTipName(o), id, [
-          ['Date', o.date], ['Studio', (o.studio || {}).name],
-          ['Performers', tagTipNames(o.performers)], ['Tags', tagTipNames(o.tags)],
-          ['Rating', entityTipStars(o.rating100)],
-          ['Organized', o.organized ? 'yes' : null]]);
-      },
+      text: mediaTipText('Image'),
     },
     galleries: {
       one: 'findGallery',
@@ -893,10 +1171,7 @@
       if (node._gttxEntTipTitle) node.title = node._gttxEntTipTitle;
       tipClose();
     };
-    node.addEventListener('mouseenter', open);
-    node.addEventListener('mouseleave', shut);
-    node.addEventListener('focus', open);
-    node.addEventListener('blur', shut);
+    hoverFocus(node, open, shut);
   }
 
 
@@ -926,7 +1201,7 @@
   // wall nobody reads, and the count says the rest. Each is named with its type, because
   // "Beach day" alone does not say what it is.
   var CF_TIP_HITS = 10;      // carriers named before the rest become a count
-  var CF_TIP_MARK = 'ⓘ';     // circled Latin small letter i
+  var CF_TIP_MARK = 'ⓕ';     // circled Latin small letter f - the custom-field glyph, as on the cards' counter
 
   // `id` and what names a row per type, and the filter argument each `find*` takes.
   // The alias is the list field's own name, so `data.scenes.scenes` is the rows and
@@ -1030,8 +1305,7 @@
   }
 
   function cfTipOpen(node, on) {
-    var cls = String(node.className || '').replace(/\s*gttx-cftip-open\b/, '');
-    node.className = (on ? cls + ' gttx-cftip-open' : cls).replace(/^\s+/, '');
+    toggleClass(node, 'gttx-cftip-open', on);
     if (on) cfTipPlace(node);
   }
 
@@ -1044,10 +1318,8 @@
   function cfTipArm(node, row) {
     if (!node._gttxCfArmed) {
       node._gttxCfArmed = true;
-      node.addEventListener('mouseenter', function () { cfTipLoad(node); cfTipOpen(node, true); });
-      node.addEventListener('mouseleave', function () { cfTipOpen(node, false); });
-      node.addEventListener('focus', function () { cfTipLoad(node); cfTipOpen(node, true); });
-      node.addEventListener('blur', function () { cfTipOpen(node, false); });
+      hoverFocus(node, function () { cfTipLoad(node); cfTipOpen(node, true); },
+        function () { cfTipOpen(node, false); });
     }
     if (row && !row._gttxCfArmed) {
       row._gttxCfArmed = true;
@@ -1070,11 +1342,7 @@
     var named = Array.isArray(field);   // not instanceof: a list from another realm is a list
     var list = named ? field.filter(Boolean) : field ? [field] : [];
     var base = 'gttx-cffield-' + pluginId + '-' + key;
-    if (row) {
-      var on = named && list.length > 0;
-      var cls = String(row.className || '').replace(/\s*gttx-cflisted\b/, '');
-      row.className = (on ? cls + ' gttx-cflisted' : cls).replace(/^\s+/, '');
-    }
+    if (row) toggleClass(row, 'gttx-cflisted', named && list.length > 0);
     for (var i = 0; ; i++) {
       var id = i ? base + '-' + (i + 1) : base;
       var node = document.getElementById(id);
@@ -1153,16 +1421,22 @@
   // `RELOAD_UI_ID`, which names the settings page's single shared button. Appended
   // after the text, because the text is set with `textContent` and would wipe it.
   function staleReloadButton(box) {
+    var b = reloadButton('btn btn-danger btn-sm', 'margin-left:.6rem;');
+    box.appendChild(b);
+    return b;
+  }
+
+  // The red Reload UI button, both kinds: it reloads the page.
+  function reloadButton(cls, style) {
     var b = document.createElement('button');
     b.type = 'button';
-    b.className = 'btn btn-danger btn-sm';
+    b.className = cls;
     b.textContent = 'Reload UI';
     b.title = RELOAD_UI_TIP;
-    b.style = 'margin-left:.6rem;';
+    b.style = style;
     b.addEventListener('click', function () {
       if (window.location && window.location.reload) window.location.reload();
     });
-    box.appendChild(b);
     return b;
   }
 
@@ -1175,8 +1449,8 @@
   // One flag per plugin rather than one shared boolean: a plugin that has caught up
   // must be able to say so without clearing a sibling's claim.
   function anyStale() {
-    var m = coop().staleUI || {}, k;
-    for (k in m) if (Object.prototype.hasOwnProperty.call(m, k) && m[k]) return true;
+    var m = coop().staleUI, k;
+    for (k in m) if (hasOwn(m, k) && m[k]) return true;
     return false;
   }
 
@@ -1206,9 +1480,7 @@
   // Re-added rather than tracked, like everything else this tick puts on the page:
   // React drops it on the next render of the panel.
   function ensureReloadUiButton(pluginId, group, stale) {
-    var c = coop();
-    if (!c.staleUI) c.staleUI = {};
-    c.staleUI[pluginId] = !!stale;
+    coop().staleUI[pluginId] = !!stale;
     var node = document.getElementById(RELOAD_UI_ID);
     var anchor = anyStale() ? reloadUiAnchor(group) : null;
     if (!anchor) {
@@ -1217,27 +1489,18 @@
     }
     if (node && node.parentNode === anchor.parentNode) return;
     if (node && node.parentNode) node.parentNode.removeChild(node);
-    var b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'btn btn-danger';
-    b.textContent = 'Reload UI';
-    b.id = RELOAD_UI_ID;
-    b.title = RELOAD_UI_TIP;
     // `margin-left:auto` rather than a class: the row is `justify-content-between`, so
     // a third child would otherwise sit alone in the middle of it. This puts our
     // button and Stash's together at the right, with the filter box still at the left.
-    b.style = 'margin-left:auto;margin-right:.5rem;';
-    b.addEventListener('click', function () {
-      if (window.location && window.location.reload) window.location.reload();
-    });
+    var b = reloadButton('btn btn-danger', 'margin-left:auto;margin-right:.5rem;');
+    b.id = RELOAD_UI_ID;
     anchor.parentNode.insertBefore(b, anchor);
   }
 
 
   function computedStyleOf(node) {
-    var w = (typeof window !== 'undefined') ? window : null;
-    if (!w || typeof w.getComputedStyle !== 'function' || !node) return null;
-    try { return w.getComputedStyle(node) || null; } catch (e) { return null; }
+    if (typeof window.getComputedStyle !== 'function' || !node) return null;
+    try { return window.getComputedStyle(node) || null; } catch (e) { return null; }
   }
 
   function findActionByLabel(root, label) {
@@ -1465,16 +1728,16 @@
   // untouched - and formatting is strict.
   var DEV_MODS = [
     { key: 'DEBUG', flag: 'debugMode', label: 'Debug mode',
-      help: 'Turns on the [<prefix> gate] console channel in every ᝯㄝₓ plugin that ' +
+      tip: 'Turns on the [<prefix> gate] console channel in every ᝯㄝₓ plugin that ' +
         'draws a control into Stash’s own rows, explaining for each one whether it ' +
         'is shown or hidden and why. Read at call time, so it takes effect on the next ' +
         'tick. This is what __GTTx__.StashPluginCoop.debugMode does from the console.' },
     { key: 'LAYOUT', flag: 'layoutEdit', label: 'Layout edit mode',
-      help: 'Outlines every control these plugins have injected into Stash’s own ' +
+      tip: 'Outlines every control these plugins have injected into Stash’s own ' +
         'chrome and labels it with the plugin that put it there. For working out which ' +
         'plugin owns a button in a row that holds several.' },
     { key: 'STALEDEMO', flag: 'staleDemo', label: 'Stale UI demo',
-      help: 'Pretends a plugin’s script is out of date, so the red Reload UI button ' +
+      tip: 'Pretends a plugin’s script is out of date, so the red Reload UI button ' +
         'appears beside Stash’s own Reload plugins without waiting for a real ' +
         'mismatch. Nothing else changes, and no plugin’s own banner is affected.' },
   ];
@@ -1506,7 +1769,6 @@
     c.debugMode = !!state.DEBUG;
     c.debugButtons = !!state.DEBUG;
     c.layoutEdit = !!state.LAYOUT;
-    if (!c.staleUI) c.staleUI = {};
     // A key in the same map every plugin's `anyStale` already scans, so the demo needs no
     // plugin to know about it: one entry that is not a plugin id, cleared when it is off.
     if (state.STALEDEMO) c.staleUI.demo = true;
@@ -1522,7 +1784,7 @@
     for (var i = 0; i < marked.length; i++) {
       if (!on) {
         marked[i].removeAttribute('data-gttx-owner');
-        marked[i].className = marked[i].className.replace(/\s*gttx-layoutmark/g, '');
+        toggleClass(marked[i], 'gttx-layoutmark', false);
       }
     }
     if (!on || !document.querySelectorAll) return;
@@ -1532,7 +1794,7 @@
       var owner = all[k]._coopOwner;
       if (!owner || all[k].getAttribute('data-gttx-owner')) continue;
       all[k].setAttribute('data-gttx-owner', owner);
-      if (!hasClass(all[k], 'gttx-layoutmark')) all[k].className += ' gttx-layoutmark';
+      toggleClass(all[k], 'gttx-layoutmark', true);
     }
   }
 
@@ -1571,12 +1833,8 @@
     if (!root) return;
     var on = !!(boxes.length && settings().a2SelectPaste);
     if (on === hasClass(root, PASTE_CLASS)) return;
-    if (!on) {
-      root.className = root.className.replace(/\s*gttx-selectpaste/g, '');
-      return;
-    }
-    injectStyle();     // nothing else on a Scene edit page draws ours
-    root.className += ' ' + PASTE_CLASS;
+    if (on) injectStyle();     // nothing else on a Scene edit page draws ours
+    toggleClass(root, PASTE_CLASS, on);
   }
 
   // ── The counts on the Tags, Performers and Custom Fields headings ─────────
@@ -1817,33 +2075,26 @@
   function truthy(v) { return v === true || v === 'true'; }
   function journalLimits() {
     var s = settings();
-    var d = String(s.c1JournalKeepDays == null ? '' : s.c1JournalKeepDays).replace(/^\s+|\s+$/g, '');
+    var d = String(s.c1JournalKeepDays == null ? '' : s.c1JournalKeepDays).trim();
     var days = /^(forever|0)$/i.test(d) ? 0 : parseInt(d, 10);
     if (days !== 0) days = isNaN(days) ? JOURNAL_KEEP_DAYS : Math.max(1, Math.min(999, days));
     var mb = parseInt(s.c2JournalSizeMB, 10);
     mb = isNaN(mb) ? JOURNAL_SIZE_MB : Math.max(16, Math.min(4096, mb));
     return { days: days, bytes: mb * 1048576, imageRuns: truthy(s.c5JournalImageRuns),
-      since: truthy(s.c3JournalSinceBackup) ? journalBackupAt() : 0 };
+      since: truthy(s.c3JournalSinceBackup) ? stampAt(JOURNAL_BACKUP_KEY) : 0 };
   }
 
-  // When this browser last saw a backup finish, or 0. Per browser, like the journal.
+  // When this browser last saw something happen, or 0. Per browser, like the journal.
+  function stampAt(key) {
+    try { return parseInt(window.localStorage.getItem(key), 10) || 0; } catch (e) { return 0; }
+  }
+  function stampSaw(key, at) {
+    try { window.localStorage.setItem(key, String(at)); } catch (e) { /* per page, then */ }
+  }
+  // A backup finishing; and the history saved to a file - what Clear History asks about
+  // before it deletes runs no file holds.
   var JOURNAL_BACKUP_KEY = 'gttx-journal-backup';
-  function journalBackupAt() {
-    try { return parseInt(window.localStorage.getItem(JOURNAL_BACKUP_KEY), 10) || 0; } catch (e) { return 0; }
-  }
-  function journalSawBackup(at) {
-    try { window.localStorage.setItem(JOURNAL_BACKUP_KEY, String(at)); } catch (e) { /* per page, then */ }
-  }
-
-  // When this browser last saved the history to a file, or 0 - what Clear History asks
-  // about before it deletes runs no file holds. Per browser, like the journal.
   var JOURNAL_EXPORT_KEY = 'gttx-journal-export';
-  function journalExportAt() {
-    try { return parseInt(window.localStorage.getItem(JOURNAL_EXPORT_KEY), 10) || 0; } catch (e) { return 0; }
-  }
-  function journalSawExport(at) {
-    try { window.localStorage.setItem(JOURNAL_EXPORT_KEY, String(at)); } catch (e) { /* per page, then */ }
-  }
 
   // `run` is { plugin, label, source ('plugin' | 'hand'), libraryWide }; each entry is
   // { type ('scenes', 'tags', …), id, name, field, action ('update' | 'create' |
@@ -1893,6 +2144,17 @@
     return row;
   }
 
+  // A run's head and rows, in one transaction.
+  function journalPut(head, rows) {
+    return journalDb().then(function (db) {
+      var tx = db.transaction(['runs', 'entries'], 'readwrite');
+      tx.objectStore('runs').put(head);
+      var store = tx.objectStore('entries');
+      rows.forEach(function (r) { store.put(r); });
+      return idbDone(tx);
+    });
+  }
+
   function journalRecordNow(run, entries) {
     run = run || {};
     var limits = journalLimits();
@@ -1910,13 +2172,7 @@
     if (bytes > limits.bytes / 2) return Promise.resolve({ recorded: 0, tooLarge: true, bytes: bytes });
     head.count = rows.length;
     head.bytes = bytes;
-    return journalDb().then(function (db) {
-      var tx = db.transaction(['runs', 'entries'], 'readwrite');
-      tx.objectStore('runs').put(head);
-      var store = tx.objectStore('entries');
-      rows.forEach(function (r) { store.put(r); });
-      return idbDone(tx);
-    }).then(function () {
+    return journalPut(head, rows).then(function () {
       journalChanged(true);
       journalProtect();
       return journalTrim();
@@ -1951,14 +2207,17 @@
     });
   }
 
+  // A run and every entry it holds, inside the caller's transaction.
+  function dropRunRows(runs, entries, id) {
+    runs.delete(id);
+    var keys = entries.index('run').getAllKeys(id);
+    keys.onsuccess = function () { keys.result.forEach(function (k) { entries.delete(k); }); };
+  }
+
   function journalDropRuns(db, ids) {
     var tx = db.transaction(['runs', 'entries'], 'readwrite');
     var runs = tx.objectStore('runs'), entries = tx.objectStore('entries');
-    ids.forEach(function (id) {
-      runs.delete(id);
-      var keys = entries.index('run').getAllKeys(id);
-      keys.onsuccess = function () { keys.result.forEach(function (k) { entries.delete(k); }); };
-    });
+    ids.forEach(function (id) { dropRunRows(runs, entries, id); });
     return idbDone(tx).then(function () { journalChanged(); return ids.length; });
   }
 
@@ -1968,11 +2227,7 @@
     return journalDb().then(function (db) {
       var tx = db.transaction(['runs', 'entries'], 'readwrite');
       var runs = tx.objectStore('runs'), store = tx.objectStore('entries'), touched = {};
-      runIds.forEach(function (id) {
-        runs.delete(id);
-        var keys = store.index('run').getAllKeys(id);
-        keys.onsuccess = function () { keys.result.forEach(function (k) { store.delete(k); }); };
-      });
+      runIds.forEach(function (id) { dropRunRows(runs, store, id); });
       entries.forEach(function (e) {
         e = e._orig || e;
         store.delete(e.id);
@@ -2071,9 +2326,9 @@
     hit.forEach(function (b) {
       b._gttxTitle = b.title || '';
       b.title = STALE_TIP + (b._gttxTitle ? '\n\n' + b._gttxTitle : '');
-      b.className += ' gttx-stale-rescan';
+      toggleClass(b, 'gttx-stale-rescan', true);
       var clear = function () {
-        b.className = String(b.className).replace(/\s*gttx-stale-rescan/g, '');
+        toggleClass(b, 'gttx-stale-rescan', false);
         b.title = b._gttxTitle;
         b.removeEventListener('click', clear);
       };
@@ -2091,7 +2346,7 @@
     } catch (e) { /* no channel: no mark */ }
   }
 
-  // ── Undo History: the entity types, and reading a field the way it is written ──
+  // ── Undo History: the entity-types, and reading a field the way it is written ──
   //
   // A change is recorded, and undone, in the shape of the update input that makes it:
   // `tag_ids` as a sorted list of ids, `studio_id` as one id or null, a custom field by
@@ -2347,13 +2602,7 @@
         head.count += rows.length;
         if (head.bytes > limits.bytes / 2) { over = true; return null; }
         head.note = skipped.length ? 'not recorded: ' + skipped.join(', ') : '';
-        return journalDb().then(function (db) {
-          var tx = db.transaction(['runs', 'entries'], 'readwrite');
-          tx.objectStore('runs').put(head);
-          var store = tx.objectStore('entries');
-          rows.forEach(function (r) { store.put(r); });
-          return idbDone(tx);
-        });
+        return journalPut(head, rows);
       }).then(null, function (e) { failed = e; });
       return chain;
     };
@@ -3639,25 +3888,15 @@
     return !!l && /^\/settings\b/.test(String(l.pathname || '')) &&
       /\btab=plugins\b/.test(String(l.pathname || '') + String(l.search || ''));
   }
-  var SEEDS = {
-    a1TaggerDuration: false,
-    a2SelectPaste: false,
-    a3SameTab: false,
-    a4HeadingCounts: false,
-    a5LogLinesKept: LOG_KEEP,
-    a6CaseSensitive: false,
-    a7CardFieldCount: true,
-    a8CardFileCount: true,
-    c1JournalKeepDays: String(JOURNAL_KEEP_DAYS),
-    c2JournalSizeMB: JOURNAL_SIZE_MB,
-    c3JournalSinceBackup: false,
-    c4JournalHandEdits: true,
-    c5JournalImageRuns: false,
-    c6JournalProtect: true,
-    c7JournalDeletes: true,
-    c8JournalUndoTakesOut: false,
-    c9JournalSettings: true,
-  };
+  // `DEFAULTS`, less Dev Mods, with a number where an empty box means one - so the seeded
+  // boxes show what is in force.
+  var SEEDS = {};
+  (function () {
+    for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k) && k !== 'b1DevMods') SEEDS[k] = DEFAULTS[k];
+    SEEDS.a5LogLinesKept = LOG_KEEP;
+    SEEDS.c1JournalKeepDays = String(JOURNAL_KEEP_DAYS);
+    SEEDS.c2JournalSizeMB = JOURNAL_SIZE_MB;
+  }());
   // What each absent key is seeded with: its default, but the heading-counts switch on
   // where either old key was, as `loadSettings` reads it. `showDefaults` shows the same.
   function seedValues(raw) {
@@ -3693,124 +3932,27 @@
   // is read per write and sent back whole - see the repo-root AGENTS.md. Read from the
   // server rather than from the cache above, because a value another tab changed is a
   // value this write would otherwise put back.
-  function writeOwnSettings(patch) {
-    return gqlRequest('query GTTxCoreConfig { configuration { plugins } }', null)
+  // Any plugin's: `op` names the two operations (`<op>Config`, `<op>Configure`), which each
+  // plugin's suites and logs know it by. A key patched to `undefined` is taken out.
+  function writePluginSettings(pluginId, patch, op) {
+    return gqlRequest('query ' + op + 'Config { configuration { plugins } }', null)
       .then(function (data) {
-        var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+        var raw = ((data.configuration || {}).plugins || {})[pluginId] || {};
         var input = {}, k;
         for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-        for (k in patch) if (hasOwn(patch, k)) input[k] = patch[k];
+        for (k in patch) {
+          if (!hasOwn(patch, k)) continue;
+          if (patch[k] === undefined) delete input[k]; else input[k] = patch[k];
+        }
         return gqlRequest(
-          'mutation GTTxCoreConfigure($plugin_id: ID!, $input: Map!) { ' +
+          'mutation ' + op + 'Configure($plugin_id: ID!, $input: Map!) { ' +
           'configurePlugin(plugin_id: $plugin_id, input: $input) }',
-          { plugin_id: PLUGIN_ID, input: input });
-      })
-      .then(function () { return loadSettings(true); });
+          { plugin_id: pluginId, input: input });
+      });
   }
 
-  // ── The Dev Mods dialog ───────────────────────────────────────────────────
-  //
-  // The shared chrome, in its smallest form: this dialog reads nothing and writes no
-  // entity, so it has no log, no counters and no backup sentence - the head says where
-  // the switches reach instead. Escape acts through the footer's own exit, as everywhere
-  // else, so it can never reach a button that is hidden or disabled.
-  var _dialog = null;
-
-  function openDevMods() {
-    if (_dialog) { if (_dialog.modal.scrollIntoView) _dialog.modal.scrollIntoView(); return; }
-    injectStyle();
-    var state = parseDevMods(settings().b1DevMods);
-    var backdrop = el('div', 'gttxcore-backdrop');
-    var modal = el('div', 'gttxcore-modal gttxcore-narrow');
-    backdrop.appendChild(modal);
-
-    var head = el('div', 'gttxcore-head');
-    head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - Dev Mods'));
-    head.appendChild(el('div', 'gttxcore-note',
-      'Switches for working on these plugins, not for using them. Each one sets a flag ' +
-      'on the object the ᝯㄝₓ plugins share, so it reaches every one of them at once and ' +
-      'none of them writes anything because of it. All three are off by default and none ' +
-      'is meant to be left on.'));
-    modal.appendChild(head);
-
-    var body = el('div', 'gttxcore-body');
-    var boxes = {};
-    DEV_MODS.forEach(function (m) {
-      var row = el('div', 'gttxcore-devrow');
-      var label = el('label', 'gttxcore-devlabel');
-      var box = document.createElement('input');
-      box.type = 'checkbox';
-      box.checked = !!state[m.key];
-      box.className = 'gttxcore-devbox';
-      box.addEventListener('change', function () { refreshSave(); });
-      boxes[m.key] = box;
-      label.appendChild(box);
-      label.appendChild(el('span', 'gttxcore-devname', m.label));
-      row.appendChild(label);
-      row.appendChild(el('div', 'gttxcore-devhelp', m.help));
-      body.appendChild(row);
-    });
-    modal.appendChild(body);
-
-    var foot = el('div', 'gttxcore-foot');
-    var saveBtn = button('Save', 'gttxcore-save');
-    // Teal, not amber: it stores three flags in this plugin's own settings and touches
-    // nothing in the library. The colour rule is about what a control does to your data.
-    saveBtn.className = saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    var closeBtn = button('Close', 'gttxcore-close');
-    foot.appendChild(saveBtn);
-    foot.appendChild(closeBtn);
-    modal.appendChild(foot);
-
-    var run = { modal: modal, backdrop: backdrop, boxes: boxes,
-      saveBtn: saveBtn, closeBtn: closeBtn };
-
-    // **Save is held back until a switch has actually moved**, the rule
-    // `PropagateTagsAndPerformers` settled for its own settings dialog: a Save that is
-    // live from the moment the dialog opens invites a press that stores back exactly what
-    // it just read. Compared between *formatted* strings rather than against the stored
-    // one, so a difference of case or spacing in what was stored is not a change - and so
-    // that a stored value this script could not parse is normalised by the first real
-    // edit rather than by an idle press.
-    function current() {
-      var next = {};
-      DEV_MODS.forEach(function (m) { next[m.key] = !!boxes[m.key].checked; });
-      return next;
-    }
-    function refreshSave() {
-      var moved = formatDevMods(current()) !== formatDevMods(state);
-      saveBtn.disabled = !moved;
-      saveBtn.title = moved ? 'Store these three switches and apply them now.'
-        : 'Nothing has changed since this opened.';
-    }
-    run.refreshSave = refreshSave;
-    refreshSave();
-
-    function shut() {
-      unwireEscape(run);
-      if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-      _dialog = null;
-    }
-    closeBtn.addEventListener('click', shut);
-    saveBtn.addEventListener('click', function () {
-      if (saveBtn.disabled) return;
-      var next = current();
-      saveBtn.disabled = true;
-      closeBtn.disabled = true;
-      // Applied before the write lands as well as after it: the flags are what the user
-      // pressed Save for, and a round trip is not a reason to wait for them.
-      applyDevMods(next);
-      writeOwnSettings({ b1DevMods: formatDevMods(next) }).then(shut, function (e) {
-        saveBtn.disabled = false;
-        closeBtn.disabled = false;
-        saveBtn.textContent = 'Save failed';
-        if (window.console && console.error) console.error('[gttxcore]', e);
-      });
-    });
-
-    _dialog = run;
-    wireEscape(run);
-    document.body.appendChild(backdrop);
+  function writeOwnSettings(patch) {
+    return writePluginSettings(PLUGIN_ID, patch, 'GTTxCore').then(function () { return loadSettings(true); });
   }
 
   // ── The Undo History settings, in a dialog of their own ───────────────────
@@ -3821,12 +3963,12 @@
   // dialog-only); they are stored under their keys as before, the seed still writes their
   // defaults, and the dialog writes the whole map back like every settings write here.
   var JOURNAL_FIELDS = [
-    { key: 'c1JournalKeepDays', label: 'Keep For (Days)', text: true,
+    { key: 'c1JournalKeepDays', label: 'Keep For (Days)', text: true, dflt: JOURNAL_KEEP_DAYS,
       tip: 'How long Undo History keeps what was changed, in days: 1 to 999, or Forever. Default ' +
         '90.\n\nOlder runs are dropped, oldest first, the next time anything is recorded. A run ' +
         'you imported back from a file is kept past this, since you brought it back to undo it. ' +
         'Whichever limit is reached first - this one or the size - drops the oldest.' },
-    { key: 'c2JournalSizeMB', label: 'Size Limit (MB)', number: true,
+    { key: 'c2JournalSizeMB', label: 'Size Limit (MB)', number: true, dflt: JOURNAL_SIZE_MB,
       tip: 'The most space Undo History may use in this browser, in MB: 16 to 4096. Default ' +
         '256.\n\n256 MB holds roughly half a million to a million changes - a couple of ' +
         'library-wide runs and years of edits by hand. Past it the oldest runs are dropped. A ' +
@@ -3883,8 +4025,6 @@
         'itself be undone. This only sets where the box starts: the review screen still shows it ' +
         'beside Proceed, and changing it there decides for that undo alone.' },
   ];
-  var _journalDialog = null;
-
   function journalSummary(s) {
     var days = String(s.c1JournalKeepDays == null || s.c1JournalKeepDays === '' ? JOURNAL_KEEP_DAYS : s.c1JournalKeepDays);
     var mb = String(s.c2JournalSizeMB == null || s.c2JournalSizeMB === '' ? JOURNAL_SIZE_MB : s.c2JournalSizeMB);
@@ -3897,20 +4037,24 @@
       (on('c8JournalUndoTakesOut') ? ' An undo takes what it undid out of the history.' : '');
   }
 
-  function openJournalSettings() {
-    if (_journalDialog) { if (_journalDialog.modal.scrollIntoView) _journalDialog.modal.scrollIntoView(); return; }
+  // One settings dialog for a list of fields in `JOURNAL_FIELDS`' shape - a box a field,
+  // its label, the tip's first paragraphs under it - and `spec` saying what it is called and
+  // what it says once read. `spec.open` is the one open now. Where the fields are not keys of
+  // their own, `spec.read(settings)` gives their values and `spec.write(values)` the patch.
+  function openFieldsDialog(spec) {
+    if (spec.open) { if (spec.open.modal.scrollIntoView) spec.open.modal.scrollIntoView(); return; }
     injectStyle();
     var backdrop = el('div', 'gttxcore-backdrop');
     var modal = el('div', 'gttxcore-modal gttxcore-narrow');
     backdrop.appendChild(modal);
     var head = el('div', 'gttxcore-head');
-    head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - Undo History Settings'));
+    head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - ' + spec.title));
     var note = el('div', 'gttxcore-note', 'Reading the current settings…');
     head.appendChild(note);
     modal.appendChild(head);
     var body = el('div', 'gttxcore-body');
     var boxes = {};
-    JOURNAL_FIELDS.forEach(function (f) {
+    spec.fields.forEach(function (f) {
       var row = el('div', 'gttxcore-devrow');
       var label = el('label', 'gttxcore-devlabel' + (f.warn ? ' gttxcore-warnlabel' : ''));
       label.title = f.tip;
@@ -3920,10 +4064,12 @@
       box.disabled = true;
       box.addEventListener(box.type === 'checkbox' ? 'change' : 'input', function () { refreshSave(); });
       boxes[f.key] = box;
-      if (box.type === 'checkbox') { label.appendChild(box); label.appendChild(el('span', 'gttxcore-devname', f.label)); }
-      else { label.appendChild(el('span', 'gttxcore-devname', f.label)); label.appendChild(box); }
+      var name = markGlyphs(el('span', 'gttxcore-devname'), f.label);
+      if (box.type === 'checkbox') { label.appendChild(box); label.appendChild(name); }
+      else { label.appendChild(name); label.appendChild(box); }
       row.appendChild(label);
-      row.appendChild(el('div', 'gttxcore-devhelp' + (f.warn ? ' gttxcore-warnhelp' : ''), f.tip.split('\n\n').slice(0, 2).join(' ')));
+      row.appendChild(markGlyphs(el('div', 'gttxcore-devhelp' + (f.warn ? ' gttxcore-warnhelp' : '')),
+        f.tip.split('\n\n').slice(0, 2).join(' ')));
       body.appendChild(row);
     });
     modal.appendChild(body);
@@ -3938,25 +4084,25 @@
     var run = { modal: modal, backdrop: backdrop, closeBtn: closeBtn, stored: null };
     var values = function () {
       var out = {};
-      JOURNAL_FIELDS.forEach(function (f) {
+      spec.fields.forEach(function (f) {
         var b = boxes[f.key];
         out[f.key] = b.type === 'checkbox' ? !!b.checked
-          : f.number && /^\s*\d+\s*$/.test(b.value) ? Number(b.value) : String(b.value).replace(/^\s+|\s+$/g, '');
+          : f.number && /^\s*\d+\s*$/.test(b.value) ? Number(b.value) : String(b.value).trim();
       });
       return out;
     };
     function refreshSave() {
       var v = values(), s = run.stored, moved = false;
-      if (s) JOURNAL_FIELDS.forEach(function (f) { if (String(v[f.key]) !== String(s[f.key])) moved = true; });
+      if (s) spec.fields.forEach(function (f) { if (String(v[f.key]) !== String(s[f.key])) moved = true; });
       saveBtn.disabled = !s || !moved;
       saveBtn.title = !s ? 'Still reading the current settings.' : !moved ? 'Nothing has changed since this opened.'
-        : 'Store these settings. They apply from the next thing recorded.';
+        : spec.saveTip;
     }
     refreshSave();
     function shut() {
       unwireEscape(run);
       if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
-      _journalDialog = null;
+      spec.open = null;
     }
     closeBtn.addEventListener('click', shut);
     saveBtn.addEventListener('click', function () {
@@ -3964,65 +4110,93 @@
       saveBtn.disabled = true;
       closeBtn.disabled = true;
       note.textContent = 'Saving…';
-      writeOwnSettings(values()).then(shut, function (e) {
+      writeOwnSettings(spec.write ? spec.write(values()) : values()).then(shut, function (e) {
         closeBtn.disabled = false;
         note.textContent = 'The settings could not be saved: ' + (e && e.message ? e.message : e);
         refreshSave();
       });
     });
-    _journalDialog = run;
-    wireEscape(run);
+    spec.open = run;
+    wireEscape(run, 'gttxcore', closeOnly);
     document.body.appendChild(backdrop);
     loadSettings(true).then(function (s) {
-      if (_journalDialog !== run) return;
+      if (spec.open !== run) return;
+      if (spec.read) s = spec.read(s);
       run.stored = {};
-      JOURNAL_FIELDS.forEach(function (f) {
+      spec.fields.forEach(function (f) {
         var b = boxes[f.key], v = s[f.key];
         if (b.type === 'checkbox') b.checked = truthy(v);
-        else b.value = v == null || v === '' ? String(f.number ? JOURNAL_SIZE_MB : JOURNAL_KEEP_DAYS) : String(v);
+        else b.value = v == null || v === '' ? String(f.dflt) : String(v);
         run.stored[f.key] = b.type === 'checkbox' ? b.checked : (f.number && /^\d+$/.test(b.value) ? Number(b.value) : b.value);
         b.disabled = false;
       });
-      note.textContent = 'What Undo History keeps and records, in this browser. Hover a line for all it does.';
+      note.textContent = spec.ready;
       refreshSave();
     }, function (e) {
-      if (_journalDialog !== run) return;
+      if (spec.open !== run) return;
       note.textContent = 'The current settings could not be read (' + (e && e.message ? e.message : e) +
         '), so Save stays off: saving would replace them with whatever the boxes hold.';
     });
   }
 
-  // The group's row for them, in the shape of Stash's own: a heading, a line, what they
-  // say now, and the button where Edit would be - first, above the rest of the settings.
-  var JOURNAL_ROW_ID = 'gttxcore-journal-row';
-  function journalRowTick(group) {
-    var had = document.getElementById(JOURNAL_ROW_ID);
-    var text = journalSummary(settings());
+  var JOURNAL_DIALOG = { title: 'Undo History Settings', fields: JOURNAL_FIELDS, open: null,
+    ready: 'What Undo History keeps and records, in this browser. Hover a line for all it does.',
+    saveTip: 'Store these settings. They apply from the next thing recorded.' };
+  function openJournalSettings() { openFieldsDialog(JOURNAL_DIALOG); }
+
+  // Dev Mods: three switches stored as one string. Save applies them before the write lands
+  // as well as after it: the flags are what it was pressed for, and a round trip is not a
+  // reason to wait for them.
+  var DEV_DIALOG = { title: 'Dev Mods', fields: DEV_MODS, open: null,
+    ready: 'Switches for working on these plugins, not for using them. Each one sets a flag ' +
+      'on the object the ᝯㄝₓ plugins share, so it reaches every one of them at once and ' +
+      'none of them writes anything because of it. All three are off by default and none ' +
+      'is meant to be left on.',
+    saveTip: 'Store these three switches and apply them now.',
+    read: function (s) { return parseDevMods(s.b1DevMods); },
+    write: function (v) { applyDevMods(v); return { b1DevMods: formatDevMods(v) }; } };
+  function openDevMods() { openFieldsDialog(DEV_DIALOG); }
+
+  // ⓕ and 🖬 amber wherever the settings name them, as on the cards (`CARD_AMBER`) and as
+  // Scene Variants' ⸎ in its own setting's name. Appended to `node`, which is returned.
+  var CARD_MARKS = /(ⓕ|🖬)/;
+  function markGlyphs(node, text) {
+    String(text).split(CARD_MARKS).forEach(function (part, i) {
+      if (part) node.appendChild(el('span', i % 2 ? 'gttxcore-amber-mark' : null, part));
+    });
+    return node;
+  }
+
+  // A group row standing for a dialog, in the shape of Stash's own: a heading, a line, what
+  // the settings say now, and the button where Edit would be - before the first of the rest
+  // of the group's settings, so a row drawn later lands above one drawn earlier.
+  function dialogRowTick(group, r) {
+    var id = 'gttxcore-' + r.key + '-row', had = document.getElementById(id);
+    var text = r.summary(settings());
     if (had) {
-      if (had._sum && had._sum.textContent !== text) had._sum.textContent = text;
+      if (had._text !== text) { had._text = text; had._sum.textContent = ''; markGlyphs(had._sum, text); }
       return;
     }
     // The group's own heading is a `.setting` too, beside the `.collapsible-section` of the rest.
     var rows = group.querySelectorAll ? group.querySelectorAll('.setting') : [], first = null;
     for (var i = 0; i < rows.length && !first; i++) if (rows[i].parentNode !== group) first = rows[i];
-    var row = el('div', 'setting gttxcore-journal-row');
-    row.id = JOURNAL_ROW_ID;
+    var row = el('div', 'setting gttxcore-' + r.key + '-row');
+    row.id = id;
     var left = el('div');
-    left.appendChild(el('h3', null, 'Undo History'));
-    left.appendChild(el('div', 'sub-heading', 'How long Undo History keeps what was changed and what it ' +
-      'records: edits in Stash\'s pages, deletes and merges, settings changes, library-wide image writes. ' +
-      'Nine settings, in a dialog.'));
-    row._sum = left.appendChild(el('div', 'value gttxcore-journal-sum', text));
+    left.appendChild(el('h3', null, r.heading));
+    left.appendChild(markGlyphs(el('div', 'sub-heading'), r.line));
+    row._text = text;
+    row._sum = left.appendChild(markGlyphs(el('div', 'value gttxcore-' + r.key + '-sum'), text));
     row.appendChild(left);
     var right = el('div');
-    var btn = button('Undo History Settings...', 'gttxcore-journal-btn');
+    var btn = button(r.button, 'gttxcore-' + r.key + '-btn');
     btn.className = btn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     btn._coopOwner = PLUGIN_ID;
-    btn.title = 'Open the Undo History settings. Nothing is written until you press Save there.';
+    btn.title = r.title;
     btn.addEventListener('click', function (ev) {
       if (ev && ev.preventDefault) ev.preventDefault();
       if (ev && ev.stopPropagation) ev.stopPropagation();
-      openJournalSettings();
+      r.open();
     });
     right.appendChild(btn);
     row.appendChild(right);
@@ -4030,38 +4204,99 @@
     else group.appendChild(row);
   }
 
+  var JOURNAL_ROW = { key: 'journal', heading: 'Undo History', summary: journalSummary,
+    line: 'How long Undo History keeps what was changed and what it records: edits in Stash\'s pages, ' +
+      'deletes and merges, settings changes, library-wide image writes. Nine settings, in a dialog.',
+    button: 'Undo History Settings...', open: openJournalSettings,
+    title: 'Open the Undo History settings. Nothing is written until you press Save there.' };
+  function journalRowTick(group) { dialogRowTick(group, JOURNAL_ROW); }
+
+  // ── General Globals: the rest of Core's settings, in a dialog of their own ─
+  //
+  // Eight settings about eight different things made the group read as a wall with Undo
+  // History and Dev Mods lost in it, so they are one row as Undo History's are, and the group
+  // shows General Globals, Undo History and Dev Mods and nothing else. Stored under their keys
+  // as before (`version.test.js`' `DIALOG_ONLY`), seeded and read as before.
+  var GLOBAL_FIELDS = [
+    { key: 'a1TaggerDuration', label: 'Emphasise a Tagger Duration Mismatch',
+      tip: 'Emphasise the Scene Tagger\'s duration mismatch. Off by default.\n\nStash\'s tagger prints ' +
+        '"Duration off by at least Ns" among the other fields on a search result, in the same weight and ' +
+        'colour as everything beside it - and it is the one line there that decides whether a match is the ' +
+        'right file. With this on, that sentence is drawn larger, capitalised and red when the gap is more ' +
+        'than five seconds, and amber when it is more than one; anything closer is left alone.\n\nIt ' +
+        'restyles a page this plugin does not own, and only how the sentence looks: nothing is hidden, ' +
+        'reordered, acted on or written.' },
+    { key: 'a2SelectPaste', label: 'Right-Click Paste in Tags and Performers Boxes',
+      tip: 'Add a right-click Paste to the Tags, Performers and Groups boxes. Off by default.\n\nThose ' +
+        'boxes offer no Paste in the browser\'s context menu, while Title and Details do. There is a real ' +
+        'text input in them, but it is sized to what has been typed, so the right-click lands beside it. ' +
+        'This widens it to fill the rest of the row, so the browser offers its own Paste, which goes down ' +
+        'the same path Ctrl+V already uses.\n\nIt stands in for stashapp/stash issue 7139 and nothing ' +
+        'more: when a Stash release fixes that, it changes nothing you can see.' },
+    { key: 'a3SameTab', label: 'Open Links in the Same Tab',
+      tip: 'Open every link the ᝯㄝₓ plugins draw in the tab you are already in. Off by default, which ' +
+        'is a new tab.\n\nTheir dialogs, listings and hover cards name entities as links, and every one ' +
+        'of them opens a new tab, which keeps the dialog you are reading open behind it. On, they all ' +
+        'open in the current tab, the way Stash\'s own links do - every ᝯㄝₓ plugin at once, from the ' +
+        'next link drawn.' },
+    { key: 'a4HeadingCounts', label: 'Show Counts on Headings',
+      tip: 'Put the number of things after the word above every Tags, Performers and Custom Fields ' +
+        'list. Off by default.\n\nOn the details view and the edit form of a scene, image, gallery, ' +
+        'performer, studio, group or tag, the heading reads Tags (12), Performers (3) or Custom Fields (5) ' +
+        'instead of the bare word, counted off what the page shows. It changes only the heading\'s text, ' +
+        'and nothing is read from your library for it.' },
+    { key: 'a6CaseSensitive', label: 'Case-Sensitive Matching',
+      tip: 'Where the Case-sensitive box starts in every ᝯㄝₓ dialog that searches text. Off by ' +
+        'default.\n\nOff, "beach" finds "Beach" and "BEACH" too. On, the box starts ticked and only the ' +
+        'text written exactly so is found. Ticking or unticking the box in a dialog lasts for that dialog ' +
+        'and leaves this setting as it is.' },
+    { key: 'a7CardFieldCount', label: 'Show ⓕ Custom Field Count on Cards',
+      tip: 'Put ⓕ and the number of custom fields an entity holds last in the row of counters under its ' +
+        'card. On by default.\n\nOn scene, image, gallery, performer, studio, group and tag cards, where ' +
+        'it holds at least one; its tooltip lists them, name and value. The fields are read once for a ' +
+        'page of cards at a time.' },
+    { key: 'a8CardFileCount', label: 'Show 🖬 File Count on Scene Cards',
+      tip: 'Put 🖬 and the number of files last in the row of counters under a scene\'s card, where the ' +
+        'scene has more than one file. On by default.\n\nIts tooltip names them, the first being the one ' +
+        'Stash plays and names the scene by. Nothing is read from your library for it.' },
+    { key: 'a5LogLinesKept', label: 'Maximum Log Lines Kept', number: true, dflt: LOG_KEEP,
+      tip: 'How many log lines a ᝯㄝₓ dialog keeps for Copy log: 1000 to 5000000, clamped. Default ' +
+        '200000.\n\nEvery dialog draws only its last thousand lines but keeps the rest so Copy log can ' +
+        'hand over the whole run. Past this number the oldest are dropped and the copy says how many went. ' +
+        'About 200 bytes a line: 200000 lines is roughly 40 MB.' },
+  ];
+
+  function globalsSummary(s) {
+    var on = GLOBAL_FIELDS.filter(function (f) { return !f.number && truthy(s[f.key]); })
+      .map(function (f) { return f.label; });
+    var lines = s.a5LogLinesKept == null || s.a5LogLinesKept === '' ? LOG_KEEP : s.a5LogLinesKept;
+    return (on.length ? 'On: ' + on.join(', ') : 'Every switch off') + '. Log lines kept: ' + lines + '.';
+  }
+
+  var GLOBALS_DIALOG = { title: 'General Globals', fields: GLOBAL_FIELDS, open: null,
+    ready: 'Settings that reach every ᝯㄝₓ plugin, or a page none of them owns. Hover a line for all it does.',
+    saveTip: 'Store these settings. They apply from the next thing drawn.' };
+  function openGlobals() { openFieldsDialog(GLOBALS_DIALOG); }
+
+  var GLOBALS_ROW = { key: 'globals', heading: 'General Globals', summary: globalsSummary,
+    line: 'The tagger emphasis, right-click Paste, where links open, counts on headings, case-sensitive ' +
+      'matching, the ⓕ and 🖬 counters on cards, and how many log lines a dialog keeps. Eight settings, ' +
+      'in a dialog.',
+    button: 'General Globals...', open: openGlobals,
+    title: 'Open the settings every ᝯㄝₓ plugin shares. Nothing is written until you press Save there.' };
+  // Drawn after Undo History's row, so it lands above it.
+  function globalsRowTick(group) { dialogRowTick(group, GLOBALS_ROW); }
+
   function button(label, className) {
     var b = el('button', 'btn btn-secondary btn-sm ' + (className || ''), label);
     b.type = 'button';
     return b;
   }
 
-  function escapeButton(run) {
+  // Core's own dialogs close on Escape through Close alone - Cancel on them is not a way out.
+  function closeOnly(run) {
     var b = run.closeBtn;
     return b && !b.disabled ? b : null;
-  }
-
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      // Only the topmost of these dialogs: a warning opened over Undo History closes alone.
-      if (run.backdrop && document.querySelectorAll) {
-        var all = document.querySelectorAll('.gttxcore-backdrop');
-        if (all.length && all[all.length - 1] !== run.backdrop) return;
-      }
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
   }
 
 
@@ -4087,9 +4322,7 @@
         runs: both[0].length, entries: both[1].length }) + '\n'];
       both[0].sort(journalOrder).forEach(function (r) { parts.push(JSON.stringify({ kind: 'run', run: r }) + '\n'); });
       both[1].forEach(function (e) { parts.push(JSON.stringify({ kind: 'entry', entry: e }) + '\n'); });
-      var d = new Date(), pad = function (n) { return (n < 10 ? '0' : '') + n; };
-      var name = 'gttx-undo-history-' + d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' +
-        pad(d.getDate()) + '-' + pad(d.getHours()) + pad(d.getMinutes()) + '.ndjson';
+      var name = 'gttx-undo-history-' + historyWhen(Date.now()).replace(' ', '-').replace(':', '') + '.ndjson';
       var blob = new window.Blob(parts, { type: 'application/x-ndjson' });
       var a = document.createElement('a');
       a.href = window.URL.createObjectURL(blob);
@@ -4101,7 +4334,7 @@
         if (a.parentNode) a.parentNode.removeChild(a);
         try { window.URL.revokeObjectURL(a.href); } catch (e) { /* the page lets it go */ }
       }, 0);
-      journalSawExport(at);
+      stampSaw(JOURNAL_EXPORT_KEY, at);
       return { runs: both[0].length, entries: both[1].length, name: name };
     });
   }
@@ -4232,9 +4465,9 @@
   // only once the name is read: fifty to a request, cached for the page, the link drawn
   // at once with its id and named when the answer lands. Each is a link with the hover
   // card every listing here draws.
-  var HISTORY_REL_TYPES = { tag_ids: 'tags', performer_ids: 'performers', gallery_ids: 'galleries',
-    scene_ids: 'scenes', parent_ids: 'tags', child_ids: 'tags', studio_id: 'studios',
-    parent_id: 'studios', groups: 'groups' };
+  // The relations a merge remaps, and a scene's groups.
+  var HISTORY_REL_TYPES = { groups: 'groups' };
+  (function () { for (var k in REMAP_REL) if (hasOwn(REMAP_REL, k)) HISTORY_REL_TYPES[k] = REMAP_REL[k]; }());
   var _histNames = {};
 
   function historyNames(type, ids) {
@@ -4378,7 +4611,7 @@
     var head = el('div', 'gttxcore-head');
     head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - Undo History'));
     head.appendChild(el('div', 'gttxcore-warn',
-      'Backing up your database before proceeding is recommended. An undo writes to your ' +
+      'Backing up your database before proceeding is strongly recommended. An undo writes to your ' +
       'library like any other edit, and is recorded here so it can be undone in turn.'));
     H.noteEl = el('div', 'gttxcore-note', 'Reading the history…');
     head.appendChild(H.noteEl);
@@ -4532,7 +4765,7 @@
       var at = Date.now(), where = '';
       journalBackup().then(function (w) {
         where = w;
-        journalSawBackup(at);
+        stampSaw(JOURNAL_BACKUP_KEY, at);
         historyWorking(H, 'Saving the history…');
         return journalExport();
       }).then(function (r) {
@@ -4599,7 +4832,7 @@
     } catch (e) { /* redrawn on the next open */ }
 
     _history = H;
-    wireEscape(H);
+    wireEscape(H, 'gttxcore', closeOnly);
     document.body.appendChild(backdrop);
     historyFoot(H);
     historyStats(H);
@@ -4608,7 +4841,7 @@
   }
 
   function historyShow(node, on) {
-    node.className = String(node.className || '').replace(/\s*gttxcore-hidden\b/g, '') + (on ? '' : ' gttxcore-hidden');
+    toggleClass(node, 'gttxcore-hidden', !on);
   }
 
   // A line with a spinner before it, for as long as the work runs; the next line written
@@ -4661,7 +4894,7 @@
   function historyClearGate(H) {
     return function (go) {
       return journalRuns().then(function (runs) {
-        var since = journalExportAt();
+        var since = stampAt(JOURNAL_EXPORT_KEY);
         var fresh = runs.filter(function (r) { return !r.imported && (r.at || 0) > since; });
         if (!fresh.length) return true;
         historyClearAsk(H, fresh, since, go);
@@ -4717,7 +4950,7 @@
         historyBusy(H, false);
       });
     });
-    wireEscape(run);
+    wireEscape(run, 'gttxcore', closeOnly);
     document.body.appendChild(backdrop);
   }
 
@@ -5067,7 +5300,7 @@
   // heading. The top bar gets a button of its own beside Stash's Settings and Help, so the
   // history is one click from any page.
   function ownHistoryTask(btn) {
-    if (String(btn.textContent || '').replace(/^\s+|\s+$/g, '') !== HISTORY_TASK) return false;
+    if (String(btn.textContent || '').trim() !== HISTORY_TASK) return false;
     for (var node = btn, d = 0; node && d < 8; d++, node = node.parentElement) {
       var h3 = node.querySelector ? node.querySelector('h3') : null;
       if (h3 && headingIsOurs(h3.textContent)) return true;
@@ -5190,231 +5423,11 @@
   // **Show more**, a labelled README link, and the red banner when the script
   // running here is not the one installed.
   var CORE_TASKS = ['Undo History...'];
-  var TIP_MARK = 'ⓘ';     // circled Latin small letter i
-
-
-  function ownSettingGroup() {
-    // Every key rather than one named one: a release can rename every setting the
-    // plugin has, and a single named anchor is exactly what such a rename breaks.
-    var node = null, d, key;
-    for (key in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, key)) continue;
-      node = settingElement(PLUGIN_ID, key);
-      if (node) break;
-    }
-    for (d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    // Fallback for a Stash that sets no setting ids: the group headed with our own
-    // name. It was the both-modes notice's fallback and it outlived that notice,
-    // because everything else this section puts on the page - the README
-    // link, the description split, the stale banner - needs the same box.
-    //
-    // Settings - Tasks heads *its* group with the same name, and that group is not
-    // this one: it holds the task buttons and no settings, so decorating it would put
-    // a README link and a split description on a page that never had either. The
-    // heading is only enough to identify us; the buttons are what say which page.
-    var heading = ownSettingGroupHeading();
-    for (node = heading, d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return hasOwnTaskButton(node) ? null : node;
-    }
-    return heading && !hasOwnTaskButton(heading.parentElement)
-      ? heading.parentElement : null;
-  }
-
-  function hasOwnTaskButton(node) {
-    if (!node) return false;
-    if (node.tagName === 'BUTTON' &&
-        CORE_TASKS.indexOf(String(node.textContent || '').replace(/^\s+|\s+$/g, '')) !== -1) {
-      return true;
-    }
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) {
-      if (hasOwnTaskButton(kids[i])) return true;
-    }
-    return false;
-  }
-
-  function readmeLinkSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub.nextSibling };
-    var header = byClass(group, 'setting');
-    var box = header && header.childNodes && header.childNodes[0];
-    if (box) return { parent: box, before: null };
-    return { parent: group, before: null };
-  }
-
-  function splitDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'gttxcore-p')) return;   // already ours
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;                   // nothing to split
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = para.replace(/\s+/g, ' ').replace(/^ | $/g, '');
-      if (t) sub.appendChild(el('div', 'gttxcore-p', t));
-    });
-  }
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*gttxcore-tip-open\b/, '');
-    sub.className = (on ? cls + ' gttxcore-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  function tipTrigger(node, row) {
-    if (!node || node._nptTipWired) return;
-    node._nptTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(PLUGIN_ID, key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'gttxcore-sum')) return;    // already ours
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;                                     // nothing to hide
-    var summary = oneLine(text.slice(0, cut));
-    // Kept as paragraphs: a native tooltip honours newlines, and a description with
-    // three paragraphs run together reads worse than the wall this is replacing.
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'gttxcore-tipped')) {
-      sub.className = ((sub.className || '') + ' gttxcore-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'gttxcore-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a
-    // sibling of the mark rather than a child: as a child it would sit inside an
-    // inline span and inherit its clipping and stacking.
-    var mark = el('span', 'gttxcore-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'gttxcore-tipbox', detail));
-    tipTrigger(mark, row);
-    // The visible summary opens it too. The mark is a small target for something
-    // every row now hides half its text behind, and the box opens *above* the
-    // .sub-heading, so it covers the name rather than the sentence being read - the
-    // one place a hover-to-open box would have been in its own way.
-    tipTrigger(sum, row);
-    // The setting's *name* opens the same box. It used to carry a plain `title`
-    // instead, so one row had two hover targets showing the same text in two
-    // different tooltips - and the browser's was exactly what the box exists to
-    // replace. Stash's own `<h3 title>` slot is left empty.
-    // querySelector by tag name is all the fake DOM implements, and all this needs.
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var k in DEFAULTS) {
-      if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    }
-  }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*gttxcore-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' gttxcore-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  function collapseDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'gttxcore-p')) paras++;
-    if (paras < 2) return;                        // one paragraph hides nothing
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    // A re-render drops the button and the class together, so the description
-    // returns to collapsed rather than to a half-state with no way out of it.
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'gttxcore-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  function installedFromHeading(group) {
-    var h3 = group && group.querySelector ? group.querySelector('h3') : null;
-    var t = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? m[1].replace(/^\s+|\s+$/g, '') : null;
-  }
-
-  function staleSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
-    return { parent: group, before: group.firstChild };
-  }
-
-  function ensureStaleNotice(group) {
-    var installed = installedFromHeading(group);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, group, !!installed && installed !== PLUGIN_VERSION);
-    // No parenthesised version on the heading means Settings → Tasks, which heads its
-    // group with the bare name - not a mismatch, and nothing to say.
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = staleSlot(group);
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'gttxcore-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
-      'the older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-
-  function ensureReadmeLink() {
-    var group = ownSettingGroup();
-    if (!group) return;
-    // Both of these run on every tick, not just when the link is missing: React
-    // re-renders this panel on any settings change, and the class is the only thing
-    // making the description's paragraph breaks visible.
-    injectStyle();
-    if (!hasClass(group, 'gttxcore-own-group')) {
-      group.className = ((group.className || '') + ' gttxcore-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(group);
-    collapseDescription(group);   // after the split: it counts the .gttxcore-p divs
-    tipSettings();
-    ensureStaleNotice(group);     // before the early return: the link outlives it
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'gttxcore-readme', 'GTTxCore/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noreferrer';
-    link.title = 'Open this plugin\'s documentation for the version it was published at';
-    link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
-    var slot = readmeLinkSlot(group);
-    slot.parent.insertBefore(link, slot.before);
-  }
+  var CORE_PAGE = settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'gttxcore', keys: Object.keys(DEFAULTS), tasks: CORE_TASKS,
+    readmeUrl: README_URL, readmeLabel: 'GTTxCore/README.md', injectStyle: injectStyle,
+  });
 
 
   function headingIsOurs(text) {
@@ -5422,14 +5435,6 @@
     if (t === PLUGIN_NAME) return true;
     t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
     return t === PLUGIN_NAME;
-  }
-
-  function ownSettingGroupHeading() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (headingIsOurs(nodes[i].textContent)) return nodes[i];
-    }
-    return null;
   }
 
   function hide(node) {
@@ -5495,13 +5500,6 @@
     return null;
   }
 
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').trim();
-  }
-
-  function descCollapsed(sub) { return hasClass(sub, 'gttxcore-desc-collapsed'); }
-
-
   function pxOf(value) {
     var n = parseFloat(value);
     return n > 0 ? n : 0;
@@ -5566,6 +5564,7 @@
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
+    '.gttx-gloss{text-decoration:underline dotted;text-underline-offset:2px;cursor:help;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
     'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
     // Over the picture's top corners, positioned against the fixed box itself - the
@@ -5583,7 +5582,7 @@
     // pseudo-element shares the column and is unharmed; a long entry now scrolls inside
     // the input rather than widening the row, which is the better of the two anyway.
     '.gttx-selectpaste .react-select__input-container{grid-template-columns:0 1fr;}' +
-    '.gttx-cftip{margin-left:.9rem;color:#a7b6c2;cursor:help;}' +
+    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
     // A listed setting: our names stand in for Stash's text of the value, each with
     // its mark close behind it.
     '.gttx-cflisted .value > span:not(.gttx-cftipped){display:none;}' +
@@ -5701,6 +5700,8 @@
     '.gttxcore-jbox{margin-left:.5rem;width:7rem;background:#30404d;color:#f5f8fa;border:1px solid #394b59;' +
     'border-radius:3px;padding:.1rem .35rem;}' +
     '.gttxcore-warnlabel .gttxcore-devname,.gttxcore-warnhelp{color:#ffc107;}' +
+    // ⓕ and 🖬 in General Globals, amber as on the cards.
+    '.gttxcore-amber-mark{color:#ffc107;}' +
     // A Rescan whose listing another tab has since changed: bold amber, breathing white and
     // green about once a second.
     '@keyframes gttx-breathe{0%,100%{box-shadow:0 0 0 2px #f5f8fa;border-color:#f5f8fa;}' +
@@ -5815,7 +5816,7 @@
   // two things that need the settings are the tagger's duration sentence and this
   // plugin's own settings group, and both announce themselves in the DOM.
   function tick() {
-    var group = ownSettingGroup();
+    var group = CORE_PAGE.group();
     var cards = document.querySelectorAll ?
       document.querySelectorAll('.scene-metadata') : [];
     var boxes = document.querySelectorAll ?
@@ -5831,6 +5832,8 @@
     try { historyNavTick(); } catch (e) { fail(e); }
     try { historyTaskTick(); } catch (e) { fail(e); }
     if (group) { try { settingsTick(group); } catch (e) { fail(e); } }
+    // Last, so it reads the descriptions after the ticks above have split and folded them.
+    try { glossaryTick(); } catch (e) { fail(e); }
   }
 
   function fail(e) { if (window.console && console.error) console.error('[gttxcore]', e); }
@@ -5845,14 +5848,14 @@
   // the cards mounting together join one batch per type - and kept a short while.
   // Registered at load, before the cards first render, through Stash's component patching.
   var CARD_TYPES = [
-    { card: 'SceneCard', patch: 'SceneCard.Popovers', prop: 'scene', find: 'findScenes', node: 'scenes', files: true },
-    { card: 'ImageCard', patch: 'ImageCard.Popovers', prop: 'image', find: 'findImages', node: 'images' },
-    { card: 'GalleryCard', patch: 'GalleryCard.Popovers', prop: 'gallery', find: 'findGalleries', node: 'galleries' },
-    { card: 'PerformerCard', patch: 'PerformerCard.Popovers', prop: 'performer', find: 'findPerformers', node: 'performers' },
-    { card: 'TagCard', patch: 'TagCard.Popovers', prop: 'tag', find: 'findTags', node: 'tags' },
+    { patch: 'SceneCard.Popovers', prop: 'scene', find: 'findScenes', node: 'scenes', files: true },
+    { patch: 'ImageCard.Popovers', prop: 'image', find: 'findImages', node: 'images' },
+    { patch: 'GalleryCard.Popovers', prop: 'gallery', find: 'findGalleries', node: 'galleries' },
+    { patch: 'PerformerCard.Popovers', prop: 'performer', find: 'findPerformers', node: 'performers' },
+    { patch: 'TagCard.Popovers', prop: 'tag', find: 'findTags', node: 'tags' },
     // No counter row of their own to patch: the whole card, whose `popovers` it is handed.
-    { card: 'GroupCard', patch: 'GroupCard', prop: 'group', find: 'findGroups', node: 'groups', whole: true },
-    { card: 'StudioCard', patch: 'StudioCard', prop: 'studio', find: 'findStudios', node: 'studios', whole: true },
+    { patch: 'GroupCard', prop: 'group', find: 'findGroups', node: 'groups', whole: true },
+    { patch: 'StudioCard', prop: 'studio', find: 'findStudios', node: 'studios', whole: true },
   ];
   var CARD_SHARE_MS = 30000, CARD_BATCH_MS = 50, CARD_TIP_LINES = 10;
   var _cardFields = {}, _cardBatch = {};
@@ -5901,6 +5904,10 @@
   // their icon is. `own` draws the rule and the group too, for a card Stash drew none on.
   // Amber, as Scene Variants' ⸎ beside them is.
   var CARD_AMBER = { color: '#ffc107' };
+  // A circled letter sits inside the cap height, so at the button's own size ⓕ read smaller
+  // than the icons beside it and than the same ⓕ on the settings page. Scaled up to match that
+  // one; line-height 1 keeps the counter row its height. The number to tune if it looks off.
+  var CARD_FIELD_MARK = { marginRight: '7px', fontSize: '1.25em', lineHeight: 1 };
   function CardCounts(React, Bootstrap) {
     return function (props) {
       var t = props.t, ent = props.ent;
@@ -5917,20 +5924,16 @@
         return function () { live = false; };
       }, [ent.id]);
       var kids = [];
+      var counter = function (cls, title, mark, count, markStyle) {
+        kids.push(React.createElement('div', { key: cls, className: cls, title: title },
+          React.createElement(Bootstrap.Button, { className: 'minimal', style: CARD_AMBER },
+            React.createElement('span', { className: 'gttx-card-mark', style: markStyle || { marginRight: '7px' } }, mark),
+            React.createElement('span', null, String(count)))));
+      };
       var n = fields && truthy(s.a7CardFieldCount) ? Object.keys(fields).length : 0;
-      if (n) {
-        kids.push(React.createElement('div', { key: 'gttx-cfields', className: 'gttx-cfields', title: cardFieldTip(fields) },
-          React.createElement(Bootstrap.Button, { className: 'minimal', style: CARD_AMBER },
-            React.createElement('span', { className: 'gttx-card-mark', style: { marginRight: '7px' } }, '\u24d5'),
-            React.createElement('span', null, String(n)))));
-      }
+      if (n) counter('gttx-cfields', cardFieldTip(fields), '\u24d5', n, CARD_FIELD_MARK);
       var files = t.files && truthy(s.a8CardFileCount) ? ent.files || [] : [];
-      if (files.length > 1) {
-        kids.push(React.createElement('div', { key: 'gttx-cfiles', className: 'gttx-cfiles', title: cardFileTip(files) },
-          React.createElement(Bootstrap.Button, { className: 'minimal', style: CARD_AMBER },
-            React.createElement('span', { className: 'gttx-card-mark', style: { marginRight: '7px' } }, '\ud83d\uddac'),
-            React.createElement('span', null, String(files.length)))));
-      }
+      if (files.length > 1) counter('gttx-cfiles', cardFileTip(files), '\ud83d\uddac', files.length);
       if (!kids.length) return null;
       if (!props.own) return React.createElement(React.Fragment, null, kids);
       return React.createElement(React.Fragment, null, React.createElement('hr', { key: 'gttx-card-hr' }),
@@ -5987,14 +5990,686 @@
   }
 
   function settingsTick(group) {
-    injectStyle();
-    splitDescription(group);
-    collapseDescription(group);
-    tipSettings();
+    CORE_PAGE.decorate(group);
     devFieldTick();
     journalRowTick(group);
-    ensureStaleNotice(group);
-    ensureReadmeLink();
+    globalsRowTick(group);
+  }
+
+  // ── Every plugin's own chrome ─────────────────────────────────────────────
+  //
+  // What each ᝯㄝₓ plugin used to carry a copy of - near-identical copies that had
+  // drifted only in renamed locals and inlined helpers: its settings group, its task
+  // buttons on Settings → Tasks, Escape on its dialogs, the bulk-edit lease, its
+  // installed version, its console gate, and the two fetch-interception helpers. Each takes
+  // the caller's identity - id, name, class prefix, tasks - so the classes and ids on the
+  // page are exactly the ones each plugin's own CSS and suites already use.
+
+  var BTN_VARIANTS = /\bbtn-(secondary|primary|success|info|light|dark|link|warning)\b/g;
+  var LEASE_TTL_MS = 300000;      // a lease lapses on its own, so a crashed run cannot hold the others off
+
+  // `o`: { id, name, shortName, version, prefix, keys, tasks, readmeUrl, readmeLabel,
+  // injectStyle, headingText }. `headingText(h3)` is what the group's heading says, for a
+  // plugin that puts a node of its own inside that h3; the raw text by default. `keys` are the plugin's setting keys, which find its group by id; with
+  // none (a plugin that has no settings) the group is found by its heading alone. `tasks`
+  // are its task captions, which tell Settings → Tasks - headed with the same name - apart.
+  // Returns `group()`, the plugin's settings group or null, and `decorate(group)`: the
+  // description split into paragraphs with the rest behind Show more, each multi-paragraph
+  // setting reduced to its summary with the rest in a hover box, the red banner when the
+  // script running is not the one installed, and the labelled README link.
+  function settingsPage(o) {
+    var P = o.prefix;
+    var keys = o.keys || [];
+    var tasks = o.tasks || [];
+    var cls = function (n) { return P + '-' + n; };
+    var headingText = o.headingText || function (h3) {
+      return h3 && h3.textContent != null ? String(h3.textContent) : '';
+    };
+
+    function headingIsOurs(text) {
+      var t = String(text == null ? '' : text).trim();
+      if (t === o.name) return true;
+      return t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim() === o.name;
+    }
+
+    // Settings → Tasks heads its group with the same name; the task buttons are what say
+    // which page this is.
+    function hasTaskButton(node) {
+      var buttons = node && node.querySelectorAll ? node.querySelectorAll('button') : [];
+      for (var i = 0; i < buttons.length; i++) {
+        if (tasks.indexOf(String(buttons[i].textContent || '').trim()) !== -1) return true;
+      }
+      return false;
+    }
+
+    function group() {
+      // Every key rather than one named one: a release can rename every setting a plugin
+      // has, and a single named anchor is exactly what such a rename breaks.
+      var node = null, d, i;
+      for (i = 0; i < keys.length && !node; i++) node = settingElement(o.id, keys[i]);
+      for (d = 0; node && d < 10; d++, node = node.parentElement) {
+        if (hasClass(node, 'setting-group')) return node;
+      }
+      // A Stash that sets no setting ids, or a plugin with no settings: the group headed
+      // with the plugin's name that is not the Tasks page's. Every such heading, not the
+      // first: Settings → Tasks can be in the document too, ahead of ours, and stopping at
+      // it left a plugin with no settings - found by its heading alone - decorating nothing.
+      var heads = document.querySelectorAll ? document.querySelectorAll('h3') : [];
+      for (i = 0; i < heads.length; i++) {
+        if (!headingIsOurs(headingText(heads[i]))) continue;
+        for (node = heads[i], d = 0; node && d < 10 && !hasClass(node, 'setting-group'); d++) node = node.parentElement;
+        var g = node && hasClass(node, 'setting-group') ? node : heads[i].parentElement;
+        if (g && !hasTaskButton(g)) return g;
+      }
+      return null;
+    }
+
+    function split(g) {
+      var sub = byClass(g, 'sub-heading');
+      if (!sub) return;
+      var kids = sub.childNodes || [];
+      if (kids.length && hasClass(kids[0], cls('p'))) return;           // already split
+      var text = sub.textContent || '';
+      if (text.indexOf('\n') === -1) return;                            // nothing to split
+      sub.textContent = '';
+      text.split(/\n{2,}/).forEach(function (para) {
+        var t = tipText(para);
+        if (t) sub.appendChild(el('div', cls('p'), t));
+      });
+    }
+
+    function collapse(g) {
+      var sub = byClass(g, 'sub-heading');
+      if (!sub) return;
+      var kids = sub.childNodes || [], paras = 0;
+      for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], cls('p'))) paras++;
+      if (paras < 2 || document.getElementById(cls('desc-toggle'))) return;
+      // A re-render drops the button and the class together, so the description returns
+      // to collapsed rather than to a half-state with no way out of it.
+      toggleClass(sub, cls('desc-collapsed'), true);
+      var btn = el('button', cls('desc-toggle'), 'Show more');
+      btn.id = cls('desc-toggle');
+      btn.type = 'button';
+      btn.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        if (e && e.stopPropagation) e.stopPropagation();
+        var open = hasClass(sub, cls('desc-collapsed'));
+        toggleClass(sub, cls('desc-collapsed'), !open);
+        btn.textContent = open ? 'Show less' : 'Show more';
+      });
+      sub.appendChild(btn);
+    }
+
+    function tipTrigger(node, row) {
+      if (!node || node._gttxTipWired) return;
+      node._gttxTipWired = true;
+      var toggle = function (on) { var sub = byClass(row, 'sub-heading'); if (sub) toggleClass(sub, cls('tip-open'), on); };
+      hoverFocus(node, function () { toggle(true); }, function () { toggle(false); });
+    }
+
+    // A setting with more than one paragraph shows its first on the row; the rest opens in
+    // a box from the ⓘ mark, the summary, or the setting's name.
+    function tip(key) {
+      var row = settingRow(o.id, key);
+      var sub = row && byClass(row, 'sub-heading');
+      if (!sub) return;
+      var kids = sub.childNodes || [];
+      if (kids.length && hasClass(kids[0], cls('sum'))) return;         // already ours
+      var text = sub.textContent || '';
+      var cut = text.indexOf('\n\n');
+      if (cut === -1) return;                                           // nothing to hide
+      var summary = tipText(text.slice(0, cut));
+      var detail = text.slice(cut + 2).split(/\n{2,}/).map(tipText).filter(function (p) { return !!p; }).join('\n\n');
+      if (!summary || !detail) return;
+      sub.textContent = '';
+      toggleClass(sub, cls('tipped'), true);
+      var sum = el('span', cls('sum'), summary);
+      sub.appendChild(sum);
+      // tabIndex, so the box can be reached and read without a mouse. A sibling of the
+      // mark rather than a child, which would inherit an inline span's clipping.
+      var mark = el('span', cls('tip'), 'ⓘ');
+      mark.tabIndex = 0;
+      sub.appendChild(mark);
+      sub.appendChild(el('span', cls('tipbox'), detail));
+      tipTrigger(mark, row);
+      tipTrigger(sum, row);
+      tipTrigger(row.querySelector ? row.querySelector('h3') : null, row);
+    }
+
+    function installedFromHeading(g) {
+      var h3 = g && g.querySelector ? g.querySelector('h3') : null;
+      var m = /\(([^()]+)\)$/.exec(headingText(h3).trim());
+      return m ? m[1].trim() : null;
+    }
+
+    function stale(g) {
+      var installed = installedFromHeading(g);
+      var node = document.getElementById(cls('stale-notice'));
+      ensureReloadUiButton(o.id, g, !!installed && installed !== o.version);
+      // No parenthesised version on the heading means Settings → Tasks, which heads its
+      // group with the bare name - not a mismatch, and nothing to say.
+      if (!installed || installed === o.version) {
+        if (node && node.parentNode) node.parentNode.removeChild(node);
+        return;
+      }
+      var sub = byClass(g, 'sub-heading');
+      var parent = sub && sub.parentNode ? sub.parentNode : g;
+      var before = sub && sub.parentNode ? sub : g.firstChild;
+      if (node && node.parentNode === parent) return;
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+      var box = el('div', cls('stale'), '⚠ This page is still running ' + o.shortName + ' ' + o.version + ', but ' +
+        installed + ' is installed. Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
+        'the older script, and everything this plugin does until then is that older code.');
+      box.id = cls('stale-notice');
+      parent.insertBefore(box, before);
+    }
+
+    function readme(g) {
+      if (document.getElementById(cls('readme-link'))) return;
+      var link = el('a', cls('readme'), o.readmeLabel);
+      link.id = cls('readme-link');
+      link.href = o.readmeUrl;
+      link.target = linkTarget();
+      link.rel = 'noreferrer';
+      link.title = 'Open this plugin\'s documentation for the version it was published at';
+      link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
+      var sub = byClass(g, 'sub-heading');
+      if (sub && sub.parentNode) { sub.parentNode.insertBefore(link, sub.nextSibling); return; }
+      var header = byClass(g, 'setting');
+      var box = header && header.childNodes && header.childNodes[0];
+      (box || g).appendChild(link);
+    }
+
+    // Every tick, not only when something is missing: React re-renders this panel on any
+    // settings change, and the class is what makes the paragraph breaks visible.
+    function decorate(g) {
+      if (!g) return;
+      if (o.injectStyle) o.injectStyle();
+      if (!hasClass(g, cls('own-group'))) toggleClass(g, cls('own-group'), true);
+      split(g);
+      collapse(g);          // after the split: it counts the paragraphs
+      keys.forEach(tip);
+      stale(g);             // before the README link, which outlives it
+      readme(g);
+    }
+
+    return { group: group, decorate: decorate, tip: tip, installedFromHeading: installedFromHeading };
+  }
+
+  // The bulk-edit lease: a plugin writing across the library holds one, and the others'
+  // reactions to its writes stand down until it is released or lapses.
+  function lease(owner, label, ttl) {
+    var c = coop();
+    var ms = ttl || LEASE_TTL_MS;
+    var held = { owner: owner, label: label, until: Date.now() + ms };
+    c.leases.push(held);
+    return {
+      renew: function () { held.until = Date.now() + ms; },
+      release: function () { var i = c.leases.indexOf(held); if (i !== -1) c.leases.splice(i, 1); },
+    };
+  }
+
+  // A live lease held by any plugin but `owner`, lapsed ones swept first; else null.
+  function foreignLease(owner) {
+    var c = coop();
+    var now = Date.now();
+    for (var i = c.leases.length - 1; i >= 0; i--) if (c.leases[i].until <= now) c.leases.splice(i, 1);
+    for (var j = 0; j < c.leases.length; j++) if (c.leases[j].owner !== owner) return c.leases[j];
+    return null;
+  }
+
+  // The version Stash has installed, read fresh - the manifest's, which can be newer than
+  // the script this browser is running. Null when it cannot be read.
+  function installedVersion(pluginId, opName) {
+    return gqlRequest('query ' + opName + ' { plugins { id version } }', null).then(function (data) {
+      var list = (data && data.plugins) || [];
+      for (var i = 0; i < list.length; i++) if (list[i] && String(list[i].id) === pluginId) return list[i].version || null;
+      return null;
+    }, function () { return null; });
+  }
+
+  // The `[<prefix> gate]` console channel Dev Mods' Debug switch opens: `log` every line,
+  // `once` a line only when it differs from the last on its channel.
+  function gate(prefix) {
+    var last = {};
+    var on = function () { var c = coop(); return !!(c.debugMode || c.debugButtons); };
+    return {
+      log: function (line) { if (on()) console.info('[' + prefix + ' gate] ' + line); },
+      once: function (channel, line) {
+        if (!on()) { last = {}; return; }
+        if (last[channel] === line) return;
+        last[channel] = line;
+        console.info('[' + prefix + ' gate] ' + line);
+      },
+    };
+  }
+
+  // A task button's caption if it is one of `tasks` in `pluginName`'s own group on Settings →
+  // Tasks, else null. Answered from the button's own SettingGroup and no further: climbing
+  // past it reaches the panel holding every plugin's group, whose first h3 is whichever
+  // plugin is listed first - how a same-named task of another plugin was once hijacked. A
+  // Stash that puts no `setting-group` on that box gets the any-ancestor walk, the behaviour
+  // every release before the group check shipped.
+  function ownTaskName(btn, pluginName, tasks) {
+    var label = (btn.textContent || '').trim();
+    if (tasks.indexOf(label) === -1) return null;
+    var fallback = null;
+    for (var node = btn, depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+      var heading = node.querySelector ? node.querySelector('h3') : null;
+      var ours = !!heading && (heading.textContent || '').trim() === pluginName;
+      if (hasClass(node, 'setting-group')) return ours ? label : null;
+      if (ours) fallback = label;
+    }
+    return fallback;
+  }
+
+  function paintButton(btn, variant) {
+    if (hasClass(btn, variant)) return;                                  // already ours
+    var c = String(btn.className || '').replace(BTN_VARIANTS, '');
+    btn.className = c.replace(/\s+/g, ' ').trim() + ' ' + variant;
+  }
+
+  // Every task button of the plugin's own, painted `variantFor(caption)` - amber for a task
+  // that writes, teal for one that only reads.
+  function paintTaskButtons(pluginName, tasks, variantFor) {
+    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
+    for (var i = 0; i < nodes.length; i++) {
+      var name = ownTaskName(nodes[i], pluginName, tasks);
+      if (name) paintButton(nodes[i], variantFor(name));
+    }
+  }
+
+  // Escape on a dialog clicks the button `pick(run)` names - by default whichever of Close
+  // and Cancel is shown and enabled - and nothing else: mid-write, where both are hidden,
+  // the key does nothing. Only the topmost of a plugin's dialogs answers, so a warning
+  // opened over another closes alone. The listener is on `document`, since the modal is not
+  // focusable. `prefix` names the plugin's `-hidden` and `-backdrop` classes.
+  function wireEscape(run, prefix, pick) {
+    var choose = pick || function (r) {
+      var order = [r.closeBtn, r.cancelBtn];
+      for (var i = 0; i < order.length; i++) {
+        var b = order[i];
+        if (b && !b.disabled && !hasClass(b, prefix + '-hidden')) return b;
+      }
+      return null;
+    };
+    run._onEscape = function (ev) {
+      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
+      if (run.backdrop && document.querySelectorAll) {
+        var all = document.querySelectorAll('.' + prefix + '-backdrop');
+        if (all.length && all[all.length - 1] !== run.backdrop) return;
+      }
+      var b = choose(run);
+      if (!b) return;
+      if (ev.preventDefault) ev.preventDefault();
+      b.click();
+    };
+    document.addEventListener('keydown', run._onEscape);
+  }
+
+  function unwireEscape(run) {
+    if (run._onEscape) document.removeEventListener('keydown', run._onEscape);
+    run._onEscape = null;
+  }
+
+  // ── A run dialog's log ──────────────────────────────────────────────────────
+  //
+  // The log of a task dialog that plans and writes: `spin`, `log`, `scheduleFlush`,
+  // `flush`, `disarmUndo` and `focus`, installed on the dialog's prototype. They read the
+  // instance's `logEl`, `lines`, `pending`, `undoBtn` and `modal`, and `flush` ends in the
+  // instance's own `renderProgress`. `prefix` names the classes each line carries, so the
+  // plugin's own CSS styles them; `own` lists the methods a plugin keeps a copy of its own.
+  // `runLogCap` is exported beside it, for the progress line that says how much is shown, and
+  // the spinner's frames and period, for a dialog that keeps a log of its own.
+  var RUN_SPIN_FRAMES = ['▙', '▛', '▜', '▟'];
+  var RUN_SPIN_MS = 125;          // one four-frame cycle at 2Hz
+  var RUN_FLUSH_MS = 100;
+  var RUN_LOG_CAP = 1000;         // log lines kept in the DOM; all of them stay in `lines`
+
+  function runLog(proto, prefix, own) {
+    var P = prefix;
+    var methods = {
+      // A cursor cycling under the last log line for as long as work is in flight, and
+      // gone the moment it is not. A sibling of the lines rather than part of one, so it
+      // survives a flush that appends under it - `flush` moves it back to the end - and
+      // it carries no `-line` class, since it is not a log line and must not be read back
+      // as one. The dialog's state is what says whether it runs.
+      spin: function (on) {
+        if (!on) {
+          if (this.spinTimer) clearInterval(this.spinTimer);
+          this.spinTimer = null;
+          if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
+          this.spinEl = null;
+          return;
+        }
+        if (!this.spinEl) {
+          this.spinEl = el('div', P + '-spin', RUN_SPIN_FRAMES[0]);
+          var self = this, i = 0;
+          this.spinTimer = setInterval(function () {
+            self.spinEl.textContent = RUN_SPIN_FRAMES[++i % RUN_SPIN_FRAMES.length];
+          }, RUN_SPIN_MS);
+        }
+        this.logEl.appendChild(this.spinEl);
+      },
+      // `parts` is optional: a line passed as parts is rendered as spans, so each name can
+      // carry its own tooltip. `lines` keeps the plain string either way - Copy log hands
+      // over text, and a tooltip is not text.
+      log: function (kind, message, parts) {
+        var line = '[' + kind + '] ' + message;
+        this.logged = (this.logged || 0) + 1;
+        this.lines.push(line);
+        // Bounded, because the copy buffer is what a library-wide pass grows without limit.
+        this.logDropped = (this.logDropped || 0) + keepLog(this.lines);
+        this.pending.push({ kind: kind, line: line, parts: parts || null });
+        this.scheduleFlush();
+      },
+      scheduleFlush: function () {
+        var self = this;
+        if (this.flushTimer) return;
+        this.flushTimer = setTimeout(function () {
+          self.flushTimer = null;
+          self.flush();
+        }, RUN_FLUSH_MS);
+      },
+      // Only the tail is rendered: a first run on a large library can plan six figures of
+      // changes, and one node per change is a page that stops responding.
+      flush: function () {
+        if (!this.pending.length) return;
+        var pending = this.pending;
+        this.pending = [];
+        // Out of the way while the lines land, so the cursor is neither counted against
+        // the render cap nor left in the middle of the log.
+        if (this.spinEl && this.spinEl.parentNode) this.logEl.removeChild(this.spinEl);
+        pending.forEach(function (p) {
+          var node = el('div', P + '-line ' + P + '-' + p.kind, p.parts ? null : p.line);
+          // The line looks exactly like every other one: the spans exist to hang a title
+          // on, and carry no styling of their own. An underline and a help cursor were
+          // tried and read as decoration on a log that has none elsewhere.
+          if (p.parts) {
+            node.appendChild(el('span', null, '[' + p.kind + '] '));
+            p.parts.forEach(function (seg) {
+              var span;
+              if (seg.href) {
+                span = el('a', P + '-elink', seg.text);
+                span.href = seg.href;
+                span.target = linkTarget();
+                span.rel = 'noopener noreferrer';
+              } else {
+                span = el('span', null, seg.text);
+              }
+              if (seg.title) span.title = seg.title;
+              // A segment naming a tag opens the box with the tag's image above the same
+              // text; one with no image of its own keeps the `title` it already had.
+              if (seg.tip) tagTip(span, seg.tip, seg.title);
+              // Anything else with a page of its own opens a card that says which one it is.
+              if (seg.ent) entityTip(span, seg.ent.type, seg.ent.id);
+              node.appendChild(span);
+            });
+          }
+          this.logEl.appendChild(node);
+        }, this);
+        while (this.logEl.childNodes && this.logEl.childNodes.length > RUN_LOG_CAP) {
+          this.logEl.removeChild(this.logEl.firstChild);
+        }
+        if (this.spinEl) this.logEl.appendChild(this.spinEl);
+        if (typeof this.logEl.scrollHeight === 'number') this.logEl.scrollTop = this.logEl.scrollHeight;
+        this.renderProgress();
+      },
+      disarmUndo: function () {
+        if (this.undoTimer) { clearTimeout(this.undoTimer); this.undoTimer = null; }
+        this.undoArmed = false;
+        if (this.undoBtn) this.undoBtn.textContent = 'Undo';
+      },
+      focus: function () {
+        if (this.modal && this.modal.scrollIntoView) this.modal.scrollIntoView();
+      },
+    };
+    for (var name in methods) {
+      if (hasOwn(methods, name) && (own || []).indexOf(name) === -1) proto[name] = methods[name];
+    }
+  }
+
+  // What an entity is called: its title or name, else its first file's name, else its folder's.
+  function firstBasename(files) {
+    return (files && files.length && files[0].basename) || '';
+  }
+
+  function displayName(ent) {
+    return ent.title || ent.name || firstBasename(ent.files) || firstBasename(ent.visual_files) ||
+      (ent.folder && ent.folder.basename) || null;
+  }
+
+  // A response for a request a plugin answers itself instead of sending.
+  function fakeOk(payload) {
+    return new Response(JSON.stringify(payload), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  // Whether a mutation's response says it landed: an ok status and no `errors` in the body.
+  // A body that cannot be read is taken as landed, as the status already said.
+  function mutationSucceeded(p) {
+    return p.then(function (resp) {
+      if (!resp || !resp.ok) return false;
+      var clone;
+      try { clone = resp.clone(); } catch (e) { return true; }
+      return clone.json().then(function (json) { return !json || !json.errors; }, function () { return true; });
+    }, function () { return false; });
+  }
+
+  // ── The seven entity-types, and the text on them ──────────────────────────
+  //
+  // For a plugin that reads every text field of every entity-type - Entity Name
+  // Maintainer's scan for an old name, Find Entities by Text Content's search. `fields` is
+  // a list of *candidates*, not a promise: which of them the running Stash actually has is
+  // settled by one introspection query (`describeFields`). A schema guessed wrong would
+  // otherwise fail the whole query and report as "nothing found", which is the one
+  // failure mode a search must not have.
+  //
+  //   nameField  the field a rename moves
+  //   extra      the display fields that are not searchable text - a file's basename, a
+  //              gallery's folder - so a hit can name an entity with no title
+  //   mutation   the single-entity update, and `input` its input type; there is no bulk
+  //              input carrying free text
+  var ENTITY_TYPES = {
+    scenes: {
+      key: 'scenes', label: 'Scene', plural: 'Scenes', gqlType: 'Scene',
+      find: 'findScenes', list: 'scenes', one: 'findScene', route: '/scenes/',
+      mutation: 'sceneUpdate', input: 'SceneUpdateInput', nameField: 'title',
+      extra: 'files { basename }',
+      fields: ['title', 'code', 'details', 'director', 'urls', 'custom_fields'],
+    },
+    images: {
+      key: 'images', label: 'Image', plural: 'Images', gqlType: 'Image',
+      find: 'findImages', list: 'images', one: 'findImage', route: '/images/',
+      mutation: 'imageUpdate', input: 'ImageUpdateInput', nameField: 'title',
+      extra: 'visual_files { ... on ImageFile { basename } ... on VideoFile { basename } }',
+      fields: ['title', 'code', 'details', 'photographer', 'urls', 'custom_fields'],
+    },
+    galleries: {
+      key: 'galleries', label: 'Gallery', plural: 'Galleries', gqlType: 'Gallery',
+      find: 'findGalleries', list: 'galleries', one: 'findGallery', route: '/galleries/',
+      mutation: 'galleryUpdate', input: 'GalleryUpdateInput', nameField: 'title',
+      extra: 'files { basename } folder { basename }',
+      fields: ['title', 'code', 'details', 'photographer', 'urls', 'custom_fields'],
+    },
+    performers: {
+      key: 'performers', label: 'Performer', plural: 'Performers', gqlType: 'Performer',
+      find: 'findPerformers', list: 'performers', one: 'findPerformer', route: '/performers/',
+      mutation: 'performerUpdate', input: 'PerformerUpdateInput', nameField: 'name',
+      extra: '',
+      fields: ['name', 'disambiguation', 'alias_list', 'details', 'urls', 'tattoos',
+        'piercings', 'measurements', 'career_length', 'custom_fields'],
+    },
+    studios: {
+      key: 'studios', label: 'Studio', plural: 'Studios', gqlType: 'Studio',
+      find: 'findStudios', list: 'studios', one: 'findStudio', route: '/studios/',
+      mutation: 'studioUpdate', input: 'StudioUpdateInput', nameField: 'name',
+      extra: '',
+      fields: ['name', 'aliases', 'details', 'urls', 'custom_fields'],
+    },
+    groups: {
+      key: 'groups', label: 'Group', plural: 'Groups', gqlType: 'Group',
+      find: 'findGroups', list: 'groups', one: 'findGroup', route: '/groups/',
+      mutation: 'groupUpdate', input: 'GroupUpdateInput', nameField: 'name',
+      extra: '',
+      fields: ['name', 'aliases', 'synopsis', 'director', 'urls', 'custom_fields'],
+    },
+    tags: {
+      key: 'tags', label: 'Tag', plural: 'Tags', gqlType: 'Tag',
+      find: 'findTags', list: 'tags', one: 'findTag', route: '/tags/',
+      mutation: 'tagUpdate', input: 'TagUpdateInput', nameField: 'name',
+      extra: '',
+      fields: ['name', 'aliases', 'description', 'custom_fields'],
+    },
+  };
+  var ENTITY_ORDER = ['scenes', 'images', 'galleries', 'performers', 'studios', 'groups', 'tags'];
+
+  // The label a filter row and a hit line both wear. One label per *concept*, shared
+  // across types on purpose: Details means the same thing on a Scene and on a Performer,
+  // and a user turning it off means both.
+  var ENTITY_FIELD_LABEL = {
+    title: 'Title', name: 'Name', code: 'Code', details: 'Details',
+    description: 'Description', synopsis: 'Synopsis', director: 'Director',
+    photographer: 'Photographer', urls: 'URLs', aliases: 'Aliases',
+    alias_list: 'Aliases', disambiguation: 'Disambiguation', tattoos: 'Tattoos',
+    piercings: 'Piercings', measurements: 'Measurements', career_length: 'Career length',
+  };
+
+  var MATCH_CONTEXT = 48;     // characters of surrounding text shown either side of a hit
+  var MATCH_ELLIPSIS = '…';
+
+  function unwrapType(t) {
+    // NON_NULL and LIST wrappers carry the real type in `ofType`. `[String!]!` is four
+    // deep - NON_NULL, LIST, NON_NULL, SCALAR - which is what the query has to ask for.
+    var kind = null;
+    while (t) {
+      if (t.kind === 'LIST') kind = 'list';
+      if (t.kind === 'SCALAR' || t.kind === 'OBJECT' || t.kind === 'ENUM') {
+        return { kind: kind || (t.name === 'Map' ? 'map' : 'string'), name: t.name };
+      }
+      t = t.ofType;
+    }
+    return { kind: kind || 'string', name: null };
+  }
+
+  // One plugin's copy of the table, and the queries it sends. `op` is the prefix of every
+  // operation name (`ENM`, `FRETC`), which is what the plugin's suites answer on. The
+  // table is the caller's own copy, so a type a plugin adds to it is its alone. `request`
+  // sends them, Core's `gqlRequest` by default: a plugin that wraps `fetch` passes the
+  // one that marks a request as its own, so its wrapper does not read its own reads.
+  // Returns { types, order, fieldLabel, introspect, describeFields, pageQuery, cachedFields }.
+  function entityTypes(op, request) {
+    var send = request || gqlRequest;
+    var types = {};
+    ENTITY_ORDER.forEach(function (k) {
+      var spec = {}, p;
+      for (p in ENTITY_TYPES[k]) if (hasOwn(ENTITY_TYPES[k], p)) spec[p] = ENTITY_TYPES[k][p];
+      spec.fields = spec.fields.slice();
+      types[k] = spec;
+    });
+    // Cached for the life of the page: the schema cannot change without a restart.
+    var shapes = null;
+
+    // One aliased `__type` query over the seven types: `typeProp` names the type in the
+    // table (`gqlType` or `input`), `listProp` the list asked of it (`fields`, or
+    // `inputFields` for an input type, which has no `fields`). Answers
+    // `{typeKey: {fieldName: {kind, name}}}`.
+    function introspect(typeProp, listProp, opName) {
+      var parts = ENTITY_ORDER.map(function (k) {
+        return k + ': __type(name: "' + types[k][typeProp] + '") { ' + listProp + ' { name type ' +
+          '{ kind name ofType { kind name ofType { kind name ofType { kind name } } } } } }';
+      });
+      return send('query ' + opName + ' { ' + parts.join(' ') + ' }', null)
+        .then(function (data) {
+          var out = {};
+          ENTITY_ORDER.forEach(function (k) {
+            var known = {};
+            ((data[k] || {})[listProp] || []).forEach(function (f) { known[f.name] = unwrapType(f.type); });
+            out[k] = known;
+          });
+          return out;
+        });
+    }
+
+    // Per type, the candidate fields this Stash has as text: `[{name, kind}]`, kind
+    // `string`, `list` or `map`.
+    function describeFields() {
+      if (shapes) return Promise.resolve(shapes);
+      return introspect('gqlType', 'fields', op + '_Shapes').then(function (known) {
+        var out = {};
+        ENTITY_ORDER.forEach(function (k) {
+          var keep = [];
+          types[k].fields.forEach(function (name) {
+            if (!hasOwn(known[k], name)) return;
+            var shape = known[k][name];
+            // A String scalar, a list of them, or the custom-field Map. Anything else
+            // wearing a name asked for - a date, a number, an object - is not text.
+            if (name === 'custom_fields') {
+              if (shape.name === 'Map') keep.push({ name: name, kind: 'map' });
+              return;
+            }
+            if (shape.name !== 'String') return;
+            keep.push({ name: name, kind: shape.kind === 'list' ? 'list' : 'string' });
+          });
+          out[k] = keep;
+        });
+        shapes = out;
+        return out;
+      });
+    }
+
+    function pageQuery(spec, fieldShapes) {
+      var sel = ['id'];
+      fieldShapes.forEach(function (f) { sel.push(f.name); });
+      // `extra` holds only the display fields that are *not* in the table, so nothing is
+      // ever selected twice - which GraphQL refuses outright.
+      if (spec.extra) sel.push(spec.extra);
+      return 'query ' + op + '_Scan($f: FindFilterType) { ' + spec.find + '(filter: $f) { count ' +
+        spec.list + ' { ' + sel.join(' ') + ' } } }';
+    }
+
+    return {
+      types: types, order: ENTITY_ORDER.slice(), fieldLabel: ENTITY_FIELD_LABEL,
+      introspect: introspect, describeFields: describeFields, pageQuery: pageQuery,
+      // What `describeFields` last answered, for a write that follows a scan.
+      cachedFields: function () { return shapes; },
+    };
+  }
+
+  // Where `needle` occurs in `text`, as offsets. Case is folded by `fold`, which keeps the
+  // length - but **a field whose fold still changes length is refused rather than
+  // searched**: an offset into the folded string would not point at the same character in
+  // the original, and everything downstream slices the *original* at those offsets - the
+  // context on a hit line, and the splice a replacement writes back. A refused field comes
+  // back empty and marked `refused`. `cased` compares the text as it is, which folds
+  // nothing and so refuses nothing.
+  function occurrences(text, needle, cased) {
+    var out = [];
+    if (!needle) return out;
+    var raw = String(text);
+    var hay = cased ? raw : fold(raw);
+    if (hay.length !== raw.length) { out.refused = true; return out; }
+    var n = cased ? String(needle) : fold(needle);
+    var i = 0;
+    while ((i = hay.indexOf(n, i)) !== -1) {
+      out.push(i);
+      i += n.length;
+    }
+    return out;
+  }
+
+  // The three pieces a hit line is drawn from. Whitespace is collapsed but nothing
+  // trimmed: a details field is prose with newlines in it, a line is one line, and the
+  // space either side of a match is part of what the line shows.
+  function matchContext(text, at, len) {
+    var flat = function (t) { return t.replace(/\s+/g, ' '); };
+    var s = String(text);
+    var from = Math.max(0, at - MATCH_CONTEXT);
+    var to = Math.min(s.length, at + len + MATCH_CONTEXT);
+    return {
+      pre: (from > 0 ? MATCH_ELLIPSIS : '') + flat(s.slice(from, at)),
+      hit: flat(s.slice(at, at + len)),
+      post: flat(s.slice(at + len, to)) + (to < s.length ? MATCH_ELLIPSIS : ''),
+    };
   }
 
   // ── The export other plugins bind ─────────────────────────────────────────
@@ -6013,12 +6688,13 @@
     byClass: byClass, gqlRequest: gqlRequest, pluginConfig: pluginConfig, settingElement: settingElement,
     settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, waitingOn: waitingOn,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
-    keepLog: keepLog, droppedLine: droppedLine, logKeep: logKeep, LOG_KEEP: LOG_KEEP,
+    keepLog: keepLog, droppedLine: droppedLine, logKeep: logKeep,
     splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
     linkTarget: linkTarget, caseSensitive: caseSensitive, fold: fold, holdWidth: holdWidth, fieldLocks: fieldLocks,
     tagTipImage: tagTipImage, tipBox: tipBox, tipPlace: tipPlace, tipRatingBadge: tipRatingBadge,
     tipOpen: tipOpen, tipClose: tipClose, tagTip: tagTip,
     tipText: tipText, tagTipNames: tagTipNames, tagLinkTitle: tagLinkTitle,
+    tagHasDetail: tagHasDetail, tagTooltip: tagTooltip, lowerId: lowerId, partsText: partsText,
     entityTipStars: entityTipStars, entityTipName: entityTipName, entityTipCountry: entityTipCountry,
     entityTipGender: entityTipGender, entityTipLines: entityTipLines, entityTipDetail: entityTipDetail,
     entityTip: entityTip, cfTipCarriers: cfTipCarriers, cfTipTitle: cfTipTitle,
@@ -6031,10 +6707,12 @@
     ensureRowSpacing: ensureRowSpacing, applyButtonSpacing: applyButtonSpacing, insertOrdered: insertOrdered,
     insertBeforeImportantAction: insertBeforeImportantAction, findEditContainer: findEditContainer,
     showDefaults: showDefaults,
-    // What a caller prints when it finds no core at all. Written once here, even
-    // though by definition the caller that needs it cannot read it from here.
-    missingMessage: PLUGIN_NAME + ' is not installed or is disabled. Install it from '
-      + 'the same source as this plugin and reload the page.',
+    settingsPage: settingsPage, lease: lease, foreignLease: foreignLease, installedVersion: installedVersion,
+    gate: gate, ownTaskName: ownTaskName, paintButton: paintButton, paintTaskButtons: paintTaskButtons,
+    wireEscape: wireEscape, unwireEscape: unwireEscape, firstBasename: firstBasename, displayName: displayName,
+    fakeOk: fakeOk, mutationSucceeded: mutationSucceeded, writePluginSettings: writePluginSettings, button: button,
+    runLog: runLog, runLogCap: RUN_LOG_CAP, runSpinFrames: RUN_SPIN_FRAMES, runSpinMs: RUN_SPIN_MS,
+    entityTypes: entityTypes, occurrences: occurrences, matchContext: matchContext,
   };
   ns.core = api;
   // The surface this plugin's own suite drives, beside the one its callers bind. Separate
@@ -6043,10 +6721,12 @@
   ns.gttxcore = {
     durationBand: durationBand, durationTick: durationTick, durationClear: durationClear,
     selectPasteTick: selectPasteTick,
+    glossary: function () { return (window.__GTTx__ || {}).glossary || null; }, glossaryFind: glossaryFind, glossaryMark: glossaryMark,
+    glossaryTick: glossaryTick,
     headCountTick: headCountTick, headCountTargets: headCountTargets, headCountClear: headCountClear,
     parseDevMods: parseDevMods, formatDevMods: formatDevMods, applyDevMods: applyDevMods,
-    devMods: DEV_MODS, openDevMods: openDevMods, openJournalSettings: openJournalSettings,
-    journalSummary: journalSummary, tick: tick,
+    devMods: DEV_MODS, openDevMods: openDevMods, openJournalSettings: openJournalSettings, openGlobals: openGlobals,
+    journalSummary: journalSummary, globalsSummary: globalsSummary, tick: tick,
     settings: function () { return settings(); },
     // Forced, because the tick only reads them when the page shows something that
     // depends on the answer - which a suite driving the dialog directly does not.
@@ -6064,7 +6744,7 @@
   // Replaced outright, like the export: a newer evaluation's closures are the ones called.
   coop().journal = {
     record: journalRecord, runs: journalRuns, entries: journalEntries,
-    stats: journalStats, trim: journalTrim, clear: journalClear,
+    stats: journalStats, clear: journalClear,
     plan: journalPlan, undo: journalUndo, remove: journalRemove, open: openHistory, fromInputs: journalFromInputs,
     pass: journalPass,
     exportAll: journalExport, importTexts: journalImport,
@@ -6087,6 +6767,13 @@
     _pending = setTimeout(function () { _pending = null; tick(); }, OBSERVE_MS);
   }
 
+  // Compiled at load where the table is already here, and otherwise by the first tick that
+  // finds it - either way as part of the page, not by whichever dialog first shows a term.
+  // Run once over nothing as well: V8 compiles a pattern's code the first time it runs, not
+  // when the RegExp is made, and that code stays with the page. Left to the first dialog to
+  // run them, it was counted as what that dialog kept after closing.
+  glossaryFind('', {});
+  document.addEventListener('click', glossaryOutsideTap);
   window.addEventListener('load', function () { installCardCounts(); start(); });
   window.addEventListener('popstate', tick);
   installCardCounts();

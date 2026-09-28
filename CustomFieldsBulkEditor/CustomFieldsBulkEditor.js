@@ -1,6 +1,6 @@
 // Custom Fields Bulk Editor
 //
-// Requires Stash 0.31.0 or newer: `custom_fields` on the seven entity types, and
+// Requires Stash 0.31.0 or newer: `custom_fields` on the seven entity-types, and
 // `CustomFieldsInput` on their update mutations, are what this plugin is built on.
 //
 // Stash can already store a custom field on a Scene, Image, Gallery, Performer,
@@ -27,36 +27,30 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[cfbe] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
-  var showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop, domBus = C.domBus, plural = C.plural,
-    linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth,
-    tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
-    tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
-    entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
-    entityTipGender = C.entityTipGender, entityTipLines = C.entityTipLines,
-    entityTipDetail = C.entityTipDetail, entityTip = C.entityTip,
-    cfTipCarriers = C.cfTipCarriers, cfTipTitle = C.cfTipTitle, cfTipLoad = C.cfTipLoad,
-    cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen, cfTipArm = C.cfTipArm,
-    cfTipTick = C.cfTipTick, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    entityTipName = C.entityTipName;
+  var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass, gqlRequest = C.gqlRequest,
+    settingRow = C.settingRow, showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop,
+    domBus = C.domBus, plural = C.plural, linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard,
+    holdWidth = C.holdWidth, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
+    cfTipTick = C.cfTipTick, staleReloadButton = C.staleReloadButton,
+    installedVersion = C.installedVersion, gate = C.gate('cfbe'), ownTaskName = C.ownTaskName,
+    paintButton = C.paintButton, paintTaskButtons = C.paintTaskButtons, wireEscape = C.wireEscape,
+    unwireEscape = C.unwireEscape, displayName = C.displayName, fakeOk = C.fakeOk;
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
 
   var PLUGIN_ID   = 'CustomFieldsBulkEditor';
   var PLUGIN_NAME = 'ᝯㄝₓ Custom Fields Bulk Editor';
   // The name the dialog head wears. The same string here, because this name already
-  // fits in a title that goes on to name an entity type and a count - the constant
+  // fits in a title that goes on to name an entity-type and a count - the constant
   // exists so that every head in the repo reads from one expression, not because
   // every plugin has to shorten. See the repo-root AGENTS.md, "one name prefix".
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Custom Fields Bulk Editor';
@@ -66,7 +60,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '4.0.0';
+  var PLUGIN_VERSION = '4.0.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -83,8 +77,6 @@
 
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/CustomFieldsBulkEditor/README.md';
   var STYLE_ID   = 'cfbe-style';
-  var README_LINK_ID = 'cfbe-readme-link';
-  var DESC_TOGGLE_ID = 'cfbe-desc-toggle';
 
   // The one control this plugin draws into Stash's own UI, and the button that
   // writes, in amber. Stash's own menu items and row actions are neutral, and these
@@ -94,7 +86,6 @@
 
   var CHUNK_SIZE   = 100;   // entity ids per read alias batch and per bulk mutation
   var READ_PAGE    = 5000;  // entities per page of the task's whole-library read
-  var LEASE_TTL_MS = 300000;
   var UNDO_ARM_MS  = 4000;  // how long Undo stays armed for its second click
   var TICK_MS      = 1000;
   var OBSERVE_MS   = 100;   // a burst of DOM mutations coalesced into one tick
@@ -103,8 +94,7 @@
   // The busy cursor under the last line of the listing. The counters say how far a
   // read or a write has got; this says it is still going, which is the question a
   // page of 5,000 entities leaves unanswered for seconds at a time.
-  var SPIN_FRAMES = ['▙', '▛', '▜', '▟'];
-  var SPIN_MS = 125;           // one four-frame cycle at 2Hz
+  var SPIN_FRAMES = C.runSpinFrames, SPIN_MS = C.runSpinMs;   // Core's, as its run log draws them
   // The two boxes in the descriptions dialog's right pane say what they are, since one
   // is typed into and the other is read-only and neither is obvious from its contents.
   var NAME_HEAD  = 'Name';
@@ -150,7 +140,7 @@
   // Newest first, no duplicates, capped. Returns the list so a caller can render it
   // without reading the store back.
   function rememberFilter(key, text) {
-    var t = String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
+    var t = String(text == null ? '' : text).trim();
     if (!t) return null;
     var all = readFilterHistory();
     var list = (all[key] || []).filter(function (x) { return x !== t; });
@@ -158,10 +148,6 @@
     all[key] = list.slice(0, FILTER_HISTORY_MAX);
     writeFilterHistory(all);
     return all[key];
-  }
-
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
   }
 
   // `a1` scopes the *task* only - a selection is exactly what the user picked - and it
@@ -185,14 +171,14 @@
 
   // The custom fields no bulk write of this plugin's, or of Find & Replace's, may touch:
   // exact names, comma- or newline-separated. A lock guards a field a person or another
-  // plugin keeps by hand - an archived filename, a pinned base name - against the one
+  // plugin keeps by hand - an archived filename, a pinned base-title - against the one
   // press that rewrites it across the library, and on Stash's own edit form against a
   // hand's edit or removal too (`lockFormTick`, `lockGuard`). Adding one where it is
   // missing is never stopped.
   function lockedFields(s) {
     var out = [];
     String((s && s.d1LockedFields) || '').split(/[,\n]/).forEach(function (t) {
-      t = t.replace(/^\s+|\s+$/g, '');
+      t = t.trim();
       if (t && out.indexOf(t) === -1) out.push(t);
     });
     return out;
@@ -222,6 +208,9 @@
   }
   // The default this replaced: a name in a namespace with no owner, so a setting
   // still reading it is moved onto the prefixed one wherever it is read.
+  // COMPAT: `Exclude_from_add_list`, the hide field's default before the prefix
+  // (since CustomFieldsBulkEditor 2.0.1); remove when no install can still hold it - never
+  // on its own: an install may skip releases.
   var LEGACY_HIDE_FIELD = 'Exclude_from_add_list';
   var SKIP_IMAGES_NAME = 'Skip Images in the Whole-Library Task';
 
@@ -234,6 +223,9 @@
   // and `cfbe_desc_store` was a name anyone could have picked. `LEGACY_STORE_FIELD` is
   // that old name, upgraded silently the first time a store wearing it is found.
   var STORE_FIELD = 'ᱜ╦╦🞮_🛂🧲_🛠🛈🖫_desc_store';
+  // COMPAT: `cfbe_desc_store`, the store marker's name before the prefix
+  // (since CustomFieldsBulkEditor 2.0.1); remove when no store can still wear it - never
+  // on its own: a store is upgraded only when this plugin next reads it.
   var LEGACY_STORE_FIELD = 'cfbe_desc_store';
   var MARK_VALUE = '1';
 
@@ -249,8 +241,7 @@
     'plugin: edit them in Settings - Tasks - "' + 'Manage Custom Field Descriptions and Locks...' +
     '". Delete this whole description to reset the store.';
 
-
-  // ── The seven entity types ────────────────────────────────────────────────
+  // ── The seven entity-types ────────────────────────────────────────────────
   //
   // Keyed by the plural segment Stash puts in the URL, because that is also how a
   // list view is recognised: `/scenes`, `/performers/12/scenes` and `/tags/9/images`
@@ -333,10 +324,6 @@
     tags: 'tag_filter',
   };
 
-
-
-
-
   // This plugin is bulk-only: it never watches `window.fetch` and never reacts to a
   // save, so it registers no `respecters` entry - claiming to honour leases while
   // having nothing to stand down would be a lie a sibling's dialog would repeat to
@@ -344,54 +331,7 @@
   // it puts no button in an entity's action row, so it takes no `order` priority.
   // `coop()` still creates all four fields, for shape-consistency with its siblings.
 
-  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true`, typed into the browser
-  // console: no setting, no reload, and read at call time so it takes effect on the
-  // next tick. The shared switch rather than one of our own, because the question it
-  // answers - "why is this control not there" - is rarely about a single plugin.
-  //
-  // Deduplicated per channel: the tick runs every second and on every DOM mutation
-  // burst, so an undeduplicated line would emit forever on a page nobody is touching.
-  // What is worth seeing is the moment an outcome changes. Turning the flag off
-  // clears the channels, so switching it back on restates the current position.
-  var _gateLast = {};
-  function gateLogOnce(channel, line) {
-    if (!coop().debugButtons) { _gateLast = {}; return; }
-    if (_gateLast[channel] === line) return;
-    _gateLast[channel] = line;
-    console.info('[cfbe gate] ' + line);
-  }
-
-  // A bulk run announces itself for the duration of its writes, so a reactive plugin
-  // in the same tab stands down rather than reacting to every entity we touch.
-  // Advisory, always expiring, per tab - see the repo-root AGENTS.md.
-  function acquireLease(label, ttl) {
-    var c = coop();
-    var ms = ttl || LEASE_TTL_MS;
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + ms };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + ms; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
-
-  // ── GraphQL ───────────────────────────────────────────────────────────────
-
-  function gqlRequest(query, variables) {
-    return fetch('/graphql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query, variables: variables }),
-    })
-      .then(function (resp) { return resp.json(); })
-      .then(function (json) {
-        if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
-        return json.data;
-      });
-  }
+  // ── Settings ──────────────────────────────────────────────────────────────
 
   // `configuration { plugins }` cannot be scoped to one plugin, so every other
   // plugin's settings arrive in the same response - which is what the sibling plugins'
@@ -445,6 +385,8 @@
     }
     // And the one upgrade: a hide field still named the unprefixed default is written
     // back under the prefixed one, so the box says what `effective` is already using.
+    // COMPAT: a hide field still set to `Exclude_from_add_list`
+    // (since CustomFieldsBulkEditor 2.0.1); remove when `LEGACY_HIDE_FIELD` goes.
     if (input.c1ExcludeFromAddListField === LEGACY_HIDE_FIELD) {
       input.c1ExcludeFromAddListField = DEFAULTS.c1ExcludeFromAddListField;
       missing++;
@@ -458,15 +400,13 @@
 
   // Shown on Stash's settings page from its first paint, by the same rule (Core's
   // `showDefaults`); the seed above is what writes them.
-  if (typeof showDefaults === 'function') {
-    showDefaults(PLUGIN_ID, function () {
-      var out = {};
-      for (var k in DEFAULTS) {
-        if (hasOwn(DEFAULTS, k) && typeof DEFAULTS[k] !== 'boolean' && DEFAULTS[k] !== '') out[k] = DEFAULTS[k];
-      }
-      return out;
-    });
-  }
+  showDefaults(PLUGIN_ID, function () {
+    var out = {};
+    for (var k in DEFAULTS) {
+      if (hasOwn(DEFAULTS, k) && typeof DEFAULTS[k] !== 'boolean' && DEFAULTS[k] !== '') out[k] = DEFAULTS[k];
+    }
+    return out;
+  });
 
   // The effective value of one setting, out of the raw map: the same "absent means the
   // default, empty means cleared" rule `loadSettings` reads by, so the two can never
@@ -480,6 +420,8 @@
   // a name nobody chose deliberately.
   function effective(raw, key) {
     var v = hasOwn(raw, key) && raw[key] != null ? String(raw[key]) : DEFAULTS[key];
+    // COMPAT: a hide field still set to `Exclude_from_add_list`
+    // (since CustomFieldsBulkEditor 2.0.1); remove when `LEGACY_HIDE_FIELD` goes.
     return key === 'c1ExcludeFromAddListField' && v === LEGACY_HIDE_FIELD ? DEFAULTS[key] : v;
   }
 
@@ -503,7 +445,7 @@
     // does not is somebody's writing, and writing over it is the one move here with no
     // way back. A `{` with no `}` after it took a round to get right, because reading
     // "no blob found" off it treats a mangled store as an empty one.
-    if (!s.replace(/^\s+|\s+$/g, '')) return empty;
+    if (!s.trim()) return empty;
     var open = s.indexOf('{');
     var close = s.lastIndexOf('}');
     if (open === -1 || close < open) {
@@ -596,6 +538,8 @@
 
   function findStoreTag(settings) {
     return markedTags(STORE_FIELD).then(function (tags) {
+      // COMPAT: a store still marked `cfbe_desc_store` (since CustomFieldsBulkEditor 2.0.1);
+      // remove when `LEGACY_STORE_FIELD` goes.
       return tags.length ? tags : markedTags(LEGACY_STORE_FIELD).then(function (old) {
         return moveTagField(old, LEGACY_STORE_FIELD, STORE_FIELD);
       });
@@ -609,6 +553,8 @@
         // that is a bulk write, and Migrate in the descriptions dialog is where it
         // belongs.
         var hide = settings.c1ExcludeFromAddListField;
+        // COMPAT: a store tag still hiding itself with `Exclude_from_add_list`
+        // (since CustomFieldsBulkEditor 2.0.1); remove when `LEGACY_HIDE_FIELD` goes.
         if (hide === DEFAULTS.c1ExcludeFromAddListField &&
             hasOwn(tag.custom_fields || {}, LEGACY_HIDE_FIELD)) {
           return moveTagField([tag], LEGACY_HIDE_FIELD, hide).then(function () { return tag; });
@@ -880,7 +826,7 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#a7b6c2;cursor:help;}' +
+    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -956,25 +902,6 @@
     (document.head || document.body || document.documentElement).appendChild(style);
   }
 
-
-
-
-
-
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
-  }
-
   function button(label, className) {
     var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
     b.type = 'button';
@@ -1034,49 +961,8 @@
     node.className = bad ? (cls + ' cfbe-bad').replace(/^\s+/, '') : cls;
   }
 
-  function hasClass(node, name) {
-    return !!node && (' ' + (node.className || '') + ' ').indexOf(' ' + name + ' ') !== -1;
-  }
-
-  // ── Is this script the one Stash has installed? ───────────────────────────
+  // ── Naming a value ────────────────────────────────────────────────────────
   //
-  // "Reload plugins" re-reads the plugin folder on the server; it cannot replace a
-  // script this page already fetched and executed. Comparing the two numbers is the
-  // only way the script can notice it is the stale one.
-  //
-  // Resolves to null wherever the answer is unknown - a Stash too old for the field,
-  // a plugin it cannot see, a failed request. Unknown is not a mismatch.
-  function installedVersion() {
-    return gqlRequest('query CFBEPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; });
-  }
-
-  // ── Naming an entity ──────────────────────────────────────────────────────
-  //
-  // Whichever of the display fields is present, rather than a branch per type: a
-  // per-type branch is what let galleries and images log as "untitled" in a sibling
-  // for three releases. `title` is optional on scenes, galleries and images, so each
-  // falls back to its file - and a gallery can be a folder, with no file at all.
-  function firstBasename(files) {
-    for (var i = 0; files && i < files.length; i++) {
-      if (files[i] && files[i].basename) return files[i].basename;
-    }
-    return null;
-  }
-
-  function displayName(ent) {
-    if (!ent) return null;
-    return ent.title || ent.name || firstBasename(ent.files) || firstBasename(ent.visual_files) ||
-      (ent.folder && ent.folder.basename) || null;
-  }
-
-
   // Custom field values are an arbitrary JSON `Map`, so anything that is not already
   // a string is shown as JSON rather than as `[object Object]`.
   function valueText(v) {
@@ -1128,7 +1014,7 @@
   // whichever value fell between them.
   function isMarked(v) {
     if (v == null || v === false || v === 0) return false;
-    var s = String(v).replace(/^\s+|\s+$/g, '').toLowerCase();
+    var s = String(v).trim().toLowerCase();
     return s !== '' && s !== '0' && s !== 'false';
   }
 
@@ -1149,7 +1035,7 @@
   // `develop` (Gallery.tsx, Group.tsx, Studio.tsx, Performer.tsx), 2026-08-13.
   //
   // Matched on the whole path rather than the tail: `add` on its own is far too
-  // common a segment to hand to an entity type on sight.
+  // common a segment to hand to an entity-type on sight.
   var ROUTE_ALIASES = [
     [/^\/galleries\/\d+(?:\/add)?$/, 'images'],       // a gallery's images, and add-images
     [/^\/groups\/\d+\/subgroups$/, 'groups'],
@@ -1341,7 +1227,7 @@
     var type = listType();
     if (!type) {
       clearItems(null);
-      gateLogOnce('route', 'not an entity list view (' +
+      gate.once('route', 'not an entity list view (' +
         String((window.location && window.location.pathname) || '') + ')');
       return;
     }
@@ -1349,17 +1235,17 @@
     var menu = findMenu();
     if (!menu) {
       clearItems(null);
-      gateLogOnce('route', ENTITIES[type].plural + ' list: no open "..." menu to add to');
+      gate.once('route', ENTITIES[type].plural + ' list: no open "..." menu to add to');
       return;
     }
 
     var ids = selectedIds(type);
     if (!ids.length) {
       clearItems(null);
-      gateLogOnce('route', ENTITIES[type].plural + ' list: menu open, nothing selected');
+      gate.once('route', ENTITIES[type].plural + ' list: menu open, nothing selected');
       return;
     }
-    gateLogOnce('route', ENTITIES[type].plural + ' list: menu open, ' + ids.length + ' selected');
+    gate.once('route', ENTITIES[type].plural + ' list: menu open, ' + ids.length + ' selected');
 
     // Always last in the menu, and rebuilt when the selection changes: the caption
     // says nothing about the count but the tooltip does, and a click has to carry the
@@ -1396,53 +1282,14 @@
   var TASK_DESC = 'Manage Custom Field Descriptions and Locks...';
   var TASK_NAMES = [TASK_NAME, TASK_DESC];
 
-  // Ours only if the label matches *and* the enclosing SettingGroup is headed with
-  // our name - another plugin may declare a task called the same thing. Answered from
-  // the button's own group and stopped there: climbing past it reaches the panel
-  // holding every plugin's group, where `querySelector('h3')` answers with whichever
-  // plugin is listed first (§ownTaskName in MergePerformerTagsToScenes).
-  //
-  // Returns *which* of our tasks it is, because two of them now share this path and the
-  // click has to open the right dialog.
-  function ownTaskName(btn) {
-    var label = String(btn.textContent || '').replace(/^\s+|\s+$/g, '');
-    if (TASK_NAMES.indexOf(label) === -1) return null;
-    var node = btn;
-    var fallback = null;
-    for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-      var heading = node.querySelector ? node.querySelector('h3') : null;
-      var ours = !!heading && headingIsOurs(heading.textContent);
-      if (hasClass(node, 'setting-group')) return ours ? label : null;
-      if (ours) fallback = label;
-    }
-    return fallback;
-  }
-
-  // `btn-warning` is deliberately not in the strip list - it is what we add, and the
-  // guard in `paintButton` returns before any of this once it is there.
-  var BTN_VARIANTS = /\bbtn-(secondary|primary|success|info|light|dark|link)\b/g;
-
-  function paintButton(btn, variant) {
-    if (hasClass(btn, variant)) return;                        // already ours
-    var cls = String(btn.className || '').replace(BTN_VARIANTS, '');
-    btn.className = cls.replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
-  }
-
-  // Re-applied every tick rather than once: React re-renders this panel and hands
-  // back a button with Stash's own classes, and `paintButton` is a no-op on one that
-  // still carries ours.
-  function paintTaskButtons() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (ownTaskName(nodes[i])) paintButton(nodes[i], PLUGIN_BTN_VARIANT);
-    }
-  }
-
   if (document.addEventListener) {
     document.addEventListener('click', function (event) {
       var target = event.target;
       var btn = target && target.closest ? target.closest('button') : null;
-      var task = btn && ownTaskName(btn);
+      // Which of our tasks, because two share this path and the click opens the right
+      // dialog; Core's check also asks the button's own SettingGroup for our heading,
+      // since another plugin may declare a task by the same name.
+      var task = btn && ownTaskName(btn, PLUGIN_NAME, TASK_NAMES);
       if (!task) return;
       if (event.preventDefault) event.preventDefault();
       if (event.stopPropagation) event.stopPropagation();
@@ -1580,7 +1427,7 @@
     this.staleEl = el('div', 'cfbe-stale cfbe-hidden', '');
     head.appendChild(this.staleEl);
     head.appendChild(el('div', 'cfbe-warn',
-      'Backing up your database before proceeding is recommended. Undo only reverses what this dialog wrote, ' +
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this dialog wrote, ' +
       'while it stays open, and cannot account for changes made elsewhere in the meantime.'));
     // Built from spans rather than one string, so the ␀ can carry `cfbe-nonemark` and
     // render in the same face the list draws it in. The two plain spans are unclassed
@@ -1590,7 +1437,7 @@
     legend.appendChild(el('span', null,
       'Reading the list: the number in brackets after the entity name is its id. The rest of ' +
       'the line reads: entity: field name ' + EQ + ' field value, and after Apply, ' +
-      'what changed as before ' + ARROW.replace(/^\s+|\s+$/g, '') + ' after. '));
+      'what changed as before ' + ARROW.trim() + ' after. '));
     legend.appendChild(el('span', 'cfbe-nonemark', NONE));
     legend.appendChild(el('span', null,
       ' marks nothing there - an entity carrying no custom fields at all, no field on that ' +
@@ -1782,7 +1629,7 @@
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'cfbe');
     document.body.appendChild(this.backdrop);
   };
 
@@ -1987,7 +1834,7 @@
   // locked name, which refuses every entity already carrying it. Overwrite and Remove are
   // refused, and so is a Rename *from* a locked field.
   Run.prototype.lockedHit = function () {
-    var name = String(this.nameInput.value || '').replace(/^\s+|\s+$/g, '');
+    var name = String(this.nameInput.value || '').trim();
     var mode = this.modeSel.value;
     return mode === 'add' ? [] : lockedAmong(this.settings, mode === 'rename' ? [this.renameName] : [name]);
   };
@@ -1998,7 +1845,7 @@
     // `!this.covered`: the scope is the listing, and a listing filtered down to no
     // entity leaves Apply nothing to write - an amber button that writes nothing.
     this.applyBtn.disabled = this.state !== 'listing' ||
-      !String(this.nameInput.value || '').replace(/^\s+|\s+$/g, '') || this.stale ||
+      !String(this.nameInput.value || '').trim() || this.stale ||
       (rename && !this.renameName) || !this.covered || locked.length > 0;
     // **What Apply covers, on the button that does it.** With the "Apply to" select
     // gone the scope is the listing, and a listing is counted in lines while a write is
@@ -2170,7 +2017,7 @@
 
   Run.prototype.checkVersion = function () {
     var self = this;
-    installedVersion().then(function (installed) {
+    installedVersion(PLUGIN_ID, 'CFBEPluginVersion').then(function (installed) {
       if (!installed || installed === PLUGIN_VERSION) {
         console.info('[cfbe] running ' + PLUGIN_VERSION + ', Stash reports ' +
           (installed || 'nothing') + ' installed.');
@@ -2193,7 +2040,7 @@
   // ── Reading ───────────────────────────────────────────────────────────────
   //
   // One aliased by-id query per batch of a hundred, rather than a filtered list query
-  // per entity type. Every one of the seven has a `find<Type>(id:)`, so one query
+  // per entity-type. Every one of the seven has a `find<Type>(id:)`, so one query
   // shape serves all of them and nothing here has to be right about the shape of
   // seven different filter inputs.
   // The store tag carries this plugin's own plumbing - the marker custom field, and
@@ -2266,7 +2113,7 @@
   // fraction rather than a tally, and it costs nothing extra to ask for.
   //
   // `READ_PAGE` is the whole trade: smaller pages update the line more often and cost
-  // one round trip each. 5,000 puts a 155,000-entity type at 31 requests and a line
+  // one round trip each. 5,000 puts a 155,000-entity-type at 31 requests and a line
   // that moves several times a second - a thousand would be 155 round trips of
   // latency added to a read the user has already been told is slow.
   //
@@ -2820,7 +2667,7 @@
   // distinction worth having, and it is the only one the data shape allows.
   Run.prototype.plan = function () {
     var mode = this.modeSel.value;
-    var name = String(this.nameInput.value || '').replace(/^\s+|\s+$/g, '');
+    var name = String(this.nameInput.value || '').trim();
     var value = convertCustomValue(String(this.valueInput.value || ''));
     // What the value *reads* as, for every comparison and every sentence about it. The
     // value itself may now be a number, and comparing a number with the text a listing
@@ -3112,7 +2959,7 @@
       ? { remove: [planned.name] }
       : (function () { var p = {}; p[planned.name] = planned.value; return { partial: p }; })();
 
-    // One batch per entity type, because the mutation is per type: five of the seven
+    // One batch per entity-type, because the mutation is per type: five of the seven
     // take a bulk update and two do not, and an id means nothing without the type it
     // belongs to. A selection run has exactly one batch, as it always did.
     //
@@ -3264,7 +3111,7 @@
     });
   };
 
-  // Undo History, where ᝯㄝₓ Core keeps one. A change here is a custom field's value on
+  // Undo History, which ᝯㄝₓ Core keeps. A change here is a custom field's value on
   // one entity - there, or not - so it is recorded as it is: `before` and `after`, absent
   // as `undefined`; a rename as the old name going and the new one arriving.
   function journalEntries(changes, reversed) {
@@ -3286,9 +3133,7 @@
   }
 
   function journalPass(label, libraryWide) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide });
   }
 
   // A write to the description store made outside the descriptions dialog - a field's
@@ -3306,7 +3151,7 @@
       return;
     }
     var pass = journalPass(label, false);
-    if (pass && _storeTagId) {
+    if (_storeTagId) {
       pass.add('tags', _storeTagId, _storeTagName, { id: _storeTagId, description: after },
         { id: _storeTagId, description: _storeTagDesc });
       pass.finish();
@@ -3333,7 +3178,6 @@
   // `extra`: `pass.add` arguments recorded in the same run - the description a rename moved.
   Run.prototype.recordPass = function (label, changes, writtenIds, reversed, extra) {
     var pass = journalPass(label, !this.spec), self = this;
-    if (!pass) return;
     (extra || []).forEach(function (a) { pass.add.apply(pass, a); });
     journalSlices(pass, changes, function (c) { return hasOwn(writtenIds, c.spec.key + ':' + c.id); }, reversed)
       .then(function (line) { if (line) self.msg('INFO', line); });
@@ -3345,7 +3189,7 @@
   // every entity a chunk wrote, which is what Undo History records.
   Run.prototype.runWrites = function (batches, label, written) {
     var self = this;
-    var lease = acquireLease(label);
+    var lease = C.lease(PLUGIN_ID, label);
     var ok = 0;
 
     // One chunk per bulk mutation - or per *entity* where there is no bulk mutation,
@@ -3444,44 +3288,6 @@
     });
   };
 
-  // ── Escape ────────────────────────────────────────────────────────────────
-  //
-  // Escape acts through whichever of Cancel/Close the footer is actually showing,
-  // never by calling `close()` itself. The footer is the dialog's own statement of
-  // what it will let you do right now, so routing the key through it means the key
-  // can never reach a button that is hidden or disabled - and in particular does
-  // nothing mid-write, where both are hidden and Stop is the only way out. A key
-  // that quietly abandoned a run in flight would be worse than one that does nothing.
-  function escapeButton(run) {
-    var order = [run.closeBtn, run.cancelBtn];
-    for (var i = 0; i < order.length; i++) {
-      var b = order[i];
-      if (b && !b.disabled && !hasClass(b, 'cfbe-hidden')) return b;
-    }
-    return null;
-  }
-
-  // On `document`, not on the modal: the modal is not focusable, so a click into the
-  // listing or either filter box would otherwise put the key out of reach. Removed in
-  // `close()` - a dialog that has gone away must not still be answering for the page.
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
-  }
-
   Run.prototype.close = function () {
     unwireEscape(this);
     this.spin(false);
@@ -3551,7 +3357,7 @@
     this.staleEl = el('div', 'cfbe-stale cfbe-hidden', '');
     head.appendChild(this.staleEl);
     head.appendChild(el('div', 'cfbe-warn',
-      'Backing up your database before proceeding is recommended. Undo only reverses what this dialog wrote, ' +
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this dialog wrote, ' +
       'while it stays open, and cannot account for changes made elsewhere in the meantime.'));
     head.appendChild(el('div', 'cfbe-legend',
       'Every custom field in the library is on the left, with how many entities carry ' +
@@ -3678,7 +3484,7 @@
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'cfbe');
     document.body.appendChild(this.backdrop);
   };
 
@@ -3896,7 +3702,7 @@
   DescRun.prototype.described = function (names) {
     var self = this;
     return names.filter(function (n) {
-      return hasOwn(self.desc, n) && String(self.desc[n]).replace(/^\s+|\s+$/g, '') !== '';
+      return hasOwn(self.desc, n) && String(self.desc[n]).trim() !== '';
     }).length;
   };
 
@@ -3906,7 +3712,7 @@
     this.names.forEach(function (name) {
       var store = !hasOwn(self.fields, name) && hasOwn(_storeTagFields, name);
       var orphan = !hasOwn(self.fields, name) && !store;
-      var has = String(self.desc[name] || '').replace(/^\s+|\s+$/g, '') !== '';
+      var has = String(self.desc[name] || '').trim() !== '';
       var changed = String(self.desc[name] || '') !== String(self.base[name] || '');
       var locked = descLocked(self.settings, name);
       var b = el('button', 'cfbe-name' + (self.sel === name ? ' cfbe-name-on' : '') +
@@ -4103,7 +3909,7 @@
 
   DescRun.prototype.renameField = function () {
     var from = this.sel;
-    var to = String(this.nameBox.value || '').replace(/^\s+|\s+$/g, '');
+    var to = String(this.nameBox.value || '').trim();
     if (from == null || !to || to === from || !this.editable()) return;
 
     // A name something else already has: the write would land two fields on one key and
@@ -4250,7 +4056,7 @@
     for (k in this.desc) {
       if (!hasOwn(this.desc, k)) continue;
       seen[k] = true;
-      var after = String(this.desc[k]).replace(/^\s+|\s+$/g, '');
+      var after = String(this.desc[k]).trim();
       var before = hasOwn(this.base, k) ? String(this.base[k]) : '';
       if (after !== before) out.push({ name: k, before: before, after: after });
     }
@@ -4400,7 +4206,7 @@
     };
     for (var k in this.desc) {
       if (!hasOwn(this.desc, k)) continue;
-      var v = String(this.desc[k]).replace(/^\s+|\s+$/g, '');
+      var v = String(this.desc[k]).trim();
       if (v) store.descriptions[k] = v;
     }
     var description = serialiseStore(store);
@@ -4419,7 +4225,7 @@
       { input: { name: name, description: description, custom_fields: marks,
         aliases: [STORE_TAG_ALIAS], ignore_auto_tag: true } });
 
-    var lease = acquireLease('Custom field descriptions and locks');
+    var lease = C.lease(PLUGIN_ID, 'Custom field descriptions and locks');
     write.then(function (data) {
       var tag = (data && (data.tagUpdate || data.tagCreate)) || null;
       // The store tag is a tag like any other, so Undo History has it too: its name and
@@ -4433,7 +4239,7 @@
           { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' }]];
       } else {
         var pass = journalPass('Custom field descriptions', false);
-        if (pass && tag) {
+        if (tag) {
           if (self.tag) {
             pass.add('tags', self.tag.id, name, { id: self.tag.id, name: name, description: description },
               { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
@@ -4558,23 +4364,21 @@
       .then(function (ok) {
         // Recorded as the rename it is on each entity: `from` going, `to` arriving.
         var pass = journalPass(reversed ? label + ', undone' : label, true);
-        if (pass && self.heldStore) {
+        if (self.heldStore) {
           self.heldStore.forEach(function (a) { pass.add.apply(pass, a); });
           self.heldStore = null;
         }
-        if (pass) {
-          // As a rename on each entity - `from` going, `to` arriving - in slices. Every
-          // change is built here, ahead of the move below: a slice built after it would
-          // find `from` gone from every entity and record nothing.
-          var renamed = [];
-          m.entities.forEach(function (e) {
-            if (e.fields[from] === undefined || !hasOwn(written, e.spec.key + ':' + e.id)) return;
-            renamed.push({ spec: e.spec, id: e.id, display: e.display || e.label || '', name: from, to: to,
-              before: e.fields[from] });
-          });
-          journalSlices(pass, renamed, function () { return true; }, false)
-            .then(function (line) { if (line) self.msg('INFO', line); });
-        }
+        // As a rename on each entity - `from` going, `to` arriving - in slices. Every
+        // change is built here, ahead of the move below: a slice built after it would
+        // find `from` gone from every entity and record nothing.
+        var renamed = [];
+        m.entities.forEach(function (e) {
+          if (e.fields[from] === undefined || !hasOwn(written, e.spec.key + ':' + e.id)) return;
+          renamed.push({ spec: e.spec, id: e.id, display: e.display || e.label || '', name: from, to: to,
+            before: e.fields[from] });
+        });
+        journalSlices(pass, renamed, function () { return true; }, false)
+          .then(function (line) { if (line) self.msg('INFO', line); });
         m.done = !reversed;
         m.entities.forEach(function (e) {
           if (e.fields[from] === undefined) return;
@@ -4607,7 +4411,7 @@
     this.renderProgress();
 
     var back = this.undoTo;
-    var lease = acquireLease('Custom field descriptions and locks (undo)');
+    var lease = C.lease(PLUGIN_ID, 'Custom field descriptions and locks (undo)');
     var write = back
       ? gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) { tagUpdate(input: $input) ' +
         '{ id name description } }',
@@ -4619,11 +4423,9 @@
       if (back) {
         // Recorded like the Apply it reverses: the store tag's name and description.
         var pass = journalPass('Custom field descriptions, undone', false);
-        if (pass) {
-          pass.add('tags', self.tag.id, back.name, { id: self.tag.id, name: back.name, description: back.description },
-            { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
-          pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
-        }
+        pass.add('tags', self.tag.id, back.name, { id: self.tag.id, name: back.name, description: back.description },
+          { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         _storeTagName = back.name;
         _storeTagDesc = back.description;
         var parsed = parseStore(back.description);
@@ -4689,281 +4491,18 @@
   // ── The settings page ─────────────────────────────────────────────────────
   //
   // The group gets the siblings' description treatment - a one-line summary, the rest
-  // behind **Show more**, and a labelled link to the README under it - and each of the
-  // three setting rows the per-setting hover box. The description half of that was here
-  // first and mattered most while the plugin had no settings at all: it is the only
-  // thing in the group that is ours, and the first thing a user reads before installing.
-  //
-  // **The heading is the only anchor available, and that is the one thing here worth
-  // being uneasy about.** Every sibling finds its group through the
-  // `plugin-<id>-<key>` element ids Stash builds from the plugin id and a setting
-  // key - ours by construction - and keeps a heading match only as a fallback,
-  // because two of them shipped broken twice on heading text (§6 of
-  // PropagateTagsAndPerformers' AGENTS.md). A plugin that declares no settings has no
-  // such ids to anchor on. So this is the fallback promoted to the only route, and it
-  // is why `headingIsOurs` compares *exactly* rather than by prefix.
-  function headingIsOurs(text) {
-    var t = String(text == null ? '' : text).trim();
-    if (t === PLUGIN_NAME) return true;
-    // Settings → Plugins appends the version - `${name} ${version ? `(${v})` : undefined}`
-    // - and interpolates the literal `undefined` when a plugin has no version at all.
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
-
-  // The group and the description, found in one walk from our own heading - and the
-  // description is required to be **in the same `.setting` row as that heading**.
-  //
-  // **Both panels build the same shapes out of the same classes**, which is why
-  // nothing looser works. Settings → Plugins puts our h3 and the description in one
-  // header row. Settings → Tasks heads its group with the plugin name too, and gives
-  // every *task* row an h3 of its own with a `.sub-heading` under it - so "a
-  // `.sub-heading` somewhere in the group" finds a task's description and decorates
-  // the wrong panel. Confirmed live 2026-08-13: `cfbe-own-group` was landing on the
-  // Tasks group, whose only description is the task's.
-  //
-  // A group with no header description of ours is not ours to decorate, and returning
-  // nothing is the whole of the fix.
-  function ownParts() {
-    var heads = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < heads.length; i++) {
-      if (!headingIsOurs(heads[i].textContent)) continue;
-      var node = heads[i];
-      var header = null;
-      for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-        if (!header && hasClass(node, 'setting')) header = node;
-        if (!hasClass(node, 'setting-group')) continue;
-        var sub = header ? byClass(header, 'sub-heading') : null;
-        if (sub) return { group: node, sub: sub, heading: heads[i] };
-        break;    // our heading, but no description beside it: keep looking
-      }
-    }
-    return null;
-  }
-
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
-
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').replace(/^ | $/g, '');
-  }
-
-  // Stash puts the text back on every re-render of this panel, so this runs on every
-  // tick and re-splits when it has to. Idempotent: once the children are ours there
-  // is no text node left to split.
-  function splitDescription(sub) {
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'cfbe-p')) return;   // already ours
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;                    // nothing to split
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = oneLine(para);
-      if (t) sub.appendChild(el('div', 'cfbe-p', t));
-    });
-  }
-
-  function descCollapsed(sub) { return hasClass(sub, 'cfbe-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*cfbe-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' cfbe-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  // The description sits in the group *header*, outside the `<Collapse>` Stash shuts
-  // by default - so it is on screen at full height whether the group is expanded or
-  // not, and hiding paragraphs is the only thing that shortens it.
-  //
-  // The toggle is a `<button>` rather than a span: `SettingGroup`'s `onDivClick`
-  // walks up from the event target and returns early only for `a` and `button`, so
-  // anything else would fold the whole group on click.
-  function collapseDescription(sub) {
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'cfbe-p')) paras++;
-    if (paras < 2) return;                        // one paragraph hides nothing
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    // A re-render drops the button and the class together, so the description returns
-    // to collapsed rather than to a half-state with no way out of it.
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'cfbe-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  // Under the description, which is inside the group header and so shows whether or
-  // not the group is expanded. The fallbacks are for a Stash that renders no
-  // sub-heading (an empty description) or no header row at all.
-  // Always under the description, which `ownParts` has already found and required.
-  // The fallbacks this had - the header box, then the group itself - are what put the
-  // link inside the *heading* of a group with no description of ours, so they are gone
-  // with the case that reached them.
-  function readmeLinkSlot(sub) {
-    return { parent: sub.parentNode, before: sub.nextSibling };
-  }
-
-  // ── The per-setting hover box ──────────────────────────────────────────────
-  //
-  // Copied from the siblings, function for function, because there is no module
-  // between these plugins - see the shared-dialog-chrome note in the repo-root
-  // AGENTS.md. The summary stays on the row and everything after the first blank line
-  // goes into a box opened from the ⓘ, the summary or the setting's own name.
-  var TIP_MARK = 'ⓘ';                       // circled Latin small letter i
-
-  // SettingsPluginsPanel.tsx gives every plugin setting an id built from the plugin id
-  // and the setting key - `plugin-CustomFieldsBulkEditor-a1SkipImagesInTask`. That is
-  // ours by construction: no version suffix, no localisation, nothing formatted for
-  // display. This plugin has one of those to anchor on; `ownParts`
-  // still goes in by the heading, because it needs the description beside it.
-  function settingElement(key) {
-    return document.getElementById('plugin-' + PLUGIN_ID + '-' + key);
-  }
-
-  // The `.setting` row a given setting lives in. `settingElement` returns the input
-  // itself - Stash puts the id on the Form.Switch, not on the row. ' setting ' is
-  // matched with its spaces so that "setting-group" is not mistaken for it.
-  function settingRow(key) {
-    var node = settingElement(key);
-    for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting')) return node;
-    }
-    return null;
-  }
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*cfbe-tip-open\b/, '');
-    sub.className = (on ? cls + ' cfbe-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  // The row is passed rather than the .sub-heading, and the current one looked up per
-  // event: an <h3> is Stash's element and survives the re-renders that replace
-  // everything we put in the row, so a captured reference would go stale. The flag is
-  // what stops a second pair of listeners landing on it each time we rebuild.
-  function tipTrigger(node, row) {
-    if (!node || node._cfbeTipWired) return;
-    node._cfbeTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'cfbe-sum')) return;   // already ours
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;                                     // nothing to hide
-    var summary = oneLine(text.slice(0, cut));
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'cfbe-tipped')) {
-      sub.className = ((sub.className || '') + ' cfbe-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'cfbe-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a
-    // sibling of the mark rather than a child: as a child it would sit inside an
-    // inline span and inherit its clipping and stacking.
-    var mark = el('span', 'cfbe-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'cfbe-tipbox', detail));
-    tipTrigger(mark, row);
-    tipTrigger(sum, row);
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var k in DEFAULTS) {
-      if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    }
-  }
-
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes
-  // on running it after an update and nothing on screen says so. The settings
-  // heading is where the two numbers meet: Stash builds it as `${name} (${version})`
-  // from the **manifest**, read fresh from the server, while `PLUGIN_VERSION` is what
-  // this script actually is. A disagreement means the page is running code the
-  // manifest has already replaced.
-  //
-  // No query for it - the number is on the page already, and this tick runs once a
-  // second. `installedVersion` asks the server the same question, which is right for
-  // a dialog that opens once and wrong for a timer.
-  //
-  // It catches only what a version bump makes visible; editing the file without
-  // bumping leaves both numbers equal, which is the practical reason this repo bumps
-  // the patch digit on every change.
-  var STALE_ID = 'cfbe-stale-notice';
-
-  // The heading `ownParts` already matched, handed straight back rather than searched
-  // for again - this is the one plugin here whose only route into its own group is
-  // that heading, so re-finding it would be re-running the fragile half for nothing.
-  function installedFromHeading(heading) {
-    var t = heading ? String(heading.textContent == null ? '' : heading.textContent).trim() : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? m[1].replace(/^\s+|\s+$/g, '') : null;
-  }
-
-  // Above the description rather than under it: it is the first thing in the group
-  // worth reading, and it leaves the README link's slot alone. Both sit in the group
-  // header, outside Stash's <Collapse>, so a collapsed group still shows the banner.
-  function staleSlot(sub) {
-    return { parent: sub.parentNode, before: sub };
-  }
-
-
-
-
-  function ensureStaleNotice(parts) {
-    var installed = installedFromHeading(parts.heading);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, parts.group, !!installed && installed !== PLUGIN_VERSION);
-    // No parenthesised version on the heading means Settings → Tasks, which heads its
-    // group with the bare name - not a mismatch, and nothing to say.
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = staleSlot(parts.sub);
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'cfbe-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
-      'the older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-    // circled Latin small letter i
-
-
-
-
+  // behind **Show more**, the stale-script banner, and a labelled link to the README
+  // under it - and each setting row the per-setting hover box: Core's `settingsPage`,
+  // with this plugin's classes. **The group is found by its heading only** (`keys: []`):
+  // what has to be found is the group header's own description, and the one setting id
+  // this plugin has points into a setting row. Core compares the heading exactly, after
+  // stripping the version suffix Settings → Plugins appends, and leaves the Settings →
+  // Tasks group - headed the same - alone by its task buttons.
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'cfbe', keys: [], tasks: TASK_NAMES, readmeUrl: README_URL,
+    readmeLabel: 'CustomFieldsBulkEditor/README.md', injectStyle: injectStyle,
+  });
 
   var STORE_LINK_ID = 'cfbe-store-tag';
   var STORE_LINK_MARK = '🔗';      // link symbol
@@ -4974,6 +4513,8 @@
     if (_storeLinkWait && Date.now() - _storeLinkAt < STORE_LINK_TTL_MS) return _storeLinkWait;
     _storeLinkAt = Date.now();
     _storeLinkWait = markedTags(STORE_FIELD).then(function (tags) {
+      // COMPAT: a store still marked `cfbe_desc_store` (since CustomFieldsBulkEditor 2.0.1);
+      // remove when `LEGACY_STORE_FIELD` goes.
       return tags.length ? tags : markedTags(LEGACY_STORE_FIELD);
     }).then(function (tags) {
       return filterSettings().then(function (s) {
@@ -4985,9 +4526,9 @@
 
   function storeTagLinkTick() {
     var key = 'b1DescriptionTagName';
-    if (!settingRow(key)) return;
+    if (!settingRow(PLUGIN_ID, key)) return;
     lookupStoreTag().then(function (tag) {
-      var row = settingRow(key);
+      var row = settingRow(PLUGIN_ID, key);
       var node = document.getElementById(STORE_LINK_ID);
       if (!row || !tag) {
         if (node && node.parentNode) node.parentNode.removeChild(node);
@@ -5027,7 +4568,7 @@
 
   function cfFieldTick() {
     var key = 'c1ExcludeFromAddListField', locks = 'd1LockedFields';
-    if (!settingRow(key) && !settingRow(locks)) return;
+    if (!settingRow(PLUGIN_ID, key) && !settingRow(PLUGIN_ID, locks)) return;
     if (!_cfTickWait || Date.now() - _cfTickAt > CF_TICK_TTL_MS) {
       _cfTickAt = Date.now();
       _cfTickWait = loadSettings().then(function (s) { _cfTickSettings = s; }, function () {});
@@ -5035,40 +4576,24 @@
     // Trimmed and nothing else: this is a map key, so a name holding a double space is a
     // different key from one holding a single.
     cfTipTick(PLUGIN_ID, key, _cfTickSettings
-      ? String(_cfTickSettings[key] || '').replace(/^\s+|\s+$/g, '') : '');
+      ? String(_cfTickSettings[key] || '').trim() : '');
     // The locked list: one mark per name, drawn after the name it describes. Shown, not
     // edited here: Stash's Edit box holds its own copy of the value and does not see a
     // write from the lock switch until a reload, so the switch is the one way to change it.
     cfTipTick(PLUGIN_ID, locks, _cfTickSettings ? lockedFields(_cfTickSettings) : []);
-    var lockRow = settingRow(locks);
+    var lockRow = settingRow(PLUGIN_ID, locks);
     if (lockRow && !hasClass(lockRow, 'cfbe-readonly-row')) {
       lockRow.className = ((lockRow.className || '') + ' cfbe-readonly-row').replace(/^\s+/, '');
     }
   }
 
   function settingsTick() {
-    var parts = ownParts();
-    if (!parts) return;
-    var group = parts.group;
-    injectStyle();
-    if (!hasClass(group, 'cfbe-own-group')) {
-      group.className = ((group.className || '') + ' cfbe-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(parts.sub);
-    collapseDescription(parts.sub);   // after the split: it counts the .cfbe-p divs
-    tipSettings();                    // the setting rows, which are not in the header
-    ensureStaleNotice(parts);         // before the early return: the link outlives it
-    storeTagLinkTick();               // ... and so does the store tag's link
-    cfFieldTick();                    // ... and the mark on the hide-field setting
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'cfbe-readme', 'CustomFieldsBulkEditor/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noopener noreferrer';
-    link.title = 'Open this plugin\'s documentation';
-    var slot = readmeLinkSlot(parts.sub);
-    slot.parent.insertBefore(link, slot.before);
+    var group = page.group();
+    if (!group) return;
+    page.decorate(group);
+    for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) page.tip(k);   // by heading, so not in `keys`
+    storeTagLinkTick();
+    cfFieldTick();
   }
 
   // ── Hiding entities from Stash's add/select dropdowns ─────────────────────
@@ -5147,23 +4672,6 @@
     }
   }
 
-  // A real `Response` where there is one, because Apollo reads the body through it and
-  // a shim is one method away from being wrong about something. The plain object is for
-  // the test harness, whose fetch answers with exactly this shape.
-  function jsonResponse(resp, json) {
-    var text = JSON.stringify(json);
-    if (typeof Response === 'function') {
-      return new Response(text,
-        { status: resp.status, statusText: resp.statusText, headers: resp.headers });
-    }
-    return {
-      ok: resp.ok, status: resp.status, statusText: resp.statusText, headers: resp.headers,
-      json: function () { return Promise.resolve(json); },
-      text: function () { return Promise.resolve(text); },
-      clone: function () { return this; },
-    };
-  }
-
   function filterSelectResponse(resp, key) {
     var spec = ENTITIES[key];
     return filterSettings().then(function (s) {
@@ -5182,7 +4690,9 @@
           // it has to lose exactly what the list did, or the dropdown offers to load
           // entities that are not there.
           if (typeof res.count === 'number') res.count -= (list.length - kept.length);
-          return jsonResponse(resp, json);
+          // A real `Response`, because Apollo reads the body through it.
+          return new Response(JSON.stringify(json),
+            { status: resp.status, statusText: resp.statusText, headers: resp.headers });
         });
       });
     });
@@ -5211,7 +4721,7 @@
         var within = function (cls, tag) { var box = row.querySelector('.' + cls); return box && box.querySelector(tag); };
         var label = within('custom-fields-field', 'label');
         // The text, not the title: `detailTip` has put the field's description in that.
-        var name = label ? String(label.textContent || '').replace(/^\s+|\s+$/g, '') : '';
+        var name = label ? String(label.textContent || '').trim() : '';
         var on = !!name && locked.indexOf(name) !== -1;
         var input = within('custom-fields-value', 'input');
         var remove = row.querySelector('.custom-fields-remove');
@@ -5277,17 +4787,6 @@
     }).then(null, function () { return null; });
   }
 
-  function refusedResponse(message) {
-    var json = { errors: [{ message: message }], data: null };
-    var text = JSON.stringify(json);
-    if (typeof Response === 'function') {
-      return new Response(text, { status: 200, headers: { 'Content-Type': 'application/json' } });
-    }
-    return { ok: true, status: 200, headers: { get: function () { return 'application/json'; } },
-      json: function () { return Promise.resolve(json); }, text: function () { return Promise.resolve(text); },
-      clone: function () { return this; } };
-  }
-
   // Wrapped once, and every failure path returns the original response: a dropdown that
   // shows one entity too many is a nuisance, and one that shows nothing because a
   // filter threw is a broken editor.
@@ -5305,7 +4804,7 @@
       // A save that would change a locked field is held for the check, and refused.
       if (init && typeof init.body === 'string' && /custom_fields/.test(init.body) && /Update\s*\(/.test(init.body)) {
         return lockGuard(init).then(function (refusal) {
-          return refusal ? refusedResponse(refusal) : orig.apply(self, args);
+          return refusal ? fakeOk({ errors: [{ message: refusal }], data: null }) : orig.apply(self, args);
         });
       }
       var out = orig.apply(this, arguments);
@@ -5358,7 +4857,7 @@
 
   // The one string this puts on the page, in the user's own shape.
   function detailTip(name) {
-    var d = String(_descriptions[name] || '').replace(/^\s+|\s+$/g, '');
+    var d = String(_descriptions[name] || '').trim();
     var head = (_lockedNow.indexOf(name) !== -1 ? '\ud83d\udd12 ' : '') + name;
     return d ? head + '\n\nDescription: ' + d : head;
   }
@@ -5376,11 +4875,11 @@
   // exactly, with nothing to undo. The text is the fallback for a Stash that stops
   // setting it, and one trailing colon comes off it.
   function fieldNameAt(n) {
-    var t = String(n.title == null ? '' : n.title).replace(/^\s+|\s+$/g, '');
+    var t = String(n.title == null ? '' : n.title).trim();
     var known = function (x) { return hasOwn(_descriptions, x) || _lockedNow.indexOf(x) !== -1; };
     if (t && known(t)) return t;
     var text = String(n.textContent == null ? '' : n.textContent)
-      .replace(/^\s+|\s+$/g, '').replace(/:$/, '').replace(/\s+$/, '');
+      .trim().replace(/:$/, '').replace(/\s+$/, '');
     return text && known(text) ? text : '';
   }
 
@@ -5473,8 +4972,8 @@
   }
 
   function apiDescribeField(name, description) {
-    var field = String(name == null ? '' : name).replace(/^\s+|\s+$/g, '');
-    var text = String(description == null ? '' : description).replace(/^\s+|\s+$/g, '');
+    var field = String(name == null ? '' : name).trim();
+    var text = String(description == null ? '' : description).trim();
     if (!field || !text) return Promise.resolve('rejected');
     return filterSettings().then(function (s) {
       return readStore(s).then(function () { return s; });
@@ -5648,7 +5147,7 @@
     try { detailTick(); } catch (e) { console.error('[cfbe] detail tick failed', e); }
     try { lockFormTick(); } catch (e) { console.error('[cfbe] lock tick failed', e); }
     try { settingsTick(); } catch (e) { console.error('[cfbe] settings tick failed', e); }
-    try { paintTaskButtons(); } catch (e) { console.error('[cfbe] task paint failed', e); }
+    try { paintTaskButtons(PLUGIN_NAME, TASK_NAMES, function () { return PLUGIN_BTN_VARIANT; }); } catch (e) { console.error('[cfbe] task paint failed', e); }
   }
 
   if (window.addEventListener) {

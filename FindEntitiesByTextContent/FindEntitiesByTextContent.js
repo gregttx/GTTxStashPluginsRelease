@@ -1,13 +1,13 @@
 // Find Entities by Text Content
 //
-// Requires Stash 0.31.0 or newer: `custom_fields` on the seven entity types is one of
+// Requires Stash 0.31.0 or newer: `custom_fields` on the seven entity-types is one of
 // the places this plugin looks.
 //
 // Stash can filter a Scene list on its own `details`, and a Performer list on its own
 // `details`, and neither on the other's - and nothing at all on "whichever custom fields
 // this entity happens to carry". So there is no way to ask it *which entities in my
 // library mention this string*. This plugin answers that: one search box, a toggle per
-// entity type, and a list of what it found.
+// entity-type, and a list of what it found.
 //
 // **Nothing here writes.** It is a read of the library and a list of links; there is no
 // mutation to undo, no lease to take and nothing to stand a reactive plugin down for.
@@ -32,36 +32,32 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[fretc] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[fretc] ᝯㄝₓ Find & Replace Entities by Text Content cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  var caseSensitive = C.caseSensitive, fold = C.fold, coopObject = C.coopObject, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tipText = C.tipText,
-    tagTipNames = C.tagTipNames, entityTipStars = C.entityTipStars,
-    entityTipCountry = C.entityTipCountry, entityTipGender = C.entityTipGender,
-    entityTipLines = C.entityTipLines, entityTipDetail = C.entityTipDetail,
-    entityTip = C.entityTip, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    entityTipName = C.entityTipName,
-    tagLinkTitle = C.tagLinkTitle;
+  var caseSensitive = C.caseSensitive, fold = C.fold, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural,
+    linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    holdWidth = C.holdWidth, entityTip = C.entityTip, staleReloadButton = C.staleReloadButton, hasOwn = C.hasOwn,
+    gqlRequest = C.gqlRequest, el = C.el, paintButton = C.paintButton, displayName = C.displayName,
+    matchesIn = C.occurrences, context = C.matchContext;
 
   var PLUGIN_ID   = 'FindEntitiesByTextContent';
   // The name is a display string and the id is the contract: the folder, the plugin id
   // and every storage key are untouched by a rename, which is why one costs a user
   // nothing. What moves with the name is every place this plugin matches Stash's own
-  // markup by heading text - `headingIsOurs` and `ownTaskName` - so the three files
-  // change together or it stops finding its own settings group and its own task button.
+  // markup by heading text - Core's `settingsPage` and `ownTaskName`, handed this name -
+  // so the three files change together or it stops finding its own settings group and
+  // its own task button.
   var PLUGIN_NAME = 'ᝯㄝₓ Find & Replace Entities by Text Content';
   // The name the dialog head wears. `PLUGIN_NAME` is the manifest's and has to stay
-  // byte-identical to the `.yml`, because `ownParts`' heading match and `ownTaskName`
-  // both find this plugin by it. This one is free to be short, and here it has to be:
+  // byte-identical to the `.yml`, because Core's `settingsPage` heading match and
+  // `ownTaskName` both find this plugin by it. This one is free to be short, and here it has to be:
   // the head goes on to quote what is being searched for.
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Find & Replace';
 
@@ -72,7 +68,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '4.0.0';
+  var PLUGIN_VERSION = '4.0.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -88,10 +84,7 @@
     'newer than the script your browser has cached.');
 
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/FindEntitiesByTextContent/README.md';
-  var STYLE_ID       = 'fretc-style';
-  var README_LINK_ID = 'fretc-readme-link';
-  var DESC_TOGGLE_ID = 'fretc-desc-toggle';
-  var STALE_ID       = 'fretc-stale-notice';
+  var STYLE_ID = 'fretc-style';
 
   // **Amber, because Replace writes.** The repo's rule is that a plugin's own control is
   // amber where it writes and `btn-info` where it only reads, and the task button is the
@@ -108,16 +101,13 @@
   var FILTER_ON_VARIANT = 'btn-warning';
 
   var READ_PAGE     = 500;   // entities per page of the scan
-  var RESULT_BUFFER = 200;   // rows on screen before the search pauses itself
+  var RESULT_BUFFER = 1000;   // rows on screen before the search pauses itself
   var HISTORY_MAX   = 50;    // the most previous searches the box will keep
   var TICK_MS       = 1000;
-  var CONTEXT       = 48;    // characters of surrounding text shown either side of a hit
-  var ELLIPSIS      = '…';
   // The busy cursor under the last line of the log. The counters say how far the search
   // has got; this says it is still going, which is the question a page of 500 entities
   // leaves unanswered for seconds at a time.
-  var SPIN_FRAMES = ['▙', '▛', '▜', '▟'];
-  var SPIN_MS = 125;           // one four-frame cycle at 2Hz
+  var SPIN_FRAMES = C.runSpinFrames, SPIN_MS = C.runSpinMs;   // Core's, as its run log draws them
 
   // Where the dialog keeps what the user asked it to remember. Under the one global this
   // repo reserves, so it cannot collide with another plugin's key.
@@ -129,108 +119,18 @@
   // entry is left where it is rather than deleted: it costs a few hundred bytes in one
   // browser, and a delete is the one operation that cannot be taken back if this
   // migration is wrong.
+  // COMPAT: the `__GTTx__.fetcSearch` key from before the acronym moved (since
+  // FindEntitiesByTextContent 2.0.1); remove when never on its own: a browser may skip releases.
   var LEGACY_STORE_KEY = '__GTTx__.fetcSearch';
 
-  function hasOwn(obj, key) {
-    return Object.prototype.hasOwnProperty.call(obj, key);
-  }
-
-
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').replace(/^ | $/g, '');
-  }
-
-  // Newlines and runs of space collapsed, but nothing trimmed: this is for the text
-  // *around* a match, where the space either side of it is part of what the line shows.
-  function flatten(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ');
-  }
-
-  function trim(text) {
-    return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
-  }
-
-  // ── The seven entity types ────────────────────────────────────────────────
+  // ── The seven entity-types ────────────────────────────────────────────────
   //
-  // `fields` is a list of *candidates*, not a promise: which of them the running Stash
-  // actually has is settled by one introspection query at the start of every search (see
-  // `describeFields`). A schema this plugin guessed wrong about would otherwise fail the
-  // whole query and report as "nothing found", which is the one failure mode a search
-  // tool must not have.
-  //
-  //   extra      the display fields that are not searchable text - a file's basename, a
-  //              gallery's folder - so a result can name an entity with no title
-  var ENTITIES = {
-    scenes: {
-      key: 'scenes', label: 'Scene', plural: 'Scenes', gqlType: 'Scene',
-      find: 'findScenes', list: 'scenes', route: '/scenes/',
-      extra: 'files { basename }',
-      one: 'findScene',
-      input: 'SceneUpdateInput', mutation: 'sceneUpdate',
-      fields: ['title', 'code', 'details', 'director', 'urls', 'custom_fields'],
-    },
-    images: {
-      key: 'images', label: 'Image', plural: 'Images', gqlType: 'Image',
-      find: 'findImages', list: 'images', route: '/images/',
-      extra: 'visual_files { ... on ImageFile { basename } ... on VideoFile { basename } }',
-      one: 'findImage',
-      input: 'ImageUpdateInput', mutation: 'imageUpdate',
-      fields: ['title', 'code', 'details', 'photographer', 'urls', 'custom_fields'],
-    },
-    galleries: {
-      key: 'galleries', label: 'Gallery', plural: 'Galleries', gqlType: 'Gallery',
-      find: 'findGalleries', list: 'galleries', route: '/galleries/',
-      extra: 'files { basename } folder { basename }',
-      one: 'findGallery',
-      input: 'GalleryUpdateInput', mutation: 'galleryUpdate',
-      fields: ['title', 'code', 'details', 'photographer', 'urls', 'custom_fields'],
-    },
-    performers: {
-      key: 'performers', label: 'Performer', plural: 'Performers', gqlType: 'Performer',
-      find: 'findPerformers', list: 'performers', route: '/performers/',
-      extra: '',
-      one: 'findPerformer',
-      input: 'PerformerUpdateInput', mutation: 'performerUpdate',
-      fields: ['name', 'disambiguation', 'alias_list', 'details', 'urls', 'tattoos',
-        'piercings', 'measurements', 'career_length', 'custom_fields'],
-    },
-    studios: {
-      key: 'studios', label: 'Studio', plural: 'Studios', gqlType: 'Studio',
-      find: 'findStudios', list: 'studios', route: '/studios/',
-      extra: '',
-      one: 'findStudio',
-      input: 'StudioUpdateInput', mutation: 'studioUpdate',
-      fields: ['name', 'aliases', 'details', 'urls', 'custom_fields'],
-    },
-    groups: {
-      key: 'groups', label: 'Group', plural: 'Groups', gqlType: 'Group',
-      find: 'findGroups', list: 'groups', route: '/groups/',
-      extra: '',
-      one: 'findGroup',
-      input: 'GroupUpdateInput', mutation: 'groupUpdate',
-      fields: ['name', 'aliases', 'synopsis', 'director', 'urls', 'custom_fields'],
-    },
-    tags: {
-      key: 'tags', label: 'Tag', plural: 'Tags', gqlType: 'Tag',
-      find: 'findTags', list: 'tags', route: '/tags/',
-      extra: '',
-      one: 'findTag',
-      input: 'TagUpdateInput', mutation: 'tagUpdate',
-      fields: ['name', 'aliases', 'description', 'custom_fields'],
-    },
-  };
-
-  var TYPE_ORDER = ['scenes', 'images', 'galleries', 'performers', 'studios', 'groups', 'tags'];
-
-  // The label a result line wears. One label per *concept*, shared across types on
-  // purpose: Details means the same thing on a Scene and on a Performer.
-  var FIELD_LABEL = {
-    title: 'Title', name: 'Name', code: 'Code', details: 'Details',
-    description: 'Description', synopsis: 'Synopsis', director: 'Director',
-    photographer: 'Photographer', urls: 'URLs', aliases: 'Aliases',
-    alias_list: 'Aliases', disambiguation: 'Disambiguation', tattoos: 'Tattoos',
-    piercings: 'Piercings', measurements: 'Measurements', career_length: 'Career length',
-  };
+  // Core's `entityTypes`: the table (`fields` are candidates, settled against the running
+  // Stash by `describeFields`), the order a search walks it in, one label per field, and
+  // the `FRETC_Shapes` and `FRETC_Scan` queries.
+  var TEXT = C.entityTypes('FRETC');
+  var ENTITIES = TEXT.types, TYPE_ORDER = TEXT.order, FIELD_LABEL = TEXT.fieldLabel;
+  var describeFields = TEXT.describeFields, pageQuery = TEXT.pageQuery;
   var CF_NAME_LABEL  = 'Custom field name';
   var CF_VALUE_LABEL = 'Custom field value';
 
@@ -250,10 +150,9 @@
   //     first thing anyone reads before installing. So the description half of the shared
   //     settings design still applies here in full; only the per-*setting* tooltip does
   //     not, because there is no setting row for one to open from.
-  //   - **There is no `plugin-<id>-<key>` id to anchor on**, so `ownParts` enters by the
-  //     heading alone. That is the one anchor in this repo with nothing behind it; see
-  //     the note there.
-
+  //   - **There is no `plugin-<id>-<key>` id to anchor on**, so Core's `settingsPage`,
+  //     handed no keys, finds the group by the heading alone - exactly, never by prefix -
+  //     and passes over the Settings → Tasks group by its task caption.
 
   // **This plugin is on the bulk side of the lease protocol and on neither other side,
   // and exactly one of its four absences moved when Replace arrived.** It reacts to nothing, so it still registers no `respecters` entry; it
@@ -269,49 +168,13 @@
   // It does note a foreign lease in its log, which is not standing down: a bulk run in
   // another dialog is rewriting the very entities this search is reading, so a result may
   // be a moment out of date. Saying so costs a line; refusing to search would be absurd.
-  function foreignLease() {
-    var c = coop();
-    var now = Date.now();
-    for (var i = c.leases.length - 1; i >= 0; i--) {
-      if (c.leases[i].until <= now) c.leases.splice(i, 1);
-    }
-    return c.leases.length ? c.leases[0] : null;
-  }
-
-  // Renewed per batch rather than taken once for the whole write, because a replacement
-  // across a large library can outlast any sane fixed expiry, and released in every
-  // outcome - success, failure, the dialog being closed - so a reactive sibling is never
+  //
+  // The lease is Core's `lease`, renewed per batch rather than taken once for the whole
+  // write, because a replacement across a large library can outlast any sane fixed
+  // expiry, and released in every outcome - success, failure, the dialog being closed - so a reactive sibling is never
   // left standing down. The expiry is the backstop for the one outcome neither can catch:
   // the tab going away mid-run.
   var LEASE_TTL_MS = 60000;
-
-  function acquireLease(label) {
-    var c = coop();
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + LEASE_TTL_MS };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + LEASE_TTL_MS; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
-
-  // ── GraphQL ───────────────────────────────────────────────────────────────
-
-  function gqlRequest(query, variables) {
-    return fetch('/graphql', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: query, variables: variables }),
-    })
-      .then(function (resp) { return resp.json(); })
-      .then(function (json) {
-        if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
-        return json.data;
-      });
-  }
 
   // ── What the dialog remembers ─────────────────────────────────────────────
   //
@@ -327,6 +190,8 @@
     try {
       var raw = window.localStorage.getItem(STORE_KEY);
       var legacy = false;
+      // COMPAT: the pre-2.0.1 key, taken over on this read (since FindEntitiesByTextContent
+      // 2.0.1); remove when never on its own: a browser may skip releases.
       if (!raw) {
         raw = window.localStorage.getItem(LEGACY_STORE_KEY);
         legacy = !!raw;
@@ -481,7 +346,7 @@
     'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
     // **No per-setting hover box and no colour-coded toggle**, because this plugin
     // declares no settings: both would style rows Stash never renders for it. The teal is
-    // not lost - it is on the task button, which `paintTaskButtons` sets.
+    // not lost - it is on the task button, which Core's `paintTaskButtons` sets.
     'text-decoration:underline;}';
 
   function injectStyle() {
@@ -490,23 +355,6 @@
     style.id = STYLE_ID;
     style.textContent = CSS;
     (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-
-
-
-
-
-
-
-
-
-
-  function el(tag, className, text) {
-    var node = document.createElement(tag);
-    if (className) node.className = className;
-    if (text != null) node.textContent = text;
-    return node;
   }
 
   // A `<datalist>` renders nothing of its own, so there is no empty state to draw and
@@ -529,117 +377,10 @@
     return b;
   }
 
-  function hasClass(node, name) {
-    return !!node && (' ' + (node.className || '') + ' ').indexOf(' ' + name + ' ') !== -1;
-  }
-
-  // Swaps one Bootstrap variant for another in place, so a toggle can go amber and back
-  // without losing `btn` or `btn-sm`.
-  var BTN_VARIANTS = /\bbtn-(secondary|warning|info|primary|success|light|dark|link)\b/g;
-
-  function paintButton(btn, variant) {
-    if (hasClass(btn, variant)) return;
-    btn.className = String(btn.className || '').replace(BTN_VARIANTS, '')
-      .replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
-  }
-
-  // ── Is this script the one Stash has installed? ───────────────────────────
-  //
-  // "Reload plugins" re-reads the plugin folder on the server; it cannot replace a
-  // script this page already fetched and executed. Comparing the two numbers is the
-  // only way the script can notice it is the stale one.
-  //
-  // Resolves to null wherever the answer is unknown - a Stash too old for the field, a
-  // plugin it cannot see, a failed request. Unknown is not a mismatch.
-  function installedVersion() {
-    return gqlRequest('query FRETCPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; });
-  }
-
-  // ── Naming an entity ──────────────────────────────────────────────────────
-  //
-  // Whichever of the display fields is present, rather than a branch per type: a
-  // per-type branch is what let galleries and images log as "untitled" in a sibling for
-  // three releases.
-  function firstBasename(files) {
-    for (var i = 0; files && i < files.length; i++) {
-      if (files[i] && files[i].basename) return files[i].basename;
-    }
-    return null;
-  }
-
-  function displayName(ent) {
-    if (!ent) return null;
-    return ent.title || ent.name || firstBasename(ent.files) || firstBasename(ent.visual_files) ||
-      (ent.folder && ent.folder.basename) || null;
-  }
-
-
   // ── What the running Stash actually stores ────────────────────────────────
   //
-  // One introspection query settles, for every candidate field in the table above,
-  // whether the server has it and whether it is a string, a list of strings or the
-  // custom-field map. A field this plugin guessed wrong about is dropped rather than
-  // failing the whole search query - which for a search tool is the difference between
-  // "your Stash calls it something else" and "nothing in your library says that".
-  //
-  // Cached for the life of the page: the schema cannot change without a restart.
-  var _shapes = null;
-
-  function unwrap(t) {
-    // NON_NULL and LIST wrappers carry the real type in `ofType`. `[String!]!` is four
-    // deep - NON_NULL, LIST, NON_NULL, SCALAR - which is what the query has to ask for.
-    var kind = null;
-    while (t) {
-      if (t.kind === 'LIST') kind = 'list';
-      if (t.kind === 'SCALAR' || t.kind === 'OBJECT' || t.kind === 'ENUM') {
-        return { kind: kind || (t.name === 'Map' ? 'map' : 'string'), name: t.name };
-      }
-      t = t.ofType;
-    }
-    return { kind: kind || 'string', name: null };
-  }
-
-  function describeFields() {
-    if (_shapes) return Promise.resolve(_shapes);
-    var parts = TYPE_ORDER.map(function (k) {
-      return k + ': __type(name: "' + ENTITIES[k].gqlType + '") { fields { name type ' +
-        '{ kind name ofType { kind name ofType { kind name ofType { kind name } } } } } }';
-    });
-    return gqlRequest('query FRETC_Shapes { ' + parts.join(' ') + ' }', null)
-      .then(function (data) {
-        var out = {};
-        TYPE_ORDER.forEach(function (k) {
-          var known = {};
-          ((data[k] || {}).fields || []).forEach(function (f) { known[f.name] = f.type; });
-          var keep = [];
-          ENTITIES[k].fields.forEach(function (name) {
-            if (!hasOwn(known, name)) return;
-            var shape = unwrap(known[name]);
-            // A String scalar, a list of them, or the custom-field Map. Anything else
-            // wearing a name we asked for - a date, a number, an object - is not text
-            // and has no business in a text search.
-            if (name === 'custom_fields') {
-              if (shape.name === 'Map') keep.push({ name: name, kind: 'map' });
-              return;
-            }
-            if (shape.name !== 'String') return;
-            keep.push({ name: name, kind: shape.kind === 'list' ? 'list' : 'string' });
-          });
-          out[k] = keep;
-        });
-        _shapes = out;
-        return out;
-      });
-  }
-
-  // **The write half of the same question, and it is a different question.** A field can
+  // Core's `describeFields` settles which text fields the object types have. **The write
+  // half of the same question is a different question.** A field can
   // exist on the object type and not on the update input, or be spelled differently
   // there, and a mutation naming one Stash does not have fails outright - taking the
   // whole entity's replacement with it. So the inputs are introspected too, once per
@@ -653,23 +394,8 @@
 
   function describeInputs() {
     if (_inputs) return Promise.resolve(_inputs);
-    var parts = TYPE_ORDER.map(function (k) {
-      return k + ': __type(name: "' + ENTITIES[k].input + '") { inputFields { name type ' +
-        '{ kind name ofType { kind name ofType { kind name ofType { kind name } } } } } }';
-    });
-    return gqlRequest('query FRETC_Inputs { ' + parts.join(' ') + ' }', null)
-      .then(function (data) {
-        var out = {};
-        TYPE_ORDER.forEach(function (k) {
-          var known = {};
-          ((data[k] || {}).inputFields || []).forEach(function (f) {
-            known[f.name] = unwrap(f.type);
-          });
-          out[k] = known;
-        });
-        _inputs = out;
-        return out;
-      });
+    return TEXT.introspect('input', 'inputFields', 'FRETC_Inputs')
+      .then(function (out) { _inputs = out; return out; });
   }
 
   // ── Finding the text ──────────────────────────────────────────────────────
@@ -679,28 +405,14 @@
   // replacement reads the same captured value rather than what the checkbox says now.
   // A default of false keeps every existing call site meaning what it meant.
   //
-  // Case is folded by Core's `fold`, which keeps the length - 'İ' is taken to 'i' before
-  // `toLowerCase()`, which would make it two units. **A field whose fold still changes
-  // length is refused rather than searched**: a position recorded against the folded
-  // string would not point at the same character in the original, and everything
-  // downstream slices the *original* at those offsets - the context on a result line,
-  // and the splice a Replace writes back. A field not searched is survivable; one
-  // rewritten with the replacement in the wrong place is not.
+  // Core's `occurrences` refuses a field whose fold changes length rather than search it
+  // at offsets that would not point into the original; this counts each refusal, for the
+  // line that says how many fields a search or a Replace could not read.
   var _foldSkips = 0;
-  function foldSkips() { return _foldSkips; }
 
   function occurrences(text, needle, cased) {
-    var out = [];
-    if (!needle) return out;
-    var raw = String(text);
-    var hay = cased ? raw : fold(raw);
-    if (hay.length !== raw.length) { _foldSkips++; return out; }
-    var n = cased ? String(needle) : fold(needle);
-    var i = 0;
-    while ((i = hay.indexOf(n, i)) !== -1) {
-      out.push(i);
-      i += n.length;
-    }
+    var out = matchesIn(text, needle, cased);
+    if (out.refused) _foldSkips++;
     return out;
   }
 
@@ -710,36 +422,17 @@
   // capitalised replacement is a rule nobody asked for, and a wrong guess is a wrong
   // word in the library. Written from `indexOf` rather than a RegExp because the needle
   // is the user's literal text - `.` and `(` in a box are characters, not syntax.
+  //
+  // The offsets are `occurrences`', so its refusal of a field whose fold changes length
+  // holds here too: a field the scan refused yields none and is returned untouched,
+  // never rewritten from offsets nothing computed.
   function replaceAllIn(text, needle, to, cased) {
     var str = String(text);
-    var hay = cased ? str : fold(str);
-    // The same refusal as `occurrences`, and it has to be restated here rather than
-    // inferred: this is the half that writes, and a field the scan refused must not be
-    // rewritten from offsets nothing computed.
-    if (hay.length !== str.length) { _foldSkips++; return str; }
-    var n = cased ? String(needle) : fold(needle);
-    if (!n) return str;
+    var len = (cased ? String(needle) : fold(needle)).length;
     var out = '';
     var i = 0;
-    var at;
-    while ((at = hay.indexOf(n, i)) !== -1) {
-      out += str.slice(i, at) + to;
-      i = at + n.length;
-    }
+    occurrences(str, needle, cased).forEach(function (at) { out += str.slice(i, at) + to; i = at + len; });
     return out + str.slice(i);
-  }
-
-  // The three pieces a result line is drawn from. Whitespace is collapsed: a details
-  // field is prose with newlines in it, and a result line is one line.
-  function context(text, at, len) {
-    var s = String(text);
-    var from = Math.max(0, at - CONTEXT);
-    var to = Math.min(s.length, at + len + CONTEXT);
-    return {
-      pre: (from > 0 ? ELLIPSIS : '') + flatten(s.slice(from, at)),
-      hit: flatten(s.slice(at, at + len)),
-      post: flatten(s.slice(at + len, to)) + (to < s.length ? ELLIPSIS : ''),
-    };
   }
 
   // How many entities the chosen types hold, in one query before the first page. The
@@ -764,16 +457,6 @@
         });
         return out;
       });
-  }
-
-  function pageQuery(spec, shapes) {
-    var sel = ['id'];
-    shapes.forEach(function (f) { sel.push(f.name); });
-    // `extra` holds only the display fields that are *not* in the table above, so
-    // nothing is ever selected twice - which GraphQL refuses outright.
-    if (spec.extra) sel.push(spec.extra);
-    return 'query FRETC_Scan($f: FindFilterType) { ' + spec.find + '(filter: $f) { count ' +
-      spec.list + ' { ' + sel.join(' ') + ' } } }';
   }
 
   // One result per *entity*, not per occurrence: the question this plugin answers is
@@ -847,39 +530,16 @@
   var TASK_NAME = 'Find & Replace Entities by Text Content...';
 
   // Ours only if the label matches *and* the enclosing SettingGroup is headed with our
-  // name - another plugin may declare a task called the same thing. Answered from the
-  // button's own group and stopped there: climbing past it reaches the panel holding
-  // every plugin's group, where `querySelector('h3')` answers with whichever plugin is
-  // listed first.
-  function ownTaskName(btn) {
-    var label = trim(btn.textContent);
-    if (label !== TASK_NAME) return null;
-    var node = btn;
-    var fallback = null;
-    for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-      var heading = node.querySelector ? node.querySelector('h3') : null;
-      var ours = !!heading && headingIsOurs(heading.textContent);
-      if (hasClass(node, 'setting-group')) return ours ? label : null;
-      if (ours) fallback = label;
-    }
-    return fallback;
-  }
-
-  // Re-applied every tick rather than once: React re-renders this panel and hands back a
-  // button with Stash's own classes, and `paintButton` is a no-op on one that already
-  // carries ours.
-  function paintTaskButtons() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (ownTaskName(nodes[i])) paintButton(nodes[i], PLUGIN_BTN_VARIANT);
-    }
-  }
+  // name - another plugin may declare a task called the same thing. Core's `ownTaskName`
+  // answers that, and `paintTaskButtons` re-paints ours every tick, since React hands back
+  // a button with Stash's own classes on every re-render.
+  var TASKS = [TASK_NAME];
 
   if (document.addEventListener) {
     document.addEventListener('click', function (event) {
       var target = event.target;
       var btn = target && target.closest ? target.closest('button') : null;
-      if (!btn || !ownTaskName(btn)) return;
+      if (!btn || !C.ownTaskName(btn, PLUGIN_NAME, TASKS)) return;
       if (event.preventDefault) event.preventDefault();
       if (event.stopPropagation) event.stopPropagation();
       startRun();
@@ -939,7 +599,7 @@
     // Copy log takes all of it.
     this.results = [];
     // Which attribute names are letting their lines through. Filled in as the search
-    // finds them - unlike the entity types, which are the whole list from the start
+    // finds them - unlike the entity-types, which are the whole list from the start
     // because they are what gets *read*. An attribute nothing has matched in is a toggle
     // that could not change anything.
     this.attrOn = {};
@@ -1068,7 +728,7 @@
     });
     keep.appendChild(this.persistBox);
     keep.appendChild(el('span', null, 'Remember filters'));
-    keep.title = 'Keep the entity types you have turned on, in this browser, for the next ' +
+    keep.title = 'Keep the entity-types you have turned on, in this browser, for the next ' +
       'time this dialog is opened. Nothing is written to your library or to the plugin ' +
       'settings.';
     opts.appendChild(keep);
@@ -1161,7 +821,7 @@
 
     this.filtersEl = el('div', 'fretc-filters');
     this.typeRow = el('div', 'fretc-filterrow');
-    this.typeRow.appendChild(el('span', 'fretc-label', 'Entity types'));
+    this.typeRow.appendChild(el('span', 'fretc-label', 'Entity-types'));
     TYPE_ORDER.forEach(function (k) {
       self.typeRow.appendChild(self.toggle(ENTITIES[k].plural, self.typeOn, k));
     });
@@ -1212,8 +872,8 @@
       paintButton(b, FILTER_ON_VARIANT);
       // Both rows, which is what "the filters" means to someone looking at one block of
       // buttons - and the attribute half decides what a Replace covers, so the caption
-      // saying only "entity type" was hiding the half that writes.
-      b.title = 'Turn every filter in this strip on or off - entity types and attributes ' +
+      // saying only "entity-type" was hiding the half that writes.
+      b.title = 'Turn every filter in this strip on or off - entity-types and attributes ' +
         'alike. The attribute half also decides what a Replace covers.';
     });
 
@@ -1244,7 +904,7 @@
 
     this.syncRecent();
     this.syncFooter();
-    wireEscape(this);
+    C.wireEscape(this, 'fretc');
     document.body.appendChild(this.backdrop);
   };
 
@@ -1310,7 +970,7 @@
   // Zero is not merely "keep none": it is also how the list already kept is cleared,
   // which is the one thing a number box can be asked to do that is not about the future.
   Run.prototype.setHistoryMax = function () {
-    var n = parseInt(trim(this.historyInput.value), 10);
+    var n = parseInt(this.historyInput.value.trim(), 10);
     if (!(n > 0)) n = 0;
     this.historyMax = Math.min(HISTORY_MAX, n);
     this.history = this.historyMax ? this.history.slice(0, this.historyMax) : [];
@@ -1319,21 +979,12 @@
     this.save();
   };
 
-  Run.prototype.remember = function (text) {
-    if (!this.historyMax) return;
-    this.history = [text].concat(this.history.filter(function (t) { return t !== text; }))
-      .slice(0, this.historyMax);
-    this.syncRecent();
-    this.save();
-  };
-
-  // The replacement box's own list, kept on the press that *uses* the value rather than
-  // as it is typed - a half-typed replacement is not something to offer back, and unlike
-  // the search box there is no cheap "and then they pressed Search" moment before it.
-  Run.prototype.rememberReplacement = function (text) {
+  // `text` to the front of `this[listProp]` - `history` for the search box, on Search;
+  // `replaceHistory` for the replacement box, on the press that *uses* the value rather
+  // than as it is typed, since a half-typed replacement is not something to offer back.
+  Run.prototype.remember = function (listProp, text) {
     if (!this.historyMax || !text) return;
-    this.replaceHistory = [text]
-      .concat(this.replaceHistory.filter(function (t) { return t !== text; }))
+    this[listProp] = [text].concat(this[listProp].filter(function (t) { return t !== text; }))
       .slice(0, this.historyMax);
     this.syncRecent();
     this.save();
@@ -1368,11 +1019,11 @@
         : this.state === 'full' ? 'Continue' : 'Search';
     this.goBtn.textContent = caption;
     paintButton(this.goBtn, 'btn-secondary');
-    var text = trim(this.textInput.value);
+    var text = this.textInput.value.trim();
     var types = this.chosen().length;
     var why = this.state !== 'idle' && this.state !== 'done' ? ''
       : !text ? 'Type what to look for.'
-        : !types ? 'Turn on at least one entity type.' : '';
+        : !types ? 'Turn on at least one entity-type.' : '';
     this.goBtn.disabled = !!why;
     this.goBtn.title = why || (caption === 'Pause' ? 'Stop after the page being read.'
       : caption === 'Continue' ? 'Clear the list on screen and carry on from where it stopped.'
@@ -1457,7 +1108,7 @@
   Run.prototype.syncReplace = function (busy) {
     var self = this;
     var writing = !!this.writing;
-    var text = trim(this.textInput.value);
+    var text = this.textInput.value.trim();
     // **Nothing to replace until there is something to replace.** The button already said
     // so and stayed on screen saying it, under a row offering a replacement for a search
     // nobody had asked for. With the box above empty the whole row is a control for a
@@ -1473,7 +1124,7 @@
     // place the siblings put it whichever of the two it is showing.
     this.noteFixedEl.className = on ? 'fretc-warn' : 'fretc-note';
     this.noteFixedEl.textContent = on
-      ? 'Backing up your database before proceeding is recommended. Replace rewrites the ' +
+      ? 'Backing up your database before proceeding is strongly recommended. Replace rewrites the ' +
         'text in your library; Undo only reverses what this dialog wrote, while it stays ' +
         'open, and cannot account for changes made elsewhere in the meantime.'
       : 'Nothing here is written to your library: this is a read and a list of links.';
@@ -1488,7 +1139,7 @@
         'finish, or pause it, and this comes back.'
       : '';
     this.replaceInput.disabled = busy || writing;
-    this.show(this.replaceClearBtn, on && !!trim(this.replaceInput.value) && !busy && !writing);
+    this.show(this.replaceClearBtn, on && !!this.replaceInput.value.trim() && !busy && !writing);
     this.replaceBox.disabled = busy || writing || !text;
     this.replaceLabel.title = text
       ? 'Offer to replace the text you searched for, everywhere this search found it. ' +
@@ -1611,7 +1262,7 @@
 
   Run.prototype.begin = function () {
     this.checkVersion();
-    var other = foreignLease();
+    var other = C.foreignLease(PLUGIN_ID);
     if (other) {
       // Not a stand-down: this plugin has nothing to suppress. A bulk run is rewriting
       // the entities being read, so a result may be a moment out of date, and saying so
@@ -1624,7 +1275,7 @@
 
   Run.prototype.checkVersion = function () {
     var self = this;
-    installedVersion().then(function (installed) {
+    C.installedVersion(PLUGIN_ID, 'FRETCPluginVersion').then(function (installed) {
       if (!installed || installed === PLUGIN_VERSION) { self.showStale(''); return; }
       self.stale = true;
       var msg = '⚠ This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
@@ -1656,7 +1307,7 @@
 
   Run.prototype.start = function () {
     var self = this;
-    var text = trim(this.textInput.value);
+    var text = this.textInput.value.trim();
     if (!text) return;                       // an empty box does nothing, as asked
     var epoch = ++this.epoch;
     this.needle = text;
@@ -1685,7 +1336,7 @@
     }
     this.show(this.attrRow, false);
     this.shownFrom = 0;
-    this.remember(text);
+    this.remember('history', text);
     this.titleEl.textContent = PLUGIN_NAME + ' - "' + text + '"';
     this.queue = this.chosen().slice();
     // The queue is consumed as the search goes; this stays, so the breakdown goes on
@@ -1724,7 +1375,7 @@
     var self = this;
     if (this.state === 'done' || !this.queue) return;
     this.state = 'running';
-    this.foldMark = foldSkips();
+    this.foldMark = _foldSkips;
     this.syncFooter();
     this.step(this.epoch).then(null, function (e) {
       if (self.state !== 'running') return;
@@ -1783,7 +1434,8 @@
           self.progress();
           self.msg('INFO', 'Paused: the list on screen holds ' +
             plural(RESULT_BUFFER, 'result') + '. Continue clears it and carries on; every ' +
-            'result so far is still in Copy log.');
+            'result so far is still in Copy log' + (self.replacing
+              ? ', and Replace still covers all of them, not only the ones on screen.' : '.'));
           return;
         }
         return self.step(epoch);
@@ -1794,7 +1446,7 @@
   // this in the same position as a wrong field name: "nothing found" and "not searched"
   // reading identically.
   Run.prototype.noteFolds = function (mark) {
-    var n = foldSkips() - mark;
+    var n = _foldSkips - mark;
     if (n <= 0) return;
     this.msg('WARN', plural(n, 'field') + ' could not be matched case-insensitively: the ' +
       'text holds a character whose lower case is longer than itself, so a position in it ' +
@@ -1846,14 +1498,13 @@
   //     inverse rather than a restore of a whole record.
   var WRITE_CHUNK = 50;   // entities re-read per query before their mutations go out
 
-
   Run.prototype.replaceAll = function () {
     if (this.replaceBtn.disabled) return;
     var self = this;
-    var needle = trim(this.textInput.value);
+    var needle = this.textInput.value.trim();
     var to = this.replaceInput.value;
     var scope = this.replaceScope();
-    this.rememberReplacement(to);
+    this.remember('replaceHistory', to);
     this.changes = [];
     this.msg('INFO', 'Replacing "' + needle + '" with ' + (to ? '"' + to + '"' : 'nothing') +
       ' in ' + plural(scope.length, 'entity', 'entities') + ' on this list.');
@@ -1890,7 +1541,7 @@
     // decide what "before" meant.
     this.writing = true;
     this.syncFooter();
-    var lease = acquireLease('Find & Replace (undo)');
+    var lease = C.lease(PLUGIN_ID, 'Find & Replace (undo)', LEASE_TTL_MS);
     var pass = journalPass('Find & Replace, undone');
     var i = 0;
     var ok = 0;
@@ -1905,7 +1556,7 @@
         // the pile rather than being dropped: pressing Undo again carries on.
         if (left.length) self.changes = left.slice().reverse().concat(self.changes);
         self.syncFooter();
-        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         self.msg('INFO', 'Undo ' + (left.length ? 'stopped' : 'finished') + ': ' +
           plural(ok, 'entity', 'entities') + ' put back' +
           (failed ? ', ' + plural(failed, 'failure') : '') +
@@ -1919,7 +1570,7 @@
       self.sendUpdate(c.typeKey, c.id, c.input).then(function () {
         ok++;
         // Recorded from the Replace's own run in the history, reversed - nothing is kept here.
-        if (pass) pass.reverse(c.run, c.typeKey, c.id);
+        pass.reverse(c.run, c.typeKey, c.id);
       }, function (e) {
         failed++;
         self.msg('ERROR', ENTITIES[c.typeKey].label + ' ' + c.id + ' could not be put back: ' +
@@ -1929,13 +1580,10 @@
     next();
   };
 
-  // Undo History, where ᝯㄝₓ Core keeps one: a pass collects what it wrote and records it
-  // when it ends, so it can be undone after this dialog has closed. Without it, the
-  // dialog's own Undo is the only one, as before.
+  // Undo History, which ᝯㄝₓ Core keeps: a pass collects what it wrote and records it
+  // when it ends, so it can be undone after this dialog has closed.
   function journalPass(label) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true });
   }
 
   // One mutation, named from the table rather than assembled at each call site.
@@ -1957,9 +1605,9 @@
     var self = this;
     this.writing = true;
     this.syncFooter();
-    var lease = acquireLease('Find & Replace');
+    var lease = C.lease(PLUGIN_ID, 'Find & Replace', LEASE_TTL_MS);
     var pass = journalPass(label);
-    var foldMark = foldSkips();
+    var foldMark = _foldSkips;
     var written = 0;
     var skipped = 0;
     var failed = 0;
@@ -1975,7 +1623,7 @@
         self.writing = false;
         self.stopping = false;
         self.syncFooter();
-        if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         var missing = Object.keys(dropped);
         if (missing.length) {
           self.msg('WARN', 'This Stash has no ' + missing.join(', ') + ' on the update ' +
@@ -2026,8 +1674,8 @@
             return self.sendUpdate(hit.typeKey, hit.id, plan.input).then(function () {
               written++;
               self.changes.push({ typeKey: hit.typeKey, id: hit.id, input: plan.undo,
-                run: pass ? pass.id : null });
-              if (pass) pass.add(hit.typeKey, hit.id, hit.name, plan.input, plan.undo);
+                run: pass.id });
+              pass.add(hit.typeKey, hit.id, hit.name, plan.input, plan.undo);
               // **`EDIT`, not `INFO`.** Every other line this dialog writes is about the
               // run - what it is looking for, how far it got, what it could not do. These
               // are the only ones that say an entity in the library was changed, and a log
@@ -2282,39 +1930,14 @@
     });
   };
 
-  // ── Escape ────────────────────────────────────────────────────────────────
-  //
-  // Escape acts through the footer's own exit rather than by calling `close()` itself.
-  // The footer is the dialog's statement of what it will let you do right now, so the
-  // key can never reach a button that is hidden or disabled.
-  function escapeButton(run) {
-    var b = run.cancelBtn;
-    return b && !b.disabled && !hasClass(b, 'fretc-hidden') ? b : null;
-  }
-
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
-  }
-
+  // Escape acts through the footer's own exit - Core's `wireEscape` presses `cancelBtn`
+  // while it is shown and enabled - rather than by calling `close()` itself, so the key
+  // can never reach a button that is hidden or disabled.
   Run.prototype.close = function () {
     // The epoch moves, so a page still in flight cannot append to a dialog that has gone.
     this.epoch++;
     this.state = 'done';
-    unwireEscape(this);
+    C.unwireEscape(this);
     this.spin(false);
     if (this.backdrop && this.backdrop.parentNode) {
       this.backdrop.parentNode.removeChild(this.backdrop);
@@ -2325,182 +1948,16 @@
   // ── The settings page ─────────────────────────────────────────────────────
   //
   // The group gets the siblings' description treatment - a one-line summary, the rest
-  // behind **Show more**, and a labelled link to the README under it - and the setting
-  // row the per-setting hover box.
-  //
-  // The `plugin-<id>-<key>` id Stash builds is ours by construction and is the anchor;
-  // the heading is the fallback, because a plugin whose only route in is a heading loses
-  // its whole settings page to a rename.
-  function headingIsOurs(text) {
-    var t = trim(text);
-    if (t === PLUGIN_NAME) return true;
-    // Settings → Plugins appends the version - `${name} ${version ? `(${v})` : undefined}`
-    // - and interpolates the literal `undefined` when a plugin has no version at all.
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
-
-  function byClass(root, name) {
-    if (!root || typeof root.querySelector !== 'function') return null;
-    try { return root.querySelector('.' + name) || null; } catch (e) { return null; }
-  }
-
-  // The group and the description, found from the one h3 on the page that is ours.
-  //
-  // **The heading is the only anchor available, and that is the one thing here worth
-  // being uneasy about.** Every sibling with settings finds its group through the
-  // `plugin-<id>-<key>` element ids Stash builds from the plugin id and a setting key -
-  // ours by construction - and keeps a heading match only as a fallback, because two of
-  // them shipped broken twice on heading text. A plugin that declares no settings has no
-  // such ids to anchor on, so this is the fallback promoted to the only route, and it is
-  // why `headingIsOurs` compares *exactly* rather than by prefix.
-  //
-  // Two guards, and both are needed. The description has to be **in the same `.setting`
-  // row as the heading**: Settings - Tasks gives every *task* row an h3 with a
-  // `.sub-heading` under it, so "a `.sub-heading` somewhere in the group" finds a task's
-  // description and decorates the wrong panel. And the group must not hold **our own task
-  // button**: Settings - Tasks heads its group with the same name, and decorating it puts
-  // a README link and a split description on a page that never had either - the link's
-  // slot is picked by structure, and there that slot is inside the button.
-  //
-  // The task-button test is by *caption*, not by "does this group hold a button". Stash
-  // puts its own Enable/Disable button in the plugin group's header row on Settings -
-  // Plugins, so "any button" excludes the very page this decoration is for - which is
-  // exactly what shipped, and why nothing on this plugin's settings page was formatted.
-  function hasOwnTaskButton(node) {
-    if (!node) return false;
-    if (node.tagName === 'BUTTON' && trim(node.textContent) === TASK_NAME) return true;
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) {
-      if (hasOwnTaskButton(kids[i])) return true;
-    }
-    return false;
-  }
-
-  function ownParts() {
-    var heads = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < heads.length; i++) {
-      if (!headingIsOurs(heads[i].textContent)) continue;
-      var node = heads[i];
-      var header = null;
-      for (var d = 0; node && d < 10; d++, node = node.parentElement) {
-        if (!header && hasClass(node, 'setting')) header = node;
-        if (!hasClass(node, 'setting-group')) continue;
-        var sub = header ? byClass(header, 'sub-heading') : null;
-        if (sub && !hasOwnTaskButton(node)) {
-          return { group: node, sub: sub, heading: heads[i] };
-        }
-        break;    // our heading, but not our page: keep looking
-      }
-    }
-    return null;
-  }
-
-  // Stash puts the text back on every re-render of this panel, so this runs on every tick
-  // and re-splits when it has to. Idempotent: once the children are ours there is no text
-  // node left to split.
-  function splitDescription(sub) {
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'fretc-p')) return;
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = oneLine(para);
-      if (t) sub.appendChild(el('div', 'fretc-p', t));
-    });
-  }
-
-  function descCollapsed(sub) { return hasClass(sub, 'fretc-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*fretc-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' fretc-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  // The toggle is a `<button>` rather than a span: `SettingGroup`'s `onDivClick` walks up
-  // from the event target and returns early only for `a` and `button`, so anything else
-  // would fold the whole group on click.
-  function collapseDescription(sub) {
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'fretc-p')) paras++;
-    if (paras < 2) return;
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'fretc-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  function readmeLinkSlot(sub) {
-    return { parent: sub.parentNode, before: sub.nextSibling };
-  }
-
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes on
-  // running it after an update and nothing on screen says so. The settings heading is
-  // where the two numbers meet: Stash builds it as `${name} (${version})` from the
-  // manifest, read fresh from the server, while `PLUGIN_VERSION` is what this script
-  // actually is.
-  function installedFromHeading(heading) {
-    var t = heading ? trim(heading.textContent) : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? trim(m[1]) : null;
-  }
-
-
-
-
-  function ensureStaleNotice(parts) {
-    var installed = installedFromHeading(parts.heading);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, parts.group, !!installed && installed !== PLUGIN_VERSION);
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = { parent: parts.sub.parentNode, before: parts.sub };
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'fretc-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached the ' +
-      'older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-
-  function settingsTick() {
-    var parts = ownParts();
-    if (!parts) return;
-    injectStyle();
-    if (!hasClass(parts.group, 'fretc-own-group')) {
-      parts.group.className = ((parts.group.className || '') + ' fretc-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(parts.sub);
-    collapseDescription(parts.sub);   // after the split: it counts the .fretc-p divs
-    ensureStaleNotice(parts);         // before the early return: the link outlives it
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'fretc-readme', 'FindEntitiesByTextContent/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noopener noreferrer';
-    link.title = 'Open this plugin\'s documentation';
-    var slot = readmeLinkSlot(parts.sub);
-    slot.parent.insertBefore(link, slot.before);
-  }
+  // behind **Show more**, the stale-script banner and a labelled link to the README -
+  // from Core's `settingsPage`. No `keys`: this plugin declares no settings, so there is
+  // no `plugin-<id>-<key>` id to anchor on and the group is found by its heading alone,
+  // compared *exactly*; the Settings → Tasks group, headed the same, is passed over by
+  // its task caption.
+  var PAGE = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'fretc', keys: [], tasks: TASKS,
+    readmeUrl: README_URL, readmeLabel: 'FindEntitiesByTextContent/README.md', injectStyle: injectStyle,
+  });
 
   // ── Ticking ───────────────────────────────────────────────────────────────
   //
@@ -2509,8 +1966,10 @@
   // enough - there is no MutationObserver here and so nothing to subscribe to the shared
   // bus.
   function tick() {
-    try { settingsTick(); } catch (e) { console.error('[fretc] settings tick failed', e); }
-    try { paintTaskButtons(); } catch (e) { console.error('[fretc] task paint failed', e); }
+    try { PAGE.decorate(PAGE.group()); } catch (e) { console.error('[fretc] settings tick failed', e); }
+    try {
+      C.paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
+    } catch (e) { console.error('[fretc] task paint failed', e); }
   }
 
   if (window.addEventListener) {

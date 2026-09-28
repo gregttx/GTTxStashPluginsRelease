@@ -35,32 +35,32 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
-    // Nothing else in this file can run, and there is no shared code left to say so
-    // with - so this is the one message this plugin prints on its own.
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[svr] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[svr] ᝯㄝₓ Scene Variants cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
   var showDefaults = C.showDefaults, coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
-    tipPlace = C.tipPlace, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
+    tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
     entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick, cfTipMark = C.cfTipMark,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
+    staleReloadButton = C.staleReloadButton, splitTerms = C.splitTerms, tipText = C.tipText,
     hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, byClass = C.byClass,
-    coreSettingElement = C.settingElement, coreSettingRow = C.settingRow;
+    coreSettingRow = C.settingRow, foreignLease = C.foreignLease, paintButton = C.paintButton,
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, writePluginSettings = C.writePluginSettings;
 
   var PLUGIN_ID   = 'SceneVariants';
   var PLUGIN_NAME = 'ᝯㄝₓ Scene Variants';
   // The name a head wears. `PLUGIN_NAME` is the manifest's and has to stay
-  // byte-identical to the `.yml`, because `ownSettingGroup`'s fallback and
-  // `headingIsOurs` find this plugin's block on the settings page by matching that
-  // heading. This one is free to be short; here it already fits.
+  // byte-identical to the `.yml`, because Core's `settingsPage` falls back to finding
+  // this plugin's block on the settings page by that heading, and `ownTaskName` finds
+  // its task buttons by it. This one is free to be short; here it already fits.
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Scene Variants';
 
   // The one version that proves anything. The settings page reads the manifest over
@@ -71,24 +71,15 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '3.0.0';
+  var PLUGIN_VERSION = '3.0.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
-  // apart from one that never loaded at all. Through whatever the console offers rather
-  // than console.info directly: this is the first statement in the file.
-  function svr(message) {
-    if (typeof console !== 'undefined' && (console.info || console.log)) {
-      (console.info || console.log).call(console, message);
-    }
-  }
-
-  svr('[svr] SceneVariants.js ' + PLUGIN_VERSION + ' loaded. This is the running ' +
+  // apart from one that never loaded at all.
+  console.info('[svr] SceneVariants.js ' + PLUGIN_VERSION + ' loaded. This is the running ' +
     'script\'s own version - the settings page reads the manifest instead, which can be ' +
     'newer than the script your browser has cached.');
 
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/SceneVariants/README.md';
-  var README_LINK_ID = 'svr-readme-link';
-  var DESC_TOGGLE_ID = 'svr-desc-toggle';
   var STYLE_ID       = 'svr-style';
 
   // The tab's own key, in the namespace Stash's own nine sit in - `scene-details-panel`,
@@ -115,14 +106,8 @@
   // paints its task button with.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
 
-
   function trim(text) {
     return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
-  }
-
-
-  function oneLine(text) {
-    return String(text == null ? '' : text).replace(/\s+/g, ' ').replace(/^ | $/g, '');
   }
 
   // What a listing calls a scene: its title, else its file's name the way Stash's own
@@ -159,7 +144,7 @@
     c1PropagateOnSave: false,
     c3SkipRedundantTags: false,
     c4CheckCoverMismatch: false,
-    // `c5` was `c2` before it moved beside the title settings; the old key is read where the new one is unanswered.
+    // `c5` was `c2` before it moved beside the title settings; `loadSettings` reads the old key where the new one is unanswered.
     c5PropagateTitleOnSave: false,
     f1AlwaysOpenFullDuration: false,
     e1PartialPostfix: '',
@@ -224,7 +209,7 @@
 
   // Rename Variants: what a partial-duration scene is called after its set. The postfix
   // carries its own separator; the first index's spelling is the counting rule (see
-  // `indexAlphabet`); the two fields are a remembered base name for a set and a mark
+  // `indexAlphabet`); the two fields are a remembered base-title for a set and a mark
   // that keeps a scene out of the renaming.
   // The postfix ends in the space the index follows: nothing is put between them, so
   // " - cut #" with a first index of "00" reads " - cut #00". An empty first index means
@@ -250,6 +235,9 @@
   // The names this shipped under before, only ever written by the seed - treated as
   // unanswered so a rename reaches a box nobody chose deliberately, the same trade
   // CustomFieldsBulkEditor's legacy hide-field name makes.
+  // COMPAT: a flag tag setting still holding a default this shipped under before - the
+  // underscore spelling (since Scene Variants 0.18.0), then the ❌ one (since Scene Variants
+  // 1.4.4); remove when never on its own: an install may skip releases.
   var LEGACY_FLAG_DEFAULTS = ['ᱜ╦╦🞮_Multiple_Variants', 'ᱜ╦╦🞮⸎✱MultiVariants❌∙'];
   function isLegacyFlag(v) { return LEGACY_FLAG_DEFAULTS.indexOf(v) !== -1; }
 
@@ -292,6 +280,8 @@
   // of the set the user grouped by hand, it is a line like any other from there on -
   // the tab's lookup, the flag task's matching and the field regex all read it with no
   // special case.
+  // `Math.random` only where the page has no `crypto.getRandomValues` - never in a browser
+  // Stash supports; it is there for a test context that provides none.
   function pseudoStashId() {
     var hex = '', bytes = null, i, b;
     var c = window.crypto || window.msCrypto;
@@ -304,11 +294,6 @@
       hex += (b < 16 ? '0' : '') + b.toString(16);
     }
     return 'pseudo:' + hex;
-  }
-
-  function splitValues(raw) {
-    if (raw == null) return [];
-    return String(raw).split('\n').map(trim).filter(function (v) { return !!v; });
   }
 
   // A field line back into the page it names: `stashdb.org:9f3c…` is this work's entry
@@ -331,9 +316,7 @@
   // has to be inside a single pattern, and the line anchors are what keep one id from
   // matching inside a longer one.
   function fieldRegex(values) {
-    return '(^|\n)(' + values.map(function (v) {
-      return v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    }).join('|') + ')(\n|$)';
+    return '(^|\n)(' + values.map(escapeRe).join('|') + ')(\n|$)';
   }
 
   function customField(scene, field) {
@@ -344,9 +327,8 @@
   // Compared case-insensitively and with the surrounding space trimmed, because these
   // are typed into a settings box by hand rather than picked from a list.
   function tagKey(name) {
-    return String(name == null ? '' : name).replace(/^\s+|\s+$/g, '').toLowerCase();
+    return trim(name).toLowerCase();
   }
-
 
   // **Three of the shared mechanisms are correctly left alone, and each absence is a
   // rule rather than an omission:**
@@ -372,53 +354,18 @@
   // `debugButtons` too - the tab is a control drawn into Stash's chrome and "why is it
   // not there" is the same question that flag answers for every sibling.
 
-  // A bulk run announces itself for the duration of its writes, so a reactive plugin in
-  // the same tab stands down rather than reacting to every entity we touch. Advisory,
-  // always expiring, per tab - see the repo-root AGENTS.md.
-  function acquireLease(label, ttl) {
-    var c = coop();
-    var ms = ttl || LEASE_TTL_MS;
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + ms };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + ms; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
-
-  // Someone else's lease, still live. Expired ones are dropped on the way past: a tab
-  // that crashed mid-run must not disable this plugin until the next reload.
-  function foreignLease() {
-    var c = coop();
-    var now = Date.now();
-    for (var i = c.leases.length - 1; i >= 0; i--) {
-      if (c.leases[i].until <= now) c.leases.splice(i, 1);
-    }
-    for (var j = 0; j < c.leases.length; j++) {
-      if (c.leases[j].owner !== PLUGIN_ID) return c.leases[j];
-    }
-    return null;
-  }
+  // A bulk run holds Core's `lease` for the duration of its writes, so a reactive plugin
+  // in the same tab stands down rather than reacting to every entity we touch; the save
+  // watch stands down for anyone else's (`foreignLease`). Advisory, always expiring, per
+  // tab - see the repo-root AGENTS.md.
 
   // ── Tab gating diagnostics ───────────────────────────────────────────────
   //
-  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true`, which is typed into the
-  // browser console: no setting, no reload, no file edit, and the flag is read at call
-  // time so it takes effect on the next tick.
-  //
-  // Deduplicated per channel, because a React re-render can ask the same question many
-  // times a second. Turning the flag off clears the channels, so switching it back on
-  // restates the current position rather than staying silent until something moves.
-  var _gateLast = {};
-  function gateLogOnce(channel, line) {
-    if (!coop().debugButtons) { _gateLast = {}; return; }
-    if (_gateLast[channel] === line) return;
-    _gateLast[channel] = line;
-    console.info('[svr gate] ' + line);
-  }
+  // Core's `[svr gate]` console channel, off unless Dev Mods' Debug switch (or
+  // `__GTTx__.StashPluginCoop.debugButtons = true`) is on - read at call time, so it takes
+  // effect on the next tick. Deduplicated per channel, because a React re-render can ask
+  // the same question many times a second.
+  var GATE = C.gate('svr');
 
   // ── GraphQL ───────────────────────────────────────────────────────────────
 
@@ -444,6 +391,8 @@
   function loadSettings(fresh) {
     return pluginConfig(fresh).then(function (data) {
       var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      // COMPAT: `c2PropagateTitleOnSave`, the key before it moved beside the title settings
+      // as `c5` (since Scene Variants 1.11.0); remove when never on its own: an install may skip releases.
       if (raw.c5PropagateTitleOnSave == null && raw.c2PropagateTitleOnSave != null) {
         raw.c5PropagateTitleOnSave = raw.c2PropagateTitleOnSave;
       }
@@ -479,10 +428,10 @@
   // the next page load. The key's *presence* is what says the question has been answered,
   // the same rule the siblings' exclusion-filter adoption reads.
   //
-  // **The whole stored map goes back.** `configurePlugin` replaces `plugins.<id>` rather
-  // than merging into it, so a mutation naming one key deletes every other setting the
-  // plugin has - which is what cost this repo two users' configurations before the rule
-  // was written down in the root `AGENTS.md`.
+  // **The whole stored map goes back** (Core's `writePluginSettings`). `configurePlugin`
+  // replaces `plugins.<id>` rather than merging into it, so a mutation naming one key
+  // deletes every other setting the plugin has - which is what cost this repo two users'
+  // configurations before the rule was written down in the root `AGENTS.md`.
   //
   // **Its own operation name**, so a plugin watching for its own settings change can tell
   // this apart from one: what it writes is what `loadSettings` has already returned.
@@ -509,7 +458,7 @@
 
   // Shown on Stash's settings page from its first paint, by the same rule (Core's
   // `showDefaults`); `seedFieldDefault` below is what writes them.
-  if (typeof showDefaults === 'function') showDefaults(PLUGIN_ID, function () { return SEED_DEFAULTS; });
+  showDefaults(PLUGIN_ID, function () { return SEED_DEFAULTS; });
 
   function seedFieldDefault(raw, s) {
     var missing = [], k;
@@ -517,6 +466,8 @@
       if (!hasOwn(SEED_DEFAULTS, k)) continue;
       // A legacy default was only ever written by the seed, so it is an unanswered
       // box wearing an old spelling, not an answer.
+      // COMPAT: the flag tag setting holding a legacy default (since Scene Variants 0.18.0);
+      // remove when `LEGACY_FLAG_DEFAULTS` goes.
       if (!hasOwn(raw, k) ||
         (k === 'a4VariantFlagTag' && isLegacyFlag(raw[k]))) missing.push(k);
     }
@@ -526,17 +477,14 @@
     missing.forEach(function (key) { s[key] = SEED_DEFAULTS[key]; });
     if (_seededField || !missing.length) return;
     _seededField = true;
-    var input = {};
-    for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-    missing.forEach(function (key) { input[key] = SEED_DEFAULTS[key]; });
-    gqlRequest('mutation SVRSeedSettings($id: ID!, $input: Map!) ' +
-      '{ configurePlugin(plugin_id: $id, input: $input) }',
-    { id: PLUGIN_ID, input: input }).then(null, function () {
+    var patch = {};
+    missing.forEach(function (key) { patch[key] = SEED_DEFAULTS[key]; });
+    writePluginSettings(PLUGIN_ID, patch, 'SVRSeedSettings').then(null, function () {
       // Left in force for this page either way: the values are what `fieldName` and
       // `flagTagName` already use. Only the boxes stay empty, and the next load tries
       // again.
       _seededField = false;
-      svr('[svr] the default names could not be written into the settings; ' +
+      console.info('[svr] the default names could not be written into the settings; ' +
         'they are in force all the same.');
     });
   }
@@ -777,7 +725,7 @@
   // like anyway.
   function ownFieldValues(scene, field, ids) {
     if (scene && scene.custom_fields && typeof scene.custom_fields === 'object') {
-      return Promise.resolve(splitValues(customField(scene, field)));
+      return Promise.resolve(splitTerms(customField(scene, field), '\n'));
     }
     // Only where the scene has no stash-id of its own, which after a migration is every
     // partial-duration one: a scene that carries stash-ids is matched on those, and the
@@ -790,7 +738,7 @@
     return gqlRequest('query SVRSceneFields($id: ID!) { findScene(id: $id) ' +
       '{ id custom_fields } }', { id: String(scene && scene.id) })
       .then(function (data) {
-        return splitValues(customField((data || {}).findScene, field));
+        return splitTerms(customField((data || {}).findScene, field), '\n');
       }, function () { return []; });
   }
 
@@ -882,7 +830,7 @@
             why: others.length
               ? 'Matched on ' + matchedOn(ids, own) + '.'
               : 'No other scene shares this one’s ' + matchedOn(ids, own) + '.',
-            // What the pane's drift score is priced and filtered by: the review
+            // What the pane's drift-score is priced and filtered by: the review
             // task's own weights and its own tag exclusions, read here so the number
             // on the tab is the number the listing would give this set.
             skip: skipTagIds(both[1], s, m),
@@ -1020,7 +968,7 @@
   // `expected`, the set's titles under the naming rule where it has any: a title is then
   // a difference only where a side that has an expected title is not wearing it - a
   // partial named after its set does not differ from the scene it is named after, and
-  // the review's title count says the same. A side carrying the base-name field
+  // the review's title count says the same. A side carrying the base-title field
   // (`baseField`) is left out the way the review leaves it out. A title that differs
   // but is not counted - pinned, following the rule, or on a scene the rule skips -
   // is listed as "Title (ignored)" rather than dropped, "(ignored)" in grey, so the box still says it differs.
@@ -1266,11 +1214,12 @@
     injectStyle();
     var self = this;
 
-    this.backdrop = el('div', 'svr-backdrop');
     // An automatic run stays invisible until its plan holds something to offer: a
     // dialog that flashed open and shut on every unremarkable save would be worse
-    // than no feature.
-    if (this.auto) this.backdrop.className += ' svr-hidden';
+    // than no feature. Not a `.svr-backdrop` until `reveal` makes it one: Escape answers
+    // only the topmost of those, and one nobody can see must not take the key from a
+    // dialog that is on screen.
+    this.backdrop = el('div', this.auto ? 'svr-hidden' : 'svr-backdrop');
     // Tall, as its siblings' run dialogs are: the log takes the height the listing leaves,
     // rather than the dialog shrinking to what has been written so far.
     this.modal = el('div', 'svr-modal svr-tall');
@@ -1282,7 +1231,7 @@
     this.staleEl = el('div', 'svr-stale svr-hidden', '');
     head.appendChild(this.staleEl);
     head.appendChild(el('div', 'svr-warn',
-      'Backing up your database before proceeding is recommended. Undo only reverses what this ' +
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this ' +
       'dialog wrote, while it stays open, and cannot account for changes made elsewhere in the ' +
       'meantime.'));
     this.noteEl = el('div', 'svr-note svr-hidden', '');
@@ -1358,11 +1307,9 @@
     // **Rescan is what makes that false**: it reads the library again and produces a
     // fresh plan while what the last pass wrote is still undoable, and a single button
     // can only offer one of them. Live, that was a Proceed nobody could find.
-    this.goBtn = button('Proceed', 'svr-go');
-    this.goBtn.className = this.goBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.goBtn = button('Proceed', 'svr-go', PLUGIN_BTN_VARIANT);
     this.goBtn.disabled = true;
-    this.undoBtn = button('Undo', 'svr-undo svr-hidden');
-    this.undoBtn.className = this.undoBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.undoBtn = button('Undo', 'svr-undo svr-hidden', PLUGIN_BTN_VARIANT);
     // Offered while a write runs and never during the scan, which is the split the
     // siblings make too. A scan is a read: Close abandons it outright, so a second
     // control that ends it slowly - after the page in flight, which is hundreds of
@@ -1370,19 +1317,14 @@
     this.stopBtn = button('Stop', 'svr-stop svr-hidden');
     // The two candidate actions, hidden until a scan lists a [GROUP?] line. Both write,
     // so both are amber; no "..." because the listing they act on is already on screen.
-    this.groupBtn = button('Create Variant Group', 'svr-group svr-hidden');
-    this.groupBtn.className = this.groupBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    this.untagBtn = button('Remove Tag', 'svr-untag svr-hidden');
-    this.untagBtn.className = this.untagBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.groupBtn = button('Create Variant Group', 'svr-group svr-hidden', PLUGIN_BTN_VARIANT);
+    this.untagBtn = button('Remove Tag', 'svr-untag svr-hidden', PLUGIN_BTN_VARIANT);
     // Amber and dotted: it lists a plan rather than writing one, and the listing is
     // what Proceed then acts on.
-    this.syncSetBtn = button('Synchronize Set from Selected...', 'svr-syncset svr-hidden');
-    this.syncSetBtn.className =
-      this.syncSetBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.syncSetBtn = button('Synchronize Set from Selected...', 'svr-syncset svr-hidden', PLUGIN_BTN_VARIANT);
     this.closeBtn = button('Close', 'svr-close');
     // Reads nothing and writes nothing: it opens the set below the open one.
-    this.nextSetBtn = button('Next Set', 'svr-nextset svr-hidden');
-    this.nextSetBtn.className = this.nextSetBtn.className.replace('btn-secondary', 'btn-info');
+    this.nextSetBtn = button('Next Set', 'svr-nextset svr-hidden', 'btn-info');
     this.copyBtn = button('Copy log', 'svr-copy');
     // Grey: it reads the library again and writes nothing. Hidden while anything is
     // in flight, like Stop's mirror image - a second scan started over a running one
@@ -1422,7 +1364,7 @@
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'svr');
     document.body.appendChild(this.backdrop);
   };
 
@@ -1585,7 +1527,7 @@
     var self = this;
     this.weightBar.className = 'svr-allbar';
     this.weightBar.textContent = '';
-    this.weightBar.appendChild(el('span', 'svr-all-label', 'Drift score weights:'));
+    this.weightBar.appendChild(el('span', 'svr-all-label', 'Drift-score weights:'));
     [['title', 'title'], ['cover', 'cover'], ['attr', 'other attribute'],
       ['tag', 'tag'], ['performer', 'performer'], ['group', 'group']]
       .forEach(function (w) {
@@ -1596,7 +1538,7 @@
         input.min = '0';
         input.max = String(WEIGHT_MAX);
         input.value = String(self.weights[w[0]]);
-        input.title = 'What one ' + w[1] + ' difference adds to a set\u2019s drift score, ' +
+        input.title = 'What one ' + w[1] + ' difference adds to a set\u2019s drift-score, ' +
           '0 to ' + WEIGHT_MAX + '.';
         input.addEventListener('change', function () {
           self.weights[w[0]] = clampWeight(input.value);
@@ -1619,7 +1561,7 @@
     orgBox.type = 'checkbox';
     orgBox.checked = !!this.excludeOrganized;
     orgBox.title = 'Leave organized scenes out of the listing: out of every set\u2019s ' +
-      'drift score, out of the scenes you can pick, and out of what Synchronize Set from Selected ' +
+      'drift-score, out of the scenes you can pick, and out of what Synchronize Set from Selected ' +
       'pushes to. A set left with one scene is not listed.';
     orgBox.addEventListener('click', function () {
       self.excludeOrganized = !!orgBox.checked;
@@ -1675,34 +1617,25 @@
     this.buildAllBar();
   };
 
-  // Written whole, per the rule `configurePlugin` forces: it replaces the plugin's
-  // stored map rather than merging into it, so a mutation naming four keys would
-  // delete every other setting this plugin has. Read per write rather than off the
-  // cache, since another tab may have changed something in the meantime.
+  // Written whole, per the rule `configurePlugin` forces (Core's `writePluginSettings`):
+  // it replaces the plugin's stored map rather than merging into it, so a mutation naming
+  // four keys would delete every other setting this plugin has. Read per write rather
+  // than off the cache, since another tab may have changed something in the meantime.
   Run.prototype.saveWeights = function () {
-    var self = this;
-    // The pane behind this dialog prices its drift score by these, so closing after
+    var self = this, patch = {}, k;
+    // The pane behind this dialog prices its drift-score by these, so closing after
     // a change re-reads it the way a write does.
     self.dirty = true;
-    return gqlRequest('{ configuration { plugins } }', null).then(function (data) {
-      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
-      var input = {}, k;
-      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-      for (k in WEIGHT_KEYS) {
-        if (!hasOwn(WEIGHT_KEYS, k)) continue;
-        // Forgetting is the key going away, not a zero: an absent weight is what
-        // says "not remembered", and zero is a perfectly good weight to have chosen.
-        if (self.remember) input[WEIGHT_KEYS[k]] = self.weights[k];
-        else delete input[WEIGHT_KEYS[k]];
-        if (_settings) _settings[WEIGHT_KEYS[k]] = self.remember ? self.weights[k] : null;
-      }
-      if (self.remember) input.d7ExcludeOrganized = !!self.excludeOrganized;
-      else delete input.d7ExcludeOrganized;
-      if (_settings) _settings.d7ExcludeOrganized = !!self.remember && !!self.excludeOrganized;
-      return gqlRequest('mutation SVRSaveWeights($id: ID!, $input: Map!) ' +
-        '{ configurePlugin(plugin_id: $id, input: $input) }',
-      { id: PLUGIN_ID, input: input });
-    }).then(null, function (err) {
+    for (k in WEIGHT_KEYS) {
+      if (!hasOwn(WEIGHT_KEYS, k)) continue;
+      // Forgetting is the key going away, not a zero: an absent weight is what
+      // says "not remembered", and zero is a perfectly good weight to have chosen.
+      patch[WEIGHT_KEYS[k]] = self.remember ? self.weights[k] : undefined;
+      if (_settings) _settings[WEIGHT_KEYS[k]] = self.remember ? self.weights[k] : null;
+    }
+    patch.d7ExcludeOrganized = self.remember ? !!self.excludeOrganized : undefined;
+    if (_settings) _settings.d7ExcludeOrganized = !!self.remember && !!self.excludeOrganized;
+    return writePluginSettings(PLUGIN_ID, patch, 'SVRSaveWeights').then(null, function (err) {
       self.msg('WARN', 'The weights could not be saved: ' +
         (err && err.message ? err.message : String(err)) + '. They still apply here.');
     });
@@ -1780,7 +1713,7 @@
       // What the number is: a sorting value, priced by the weights strip - the one
       // question a bare number beside a title cannot answer. Set once here; a rescore
       // rewrites the text and the class and leaves the title standing.
-      set.scoreEl.title = 'The set\u2019s drift score - a sorting value, not a count: ' +
+      set.scoreEl.title = 'The set\u2019s drift-score - a sorting value, not a count: ' +
         'every disagreement in the counts to the right is worth the points its weight ' +
         'above assigns, and this is their sum per variant - divided by the number of ' +
         'other scenes in the set, rounded up - so a pair and a set of five are scored ' +
@@ -1816,12 +1749,7 @@
         set.radios[String(sc.id)] = radio;
         self.srcRadios.push(radio);
         row.appendChild(radio);
-        var link = el('a', 'svr-elink', (sc.title || ('Scene ' + sc.id)) + ' [' + sc.id + ']');
-        link.href = '/scenes/' + sc.id;
-        link.target = linkTarget();
-        link.rel = 'noopener noreferrer';
-        entityTip(link, 'scenes', sc.id);
-        row.appendChild(link);
+        row.appendChild(entityLink('scenes', sc.id, (sc.title || ('Scene ' + sc.id)) + ' [' + sc.id + ']'));
         row.appendChild(el('span', 'svr-meta', '  ' + (metaOf(sc) || '')));
         sub.appendChild(row);
       });
@@ -2107,7 +2035,7 @@
     this.groupBtn.disabled = !!why || selected < 2;
     this.groupBtn.title = why || (selected < 2
       ? 'Tick at least two candidate scenes: one scene cannot be a variant set.'
-      : 'Write one shared pseudo stash-id into "' + this.field + '" of the ' +
+      : 'Write one shared pseudo-stash-id into "' + this.field + '" of the ' +
         plural(selected, 'ticked scene') + ', making them one variant set. They keep ' +
         'the flag tag, which is now true of them.');
     this.untagBtn.disabled = !!why || selected < 1;
@@ -2134,12 +2062,7 @@
     box.addEventListener('click', function () { self.syncFooter(); });
     line.appendChild(box);
     line.appendChild(el('span', null, '[GROUP?]  '));
-    var link = el('a', 'svr-elink', name);
-    link.href = '/scenes/' + job.id;
-    link.target = linkTarget();
-    link.rel = 'noopener noreferrer';
-    entityTip(link, 'scenes', job.id);
-    line.appendChild(link);
+    line.appendChild(entityLink('scenes', job.id, name));
     line.appendChild(el('span', null, tail));
     this.appendLine(line, '[GROUP?]  ' + name + tail);
     this.candidates.push({ job: job, box: box });
@@ -2159,28 +2082,23 @@
     job.box = box;
     line.appendChild(box);
     line.appendChild(el('span', null, head));
-    var link = el('a', 'svr-elink', name);
-    link.href = '/scenes/' + job.id;
-    link.target = linkTarget();
-    link.rel = 'noopener noreferrer';
-    entityTip(link, 'scenes', job.id);
-    line.appendChild(link);
+    line.appendChild(entityLink('scenes', job.id, name));
+    // A tail is either a plain string or `[[text, className], ...]` - the parts a
+    // line wants coloured, in the one vocabulary the head's legend explains: what a
+    // variant loses is red, what it gains green, a value replaced blue, and every
+    // label, name and count around them the modal's own white. Its text is what the
+    // log keeps, for a line with a picker too - that one used to hand the parts array
+    // to the log, which Copy log wrote as ",,a, b,svr-add".
+    var parts = typeof tail === 'string' ? [[tail, null]] : tail;
+    var text = parts.map(function (part) { return part[0]; }).join('');
     var sub = null;
     if (job.items) sub = this.itemPicker(job, line);
     else {
-      // A tail is either a plain string or `[[text, className], ...]` - the parts a
-      // line wants coloured, in the one vocabulary the head's legend explains: what a
-      // variant loses is red, what it gains green, a value replaced blue, and every
-      // label, name and count around them the modal's own white.
-      var parts = typeof tail === 'string' ? [[tail, null]] : tail;
       var tailEl = el('span', null);
-      var text = '';
       parts.forEach(function (part) {
         // A part naming entities (`part[2]`) draws each name with its hover card.
         tailEl.appendChild(part[2] ? entityNames(part[2], part[1]) : el('span', part[1] || null, part[0]));
-        text += part[0];
       });
-      tail = text;
       // On the tail rather than on the line: the name beside it is a link with a hover
       // card of its own, and a `title` on their common parent would be what the
       // browser showed while the pointer was over the link's own text.
@@ -2194,9 +2112,20 @@
     }
     // The sub-list is a sibling of the line rather than a child, so the line's own text
     // stays exactly what the listing says and the sub-list travels under it.
-    this.appendLine(line, head + name + tail, sub);
+    this.appendLine(line, head + name + text, sub);
     this.jobs.push(job);
   };
+
+  // A name linking to its entity's page, with the hover card every name in these dialogs
+  // carries.
+  function entityLink(type, id, text) {
+    var a = el('a', 'svr-elink', text);
+    a.href = '/' + type + '/' + id;
+    a.target = linkTarget();
+    a.rel = 'noopener noreferrer';
+    entityTip(a, type, id);
+    return a;
+  }
 
   // `[{ type, id, name }]` as one span of names, each with the hover card every name in
   // these dialogs carries.
@@ -2268,12 +2197,7 @@
       row.appendChild(b);
       // A link with the shared hover card, like every name these dialogs draw: which
       // tag or performer this is, is exactly what a pick is decided from.
-      var a = el('a', 'svr-elink', it.name);
-      a.href = '/' + job.tipType + '/' + it.id;
-      a.target = linkTarget();
-      a.rel = 'noopener noreferrer';
-      entityTip(a, job.tipType, it.id);
-      row.appendChild(a);
+      row.appendChild(entityLink(job.tipType, it.id, it.name));
       sub.appendChild(row);
     });
 
@@ -2286,7 +2210,7 @@
 
   // What the two candidate buttons do: the ticked, not-yet-written candidates through
   // the same batching, lease and undo bookkeeping as Proceed. A group press mints one
-  // pseudo stash-id and writes it into every selected scene, which is what makes them a
+  // pseudo-stash-id and writes it into every selected scene, which is what makes them a
   // set; a fresh id per press, so two presses are two sets.
   // ponytail: after a partial failure a retry press mints a new id, so the retried
   // scenes form a set of their own rather than joining the ones that succeeded - Undo
@@ -2369,12 +2293,7 @@
     var text = p.head + name + p.tail;
     var line = el('div', 'svr-line svr-job ' + p.cls);
     line.appendChild(el('span', null, p.head));
-    var link = el('a', 'svr-elink', name);
-    link.href = '/scenes/' + job.id;
-    link.target = linkTarget();
-    link.rel = 'noopener noreferrer';
-    entityTip(link, 'scenes', job.id);
-    line.appendChild(link);
+    line.appendChild(entityLink('scenes', job.id, name));
     tailParts.forEach(function (part) {
       line.appendChild(el('span', part.cls || null, part.text));
     });
@@ -2452,7 +2371,6 @@
     }, 500);
   };
 
-
   Run.prototype.copyLog = function () {
     var self = this;
     var text = [this.progressEl.textContent, droppedLine(this.logDropped)].filter(Boolean)
@@ -2483,6 +2401,7 @@
   // first, the same thing `planSet` does when it moves to a new set.
   Run.prototype.rescan = function () {
     if (this.state !== 'listing') return;
+    var self = this;
     this.jobs.forEach(function (j) {
       if (j.box) j.box.disabled = true;
       if (j.items) j.items.forEach(function (it) { if (it.box) it.box.disabled = true; });
@@ -2502,18 +2421,9 @@
     this.plannedFrom = null;
     this.pruned = 0;
     this.setsEl.textContent = '';
-    this.show(this.setsEl, false);
-    this.show(this.splitEl, false);
-    this.show(this.weightBar, false);
-    this.show(this.allBar, false);
-    this.show(this.syncSetBtn, false);
-    this.show(this.nextSetBtn, false);
-    this.show(this.candLabel, false);
-    this.show(this.groupBtn, false);
-    this.show(this.untagBtn, false);
-    this.show(this.candSep, false);
-    this.show(this.selAllBtn, false);
-    this.show(this.unselAllBtn, false);
+    [this.setsEl, this.splitEl, this.weightBar, this.allBar, this.syncSetBtn, this.nextSetBtn,
+      this.candLabel, this.groupBtn, this.untagBtn, this.candSep, this.selAllBtn, this.unselAllBtn]
+      .forEach(function (node) { self.show(node, false); });
     if (!relist) { this.scanned = 0; this.total = 0; }
     this.written = 0;
     this.failed = 0;
@@ -2547,42 +2457,11 @@
     if (this.dirty && _paneRefresh) _paneRefresh();
   };
 
-  // Escape acts through whichever of the footer's exits is showing and enabled, never by
-  // calling `close()` itself. The footer is the dialog's own statement of what it will let
-  // you do right now, so the key can never reach a button that is hidden or disabled - and
-  // in particular does nothing mid-write.
-  function escapeButton(run) {
-    var b = run.closeBtn;
-    return b && !b.disabled && !hasClass(b, 'svr-hidden') ? b : null;
-  }
-
-  // One press closes one dialog: the topmost of this plugin's dialogs on screen, never
-  // every one listening. A hidden run (a save's, still deciding) is not on screen.
-  var _escapeStack = [];
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var shown = _escapeStack.filter(function (r) {
-        return !(r.backdrop && hasClass(r.backdrop, 'svr-hidden'));
-      });
-      if (shown[shown.length - 1] !== run) return;
-      var b = escapeButton(run);
-      if (!b) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    _escapeStack.push(run);
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    var i = _escapeStack.indexOf(run);
-    if (i !== -1) _escapeStack.splice(i, 1);
-    if (run._onEscape && document.removeEventListener) {
-      document.removeEventListener('keydown', run._onEscape);
-    }
-    run._onEscape = null;
-  }
+  // Escape (Core's `wireEscape`) acts through Close when it is showing and enabled, never
+  // by calling `close()` itself. The footer is the dialog's own statement of what it will
+  // let you do right now, so the key can never reach a button that is hidden or disabled -
+  // and in particular does nothing mid-write. One press closes one dialog: the topmost
+  // `.svr-backdrop`, which a hidden run (a save's, still deciding) is not.
 
   // ── The scan ──────────────────────────────────────────────────────────────
 
@@ -2595,7 +2474,7 @@
     this.stopped = false;
     this.progress('Reading your settings and the tag hierarchy…');
     checkStale(this);
-    var lease = foreignLease();
+    var lease = foreignLease(PLUGIN_ID);
     if (lease) {
       // Noted, never stood down for: this run was started by hand, and §7's rule is that
       // a manual action is not suppressed. What it buys the reader is an explanation for
@@ -2664,7 +2543,7 @@
   // informed one. A full scene carrying only its real stash-id is the ordinary case,
   // not this.
   function warnPseudoDrift(run, scene, field) {
-    var pseudos = splitValues(customField(scene, field)).filter(function (v) {
+    var pseudos = splitTerms(customField(scene, field), '\n').filter(function (v) {
       return v.indexOf('pseudo:') === 0;
     });
     if (!pseudos.length || !(scene.stash_ids || []).length) return;
@@ -2715,23 +2594,21 @@
   // scene - the flag task creates its tag there when the library has none, because a
   // tag must not be created by a scan, and a failure has to leave a listing nobody has
   // acted on.
-  // Undo History, where ᝯㄝₓ Core keeps one: each write recorded from the input it sent
+  // Undo History, which ᝯㄝₓ Core keeps: each write recorded from the input it sent
   // and the one that puts it back, a pass per press.
   function journalPass(label) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true });
   }
 
   Run.prototype.writeThen = function (before, jobs, build, verb, leaseLabel, say) {
     var self = this;
-    var lease = acquireLease(leaseLabel);
+    var lease = C.lease(PLUGIN_ID, leaseLabel, LEASE_TTL_MS);
     self.renamed = [];
     var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
       ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel);
     function settle(err) {
       self.journalRun = null;
-      if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+      pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
       lease.release();
       self.setState('listing');
       self.progress(self.progressText());
@@ -2877,14 +2754,7 @@
   // not, so it asks - and a stale script is refused the write rather than merely warned
   // about, because what it would write is last release's idea of the plan.
   function checkStale(run) {
-    gqlRequest('query SVRPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; })
+    C.installedVersion(PLUGIN_ID, 'SVRPluginVersion')
       .then(function (installed) {
         if (!installed || installed === PLUGIN_VERSION) return;
         run.stale = true;
@@ -2973,7 +2843,7 @@
   function sceneKeys(scene, field) {
     var out = variantValues(scene.stash_ids), seen = {}, i;
     for (i = 0; i < out.length; i++) seen[out[i]] = true;
-    splitValues(customField(scene, field)).forEach(function (v) {
+    splitTerms(customField(scene, field), '\n').forEach(function (v) {
       if (!hasOwn(seen, v)) { seen[v] = true; out.push(v); }
     });
     return out;
@@ -3025,6 +2895,8 @@
       // is this plugin's own tag, and a twin could not carry that alias. Proceed renames
       // it rather than creating one. Live: the default's respelling reached the setting
       // and not the tag, and every Proceed failed on the alias.
+      // COMPAT: the flag tag still under a legacy default name (since Scene Variants 1.17.1);
+      // remove when `LEGACY_FLAG_DEFAULTS` goes, keeping the alias lookup.
       var legacy = null;
       if (!hits.length) LEGACY_FLAG_DEFAULTS.concat([FLAG_TAG_ALIAS]).forEach(function (old) {
         if (!legacy) legacy = tagsMatchingName(both[1], old)[0] || null;
@@ -3076,27 +2948,9 @@
             });
           });
           // How many sets, not only how many scenes: connected components over shared
-          // lines, counted where they hold two or more. Union-find, because two scenes
-          // can be one set through a chain of overlapping lines without sharing one.
-          var parent = {};
-          function findRoot(x) {
-            while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; }
-            return x;
-          }
-          scenes.forEach(function (sc) { parent[String(sc.id)] = String(sc.id); });
-          var k2;
-          for (k2 in byKey) {
-            if (!hasOwn(byKey, k2)) continue;
-            for (var i2 = 1; i2 < byKey[k2].length; i2++) {
-              parent[findRoot(byKey[k2][i2])] = findRoot(byKey[k2][0]);
-            }
-          }
-          var sizes = {}, setCount = 0;
-          scenes.forEach(function (sc) {
-            var r = findRoot(String(sc.id));
-            sizes[r] = (sizes[r] || 0) + 1;
-            if (sizes[r] === 2) setCount++;
-          });
+          // lines, counted where they hold two or more - `variantSetsOf`, over the lines
+          // the scan kept.
+          var setCount = variantSetsOf(scenes, null, function (sc) { return sc.keys; }).length;
           scenes.forEach(function (sc) {
             var id = String(sc.id), partners = {}, n = 0;
             var keys = sc.keys;
@@ -3217,7 +3071,7 @@
       'is touched. A scene carrying the flag with no stash-id and no field value is a ' +
       'GROUP? line with a checkbox instead - either you tagged it yourself to say ' +
       '"these are variants", or its flag outlived the evidence. Tick the ones that ' +
-      'belong together and Create Variant Group writes one shared pseudo stash-id ' +
+      'belong together and Create Variant Group writes one shared pseudo-stash-id ' +
       'into their field; Remove Tag takes the flag off the ticked leftovers.',
     nothing: 'Nothing to flag or unflag.',
     scanNoun: 'scene',
@@ -3312,7 +3166,7 @@
   // details block is a paragraph and the log line is a glance. The job keeps the whole
   // value; only the display is cut.
   function syncValShow(v) {
-    var t = oneLine(v == null ? '' : String(v));
+    var t = tipText(v == null ? '' : String(v));
     if (t.length > 60) t = t.slice(0, 57) + '...';
     return t === '' ? '(empty)' : '"' + t + '"';
   }
@@ -3404,8 +3258,8 @@
   // plain old -> new - a value short enough to show whole, one side empty, or two
   // values with no word in common to anchor on.
   function valueDiffOps(oldV, newV) {
-    var a = oneLine(oldV == null ? '' : String(oldV));
-    var b = oneLine(newV == null ? '' : String(newV));
+    var a = tipText(oldV == null ? '' : String(oldV));
+    var b = tipText(newV == null ? '' : String(newV));
     if (!a || !b) return null;
     var A = diffTokens(a), B = diffTokens(b);
     var p = 0;
@@ -3648,7 +3502,7 @@
   function reportCoverCheck(run, s) {
     if (!s.c4CheckCoverMismatch) {
       run.msg('INFO', 'Cover images are not compared: switch on "Compare Cover Images" ' +
-        'in this plugin\u2019s settings to have a set\u2019s drift score count a cover ' +
+        'in this plugin\u2019s settings to have a set\u2019s drift-score count a cover ' +
         'its members disagree about.');
       return;
     }
@@ -3765,69 +3619,59 @@
     // The additive lists: what the source carries and the target lacks, by id. The
     // target's own extras are never listed and never touched - they are the variant's
     // deliberate uniqueness.
-    [['tags', 'tag_ids', 'tag'], ['performers', 'performer_ids', 'performer']]
-      .forEach(function (list) {
-        if (only && !only[list[0]]) return;
-        var have = {};
-        (target[list[0]] || []).forEach(function (x) { have[String(x.id)] = true; });
-        var missing = (source[list[0]] || []).filter(function (x) {
-          return !have[String(x.id)] && !skip[String(x.id)];
-        });
-        // A tag the hierarchy already implies through another the target carries is
-        // not copied - the sibling decides which those are. Only the additions are
-        // filtered: what the target already holds is its own, and this dialog does
-        // not prune.
-        if (list[0] === 'tags' && run.pruner && missing.length) {
-          var drop = redundantOf(run.pruner, target,
-            missing.map(function (x) { return String(x.id); }));
-          var kept = missing.filter(function (x) { return !drop[String(x.id)]; });
-          run.pruned = (run.pruned || 0) + (missing.length - kept.length);
-          missing = kept;
-        }
-        if (!missing.length) return;
-        // `items` is what makes the line a picker: one checkbox per tag or performer,
-        // behind the line's expander. `tipType` is the URL half of the item links.
-        var items = missing.map(function (x) {
-          return { id: String(x.id), name: x.name || ('id ' + x.id) };
-        });
-        run.tickLine({
-          id: String(target.id), title: title, kind: list[1],
-          items: items, noun: list[2], tipType: list[0],
-          group: list[0] === 'tags' ? 'Tags' : 'Performers',
-        }, 'svr-op-add', '[SYNC]    ',
-        [['  Add ' + plural(items.length, list[2]) + ': ', null],
-          [items.map(function (x) { return x.name; }).sort().join(', '), 'svr-add']],
-        true);
-      });
-
     // URLs are a list of bare strings with no ADD mode on the input, so the additive
     // write is the union sent whole - and the undo is the old list, not a removal.
-    // What this save *removed*, offered as removals on the variants that still carry
+    // Then what this save *removed*, offered as removals on the variants that still carry
     // it. Only the save-triggered run has `run.removed`: the manual button cannot tell
     // a value the source dropped from a value the variant deliberately owns, which is
     // why its lists stay add-only. The dimension and flag tags are protected here the
     // same way they are from the adds.
+    // [list, job kind, noun, verb]: the two adds, then the two removals.
     var rem = run.removed || {};
-    [['tags', 'tag_ids_remove', 'tag'], ['performers', 'performer_ids_remove', 'performer']]
+    [['tags', 'tag_ids', 'tag', 'Add'], ['performers', 'performer_ids', 'performer', 'Add'],
+      ['tags', 'tag_ids_remove', 'tag', 'Remove'], ['performers', 'performer_ids_remove', 'performer', 'Remove']]
       .forEach(function (list) {
         if (only && !only[list[0]]) return;
-        var gone = rem[list[0]] || [];
-        if (!gone.length) return;
-        var carried = (target[list[0]] || []).filter(function (x) {
-          return gone.indexOf(String(x.id)) !== -1 && !skip[String(x.id)];
-        });
-        if (!carried.length) return;
-        var items = carried.map(function (x) {
+        var remove = list[3] === 'Remove', found;
+        if (remove) {
+          var gone = rem[list[0]] || [];
+          found = (target[list[0]] || []).filter(function (x) {
+            return gone.indexOf(String(x.id)) !== -1 && !skip[String(x.id)];
+          });
+        } else {
+          var have = {};
+          (target[list[0]] || []).forEach(function (x) { have[String(x.id)] = true; });
+          found = (source[list[0]] || []).filter(function (x) {
+            return !have[String(x.id)] && !skip[String(x.id)];
+          });
+          // A tag the hierarchy already implies through another the target carries is
+          // not copied - the sibling decides which those are. Only the additions are
+          // filtered: what the target already holds is its own, and this dialog does
+          // not prune.
+          if (list[0] === 'tags' && run.pruner && found.length) {
+            var drop = redundantOf(run.pruner, target,
+              found.map(function (x) { return String(x.id); }));
+            var kept = found.filter(function (x) { return !drop[String(x.id)]; });
+            run.pruned = (run.pruned || 0) + (found.length - kept.length);
+            found = kept;
+          }
+        }
+        if (!found.length) return;
+        // `items` is what makes the line a picker: one checkbox per tag or performer,
+        // behind the line's expander. `tipType` is the URL half of the item links.
+        var items = found.map(function (x) {
           return { id: String(x.id), name: x.name || ('id ' + x.id) };
         });
-        run.tickLine({
+        var job = {
           id: String(target.id), title: title, kind: list[1],
-          items: items, noun: list[2], tipType: list[0], verb: 'Remove',
+          items: items, noun: list[2], tipType: list[0],
           group: list[0] === 'tags' ? 'Tags' : 'Performers',
-        }, 'svr-op-set', '[SYNC]    ',
-        [['  Remove ' + plural(items.length, list[2]) + ': ', null],
-          [items.map(function (x) { return x.name; }).sort().join(', '), 'svr-del']],
-        true);
+        };
+        if (remove) job.verb = 'Remove';
+        run.tickLine(job, remove ? 'svr-op-set' : 'svr-op-add', '[SYNC]    ',
+          [['  ' + list[3] + ' ' + plural(items.length, list[2]) + ': ', null],
+            [items.map(function (x) { return x.name; }).sort().join(', '), remove ? 'svr-del' : 'svr-add']],
+          true);
       });
 
     // Compared by the bytes, so a set already sharing a cover lists nothing. A target
@@ -3957,11 +3801,11 @@
     if (run.ruledTitles) {
       run.msg('INFO', plural(run.ruledTitles, 'partial-duration title follows', 'partial-duration titles follow') +
         ' the naming rule under the base "' + run.base.base + '"' +
-        (run.base.from === 'field' ? ', pinned by the base-name field' : '') +
+        (run.base.from === 'field' ? ', pinned by the base-title field' : '') +
         ', not this scene\u2019s title verbatim.');
     } else if (run.base.from === 'field' && run.only && run.only.title) {
-      run.msg('INFO', 'The base name of this set is pinned to "' + run.base.base +
-        '" by the base-name field, so its partial-duration scenes keep their titles.');
+      run.msg('INFO', 'The base-title of this set is pinned to "' + run.base.base +
+        '" by the base-title field, so its partial-duration scenes keep their titles.');
     }
   }
 
@@ -3999,6 +3843,26 @@
     return null;
   }
 
+  // One synchronize line's write (`fwd`) or its undo. A tag or performer line goes through
+  // `bulkSceneUpdate`, adding what a remove took or removing what an add gave; the rest
+  // write the value, or put back the one they replaced.
+  function syncInput(job, fwd) {
+    var remove = /_remove$/.test(job.kind);
+    if (remove || job.kind === 'tag_ids' || job.kind === 'performer_ids') {
+      // The picked items, read at write time - the boxes lock the moment the state
+      // leaves `listing`, so this is the selection the user saw at the press. What
+      // was actually written is kept on the job, because the undo must reverse
+      // exactly that, whatever the boxes say by then.
+      if (fwd) job.written = pickedItems(job).map(function (it) { return it.id; });
+      var input = { ids: [job.id] };
+      input[job.kind.replace('_remove', '')] = { ids: job.written || [], mode: remove === fwd ? 'REMOVE' : 'ADD' };
+      return { query: BULK_TAG_MUTATION, variables: { input: input } };
+    }
+    var one = { id: job.id };
+    one[job.kind === 'urls' || job.kind === 'groups' || job.kind === 'cover_image'
+      ? job.kind : job.input] = fwd ? job.value : job.had;
+    return { query: SCENE_UPDATE, variables: { input: one } };
+  }
 
   var SYNC_TASK = {
     title: 'Synchronize Variants',
@@ -4024,44 +3888,8 @@
     pickCaption: true,
     selectAll: true,
     begin: syncBegin,
-    writeInput: function (job) {
-      if (job.kind === 'tag_ids_remove' || job.kind === 'performer_ids_remove') {
-        job.written = pickedItems(job).map(function (it) { return it.id; });
-        var rin = { ids: [job.id] };
-        rin[job.kind.replace('_remove', '')] = { ids: job.written, mode: 'REMOVE' };
-        return { query: BULK_TAG_MUTATION, variables: { input: rin } };
-      }
-      if (job.kind === 'tag_ids' || job.kind === 'performer_ids') {
-        // The picked items, read at write time - the boxes lock the moment the state
-        // leaves `listing`, so this is the selection the user saw at the press. What
-        // was actually written is kept on the job, because the undo must remove
-        // exactly that, whatever the boxes say by then.
-        job.written = pickedItems(job).map(function (it) { return it.id; });
-        var input = { ids: [job.id] };
-        input[job.kind] = { ids: job.written, mode: 'ADD' };
-        return { query: BULK_TAG_MUTATION, variables: { input: input } };
-      }
-      var one = { id: job.id };
-      one[job.kind === 'urls' || job.kind === 'groups' || job.kind === 'cover_image'
-        ? job.kind : job.input] = job.value;
-      return { query: SCENE_UPDATE, variables: { input: one } };
-    },
-    undoInput: function (job) {
-      if (job.kind === 'tag_ids_remove' || job.kind === 'performer_ids_remove') {
-        var rin = { ids: [job.id] };
-        rin[job.kind.replace('_remove', '')] = { ids: job.written || [], mode: 'ADD' };
-        return { query: BULK_TAG_MUTATION, variables: { input: rin } };
-      }
-      if (job.kind === 'tag_ids' || job.kind === 'performer_ids') {
-        var input = { ids: [job.id] };
-        input[job.kind] = { ids: job.written || [], mode: 'REMOVE' };
-        return { query: BULK_TAG_MUTATION, variables: { input: input } };
-      }
-      var one = { id: job.id };
-      one[job.kind === 'urls' || job.kind === 'groups' || job.kind === 'cover_image'
-        ? job.kind : job.input] = job.had;
-      return { query: SCENE_UPDATE, variables: { input: one } };
-    },
+    writeInput: function (job) { return syncInput(job, true); },
+    undoInput: function (job) { return syncInput(job, false); },
   };
 
   // The save-triggered shape of the same task: identical planner, writers and undo,
@@ -4125,6 +3953,8 @@
   // current name, `movies` the compatibility one - normalised to group_id entries.
   function saveGroups(input) {
     if (hasOwn(input, 'groups')) return input.groups || [];
+    // COMPAT: a form that sends `movies`, Stash's deprecated spelling of `groups` (since
+    // Scene Variants 0.28.0); remove when Stash drops `movies` from `SceneUpdateInput`.
     if (hasOwn(input, 'movies')) {
       return (input.movies || []).map(function (m) {
         return { group_id: m.movie_id, scene_index: m.scene_index };
@@ -4280,7 +4110,7 @@
     if (!gone.length) return Promise.resolve(null);
     var field = fieldName(s), goneVals = variantValues(gone);
     var full = (input.custom_fields || {}).full;
-    var lines = splitValues(full && hasOwn(full, field) ? full[field] : customField(before, field));
+    var lines = splitTerms(full && hasOwn(full, field) ? full[field] : customField(before, field), '\n');
     var keep = lines.filter(function (l) { return goneVals.indexOf(l) === -1; });
     var cfLocked = false;
     return fieldLocks().then(function (locks) {
@@ -4346,7 +4176,7 @@
       '{ id custom_fields stash_ids { endpoint stash_id } } }', { id: String(sc.id) })
       .then(function (d) {
         var full = (d || {}).findScene || {};
-        var vals = variantValues(full.stash_ids).concat(splitValues(customField(full, field)));
+        var vals = variantValues(full.stash_ids).concat(splitTerms(customField(full, field), '\n'));
         return findVariants({ id: String(sc.id), stash_ids: full.stash_ids || [],
           custom_fields: full.custom_fields || {} }).then(function (r) {
           if (r.failed) return false;
@@ -4425,13 +4255,12 @@
   // turns into a delta per scene.
   function unflagAfterSave(ids, flagId) {
     if (!ids.length) return;
-    var lease = acquireLease('Variant cleanup');
+    var lease = C.lease(PLUGIN_ID, 'Variant cleanup', LEASE_TTL_MS);
     var input = { ids: ids, tag_ids: { ids: [flagId], mode: 'REMOVE' } };
     gqlRequest(BULK_TAG_MUTATION, { input: input })
       .then(function () {
         lease.release();
         var pass = journalPass('Variant cleanup');
-        if (!pass) return;
         pass.add('scenes', ids[0], '', input, { ids: ids, tag_ids: { ids: [flagId], mode: 'ADD' } });
         pass.finish();
       }, function (err) {
@@ -4452,15 +4281,14 @@
       var head = el('div', 'svr-head');
       head.appendChild(el('div', 'svr-title', PLUGIN_SHORT_NAME + ' - ' + title));
       if (!info) {
-        head.appendChild(el('div', 'svr-warn', 'Backing up your database before proceeding is recommended.'));
+        head.appendChild(el('div', 'svr-warn', 'Backing up your database before proceeding is strongly recommended.'));
       }
       modal.appendChild(head);
       var body = el('div', 'svr-confirm-body');
       lines.forEach(function (t) { body.appendChild(el('div', 'svr-line', t)); });
       modal.appendChild(body);
       var foot = el('div', 'svr-foot');
-      var ok = button('OK'), cancel = button(info ? 'Close' : 'Cancel');
-      paintButton(ok, PLUGIN_BTN_VARIANT);
+      var ok = button('OK', null, PLUGIN_BTN_VARIANT), cancel = button(info ? 'Close' : 'Cancel');
       if (info) ok.className += ' svr-hidden';
       var stub = { closeBtn: cancel, backdrop: backdrop };
       function done(v) {
@@ -4474,7 +4302,7 @@
       foot.appendChild(cancel);
       modal.appendChild(foot);
       document.body.appendChild(backdrop);
-      wireEscape(stub);
+      wireEscape(stub, 'svr');
       var first = info ? cancel : ok;
       if (first.focus) first.focus();
     });
@@ -4587,7 +4415,7 @@
         if (!/\/graphql([?#]|$)/.test(String(url))) return orig.apply(this, arguments);
         var input = sceneSaveOf(arguments[1]);
         if (!input) return orig.apply(this, arguments);
-        if (foreignLease()) return orig.apply(this, arguments);
+        if (foreignLease(PLUGIN_ID)) return orig.apply(this, arguments);
         return watchSave(orig, this, arguments, input);
       } catch (e) {
         return orig.apply(this, arguments);
@@ -4645,6 +4473,8 @@
     if (!list.length) return;
     var api = enmApi();
     if (!api) {
+      // COMPAT: an Entity Name Maintainer older than 2.2.0, which publishes no `renamed`
+      // (since Scene Variants 1.14.0); remove when never on its own: a sibling may lag.
       if (coop().respecters[ENM_ID]) {
         run.msg('INFO', plural(list.length, 'renamed title was', 'renamed titles were') +
           ' not handed to ' + ENM_NAME + ': the one on this page is older than ' + ENM_API_MIN + '.');
@@ -4655,6 +4485,8 @@
     // were swapped must not be offered as mentions of each other's old title. A sibling
     // from before the batch shape answers with no count, and is handed them one by one.
     var taken = api.renamed({ type: 'scene', owner: PLUGIN_SHORT_NAME, renames: list });
+    // COMPAT: an Entity Name Maintainer older than 2.3.0, which takes one rename per call
+    // (since Scene Variants 1.16.1); remove when never on its own: a sibling may lag.
     if (typeof taken !== 'number') {
       taken = list.filter(function (r) {
         return api.renamed({ type: 'scene', id: r.id, from: r.from, to: r.to,
@@ -4684,11 +4516,10 @@
   // because a tag is redundant for being implied by *any* of them, most often by one
   // that was already there.
   function redundantOf(pruner, target, ids) {
-    var all = {}, k, out = {};
+    var all = {}, out = {};
     idsOfList(target, 'tags').forEach(function (id) { all[id] = true; });
     ids.forEach(function (id) { all[String(id)] = true; });
-    var list = [];
-    for (k in all) if (hasOwn(all, k)) list.push(k);
+    var list = Object.keys(all);
     var res = null;
     // A sibling that throws is one that is not asked again here; this decides what to
     // skip and never what to write, so failing open is right.
@@ -4711,6 +4542,8 @@
       }
       return;
     }
+    // COMPAT: the first branch is a Normalize Parent Tags older than 3.2.0, which publishes no
+    // `prepare` (since Scene Variants 0.33.0); remove when never on its own: a sibling may lag.
     run.msg('INFO', 'Redundant tags are not being filtered: ' +
       (nptApi() ? 'the copy of ' + NPT_NAME + ' running here is older than ' +
         NPT_API_MIN + '.'
@@ -4733,7 +4566,7 @@
   // With a naming rule and a base, a title counts against a set only where it is not
   // the expected one - a partial named after its set is not drift, and a full-duration
   // scene's title is what the base is read from. Without a base, the plurality count.
-  // Either way a scene carrying the base-name field is left out of the title count:
+  // Either way a scene carrying the base-title field is left out of the title count:
   // its name was pinned by hand, so its title differing is a decision, not drift.
   function setDelta(scenes, skip, coverBy, expectedBy, baseField) {
     var out = setDeltaRaw(scenes, skip, coverBy);
@@ -4811,7 +4644,7 @@
   // Whitespace a log line cannot show: doubled, leading or trailing, or not a plain space.
   function oddSpacing(t) { return /\s\s|[^\S ]|^\s|\s$/.test(String(t || '')); }
 
-  // ── The base name ─────────────────────────────────────────────────────────
+  // ── The base-title ─────────────────────────────────────────────────────────
   //
   // Titles with this plugin's own postfix taken off, then the longest prefix they
   // share, cut back to a word boundary in every longer title and stripped of trailing
@@ -4855,7 +4688,7 @@
     members.slice().sort(function (a, b) { return (a.role === 'fl' ? 0 : 1) - (b.role === 'fl' ? 0 : 1); })
       .forEach(function (m) {
         var v = m.custom_fields && m.custom_fields[naming.baseField];
-        if (pinned === null && typeof v === 'string' && v.replace(/^\s+|\s+$/g, '')) pinned = v.replace(/^\s+|\s+$/g, '');
+        if (pinned === null && typeof v === 'string' && trim(v)) pinned = trim(v);
       });
     if (pinned !== null) return { base: pinned, from: 'field' };
     var titled = members.filter(function (m) { return typeof m.title === 'string' && m.title; });
@@ -4902,8 +4735,7 @@
     // A lone partial wears the postfix alone, unless one left alone wears it already.
     var bare = bareTitle(base, naming.postfix);
     // Spacing read loosely, as the shape is (`looseRe`): "Base  - Promo" wears it too.
-    var spaced = function (t) { return String(t || '').replace(/\s+/g, ' ').replace(/^ | $/g, ''); };
-    var bareTaken = out.some(function (o) { return o.skipped && spaced(o.member.title) === spaced(bare); });
+    var bareTaken = out.some(function (o) { return o.skipped && tipText(o.member.title) === tipText(bare); });
     if (!alpha || (live.length === 1 && !naming.loneIndex && !bareTaken)) {
       live.forEach(function (o) { o.expected = bare; });
       return out;
@@ -4939,7 +4771,6 @@
     });
     return out;
   }
-
 
   // A member the naming rule leaves alone: the no-rename field, or the no-rename tag.
   function renameSkipped(m, naming) {
@@ -4996,7 +4827,7 @@
         'listing rather than silently dropping the change. Only the save-triggered dialog ' +
         'reads this: the Synchronize Variants button on the tab always lists titles, unticked.' },
     { key: 'e1PartialPostfix', label: 'Partial-duration Title Postfix',
-      tip: 'What goes after the set\'s base name to title a partial-duration scene, ' +
+      tip: 'What goes after the set\'s base-title to title a partial-duration scene, ' +
         'separators included: nothing is added between the base and the postfix, or between ' +
         'the postfix and the index.\n\nDefault " - Promo ", so a cut of \'Song\' is \'Song - ' +
         'Promo\' - a trailing space is dropped when no index follows - and two cuts are ' +
@@ -5023,7 +4854,7 @@
         'one. The box in the Rename Variants dialog starts from this and overrides it for ' +
         'that dialog only. A scene marked in the no-rename field or wearing the no-rename ' +
         'tag keeps its title either way.' },
-    { key: 'e3BaseNameField', cfDefault: BASE_FIELD_DEFAULT, label: 'Variant Base Name Custom Field',
+    { key: 'e3BaseNameField', cfDefault: BASE_FIELD_DEFAULT, label: 'Variant Base-Title Custom Field',
       tip: 'The custom field whose value names a variant set: whatever is written in it on ' +
         'any scene of the set is the base every partial is titled from, before the postfix ' +
         'and the index. Empty means the default name, ' + BASE_FIELD_DEFAULT + '.\n\n' +
@@ -5033,7 +4864,7 @@
         'blank value counts as not set.\n\nWhere a value is found the titles are not read ' +
         'at all - no shared prefix, no falling back to the full-duration title. Where none ' +
         'is, the base is what the set\'s titles share once the postfix is taken off, or the ' +
-        'full-duration scene\'s title when they share nothing. Either way the base names ' +
+        'full-duration scene\'s title when they share nothing. Either way the base-titles ' +
         'the partials only: a full-duration scene is never renamed, so the field on it ' +
         'changes nothing but its partials\' titles.\n\nRead everywhere the rule applies - ' +
         'Rename Variants, Synchronize Variants and Synchronize Set from Selected, the offer after a save, ' +
@@ -5103,14 +4934,13 @@
         box.addEventListener('change', remark);
         self.remarks.push(remark);
       }
-      row.appendChild(el('span', 'svr-field-note', oneLine(f.tip.split('\n\n')[0])));
+      row.appendChild(el('span', 'svr-field-note', tipText(f.tip.split('\n\n')[0])));
       self.boxes[f.key] = box;
       self.body.appendChild(row);
     });
     this.modal.appendChild(this.body);
     var foot = el('div', 'svr-foot');
-    this.saveBtn = button('Save', 'svr-save');
-    this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.saveBtn = button('Save', 'svr-save', PLUGIN_BTN_VARIANT);
     this.saveBtn.disabled = true;
     this.saveBtn.title = 'Nothing has changed.';
     this.closeBtn = button('Cancel', 'svr-cancel');
@@ -5119,7 +4949,7 @@
     foot.appendChild(this.saveBtn);
     foot.appendChild(this.closeBtn);
     this.modal.appendChild(foot);
-    wireEscape(this);
+    wireEscape(this, 'svr');
     document.body.appendChild(this.backdrop);
     loadSettings(true).then(function (s) {
       if (_title !== self) return;
@@ -5156,7 +4986,8 @@
       : !changed ? 'Nothing has changed.' : 'Write these settings.';
   };
 
-  // The whole stored map goes back, per the rule `configurePlugin` forces. The cache
+  // The whole stored map goes back, per the rule `configurePlugin` forces (Core's
+  // `writePluginSettings`). The cache
   // takes the new values at once: the next dialog that names a partial reads them
   // through `settingsReady`, which would otherwise serve the old ones for ten seconds.
   TitleDialog.prototype.save = function () {
@@ -5165,14 +4996,7 @@
     this.saving = true;
     this.refreshSave();
     this.noteEl.textContent = 'Saving…';
-    gqlRequest('{ configuration { plugins } }', null).then(function (data) {
-      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
-      var input = {}, k;
-      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-      for (k in v) if (hasOwn(v, k)) input[k] = v[k];
-      return gqlRequest('mutation SVRSaveTitleSettings($id: ID!, $input: Map!) ' +
-        '{ configurePlugin(plugin_id: $id, input: $input) }', { id: PLUGIN_ID, input: input });
-    }).then(function () {
+    writePluginSettings(PLUGIN_ID, v, 'SVRSaveTitleSettings').then(function () {
       if (_settings) for (var k in v) if (hasOwn(v, k)) _settings[k] = v[k];
       if (_title === self) self.close();
     }, function (e) {
@@ -5217,16 +5041,15 @@
     return ['Postfix "' + (nm.postfix || '') + '"' + (nm.postfix ? '' : ' (none)') +
       (nm.first ? ', indexes from "' + nm.first + '"' + (nm.loneIndex ? ', a lone partial indexed too' : '') +
         (nm.renumber ? ', renumbered by duration' : ', indexes kept') : ', no index') +
-      '; base name in "', { cf: nm.baseField }, '", no-rename in "', { cf: nm.skipField }, '"' +
+      '; base-title in "', { cf: nm.baseField }, '", no-rename in "', { cf: nm.skipField }, '"' +
       (nm.skipTag ? ' or tagged "' + nm.skipTag + '"' : '') +
       '; a title change after a save is ' + (s.c5PropagateTitleOnSave ? '' : 'not ') + 'offered to the variants.'];
   }
   function titleSummary(s) {
     return titleSummaryParts(s).map(function (p) { return typeof p === 'string' ? p : p.cf; }).join('');
   }
-  // A custom field's ⓘ after its name, where Custom Fields Bulk Editor describes it.
+  // A custom field's ⓕ after its name, where Custom Fields Bulk Editor describes it.
   function markField(nameNode, field) {
-    if (typeof cfTipMark !== 'function') return;
     cfTipMark(field).then(function (mark) {
       if (!mark || !nameNode.parentNode || nameNode._cf !== field) return;
       nameNode.parentNode.insertBefore(mark, nameNode.nextSibling);
@@ -5261,14 +5084,13 @@
     var left = el('div');
     left.appendChild(el('h3', null, 'Variants Title'));
     left.appendChild(el('div', 'sub-heading', 'How a partial-duration scene is titled after ' +
-      'its set: the postfix, the index, the base-name and no-rename marks, and whether a ' +
+      'its set: the postfix, the index, the base-title and no-rename marks, and whether a ' +
       'title change after a save is offered to the variants. Eight settings, in a dialog.'));
     row._sum = left.appendChild(el('div', 'value svr-title-sum'));
     drawTitleSummary(row._sum, settings());
     row.appendChild(left);
     var right = el('div');
-    var btn = button(TITLE_TASK_NAME, 'svr-title-btn');
-    btn.className = btn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    var btn = button(TITLE_TASK_NAME, 'svr-title-btn', PLUGIN_BTN_VARIANT);
     btn.title = 'Open the title rules. Nothing is written until you press Save there.';
     btn.addEventListener('click', function (e) {
       if (e && e.preventDefault) e.preventDefault();
@@ -5329,7 +5151,7 @@
         unbased++;
         run.msg('WARN', 'Set of ' + plural(members.length, 'scene') + ' (' + names + '): the titles ' +
           'share nothing and no single full-duration scene names it, so nothing is proposed. ' +
-          'Put the base name in "' + nm.baseField + '" on one of them to name this set.');
+          'Put the base-title in "' + nm.baseField + '" on one of them to name this set.');
         return;
       }
       // Which scenes the base was read from, so a base that looks wrong says why.
@@ -5363,7 +5185,7 @@
       run.msg('INFO', plural(skipped, 'partial-duration scene') + ' left alone: marked with "' +
         nm.skipField + '"' + (nm.skipTag ? ' or tagged "' + nm.skipTag + '"' : '') + '.');
     }
-    if (unbased) run.msg('INFO', plural(unbased, 'set') + ' without a base name, listed above.');
+    if (unbased) run.msg('INFO', plural(unbased, 'set') + ' without a base-title, listed above.');
     run.msg('INFO', changes
       ? plural(changes, 'rename') + ' proposed, none ticked: tick the ones to write, then press Proceed.'
       : 'Every partial-duration scene in a set is already named after it.');
@@ -5401,10 +5223,10 @@
   var RENAME_TASK = {
     title: 'Rename Variants',
     legend: 'Every partial-duration scene in a variant set, named after its set: the ' +
-      'base name the set\'s titles share, then the postfix from your settings, then an ' +
+      'base-title the set\'s titles share, then the postfix from your settings, then an ' +
       'index where the set has more than one partial - counted longest first, and kept ' +
       'where a title already carries one. Full-duration scenes are never renamed: the ' +
-      'base is read from them. A base remembered in the base-name field wins over the ' +
+      'base is read from them. A base remembered in the base-title field wins over the ' +
       'titles, and a scene marked in the no-rename field or wearing the no-rename tag is ' +
       'left alone. Nothing starts ' +
       'ticked and nothing is written until you press Proceed; Undo puts every written ' +
@@ -5576,7 +5398,7 @@
     head.appendChild(el('th', null, ''));
     for (var c = 0; c < shown; c++) {
       var sc = set.scenes[c];
-      var name = oneLine(sc.title || ('Scene ' + sc.id));
+      var name = tipText(sc.title || ('Scene ' + sc.id));
       if (name.length > 18) name = name.slice(0, 17) + '\u2026';
       var th = el('th', null, name + ' [' + sc.id + ']');
       // A second line under the name: the duration and resolution are how a reader
@@ -5754,12 +5576,13 @@
 
   // Connected components over the lines the scenes share: two scenes can be one set
   // through a chain of overlapping lines without sharing one, which is what makes this
-  // union-find rather than a group-by.
-  function variantSetsOf(scenes, field) {
+  // union-find rather than a group-by. A scene's lines are `sceneKeys` under `field`, or
+  // whatever `keysOf(scene)` says where the caller already holds them.
+  function variantSetsOf(scenes, field, keysOf) {
     var byKey = {}, parent = {}, k, i;
     scenes.forEach(function (sc) {
       parent[String(sc.id)] = String(sc.id);
-      sceneKeys(sc, field).forEach(function (key) {
+      (keysOf ? keysOf(sc) : sceneKeys(sc, field)).forEach(function (key) {
         (byKey[key] = byKey[key] || []).push(String(sc.id));
       });
     });
@@ -5785,9 +5608,9 @@
   }
 
   // Every scene carrying evidence, gathered into connected components over the lines
-  // they share - the flag task's union-find, over the same two queries, kept separate
-  // because this one needs every field a plan is built from rather than the four the
-  // flag needs.
+  // they share - the union-find the flag task counts with, over the same two queries, in
+  // a scan of its own because this one needs every field a plan is built from rather
+  // than the four the flag needs.
   function reviewBegin(run) {
     return Promise.all([settingsReady(), tagTree()]).then(function (both) {
       var s = both[0], m = matchers(both[1], s);
@@ -5804,7 +5627,7 @@
       // Bound before the scan, so the first Synchronize Set from Selected can read it synchronously.
       var pruning = nptPruner(s).then(function (w) { run.pruner = w; });
       run.msg('INFO', 'Looking for every scene that shares a stash-id or a "' + field +
-        '" line with another, to give each set its drift score.');
+        '" line with another, to give each set its drift-score.');
       // The count the listing is about, updated as pages land rather than only at the
       // end: a library-wide scan is the one place here that runs for minutes, and
       // "scenes read" alone says nothing about whether it is finding anything.
@@ -5845,7 +5668,7 @@
 
   var REVIEW_TASK = {
     title: 'Review Variant Sets',
-    legend: 'Every multi-variant set in your library, worst first: the drift score ' +
+    legend: 'Every multi-variant set in your library, worst first: the drift-score ' +
       'beside each is how far its members have drifted apart, counting the attributes they ' +
       'disagree on and the tags, performers and groups one carries and another does ' +
       'not. What each of those is worth is the strip above the listing, and Remember ' +
@@ -5870,41 +5693,25 @@
     undoInput: SYNC_TASK.undoInput,
   };
 
-  // ── The task button ───────────────────────────────────────────────────────
+  // ── The task buttons ──────────────────────────────────────────────────────
   //
-  // Declared in the yml so Stash renders a button for it in Settings → Tasks, and handled
+  // Declared in the yml so Stash renders a button for each in Settings → Tasks, and handled
   // entirely here: the click never reaches the server, because there is no `exec` behind
   // it and nothing server-side to run. A capture-phase listener on `document` runs before
   // React's own handler and stops the propagation, which is what keeps PluginTasks'
   // "added job to queue" toast from appearing over a dialog that is already open.
   //
-  // Ours only if the label matches *and* the enclosing SettingGroup is headed with our
-  // name - another plugin may declare a task called the same thing.
-  function ownTaskName(btn) {
-    var label = trim(btn.textContent);
-    if (label !== TASK_NAME && label !== FLAG_TASK_NAME &&
-      label !== REVIEW_TASK_NAME && label !== RENAME_TASK_NAME) return null;
-    var node = btn;
-    var fallback = null;
-    for (var depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-      var heading = node.querySelector ? node.querySelector('h3') : null;
-      var ours = !!heading && headingIsOurs(heading.textContent);
-      if (hasClass(node, 'setting-group')) return ours ? label : null;
-      if (ours) fallback = label;
-    }
-    return fallback;
-  }
-
-  // Re-applied every tick rather than once: React re-renders this panel and hands back a
-  // button with Stash's own classes, and `paintButton` is a no-op on one that already
-  // carries ours. Amber, because this one writes - the tab and its links are the reading
-  // half of this plugin and take no colour from this rule.
-  function paintTaskButtons() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (ownTaskName(nodes[i])) paintButton(nodes[i], PLUGIN_BTN_VARIANT);
-    }
-  }
+  // Ours only if the caption is one of these *and* the enclosing SettingGroup is headed
+  // with our name (Core's `ownTaskName`) - another plugin may declare a task called the
+  // same thing. Painted amber on every tick (`paintTaskButtons`), because they write -
+  // the tab and its links are the reading half of this plugin and take no colour from
+  // this rule.
+  var TASK_BY_NAME = {};
+  TASK_BY_NAME[TASK_NAME] = MIGRATE_TASK;
+  TASK_BY_NAME[FLAG_TASK_NAME] = FLAG_TASK;
+  TASK_BY_NAME[REVIEW_TASK_NAME] = REVIEW_TASK;
+  TASK_BY_NAME[RENAME_TASK_NAME] = RENAME_TASK;
+  var TASKS = Object.keys(TASK_BY_NAME);
 
   // ── Style ─────────────────────────────────────────────────────────────────
 
@@ -6311,7 +6118,7 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#a7b6c2;cursor:help;}' +
+    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -6345,19 +6152,11 @@
     (document.head || document.body || document.documentElement).appendChild(style);
   }
 
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
+  // Grey unless `variant` names another of Bootstrap's: amber for one that writes.
+  function button(label, className, variant) {
+    var b = el('button', 'btn ' + (variant || 'btn-secondary') + ' btn-sm' + (className ? ' ' + className : ''), label);
     b.type = 'button';
     return b;
-  }
-
-  // Swaps one Bootstrap variant for another in place, so a button can go amber without
-  // losing `btn` or `btn-sm`.
-  function paintButton(btn, variant) {
-    btn.className = String(btn.className || '')
-      .replace(/\bbtn-(secondary|warning|info|primary|success|light|dark|link)\b/g, '')
-      .replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
   }
 
   // ── The tab ───────────────────────────────────────────────────────────────
@@ -6475,7 +6274,7 @@
       }
       // Nothing element-shaped at all. There is nothing to append to and nothing better
       // to return than what we were handed, so the page is whatever it would have been.
-      gateLogOnce('shape', 'a patched component was called with ' +
+      GATE.once('shape', 'a patched component was called with ' +
         plural(args.length, 'argument') + ' and none of them an element - ' +
         'the Variants tab is not being added.');
       return last;
@@ -6506,9 +6305,6 @@
       var scene = (props && props.scene) || {};
       var st = React.useState(null);
       var caption = st[0], setCaption = st[1];
-      var tagKey = (scene.tags || []).map(function (t) { return t.id; }).join(',');
-      var evidence = variantValues(scene.stash_ids).join('\n') + '|' +
-        (customField(scene, fieldName()) || '');
       React.useEffect(function () {
         var live = true;
         setCaption(null);
@@ -6519,17 +6315,12 @@
             : n ? n + ' ' + (n === 1 ? 'Variant' : 'Variants') : null);
         });
         return function () { live = false; };
-      }, [scene.id, evidence, tagKey]);
+      }, [scene.id, lookupKey(scene, true)]);
       if (!caption) return null;
       return React.createElement(Nav.Item, null,
         React.createElement(Nav.Link, { eventKey: TAB_KEY, className: 'svr-tab-link' }, caption));
     };
   }
-
-  function TabLink(React, Tab, scene) {
-    return React.createElement(Tab, { key: TAB_KEY, scene: scene });
-  }
-
 
   // One row. `row.cls.label` is empty for an unclassified scene and the span is then not
   // rendered at all, rather than rendered blank - an untagged variant is listed as
@@ -6710,7 +6501,7 @@
       var stamp = bump[0], setStamp = bump[1];
       // `{ <scene id>: <data url> }` for every cover read, the viewed scene's
       // included, or null while nobody has asked or nothing has answered. A variant's
-      // badge is its entry differing from the viewed scene's; the drift score counts
+      // badge is its entry differing from the viewed scene's; the drift-score counts
       // the same map the way the review task does.
       var cov = React.useState(null);
       var coverBy = cov[0], setCoverBy = cov[1];
@@ -6735,15 +6526,13 @@
       // new one. A key of the id alone re-read on the first step with the old ids -
       // finding the same variants - and did nothing on the second, so the rows it
       // showed were the ones the save had just detached.
-      var evidence = variantValues(scene.stash_ids).join('\n') + '|' +
-        (customField(scene, fieldName()) || '');
       React.useEffect(function () {
         var live = true;
         setFound(null);
         setCoverBy(null);
         variantsOnce(scene, stamp).then(function (result) { if (live) setFound(result); });
         return function () { live = false; };
-      }, [scene.id, evidence, stamp]);
+      }, [scene.id, lookupKey(scene), stamp]);
 
       // **After the list, never before it.** Comparing covers means reading the
       // pictures, and a tab that waited for them would show nothing while it did -
@@ -6787,7 +6576,7 @@
         found.rows.length
           ? plural(found.rows.length, 'other variant') + ' of this scene. ' + found.why
           : found.why));
-      // The set's drift score, the number the review task's listing would sort this
+      // The set's drift-score, the number the review task's listing would sort this
       // set by: the same counts, the same exclusions and the same weights, so a set
       // synchronized from here reads as the listing would show it afterwards. Priced
       // by the weights the review dialog remembered, or its defaults. The cover count
@@ -6801,7 +6590,7 @@
         members = members.filter(function (sc) { return !sc.organized; });
         if (before && members.length < 2) {
           kids.push(React.createElement('div', { key: 'drift', className: 'svr-drift' },
-            'No drift score: Exclude Organized is on in ' +
+            'No drift-score: Exclude Organized is on in ' +
             REVIEW_TASK_NAME.replace(/\.\.\.$/, '') + ', and fewer than two scenes of this ' +
             'set are not organized, so the listing leaves it out.'));
         }
@@ -6830,7 +6619,7 @@
               'further apart.' +
               (found.coverCheck ? '' : ' Covers are not compared while Compare Cover ' +
                 'Images is off.'),
-          }, ['Drift score: ', React.createElement('span', {
+          }, ['Drift-score: ', React.createElement('span', {
             key: 's', className: 'svr-score ' + scoreClass(score, found.weights),
           }, String(score))])));
       }
@@ -6889,10 +6678,15 @@
   var LOOKUP_SHARE_MS = 5000;
   var _lookup = { key: null, at: 0, p: null };
 
+  // What a lookup of this scene depends on: its evidence - the stash-ids and the field -
+  // and, `withTags`, the tags its rows are classified by.
+  function lookupKey(scene, withTags) {
+    return variantValues(scene.stash_ids).join('\n') + '|' + (customField(scene, fieldName()) || '') +
+      (withTags ? '|' + (scene.tags || []).map(function (t) { return t.id; }).join(',') : '');
+  }
+
   function variantsOnce(scene, stamp) {
-    var key = scene.id + '|' + variantValues(scene.stash_ids).join('\n') + '|' +
-      (customField(scene, fieldName()) || '') + '|' +
-      (scene.tags || []).map(function (t) { return t.id; }).join(',') + '|' + (stamp || 0);
+    var key = scene.id + '|' + lookupKey(scene, true) + '|' + (stamp || 0);
     if (_lookup.key !== key || Date.now() - _lookup.at > LOOKUP_SHARE_MS) {
       _lookup = { key: key, at: Date.now(), p: findVariants(scene) };
     }
@@ -6917,7 +6711,7 @@
 
   // Which full-duration variant a partial-duration scene opens, or null where the scene is
   // not a partial or the set has no full-duration member. Several are ranked: the title
-  // closest to the set's base name (the base-name field, read off this scene first, then
+  // closest to the set's base-title (the base-title field, read off this scene first, then
   // the full-duration members, then any), then the shortest title, the highest
   // resolution, the shortest running time, and the lowest scene id.
   function fullDurationOf(scene, found) {
@@ -6974,9 +6768,6 @@
       var pick = st[0], setPick = st[1];
       // The scene this mounted strip last looked at, a box that never re-renders.
       var seen = React.useState({})[0];
-      var tagKey = (scene.tags || []).map(function (t) { return t.id; }).join(',');
-      var evidence = variantValues(scene.stash_ids).join('\n') + '|' +
-        (customField(scene, fieldName()) || '');
 
       React.useEffect(function () {
         // The same scene again - its tags or evidence moved, a save after "Back to the
@@ -7015,7 +6806,7 @@
             }, 'Back to the partial')) });
         });
         return function () { live = false; };
-      }, [scene.id, evidence, tagKey]);
+      }, [scene.id, lookupKey(scene, true)]);
 
       if (!pick) return null;
       var href = '/scenes/' + pick.scene.id;
@@ -7026,7 +6817,7 @@
           title: 'Open ' + sceneLabel(pick.scene) + ', the full-duration variant of this ' +
             'partial-duration scene.' + (pick.of > 1
               ? ' Picked from ' + pick.of + ' full-duration variants: ' +
-                (pick.base ? 'the title closest to the base name “' + pick.base +
+                (pick.base ? 'the title closest to the base-title “' + pick.base +
                   '”, then ' : '') +
                 'the shortest title, the highest resolution, the shortest running time, ' +
                 'the lowest scene id.'
@@ -7076,8 +6867,8 @@
       id: String(sc.id), title: sc.title || '',
       raw: uniq((sc.stash_ids || []).map(function (e) { return e && e.stash_id; })
         .filter(function (v) { return !!v; })),
-      values: uniq(variantValues(sc.stash_ids).concat(splitValues(customField(sc, field)))),
-      lines: splitValues(customField(sc, field)),
+      values: uniq(variantValues(sc.stash_ids).concat(splitTerms(customField(sc, field), '\n'))),
+      lines: splitTerms(customField(sc, field), '\n'),
     };
   }
 
@@ -7195,7 +6986,7 @@
 
   function installCardCount(api, React, Bootstrap) {
     if (!Bootstrap.Button || !Bootstrap.ButtonGroup || !React.cloneElement) {
-      gateLogOnce('card', 'react-bootstrap has no Button or ButtonGroup here - no variant ' +
+      GATE.once('card', 'react-bootstrap has no Button or ButtonGroup here - no variant ' +
         'count on the scene cards.');
       return;
     }
@@ -7238,7 +7029,7 @@
     if (_patched) return true;
     var api = pluginApi();
     if (!api) {
-      gateLogOnce('patch', 'PluginApi component patching is unavailable - no Variants tab. ' +
+      GATE.once('patch', 'PluginApi component patching is unavailable - no Variants tab. ' +
         'This plugin needs Stash 0.31.0 or newer.');
       return false;
     }
@@ -7246,7 +7037,7 @@
     var Bootstrap = (api.libraries || {}).Bootstrap;
     var Nav = Bootstrap && Bootstrap.Nav, Tab = Bootstrap && Bootstrap.Tab;
     if (!React || !Nav || !Tab) {
-      gateLogOnce('patch', 'PluginApi is present but React or react-bootstrap is not - ' +
+      GATE.once('patch', 'PluginApi is present but React or react-bootstrap is not - ' +
         'no Variants tab.');
       return false;
     }
@@ -7255,7 +7046,7 @@
     var VTab = VariantsTab(React, Nav);
     api.patch.after('ScenePage.Tabs', function (props) {
       return safeAppend(React, arguments,
-        function () { return TabLink(React, VTab, props.scene); }, BEFORE_TAB_KEY);
+        function () { return React.createElement(VTab, { key: TAB_KEY, scene: props.scene }); }, BEFORE_TAB_KEY);
     });
     // Last in the strip, so nothing moves when it lands.
     api.patch.after('ScenePage.Tabs', function (props) {
@@ -7272,198 +7063,28 @@
     });
     installCardCount(api, React, Bootstrap);
     _patched = true;
-    gateLogOnce('patch', 'the Variants tab is registered on the scene page');
+    GATE.once('patch', 'the Variants tab is registered on the scene page');
     // The pane's own CSS has to be on the page before React first renders it, and there
     // is no tick watching the scene page any more to put it there.
     injectStyle();
     return true;
   }
   // ── The settings page ─────────────────────────────────────────────────────
-
-  // SettingsPluginsPanel.tsx gives every plugin setting an id built from the plugin id
-  // and the setting key - `plugin-SceneVariants-a1FullLengthTag`. That is ours by
-  // construction: no version suffix, no localisation, nothing formatted for display.
-  // Two plugins here shipped this broken by matching heading text instead, twice, so
-  // the ids are the anchor and the heading is only a fallback.
-  function settingElement(key) { return coreSettingElement(PLUGIN_ID, key); }
-
-  // Walks up from any one of our settings to the group box that contains it. Trying
-  // every key rather than a named one means removing or renaming a setting cannot
-  // quietly break the anchor - but a release that renames them *all* can, and the first
-  // casualty of that is the stale-script banner, which is the one thing on this page
-  // such a release needed to show. So the group headed with our own name is the
-  // fallback, inside this function rather than OR'd in by each caller.
   //
-  // The fallback is guarded with `hasOwnTaskButton`, because Settings - Tasks heads *its*
-  // group with the same name and decorating it would destroy the task button: the README
-  // link picks its slot by structure, and there that slot is inside the button. The
-  // guard matches this plugin's own task caption rather than merely testing for a
-  // button - Stash puts its own Enable/Disable button in the plugin group's header row,
-  // and a plugin here shipped that looser test and decorated nothing at all.
-  function ownSettingGroup() {
-    var node = null, d;
-    for (var key in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, key)) continue;
-      node = settingElement(key);
-      if (node) break;
-    }
-    for (d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    var heading = ownSettingGroupHeading();
-    for (node = heading, d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return hasOwnTaskButton(node) ? null : node;
-    }
-    return heading ? heading.parentElement : null;
-  }
-
-  function hasOwnTaskButton(node) {
-    if (!node) return false;
-    if (node.tagName === 'BUTTON' &&
-      (trim(node.textContent) === TASK_NAME || trim(node.textContent) === FLAG_TASK_NAME ||
-        trim(node.textContent) === REVIEW_TASK_NAME ||
-        trim(node.textContent) === RENAME_TASK_NAME)) return true;
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) {
-      if (hasOwnTaskButton(kids[i])) return true;
-    }
-    return false;
-  }
+  // Core's `settingsPage`: the group found from any of this plugin's setting ids - Stash
+  // builds them from the plugin id and the key, so they are ours by construction - with
+  // the heading only as the fallback, and never Settings → Tasks' group of the same name;
+  // the description split into paragraphs with the rest behind Show more; each
+  // multi-paragraph setting reduced to its summary with the rest behind ⓘ; the
+  // stale-script banner; and the README link. What is this plugin's own follows: the ⸎ in
+  // a setting's name, the Variants Title row, and the tag links.
+  var PAGE = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'svr', keys: Object.keys(DEFAULTS), tasks: TASKS,
+    readmeUrl: README_URL, readmeLabel: 'SceneVariants/README.md', injectStyle: injectStyle,
+  });
 
   function settingRow(key) { return coreSettingRow(PLUGIN_ID, key); }
-
-  // The two pages that show a group headed with our name do not head it the same way.
-  // Settings - Tasks passes the plugin name straight through, but Settings - Plugins
-  // appends the version:
-  //
-  //   heading: `${plugin.name} ${plugin.version ? `(${plugin.version})` : undefined}`
-  //
-  // so the h3 there reads "... (<version>)" - and, because that template interpolates
-  // the literal when there is no version at all, sometimes "... undefined".
-  //
-  // Strip the suffix and compare exactly, rather than testing a prefix: a plugin whose
-  // name merely starts with ours must not be mistaken for us.
-  function ownSettingGroupHeading() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (headingIsOurs(nodes[i].textContent)) return nodes[i];
-    }
-    return null;
-  }
-
-  function headingIsOurs(text) {
-    var t = String(text == null ? '' : text).trim();
-    if (t === PLUGIN_NAME) return true;
-    t = t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '').trim();
-    return t === PLUGIN_NAME;
-  }
-
-  function readmeLinkSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub.nextSibling };
-    var header = byClass(group, 'setting');
-    var box = header && header.childNodes && header.childNodes[0];
-    if (box) return { parent: box, before: null };
-    return { parent: group, before: null };
-  }
-
-  // Paragraph spacing needs elements. Under `white-space: pre-wrap` a blank line is
-  // always one whole line-height and nothing can target it, so the description's
-  // paragraphs are rebuilt as divs and the gap becomes a margin - about a third of a
-  // line, rather than a whole empty one.
-  //
-  // Stash renders the description as a single text node; React puts that text node back
-  // on every re-render of this panel, so this runs on every tick and re-splits when it
-  // has to. It is idempotent: once the children are ours, there is no text node left.
-  function splitDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'svr-p')) return;   // already ours
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;                   // nothing to split
-    var paras = text.split(/\n{2,}/);
-    sub.textContent = '';
-    paras.forEach(function (para) {
-      var t = oneLine(para);
-      if (t) sub.appendChild(el('div', 'svr-p', t));
-    });
-  }
-
-  // ── Settings verbosity: a summary on the page, the rest on hover ──────────
-  //
-  // A description written as "summary\n\ndetail" shows only its first paragraph, with
-  // the rest moved into a tooltip. Stash's own Setting renders `<h3 title={tooltip}>`,
-  // but SettingsPluginsPanel never passes a tooltip for a plugin setting and
-  // `PluginSetting` has no field to declare one - so the slot exists, is always empty
-  // for us, and is filled from here.
-  var TIP_MARK = 'ⓘ';                  // circled Latin small letter i
-
-  function setTipOpen(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*svr-tip-open\b/, '');
-    sub.className = (on ? cls + ' svr-tip-open' : cls).replace(/^\s+/, '');
-  }
-
-  // A class toggled from JS rather than a `:hover ~` selector, because the triggers do
-  // not sit in one predictable place: the mark is inside the .sub-heading and the name
-  // is an <h3> somewhere above it, and a sibling combinator would depend on exactly how
-  // Stash nests the pair.
-  //
-  // The row is passed rather than the .sub-heading, and the current one looked up per
-  // event: an <h3> is Stash's element and survives the re-renders that replace
-  // everything we put in the row, so a captured reference would go stale. The flag is
-  // what stops a second pair of listeners landing on it each time we rebuild.
-  function tipTrigger(node, row) {
-    if (!node || node._svrTipWired) return;
-    node._svrTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setTipOpen(sub, on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = settingRow(key);
-    if (!row) return;
-    var sub = byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'svr-sum')) return;   // already ours
-    var text = sub.textContent || '';
-    var cut = text.indexOf('\n\n');
-    if (cut === -1) return;                                    // nothing to hide
-    var summary = oneLine(text.slice(0, cut));
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    if (!hasClass(sub, 'svr-tipped')) {
-      sub.className = ((sub.className || '') + ' svr-tipped').replace(/^\s+/, '');
-    }
-    var sum = el('span', 'svr-sum', summary);
-    sub.appendChild(sum);
-    // tabIndex, so the box can be reached and read without a mouse. The box is a
-    // sibling of the mark rather than a child: as a child it would sit inside an inline
-    // span and inherit its clipping and stacking.
-    var mark = el('span', 'svr-tip', TIP_MARK);
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'svr-tipbox', detail));
-    tipTrigger(mark, row);
-    tipTrigger(sum, row);
-    var h3 = row.querySelector ? row.querySelector('h3') : null;
-    if (h3) tipTrigger(h3, row);
-  }
-
-  function tipSettings() {
-    for (var k in DEFAULTS) {
-      if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    }
-  }
 
   // The ⸎ in Display Variant Count on Scene Cards' name, amber as on the cards. Stash
   // puts the name back on a re-render, so this runs on every tick and is idempotent.
@@ -7477,123 +7098,6 @@
     h3.appendChild(el('span', 'svr-amber-mark', '⸎'));
     h3.appendChild(el('span', null, t.slice(at + 1)));
   }
-
-  // The group description is in the group *header*, which is outside the <Collapse> -
-  // so it stays on screen at full height whether the group is expanded or not, and
-  // per-plugin collapse does not shorten it. Hiding all but the first paragraph is the
-  // only thing that does.
-  //
-  // A <button>, never a <span>: SettingGroup's onDivClick walks up from the event
-  // target and returns early for `a` and `button`, so anything else folds the whole
-  // group on click.
-  function descCollapsed(sub) { return hasClass(sub, 'svr-desc-collapsed'); }
-
-  function setDescCollapsed(sub, on) {
-    var cls = String(sub.className || '').replace(/\s*svr-desc-collapsed\b/, '');
-    sub.className = (on ? cls + ' svr-desc-collapsed' : cls).replace(/^\s+/, '');
-  }
-
-  function collapseDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    var paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'svr-p')) paras++;
-    if (paras < 2) return;                        // one paragraph hides nothing
-    if (document.getElementById(DESC_TOGGLE_ID)) return;
-    // A re-render drops the button and the class together, so the description returns
-    // to collapsed rather than to a half-state with no way out of it.
-    setDescCollapsed(sub, true);
-    var btn = el('button', 'svr-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = descCollapsed(sub);
-      setDescCollapsed(sub, !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  // ── The stale-script banner ───────────────────────────────────────────────
-  //
-  // Stash serves plugin JS with caching on, so a browser holding the old file goes on
-  // running it after an update and nothing on screen says so. The settings heading is
-  // where the two numbers meet: Stash builds it as `${name} (${version})` from the
-  // **manifest**, read fresh from the server, while `PLUGIN_VERSION` is what this
-  // script actually is.
-  //
-  // No query for it - the number is on the page already, and this tick runs once a
-  // second.
-  var STALE_ID = 'svr-stale-notice';
-
-  // The group's own h3, not a search of the page: the header row comes before the
-  // setting rows, each of which has an h3 too, and the group is already ours.
-  function installedFromHeading(group) {
-    var h3 = group && group.querySelector ? group.querySelector('h3') : null;
-    var t = h3 ? String(h3.textContent == null ? '' : h3.textContent).trim() : '';
-    var m = /\(([^()]+)\)$/.exec(t);
-    return m ? m[1].replace(/^\s+|\s+$/g, '') : null;
-  }
-
-  function staleSlot(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
-    return { parent: group, before: group.firstChild };
-  }
-
-
-  function ensureStaleNotice(group) {
-    var installed = installedFromHeading(group);
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, group, !!installed && installed !== PLUGIN_VERSION);
-    // No parenthesised version on the heading means Settings - Tasks, which heads its
-    // group with the bare name - not a mismatch, and nothing to say.
-    if (!installed || installed === PLUGIN_VERSION) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var slot = staleSlot(group);
-    if (node && node.parentNode === slot.parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    var box = el('div', 'svr-stale', '⚠ This page is still running ' +
-      PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. ' +
-      'Press Ctrl+Shift+R (⌘+Shift+R on a Mac) to reload it: your browser has cached ' +
-      'the older script, and everything this plugin does until then is that older code.');
-    box.id = STALE_ID;
-    slot.parent.insertBefore(box, slot.before);
-  }
-
-  // Re-added rather than tracked: React re-renders this panel whenever a setting changes
-  // and drops anything we put in it, so the tick puts it back. Keyed on the id, so a
-  // re-render that kept it does not produce a second one.
-  function ensureReadmeLink() {
-    var group = ownSettingGroup();
-    if (!group) return;
-    injectStyle();
-    if (!hasClass(group, 'svr-own-group')) {
-      group.className = ((group.className || '') + ' svr-own-group').replace(/^\s+/, '');
-    }
-    splitDescription(group);
-    collapseDescription(group);   // after the split: it counts the .svr-p divs
-    tipSettings();
-    amberMarkSetting();
-    ensureStaleNotice(group);     // before the early return: the link outlives it
-    ensureTitleRow(group);
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'svr-readme', 'SceneVariants/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noopener noreferrer';
-    link.title = 'Open this plugin’s documentation';
-    link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
-    var slot = readmeLinkSlot(group);
-    slot.parent.insertBefore(link, slot.before);
-  }
-
 
   var TAG_LINK_MARK = '🔗';      // link symbol
   var TAG_LINK_KEYS = ['a1FullLengthTag', 'a2PartialLengthTag', 'a4VariantFlagTag', 'e5NoRenameTag'];
@@ -7678,9 +7182,16 @@
     }, function () { /* a link is not worth an error */ });
   }
 
+  // Every tick: React re-renders this panel whenever a setting changes and drops
+  // anything we put in it, so the tick puts it back.
   function settingsTick() {
-    ensureReadmeLink();
-    paintTaskButtons();
+    var group = PAGE.group();
+    PAGE.decorate(group);
+    if (group) {
+      amberMarkSetting();
+      ensureTitleRow(group);
+    }
+    C.paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
     for (var i = 0; i < TAG_LINK_KEYS.length; i++) tagLinkTick(TAG_LINK_KEYS[i]);
     // `fieldName()`, not the raw setting: an empty box means the default here, and the
     // mark has to describe the field actually in force rather than the empty string.
@@ -7706,7 +7217,7 @@
       var node = nodes[i];
       if (!hasClass(node, 'detail-item-value')) continue;
       if (node.querySelector && node.querySelector('.svr-cflinks')) continue;
-      var links = splitValues(node.textContent).map(boxLink)
+      var links = splitTerms(node.textContent, '\n').map(boxLink)
         .filter(function (l) { return !!l; });
       if (!links.length) continue;
       var wrap = el('span', 'svr-cflinks');
@@ -7726,13 +7237,11 @@
     document.addEventListener('click', function (event) {
       var target = event.target;
       var btn = target && target.closest ? target.closest('button') : null;
-      var name = btn ? ownTaskName(btn) : null;
+      var name = btn ? C.ownTaskName(btn, PLUGIN_NAME, TASKS) : null;
       if (!name) return;
       if (event.preventDefault) event.preventDefault();
       if (event.stopPropagation) event.stopPropagation();
-      startRun(name === FLAG_TASK_NAME ? FLAG_TASK
-        : name === REVIEW_TASK_NAME ? REVIEW_TASK
-        : name === RENAME_TASK_NAME ? RENAME_TASK : MIGRATE_TASK);
+      startRun(TASK_BY_NAME[name]);
     }, true);
   }
 
@@ -7747,7 +7256,7 @@
     'full-duration scene carries it as well as one. The Variants tab matches on this ' +
     'field and on stash-ids together, so a scene is found by either.';
 
-  var BASE_FIELD_DESCRIPTION = 'The base name of the variant set this scene belongs to: ' +
+  var BASE_FIELD_DESCRIPTION = 'The base-title of the variant set this scene belongs to: ' +
     'what Rename Variants titles the set\u2019s partial-duration scenes after, before the ' +
     'postfix and the index.\n\n' +
     'Read by ' + PLUGIN_NAME + ', never written by it. Set it on any scene of a set whose ' +
@@ -7765,10 +7274,10 @@
       [nm.skipField, SKIP_FIELD_DESCRIPTION]].forEach(function (pair) {
       api.describeField(pair[0], pair[1]).then(function (outcome) {
         if (outcome === 'added') {
-          svr('[svr] described the custom field "' + pair[0] + '" in ' +
+          console.info('[svr] described the custom field "' + pair[0] + '" in ' +
             'CustomFieldsBulkEditor\u2019s description store.');
         } else if (outcome === 'queued') {
-          svr('[svr] a description for "' + pair[0] + '" is waiting for ' +
+          console.info('[svr] a description for "' + pair[0] + '" is waiting for ' +
             'CustomFieldsBulkEditor\u2019s description store - open "Manage Custom Field ' +
             'Descriptions..." and press Apply to file it.');
         }

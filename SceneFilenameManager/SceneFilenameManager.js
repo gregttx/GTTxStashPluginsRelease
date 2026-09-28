@@ -30,31 +30,32 @@
   // `ui: requires:` in the .yml is topologically sorted by Stash and `useScript` sets
   // `async = false`, so Core has finished running before this line - when it is present.
   var C = (window.__GTTx__ || {}).core;
-  if (!C) {
+  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.settingsPage !== 'function') {
     if (window.console && console.error) {
-      console.error('[sfm] ᝯㄝₓ Core is not installed or is disabled, so '
-        + 'this plugin cannot start. Install it from the same source and reload the page.');
+      console.error('[sfm] ᝯㄝₓ Scene Filename Manager cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  // Every plugin's settings through Core's one shared read (`pluginConfig`), or read
-  // here where the Core on the page predates it.
-  var pluginConfig = C.pluginConfig || function () { return gqlRequest('{ configuration { plugins } }', null); };
-  var showDefaults = C.showDefaults, coop = C.coop, plural = C.plural, el = C.el, hasClass = C.hasClass, hasOwn = C.hasOwn,
-    byClass = C.byClass, gqlRequest = C.gqlRequest, coreSettingElement = C.settingElement,
-    coreSettingRow = C.settingRow, linkTarget = C.linkTarget, entityTip = C.entityTip,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, cfTipTick = C.cfTipTick,
-    fieldLocks = C.fieldLocks, settle = C.settle,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton;
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
+  var showDefaults = C.showDefaults, coop = C.coop, plural = C.plural, el = C.el,
+    hasOwn = C.hasOwn, gqlRequest = C.gqlRequest, coreSettingRow = C.settingRow, linkTarget = C.linkTarget,
+    entityTip = C.entityTip, copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    holdWidth = C.holdWidth, cfTipTick = C.cfTipTick, fieldLocks = C.fieldLocks, settle = C.settle,
+    staleReloadButton = C.staleReloadButton, paintButton = C.paintButton, foreignLease = C.foreignLease,
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape;
 
   var PLUGIN_ID = 'SceneFilenameManager';
-  // Byte-identical to the `.yml`: `headingIsOurs` and `ownTaskName` find this plugin's
-  // settings group and task buttons by it.
+  // Byte-identical to the `.yml`: Core's `settingsPage` and `ownTaskName` find this
+  // plugin's settings group and task buttons by it.
   var PLUGIN_NAME = 'ᝯㄝₓ Scene Filename Manager';
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '2.0.0';
+  var PLUGIN_VERSION = '2.0.5';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -68,9 +69,6 @@
 
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/SceneFilenameManager/README.md';
   var STYLE_ID = 'sfm-style';
-  var README_LINK_ID = 'sfm-readme-link';
-  var DESC_TOGGLE_ID = 'sfm-desc-toggle';
-  var STALE_ID = 'sfm-stale-notice';
 
   // Amber: both tasks write.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
@@ -160,7 +158,7 @@
 
   // Shown on Stash's settings page from its first paint, by the same rule (Core's
   // `showDefaults`); `seedDefaults` below is what writes them.
-  if (typeof showDefaults === 'function') showDefaults(PLUGIN_ID, function () { return SEED_DEFAULTS; });
+  showDefaults(PLUGIN_ID, function () { return SEED_DEFAULTS; });
 
   // **Absent is seeded, present is answered** - even an empty box, which means the
   // default anyway. A saved template naming `base` or `postfix` is promoted to their new
@@ -174,6 +172,8 @@
     // An unanswered box is its default on every read, not only the one that writes the seed.
     missing.forEach(function (key) { s[key] = SEED_DEFAULTS[key]; });
     if (_seeded) return;
+    // COMPAT: a template saved naming `base` or `postfix` (since SceneFilenameManager 0.4.0);
+    // remove when never on its own: an install may skip releases, and the template is kept.
     var promoted = raw.b1RenameTemplate == null ? null : promoteTemplate(raw.b1RenameTemplate);
     if (!missing.length && promoted == null) return;
     _seeded = true;
@@ -287,33 +287,6 @@
     return isNaN(n) || n < 0 ? MAX_PERFORMERS_DEFAULT : n;
   }
 
-  // ── The bulk-edit lease ───────────────────────────────────────────────────
-  //
-  // Taken for every write and every undo, renewed per scene, released in every outcome.
-  // A foreign one is noted in the head, never stood down for: these runs are started by
-  // hand. The one reaction to a save - carrying archived names when a file moves - stands
-  // down for it, so a sibling's bulk merge raises no dialog.
-  function foreignLease() {
-    var c = coop(), now = Date.now();
-    for (var i = c.leases.length - 1; i >= 0; i--) {
-      if (c.leases[i].until <= now) c.leases.splice(i, 1);
-    }
-    return c.leases.length ? c.leases[0] : null;
-  }
-
-  function acquireLease(label) {
-    var c = coop();
-    var lease = { owner: PLUGIN_ID, label: label, until: Date.now() + LEASE_TTL_MS };
-    c.leases.push(lease);
-    return {
-      renew: function () { lease.until = Date.now() + LEASE_TTL_MS; },
-      release: function () {
-        var i = c.leases.indexOf(lease);
-        if (i !== -1) c.leases.splice(i, 1);
-      },
-    };
-  }
-
   // ── Styles ────────────────────────────────────────────────────────────────
 
   var CSS =
@@ -416,13 +389,6 @@
     return b;
   }
 
-  function paintButton(btn, variant) {
-    if (hasClass(btn, variant)) return;
-    btn.className = String(btn.className || '')
-      .replace(/\bbtn-(secondary|warning|info|primary|success|light|dark|link)\b/g, '')
-      .replace(/\s+/g, ' ').replace(/^ | $/g, '') + ' ' + variant;
-  }
-
   // ── The two tasks ─────────────────────────────────────────────────────────
   //
   // Each is a scan (`plan` turns one scene into a job or nothing), a write and its
@@ -461,6 +427,8 @@
       var added = files.filter(function (f) { return !hasOwn(names.map, f.id); })
         .map(function (f) { return { id: f.id, name: map[f.id] }; });
       // The older bare value is rewritten by file id, its name kept.
+      // COMPAT: a bare-stem value, written before names were stored by file id (since
+      // SceneFilenameManager 1.0.4); remove when never on its own: a value stays until rewritten.
       var bare = names.bare ? Object.keys(names.map).map(function (k) {
         return { id: k, name: names.map[k] };
       })[0] : null;
@@ -581,6 +549,8 @@
 
   // Given by Scene Variants' naming, and renamed so they say so. A saved template is
   // promoted once, when the plugin loads.
+  // COMPAT: `base` and `postfix`, the tokens' names before (since SceneFilenameManager 0.4.0);
+  // remove when never on its own: an install may skip releases, and the template is kept.
   var RENAMED_TOKENS = { base: 'basetitle', postfix: 'variantpostfix' };
 
   // What a token is, from its lower-case text: `{ kind, arg }`, `{ error }` for a known
@@ -705,10 +675,11 @@
     }).join('');
   }
 
+  function byName(a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; }
+
   // The `max` performers with the most scenes - ties by name - listed by scene count or
   // alphabetically, and "+N" for the ones left out.
   function namedPerformers(scene) {
-    var byName = function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; };
     return (scene.performers || []).filter(function (p) { return trim(p.name); })
       .sort(function (a, b) { return (b.scene_count || 0) - (a.scene_count || 0) || byName(a, b); });
   }
@@ -716,7 +687,6 @@
   // None kept is no performers at all, not "+5": the count has `performercount` of its own.
   function performersText(scene, max, alphabetical) {
     if (max < 1) return '';
-    var byName = function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; };
     var all = namedPerformers(scene);
     var kept = all.slice(0, max);
     if (alphabetical) kept.sort(byName);
@@ -813,8 +783,6 @@
     }
     return r;
   }
-
-  function cleanStem(text, room) { return cleanReport(text, room).stem; }
 
   // The room a file's new name has before its extension, under the run's limits.
   function roomFor(run, file) {
@@ -930,6 +898,8 @@
         Object.keys(parsed).every(function (k) { return typeof parsed[k] === 'string'; });
       return ok ? { raw: raw, map: parsed } : { raw: raw, map: map, broken: true };
     }
+    // COMPAT: a bare stem, the primary file's, as every value before names by file id (since
+    // SceneFilenameManager 1.0.4); remove when never on its own: a value stays until Archive rewrites it.
     var f = primaryFile(scene);
     if (f) map[f.id] = raw;
     return { raw: raw, map: map, bare: true };
@@ -1121,6 +1091,8 @@
   }
 
   function stashIdsFor(run, api) {
+    // COMPAT: a Scene Variants older than its `stashIds` (since SceneFilenameManager 0.4.0);
+    // remove when never on its own: each plugin is updated on its own.
     if (!api || typeof api.stashIds !== 'function') {
       run.msg('INFO', 'ᯯㄝₓ Scene Variants is not installed, or is older than the ' +
         'stashid token, so stashid is empty.');
@@ -1232,6 +1204,7 @@
   }
 
   var TASKS = [ARCHIVE_TASK, RESTORE_TASK, RENAME_TASK];
+  var TASK_NAMES = TASKS.map(function (t) { return t.name; });
 
   // ── Carrying archived names to the scene a file moves to ──────────────────
   //
@@ -1246,6 +1219,8 @@
   var MOVE_SCENES_QUERY = 'query SFMMoveScenes($ids: [ID!]) { findScenes(ids: $ids, ' +
     'filter: { per_page: -1 }) { scenes { id title custom_fields files { id basename ' +
     'parent_folder { id } } } } }';
+  // COMPAT: a Stash whose files have no `scenes` back-reference (since
+  // SceneFilenameManager 1.5.5); remove when the least Stash this supports has one.
   // A Reassign names the file, not the scene it leaves. A file on the Stash this targets
   // carries no `scenes` back-reference - Stash's development branch adds one - and no
   // filter matches a file id, so the scenes holding it are found by its path: read the
@@ -1422,7 +1397,9 @@
     var handle = coop().sfmMoveWatch = coop().sfmMoveWatch || {};
     handle.react = function (orig, self, args) {
       var move = /\/graphql([?#]|$)/.test(String(args[0])) ? fileMoveOf(args[1]) : null;
-      if (!move || foreignLease()) return orig.apply(self, args);
+      // A sibling's bulk merge raises no dialog. This plugin's own lease is held only while
+      // one of its dialogs writes, and `watchMove` opens none while one is open.
+      if (!move || foreignLease(PLUGIN_ID)) return orig.apply(self, args);
       return watchMove(orig, self, args, move);
     };
     if (handle.installed || typeof window.fetch !== 'function') return;
@@ -1482,7 +1459,7 @@
     this.staleEl = el('div', 'sfm-stale sfm-hidden', '');
     head.appendChild(this.staleEl);
     head.appendChild(el('div', 'sfm-warn',
-      'Backing up your database before proceeding is recommended. Undo only reverses what this ' +
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this ' +
       'dialog wrote, while it stays open, and cannot account for changes made elsewhere in the ' +
       'meantime.'));
     this.noteEl = el('div', 'sfm-note sfm-hidden', '');
@@ -1520,7 +1497,7 @@
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'sfm');
     document.body.appendChild(this.backdrop);
   };
 
@@ -1770,7 +1747,8 @@
     this.setState('scanning');
     this.progressEl.textContent = 'Reading your settings…';
     checkStale(this);
-    var lease = foreignLease();
+    // Noted, never stood down for: these runs are started by hand.
+    var lease = foreignLease(PLUGIN_ID);
     if (lease) {
       this.note('Another plugin is running a bulk edit here (' + lease.label + '), so a ' +
         'scene may be read a moment behind what it holds.');
@@ -1838,7 +1816,7 @@
 
   // One batch per request, the lease renewed before each, Stop read between them.
   Run.prototype.runJobs = function (jobs, op, label, build, done) {
-    var self = this, lease = acquireLease(label), i = 0;
+    var self = this, lease = C.lease(PLUGIN_ID, label, LEASE_TTL_MS), i = 0;
     this.stopped = false;
     function next() {
       if (i >= jobs.length || self.stopped) return Promise.resolve();
@@ -1858,7 +1836,7 @@
     });
   };
 
-  // Undo History, where ᝯㄝₓ Core keeps one. A job here is one of two changes: a value
+  // Undo History, which ᝯㄝₓ Core keeps. A job here is one of two changes: a value
   // for the custom field (Archive, the archive a rename writes first, a carried name, or the
   // name a reassigned file leaves behind taken off - the field removed where none is left), or
   // a file's new name, which goes back by moving it in its folder under the old one.
@@ -1873,9 +1851,7 @@
   }
 
   function journalPass(label) {
-    var j = coop().journal;
-    return j && typeof j.pass === 'function'
-      ? j.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true }) : null;
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: true });
   }
 
   Run.prototype.go = function () {
@@ -1886,14 +1862,12 @@
     // to write and `runJobs` would not clear it before the renames.
     this.stopped = false;
     this.setState('writing');
-    var pass = journalPass(task.title), runId = pass ? pass.id : null;
+    var pass = journalPass(task.title), runId = pass.id;
     this.archiveFirst(jobs).then(function (wrote) {
       // The archives this pass wrote ahead of the renames are changes of their own; one an
       // earlier pass wrote is that pass's.
-      if (pass) {
-        pass.entries(wrote.map(function (st) { return journalEntry(st, field, false); }));
-        wrote.forEach(function (st) { self.recorded(runId, st); });
-      }
+      pass.entries(wrote.map(function (st) { return journalEntry(st, field, false); }));
+      wrote.forEach(function (st) { self.recorded(runId, st); });
       // Only a file whose name is archived is renamed: a step a Stop left unsent waits
       // for the next Proceed.
       jobs = jobs.filter(function (j) {
@@ -1913,17 +1887,15 @@
             self.changes.push(job);
             self.written++;
             self.sceneLine(doneKind(task), job, task.tail(job, field));
-            if (pass) {
-              pass.entries([journalEntry(job, field, false)]);
-              job.run = runId;
-              self.recorded(runId, job);
-            }
+            pass.entries([journalEntry(job, field, false)]);
+            job.run = runId;
+            self.recorded(runId, job);
           }
         });
     }).then(function () {
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.pending().length, self.task.unit || 'scene') +
         ' left unwritten.');
-      if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+      pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
       self.setState('listing');
     });
   };
@@ -2010,7 +1982,6 @@
         job.written = false;
         self.written--;
         self.sceneLine('UNDO', job, task.tail(job, field));
-        if (!pass) return;
         if (!job.run) { pass.entries([journalEntry(job, field, true)]); return; }
         var k = job.run + ':' + job.scene.id;
         (undone[k] = undone[k] || []).push(job);
@@ -2021,7 +1992,7 @@
       // recorded here, and that scene of that run stays so.
       Object.keys(undone).forEach(function (k) {
         var list = undone[k];
-        if (self.entriesIn[k] === list.length && typeof pass.reverse === 'function') {
+        if (self.entriesIn[k] === list.length) {
           pass.reverse(list[0].run, 'scenes', list[0].scene.id);
           delete self.entriesIn[k];
         } else {
@@ -2031,7 +2002,7 @@
       });
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.changes.length, self.task.unit || 'scene') +
         ' still written.');
-      if (pass) pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+      pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
       self.setState('listing');
     });
   };
@@ -2079,44 +2050,19 @@
     if (this.task.closed) this.task.closed();
   };
 
-  // Escape acts through the footer's Close, so it can never reach a disabled one.
-  function wireEscape(run) {
-    run._onEscape = function (ev) {
-      if (!ev || (ev.key !== 'Escape' && ev.keyCode !== 27)) return;
-      var b = run.closeBtn;
-      if (!b || b.disabled || hasClass(b, 'sfm-hidden')) return;
-      if (ev.preventDefault) ev.preventDefault();
-      b.click();
-    };
-    document.addEventListener('keydown', run._onEscape);
-  }
-
-  function unwireEscape(run) {
-    if (run._onEscape) document.removeEventListener('keydown', run._onEscape);
-    run._onEscape = null;
-  }
-
   // A stale script is refused the write rather than warned about: what it would write
   // is the previous release's idea of the plan.
   function checkStale(run) {
-    gqlRequest('query SFMPluginVersion { plugins { id version } }', null)
-      .then(function (data) {
-        var list = (data && data.plugins) || [];
-        for (var i = 0; i < list.length; i++) {
-          if (list[i] && String(list[i].id) === PLUGIN_ID) return list[i].version || null;
-        }
-        return null;
-      }, function () { return null; })
-      .then(function (installed) {
-        if (!installed || installed === PLUGIN_VERSION) return;
-        run.stale = true;
-        run.staleEl.textContent = '⚠ This page is still running ' + PLUGIN_SHORT_NAME +
-          ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. Press Ctrl+Shift+R ' +
-          '(⌘+Shift+R on a Mac) and open this again: nothing will be written until you do.';
-        staleReloadButton(run.staleEl);
-        run.show(run.staleEl, true);
-        run.syncFooter();
-      });
+    C.installedVersion(PLUGIN_ID, 'SFMPluginVersion').then(function (installed) {
+      if (!installed || installed === PLUGIN_VERSION) return;
+      run.stale = true;
+      run.staleEl.textContent = '⚠ This page is still running ' + PLUGIN_SHORT_NAME +
+        ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. Press Ctrl+Shift+R ' +
+        '(⌘+Shift+R on a Mac) and open this again: nothing will be written until you do.';
+      staleReloadButton(run.staleEl);
+      run.show(run.staleEl, true);
+      run.syncFooter();
+    });
   }
 
   // ── The template editor ───────────────────────────────────────────────────
@@ -2344,7 +2290,7 @@
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
-    wireEscape(this);
+    wireEscape(this, 'sfm');
     document.body.appendChild(this.backdrop);
     this.update();
     tagIndex().then(function (index) { self.tags = index; }, function () { self.tags = null; })
@@ -2492,18 +2438,13 @@
     warn.forEach(function (w) { self.warnEl.appendChild(el('div', null, w)); });
   };
 
-  // `configurePlugin` replaces the whole map, so it is read fresh and sent whole.
+  // `configurePlugin` replaces the whole map, so Core's write reads it fresh and sends it whole.
   TemplateEditor.prototype.save = function () {
-    var self = this, template = this.input.value;
+    var self = this, patch = {};
     if (this.saveBtn.disabled) return;
     this.saveBtn.disabled = true;
-    gqlRequest('query SFMSettings { configuration { plugins } }', null).then(function (data) {
-      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {}, input = {};
-      for (var k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
-      input[TEMPLATE_KEY] = template;
-      return gqlRequest('mutation SFMSaveTemplate($id: ID!, $input: Map!) ' +
-        '{ configurePlugin(plugin_id: $id, input: $input) }', { id: PLUGIN_ID, input: input });
-    }).then(function () {
+    patch[TEMPLATE_KEY] = this.input.value;
+    C.writePluginSettings(PLUGIN_ID, patch, 'SFMSaveTemplate').then(function () {
       _settingsAt = 0;
       refreshConfiguration();
       Object.keys(self.rows).forEach(function (tok) {
@@ -2548,30 +2489,11 @@
   //
   // Declared in the yml so Stash lists them, handled here: a capture-phase listener beats
   // React's own and stops the click, so no job is queued and no toast appears. Ours only
-  // if the caption matches *and* the enclosing group is headed with our name.
+  // if the caption matches *and* the enclosing group is headed with our name (Core's
+  // `ownTaskName`).
   function taskByCaption(label) {
     for (var i = 0; i < TASKS.length; i++) if (TASKS[i].name === label) return TASKS[i];
     return null;
-  }
-
-  function ownTask(btn) {
-    var task = taskByCaption(trim(btn.textContent));
-    if (!task) return null;
-    var fallback = null;
-    for (var node = btn, depth = 0; node && depth < 8; depth++, node = node.parentElement) {
-      var heading = node.querySelector ? node.querySelector('h3') : null;
-      var ours = !!heading && headingIsOurs(heading.textContent);
-      if (hasClass(node, 'setting-group')) return ours ? task : null;
-      if (ours) fallback = task;
-    }
-    return fallback;
-  }
-
-  function paintTaskButtons() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (ownTask(nodes[i])) paintButton(nodes[i], PLUGIN_BTN_VARIANT);
-    }
   }
 
   if (document.addEventListener) {
@@ -2584,7 +2506,7 @@
         openEditor();
         return;
       }
-      var task = btn ? ownTask(btn) : null;
+      var task = btn ? taskByCaption(C.ownTaskName(btn, PLUGIN_NAME, TASK_NAMES)) : null;
       if (!task) return;
       if (event.preventDefault) event.preventDefault();
       if (event.stopPropagation) event.stopPropagation();
@@ -2594,187 +2516,17 @@
 
   // ── The settings page ─────────────────────────────────────────────────────
   //
-  // The group is found by the `plugin-<id>-<key>` id Stash gives every setting, with the
-  // heading as fallback - guarded by `hasOwnTaskButton`, because Settings → Tasks heads
-  // its group with the same name and decorating it would destroy the task buttons.
-  function ownSettingGroup() {
-    var node = null, d;
-    for (var key in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, key)) continue;
-      node = coreSettingElement(PLUGIN_ID, key);
-      if (node) break;
-    }
-    for (d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return node;
-    }
-    var heading = ownSettingGroupHeading();
-    for (node = heading, d = 0; node && d < 10; d++, node = node.parentElement) {
-      if (hasClass(node, 'setting-group')) return hasOwnTaskButton(node) ? null : node;
-    }
-    return heading ? heading.parentElement : null;
-  }
-
-  function hasOwnTaskButton(node) {
-    if (!node) return false;
-    if (node.tagName === 'BUTTON' && taskByCaption(trim(node.textContent))) return true;
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) if (hasOwnTaskButton(kids[i])) return true;
-    return false;
-  }
-
-  function ownSettingGroupHeading() {
-    var nodes = document.querySelectorAll ? document.querySelectorAll('h3') : [];
-    for (var i = 0; i < nodes.length; i++) {
-      if (headingIsOurs(nodes[i].textContent)) return nodes[i];
-    }
-    return null;
-  }
-
-  // Settings → Plugins heads the group `<name> (<version>)`, Settings → Tasks with the
-  // bare name; compared exactly after the suffix is stripped.
-  function headingIsOurs(text) {
-    var t = trim(text);
-    if (t === PLUGIN_NAME) return true;
-    return trim(t.replace(/\s*\([^()]*\)$/, '').replace(/\s+undefined$/, '')) === PLUGIN_NAME;
-  }
-
-  function oneLine(text) {
-    return trim(String(text == null ? '' : text).replace(/\s+/g, ' '));
-  }
-
-  // Stash renders the description as one text node; it is rebuilt as one div per
-  // paragraph, on every tick, because React puts the text node back on a re-render.
-  function splitDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'sfm-p')) return;
-    var text = sub.textContent || '';
-    if (text.indexOf('\n') === -1) return;
-    sub.textContent = '';
-    text.split(/\n{2,}/).forEach(function (para) {
-      var t = oneLine(para);
-      if (t) sub.appendChild(el('div', 'sfm-p', t));
-    });
-  }
-
-  function setClass(node, name, on) {
-    var cls = String(node.className || '').replace(new RegExp('\\s*' + name + '\\b'), '');
-    node.className = trim(on ? cls + ' ' + name : cls);
-  }
-
-  // A <button>, never a <span>: SettingGroup folds the whole group on any other click.
-  function collapseDescription(group) {
-    var sub = byClass(group, 'sub-heading');
-    if (!sub || document.getElementById(DESC_TOGGLE_ID)) return;
-    var kids = sub.childNodes || [], paras = 0;
-    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], 'sfm-p')) paras++;
-    if (paras < 2) return;
-    setClass(sub, 'sfm-desc-collapsed', true);
-    var btn = el('button', 'sfm-desc-toggle', 'Show more');
-    btn.id = DESC_TOGGLE_ID;
-    btn.type = 'button';
-    btn.addEventListener('click', function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      if (e && e.stopPropagation) e.stopPropagation();
-      var open = hasClass(sub, 'sfm-desc-collapsed');
-      setClass(sub, 'sfm-desc-collapsed', !open);
-      btn.textContent = open ? 'Show less' : 'Show more';
-    });
-    sub.appendChild(btn);
-  }
-
-  // A setting's description keeps its first paragraph on the row; the rest opens in a
-  // box from the ⓘ mark, the summary or the setting's name.
-  function tipTrigger(node, row) {
-    if (!node || node._sfmTipWired) return;
-    node._sfmTipWired = true;
-    var toggle = function (on) {
-      var sub = byClass(row, 'sub-heading');
-      if (sub) setClass(sub, 'sfm-tip-open', on);
-    };
-    node.addEventListener('mouseenter', function () { toggle(true); });
-    node.addEventListener('mouseleave', function () { toggle(false); });
-    node.addEventListener('focus', function () { toggle(true); });
-    node.addEventListener('blur', function () { toggle(false); });
-  }
-
-  function tipSetting(key) {
-    var row = coreSettingRow(PLUGIN_ID, key);
-    var sub = row && byClass(row, 'sub-heading');
-    if (!sub) return;
-    var kids = sub.childNodes || [];
-    if (kids.length && hasClass(kids[0], 'sfm-sum')) return;
-    var text = sub.textContent || '', cut = text.indexOf('\n\n');
-    if (cut === -1) return;
-    var summary = oneLine(text.slice(0, cut));
-    var detail = text.slice(cut + 2).split(/\n{2,}/).map(oneLine)
-      .filter(function (p) { return !!p; }).join('\n\n');
-    if (!summary || !detail) return;
-    sub.textContent = '';
-    setClass(sub, 'sfm-tipped', true);
-    var sum = el('span', 'sfm-sum', summary);
-    sub.appendChild(sum);
-    var mark = el('span', 'sfm-tip', 'ⓘ');
-    mark.tabIndex = 0;
-    sub.appendChild(mark);
-    sub.appendChild(el('span', 'sfm-tipbox', detail));
-    tipTrigger(mark, row);
-    tipTrigger(sum, row);
-    tipTrigger(row.querySelector ? row.querySelector('h3') : null, row);
-  }
-
-  // The manifest's version is in the group heading; `PLUGIN_VERSION` is what this script
-  // is. No parenthesised version means Settings → Tasks, which says nothing either way.
-  function ensureStaleNotice(group) {
-    var h3 = group.querySelector ? group.querySelector('h3') : null;
-    var m = /\(([^()]+)\)$/.exec(trim(h3 && h3.textContent));
-    var installed = m ? trim(m[1]) : null;
-    var stale = !!installed && installed !== PLUGIN_VERSION;
-    var node = document.getElementById(STALE_ID);
-    ensureReloadUiButton(PLUGIN_ID, group, stale);
-    if (!stale) {
-      if (node && node.parentNode) node.parentNode.removeChild(node);
-      return;
-    }
-    var sub = byClass(group, 'sub-heading');
-    var parent = sub && sub.parentNode ? sub.parentNode : group;
-    var before = sub && sub.parentNode ? sub : group.firstChild;
-    if (node && node.parentNode === parent) return;
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-    node = el('div', 'sfm-stale', '⚠ This page is still running ' + PLUGIN_SHORT_NAME +
-      ' ' + PLUGIN_VERSION + ', but ' + installed + ' is installed. Press Ctrl+Shift+R ' +
-      '(⌘+Shift+R on a Mac) to reload it: your browser has cached the older script, ' +
-      'and everything this plugin does until then is that older code.');
-    node.id = STALE_ID;
-    parent.insertBefore(node, before);
-  }
-
-  function ensureReadmeLink(group) {
-    if (document.getElementById(README_LINK_ID)) return;
-    var link = el('a', 'sfm-readme', 'SceneFilenameManager/README.md');
-    link.id = README_LINK_ID;
-    link.href = README_URL;
-    link.target = linkTarget();
-    link.rel = 'noreferrer';
-    link.title = 'Open this plugin’s documentation';
-    link.style = 'display:inline-block;margin-top:.35rem;font-size:.8rem;';
-    var sub = byClass(group, 'sub-heading');
-    if (sub && sub.parentNode) sub.parentNode.insertBefore(link, sub.nextSibling);
-    else group.appendChild(link);
-  }
+  // Core's `settingsPage`: the group found by its settings' ids, else by its heading unless
+  // it holds the task buttons, which is Settings → Tasks.
+  var page = C.settingsPage({ id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME,
+    version: PLUGIN_VERSION, prefix: 'sfm', keys: Object.keys(DEFAULTS), tasks: TASK_NAMES,
+    readmeUrl: README_URL, readmeLabel: 'SceneFilenameManager/README.md', injectStyle: injectStyle });
 
   function settingsTick() {
-    paintTaskButtons();
-    var group = ownSettingGroup();
+    C.paintTaskButtons(PLUGIN_NAME, TASK_NAMES, function () { return PLUGIN_BTN_VARIANT; });
+    var group = page.group();
     if (!group) return;
-    injectStyle();
-    setClass(group, 'sfm-own-group', true);
-    splitDescription(group);
-    collapseDescription(group);   // after the split: it counts the paragraphs
-    for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) tipSetting(k);
-    ensureStaleNotice(group);
-    ensureReadmeLink(group);
+    page.decorate(group);
     // `fieldName()`, not the raw box: an empty one means the default.
     cfTipTick(PLUGIN_ID, 'a1FilenameField', fieldName());
   }
