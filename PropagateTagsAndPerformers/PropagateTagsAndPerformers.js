@@ -24,11 +24,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[ptp2re] ᝯㄝₓ Propagate Tags and Performers to Related Entities cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[ptp2re] ᝯㄝₓ Propagate Tags and Performers to Related Entities cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -40,7 +40,7 @@
     domBus = C.domBus, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
     holdWidth = C.holdWidth, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
-    splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny, cfTipTick = C.cfTipTick,
+    splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny, cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
     staleReloadButton = C.staleReloadButton, ensureRowSpacing = C.ensureRowSpacing,
     insertBeforeImportantAction = C.insertBeforeImportantAction,
     hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass,
@@ -80,7 +80,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.0.5';
+  var PLUGIN_VERSION = '6.1.13';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -106,10 +106,8 @@
   // knowing about and not worth using: Stash themes it identically to
   // `btn-secondary`, so it would read as no change at all.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
-  // Teal for a control that only reads, or that writes nothing but a setting of ours:
-  // the Path Settings task and the button that replaces its row on the settings page.
-  // What that setting says is already amber on the line above the button.
-  var READONLY_BTN_VARIANT = 'btn-info';
+  // Stash's blue for a control that only reads, or that writes nothing but a setting of ours.
+  var READONLY_BTN_VARIANT = 'btn-primary';
 
   // Declared in the manifest so Stash lists it under Settings - Tasks - Plugin
   // Tasks, but run in the browser: this plugin has no exec, so a queued job could
@@ -786,7 +784,6 @@
     f7TagNameSeparator: '',
     f8ExcludeTagSubtreeName: '',
 
-    g1LogToConsole: false,
   };
 
   // ── The path setting string ───────────────────────────────────────────────
@@ -992,25 +989,28 @@
   // on Stash's settings page; the pair is edited in the Auto-Propagation and Depropagate Assist
   // dialog now, and the old keys are read by the migration in `settingsFrom` only.
   var AUTO_MODES = ['target', 'source', 'silent', 'depropagate'];
+  // Each row: its mode, label, help, and Core's level (`levelOf`) - the two reactions write on
+  // their own, Silent writes with no dialog at all, Depropagate assist decides what a save
+  // offers to take back.
   var AUTO_ROWS = [
     ['target', 'Auto-Propagate when the Target is Saved',
       'Whenever Stash saves a scene, gallery, image or group, every enabled path that ' +
       'copies into it runs on that one entity. One small read per save, so it is the ' +
-      'cheaper of the two.'],
+      'cheaper of the two.', true],
     ['source', 'Auto-Propagate when the Source is Saved',
       'Whenever Stash saves an entity, its tags or performers are pushed into every ' +
       'entity an enabled path copies them to. This one fans out: saving a popular ' +
-      'performer can rewrite every scene they appear in.'],
+      'performer can rewrite every scene they appear in.', true],
     // The two options below qualify the two modes above. `silent` is the one that
     // makes a reaction write with no plan in front of it, which is why it is off
     // until asked for and greyed out while there is no reaction for it to silence.
     ['silent', 'Silent Auto-propagation',
       'On, a reaction writes the moment Stash saves. Off, a dialog lists what the ' +
-      'save would add - every line ticked - and nothing is written until you press OK.'],
+      'save would add - every line ticked - and nothing is written until you press OK.', 'strong'],
     ['depropagate', 'Suggest Tag Auto-removal - Depropagate assist',
       'When a performer, studio or group is removed from a scene on an active path, ' +
       'offer to remove the tags it brought that no other related entity of that scene ' +
-      'carries. Listed unticked; only what you tick is removed, and only on OK.'],
+      'carries. Listed unticked; only what you tick is removed, and only on OK.', 'semi'],
   ];
 
   function parseAuto(raw) {
@@ -1077,7 +1077,7 @@
     // means one row and one column each, which is the right shape for a short list.
     list.style.gridTemplateRows = 'repeat(' + Math.ceil(on.length / 3) + ', auto)';
     on.forEach(function (p) {
-      var line = el('div', 'ptp2re-pathstring-on');
+      var line = C.markLevel(el('div', 'ptp2re-pathstring-on'), 'semi');
       // The label is a span rather than the div's own text: a mode is appended after
       // it, and text plus an element in one node is the shape that loses the text.
       line.appendChild(el('span', null, pathLabel(p)));
@@ -1212,8 +1212,7 @@
 
   // ── Button gating diagnostics ────────────────────────────────────────────
   //
-  // Off unless `__GTTx__.StashPluginCoop.debugButtons = true` (or Dev Mods' Debug switch,
-  // `debugMode`), which is typed into the browser console: no setting, no reload, no file edit, and the flag is read at call time so
+  // Off unless `__GTTx__.StashPluginCoop.logButtonVisInfo = true` (or Dev Mods' Log Button Visibility switch), which is typed into the browser console: no setting, no reload, no file edit, and the flag is read at call time so
   // it takes effect on the next tick. On the shared object rather than a global of our
   // own because both plugins that draw buttons into these rows answer to it, and "why
   // is this button missing" is rarely a question about only one of them.
@@ -1548,7 +1547,7 @@
     // lighter #30404d.
     '.ptp2re-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.ptp2re-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.ptp2re-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
     // A plugin-local modifier beside the pinned shared `.modal` rule, the pattern
     // `CustomFieldsBulkEditor`'s `.cfbe-tall` set: the shared width is sized for log
@@ -1556,21 +1555,21 @@
     // columns of short labels instead. Widening past what they need only pushes each
     // select further from the label it belongs to.
     '.ptp2re-modal.ptp2re-narrow{width:min(58rem,94vw);}' +
-    '.ptp2re-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.ptp2re-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.ptp2re-title{font-size:1.1rem;font-weight:600;}' +
-    '.ptp2re-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.ptp2re-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.ptp2re-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.ptp2re-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.ptp2re-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.ptp2re-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.ptp2re-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.ptp2re-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.ptp2re-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;' +
     'font-size:.8rem;line-height:1.35;min-height:14rem;}' +
     '.ptp2re-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.ptp2re-spin{color:#a7b6c2;}' +
+    '.ptp2re-spin{color:var(--gttx-muted,#a7b6c2);}' +
     // An entity named in the log is a link to it. The same blue the siblings' result
     // lines use, underlined only on hover so a log full of them does not read as a
     // page of underlines.
-    '.ptp2re-elink{color:#7cc4ff;text-decoration:none;}' +
+    '.ptp2re-elink{text-decoration:none;}' +
     '.ptp2re-elink:hover{text-decoration:underline;}' +
     // A tag or performer named in the log opens a card on hover. The shared `.tipbox`
     // rule cannot do this job: it is absolutely positioned inside its trigger, and the
@@ -1610,11 +1609,11 @@
     // under a head of its own, with a rule between boxes.
     '.ptp2re-btncols{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;margin:.5rem 0;}' +
     '.ptp2re-btncol{min-width:0;}' +
-    '.ptp2re-btncol+.ptp2re-btncol{border-left:1px solid #394b59;padding-left:1rem;}' +
-    '.ptp2re-btncol-head{color:#d6dee4;font-size:1rem;font-weight:600;margin-bottom:.5rem;' +
+    '.ptp2re-btncol+.ptp2re-btncol{border-left:1px solid var(--gttx-border,#394b59);padding-left:1rem;}' +
+    '.ptp2re-btncol-head{color:var(--gttx-fg2,#d6dee4);font-size:1rem;font-weight:600;margin-bottom:.5rem;' +
     'text-align:center;}' +
-    '.ptp2re-btngroup{border-top:1px solid #394b59;padding:.4rem 0 .5rem;}' +
-    '.ptp2re-btngroup-head{color:#c9d3db;font-size:.95rem;font-weight:600;margin-bottom:.3rem;}' +
+    '.ptp2re-btngroup{border-top:1px solid var(--gttx-border,#394b59);padding:.4rem 0 .5rem;}' +
+    '.ptp2re-btngroup-head{color:var(--gttx-fg2,#c9d3db);font-size:.95rem;font-weight:600;margin-bottom:.3rem;}' +
     // Inside a box the caption column takes what is left and wraps - the longest
     // caption is two lines in the narrow modal - and the toggle column is at the
     // column's right edge, so every On/Off lines up down the column rather than
@@ -1622,7 +1621,7 @@
     // head reads as the head and the rows as its rows.
     '.ptp2re-btngroup .ptp2re-paths-col{grid-template-columns:minmax(0,1fr) max-content;' +
     'padding-left:.6rem;}' +
-    '.ptp2re-path-name{color:#d6dee4;font-size:.9rem;}' +
+    '.ptp2re-path-name{color:var(--gttx-fg2,#d6dee4);font-size:.9rem;}' +
     // The per-path toggle. Everything visual comes from Bootstrap's own `btn btn-sm`
     // plus the variant the paint swaps, so this rule only has to stop thirteen buttons
     // of five different caption widths from looking ragged: the grid column is already
@@ -1637,7 +1636,7 @@
     // A path nothing switched on that other enabled paths already carry end to end:
     // the resting background, and the amber as letters. `!important` because it is
     // overriding `btn-secondary`'s own colour, which is what the button still is.
-    '.ptp2re-toggle-auto{color:#ffb648 !important;}' +
+    '.ptp2re-toggle-auto{color:var(--gttx-highlight,#ffc107) !important;}' +
     '.ptp2re-pathsbody{padding:.5rem 1rem;overflow:auto;}' +
     // The one exclusion filter with no row on Stash's settings page, because the
     // dialog is where it belongs: it is the only filter whose rule another plugin
@@ -1645,10 +1644,10 @@
     // right now. Amber on the box for the reason the row it replaced was amber -
     // marking a control as ours, not as one that writes.
     '.ptp2re-opt{display:flex;align-items:flex-start;gap:.45rem;margin:.75rem 0 .25rem;' +
-    'color:#d6dee4;font-size:.9rem;cursor:pointer;}' +
-    '.ptp2re-opt input{accent-color:#ffc107;margin-top:.2rem;flex:0 0 auto;}' +
+    'color:var(--gttx-fg2,#d6dee4);font-size:.9rem;cursor:pointer;}' +
+    '.ptp2re-opt input{margin-top:.2rem;flex:0 0 auto;}' +
     '.ptp2re-opt-off{opacity:.6;cursor:default;}' +
-    '.ptp2re-optnote{color:#7d8f9c;font-size:.8rem;margin:0 0 .25rem 1.4rem;}' +
+    '.ptp2re-optnote{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;margin:0 0 .25rem 1.4rem;}' +
     // The pick dialog's lines: a box and a plan line, the line in the log's own face.
     // Between the settings dialogs' width and the run dialog's: a line here names an
     // entity, a tag and where it came from, and a few of them should not wrap.
@@ -1656,7 +1655,7 @@
     '.ptp2re-pick{display:flex;flex-direction:column;gap:2px;min-height:8rem;}' +
     '.ptp2re-pick-row{display:flex;align-items:flex-start;gap:7px;margin:0;' +
     'font-family:monospace;font-size:.8rem;line-height:18px;cursor:pointer;}' +
-    '.ptp2re-pick-row input{accent-color:#ffc107;width:13px;height:13px;margin:3px 0 0;flex:0 0 auto;}' +
+    '.ptp2re-pick-row input{accent-color:var(--gttx-highlight,#ffc107);width:13px;height:13px;margin:3px 0 0;flex:0 0 auto;}' +
     // ── The diagram view ────────────────────────────────────────────────────
     //
     // Everything on the canvas is absolutely placed from `diagramGeometry`, in the
@@ -1668,7 +1667,7 @@
     // for it to wrap into; `.ptp2re-pathsbody` already scrolls, which is what a window
     // too narrow for it gets.
     '.ptp2re-dia{margin:.5rem 0;}' +
-    '.ptp2re-dia-legend{color:#7d8f9c;font-size:.8rem;margin:0 0 .6rem;}' +
+    '.ptp2re-dia-legend{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;margin:0 0 .6rem;}' +
     // Centred: the canvas is exactly as big as the picture on it, so `auto` margins
     // put it in the middle of a dialog wider than that. Not while arranging - the
     // canvas grows as a box is dragged towards its edge, and a centred canvas that
@@ -1687,17 +1686,17 @@
     // because all three override `btn-secondary`'s own border, which is what the box
     // still is.
     '.ptp2re-dia-live{border-color:#ffb648 !important;}' +
-    '.ptp2re-dia-gives{border-color:#17a2b8 !important;}' +
+    '.ptp2re-dia-gives{border-color:#48aff0 !important;}' +
     '.ptp2re-dia-idle{border-color:#000 !important;}' +
     '.ptp2re-dia-name{padding:.25rem .55rem;font-weight:600;font-size:.9rem;}' +
     // The two chips are the arrows' anchors as well as the box's contents, so they
     // carry the arrow colours: what a line moves is readable at both ends of it.
     '.ptp2re-dia-chip{position:absolute;box-sizing:border-box;pointer-events:none;' +
     'border:1px solid;' +
-    'border-radius:10px;background:#202b33;font-size:.75rem;line-height:18px;' +
+    'border-radius:10px;background:var(--gttx-bg,#202b33);font-size:.75rem;line-height:18px;' +
     'text-align:center;}' +
     '.ptp2re-dia-tags{color:#84d68a;border-color:#84d68a;}' +
-    '.ptp2re-dia-performers{color:#7cc4ff;border-color:#7cc4ff;}' +
+    '.ptp2re-dia-performers{color:var(--gttx-accent,#7cc4ff);border-color:var(--gttx-accent,#7cc4ff);}' +
     // The point the geometry returns is the middle of the button, not its corner:
     // where a toggle sits on its curve is a fact about the curve, and its width is a
     // fact about its caption.
@@ -1716,7 +1715,7 @@
     '.ptp2re-dia-edit{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;' +
     'margin:0 0 .6rem;}' +
     '.ptp2re-dia-edit button{margin-right:0;}' +
-    '.ptp2re-dia-edithint{color:#ffb648;font-size:.8rem;margin-right:.4rem;}' +
+    '.ptp2re-dia-edithint{color:var(--gttx-highlight,#ffc107);font-size:.8rem;margin-right:.4rem;}' +
     // The enabled paths as the settings row shows them. Prose rather than the
     // sibling's monospace: what is rendered here is `pathLabel`, the same sentence
     // the log uses, not the tokens the setting stores.
@@ -1725,19 +1724,19 @@
     // `renderPathString` sets, since the stylesheet cannot know how many paths are on.
     // `max-content` columns and `justify-content: start` so the block is only as wide
     // as the entries in it: with equal columns the longest entry would set all three.
-    '.ptp2re-pathstring{font-size:.85rem;color:#a7b6c2;margin:.25rem 0 .5rem;}' +
+    '.ptp2re-pathstring{font-family:var(--font-family-sans-serif,var(--bs-font-sans-serif,sans-serif));font-size:.85rem;color:var(--gttx-muted,#a7b6c2);margin:.25rem 0 .5rem;}' +
     '.ptp2re-pathstring-list{display:grid;grid-auto-flow:column;' +
     'grid-auto-columns:max-content;justify-content:start;gap:.1rem 1.5rem;}' +
     // Amber for the same reason the selectors are: a path that is on is one this
     // plugin writes along. The mode in brackets stays grey - it qualifies the line
     // rather than being a second thing that is on.
-    '.ptp2re-pathstring-on{color:#ffb648;}' +
+
     // The buttons row: a column per side, each a line per page, wrapping rather than
     // growing - the three-column list overflowed the row with twenty-four captions.
     '.ptp2re-btnstring{display:grid;grid-template-columns:1fr 1fr;gap:.1rem 1.5rem;}' +
     '.ptp2re-btnstring>div{min-width:0;}' +
-    '.ptp2re-btnstring-head{color:#7d8f9c;font-size:.8rem;}' +
-    '.ptp2re-pathstring-mode{color:#a7b6c2;font-size:.8rem;}' +
+    '.ptp2re-btnstring-head{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;}' +
+    '.ptp2re-pathstring-mode{color:var(--gttx-muted,#a7b6c2);font-size:.8rem;}' +
     // The row's own "I could not read this" line. The stale banner's red, because it
     // is the same kind of message: something is configured and not in force.
     '.ptp2re-pathstring-warn{color:#ff7373;}' +
@@ -1746,9 +1745,9 @@
     'font-weight:600;}' +
     // The log's own line kinds, which the siblings do not share: this plugin adds
     // both tags and performers, so ADD alone would not say which.
-    '.ptp2re-ERROR{color:#ff7373;} .ptp2re-WARN{color:#ffb648;} .ptp2re-TAG{color:#84d68a;}' +
-    '.ptp2re-PERF{color:#7cc4ff;} .ptp2re-INFO{color:#a7b6c2;}' +
-    '.ptp2re-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.ptp2re-ERROR{color:#ff7373;} .ptp2re-WARN{color:var(--gttx-highlight,#ffc107);} .ptp2re-TAG{color:#84d68a;}' +
+    '.ptp2re-PERF{color:var(--gttx-accent,#7cc4ff);} .ptp2re-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.ptp2re-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.ptp2re-foot button{margin-right:.5rem;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
@@ -1799,7 +1798,7 @@
     // a flicker loop for as long as it is hovered.
     '.ptp2re-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
     'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.ptp2re-tipped.ptp2re-tip-open .ptp2re-tipbox{display:block;}' +
@@ -1808,27 +1807,8 @@
     // but the first paragraph is the only thing that shortens it.
     '.ptp2re-desc-collapsed .ptp2re-p:not(:first-child){display:none;}' +
     '.ptp2re-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
-    // ── Colour-coded toggles ────────────────────────────────────────────────
-    //
-    // Amber for the switches that make this plugin write on its own - once one of
-    // these is on, saving an entity in Stash rewrites others with no dialog and no
-    // undo - and teal for the one that only talks to the console. Every other
-    // setting keeps Stash's blue: this marks the ones that are not like the rest,
-    // and marking everything would mark nothing.
-    //
-    // Keyed on the ids SettingsPluginsPanel.tsx builds from the plugin id and the
-    // setting key, the same anchor `settingElement` uses, rather than on position
-    // or heading text.
-    //
-    // Two shapes because the switch is Stash's to render: `::before` is the track
-    // of a react-bootstrap Form.Switch, which is what it renders today, and
-    // `accent-color` covers a plain checkbox if that ever changes. Whichever is not
-    // in use costs nothing.
-    '#plugin-PropagateTagsAndPerformers-g1LogToConsole{accent-color:#17a2b8;}' +
-    '#plugin-PropagateTagsAndPerformers-g1LogToConsole:checked~.custom-control-label::before' +
-    '{background-color:#17a2b8;border-color:#17a2b8;}' +
     // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
     // picture. Fixed to the viewport and placed from the node, because the logs these
     // open over are `overflow:auto` boxes that would clip a positioned child against
@@ -1837,13 +1817,13 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // The exclusion tag's own row, when the name in it names something. A link, so
     // the tag is one click away and the name beside it can be selected; the same blue
     // the dialog's own entity links use, which is the only other place this plugin
@@ -1852,7 +1832,8 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -1871,11 +1852,11 @@
     // would fire mouseleave on the mark, close, hand the pointer back and reopen.
     '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
     'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
-    '.ptp2re-tagicon{margin-left:.9rem;color:#7cc4ff;text-decoration:none;}' +
+    '.ptp2re-tagicon{margin-left:.9rem;text-decoration:none;}' +
     '.ptp2re-tagicon:hover{text-decoration:underline;}';
 
   function injectStyle() {
@@ -2767,7 +2748,7 @@
     });
     this.rescanBtn  = button('Rescan', 'ptp2re-rescan ptp2re-hidden');
     this.closeBtn   = button('Close', 'ptp2re-close ptp2re-hidden');
-    // Teal: it edits a setting of ours and never the library. It is here rather than in
+    // Blue: it edits a setting of ours and never the library. It is here rather than in
     // Settings - Tasks because this dialog is where a user finds out that a path they
     // wanted is off - the head lists what is enabled, and the plan is empty without it -
     // so the editor belongs a press away from that, not a page away.
@@ -4189,7 +4170,7 @@
 
   // Whether the diagram can be rearranged, read at the moment the dialog is built.
   // A console flag on the shared object rather than a setting or a permanent button,
-  // for the reasons `debugButtons` is one: it is aimed at whoever is deliberately
+  // for the reasons `logButtonVisInfo` is one: it is aimed at whoever is deliberately
   // authoring a layout, its natural lifetime is that session, and a stray drag on a
   // dialog everyone else opens to set thirteen toggles would be a bug, not a feature.
   function layoutEditing() {
@@ -4278,7 +4259,7 @@
         var p = pathById(id);
         if (!p) return;
         var row = el('div', 'ptp2re-path-row');
-        var name = el('span', 'ptp2re-path-name', pathLabel(p));
+        var name = C.markLevel(el('span', 'ptp2re-path-name', pathLabel(p)), 'semi');
         name.title = pathTip(p);
         row.appendChild(name);
         var labels = pathLabels(p), states = pathStates(p);
@@ -4392,7 +4373,8 @@
   // second thing to paint, to enable and to keep in step with the modes, for a dialog
   // that only ever shows one view at a time.
   var SVG_NS = 'http://www.w3.org/2000/svg';
-  var DIA_COLOUR = { tags: '#84d68a', performers: '#7cc4ff' };
+  // Set as a style, not a fill or stroke attribute: an SVG attribute does not read var().
+  var DIA_COLOUR = { tags: '#84d68a', performers: 'var(--gttx-accent,#7cc4ff)' };
   // What a drag rounds to. Small enough not to fight the pointer, large enough that
   // two boxes nudged into line actually line up.
   var DIA_SNAP = 5;
@@ -4447,7 +4429,7 @@
     ['tags', 'performers'].forEach(function (kind) {
       var marker = svgEl('marker', { id: 'ptp2re-head-' + kind, viewBox: '0 0 8 8',
         refX: 8, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto' });
-      marker.appendChild(svgEl('path', { d: 'M0,0 L8,4 L0,8 z', fill: DIA_COLOUR[kind] }));
+      marker.appendChild(svgEl('path', { d: 'M0,0 L8,4 L0,8 z', style: 'fill:' + DIA_COLOUR[kind] }));
       defs.appendChild(marker);
     });
     svg.appendChild(defs);
@@ -4475,7 +4457,7 @@
     });
 
     PATHS.forEach(function (p) {
-      var line = svgEl('path', { fill: 'none', stroke: DIA_COLOUR[p.kind],
+      var line = svgEl('path', { style: 'fill:none;stroke:' + DIA_COLOUR[p.kind],
         'stroke-width': '2', 'marker-end': 'url(#ptp2re-head-' + p.kind + ')' });
       // Two hops: the payload is on something the target does not have, and is reached
       // through its scenes. The list view says so in the name's tooltip; here the line
@@ -4725,6 +4707,7 @@
     label.appendChild(box);
     label.appendChild(el('span', null,
       'Skip tags ' + NPT_NAME + ' would prune again'));
+    C.markLevel(label, 'semi');
     label.title = 'The Auto-Prune in ' + NPT_NAME + ' removes a tag from an entity when ' +
       'a more specific tag on the same entity already implies it. Where it is set to Prune ' +
       'an entity-type, a tag copied onto one of those is removed again on the very save ' +
@@ -4804,10 +4787,10 @@
     // whichever view is showing.
     this.body.appendChild(this.skipRow());
 
-    // Teal: it changes nothing but which of the two views is on screen. See "one
+    // Blue: it changes nothing but which of the two views is on screen. See "one
     // colour for a plugin wrote this".
     this.viewBtn = button('System view', 'ptp2re-view');
-    this.viewBtn.className = this.viewBtn.className.replace('btn-secondary', 'btn-info');
+    this.viewBtn.className = this.viewBtn.className.replace('btn-secondary', READONLY_BTN_VARIANT);
     this.viewBtn.addEventListener('click', function () { self.showView(!self.visual); });
     foot.appendChild(this.viewBtn);
     // The bulk buttons sit at the other end of the footer, pushed there by the row's
@@ -5060,6 +5043,7 @@
     });
     label.appendChild(box);
     label.appendChild(el('span', null, 'Save Immediately'));
+    C.markLevel(label, true);             // skips the staging: writes on a click
     label.title = 'Make the Edit-tab buttons review in a dialog instead of staging in the form. ' +
       'Off, a click stages the tags or performers in the open edit form, so you can check ' +
       'them and press Save yourself. On - or on a Stash that cannot stage - a click opens a ' +
@@ -5198,9 +5182,10 @@
       label.appendChild(box);
       label.appendChild(el('span', null, r[1]));
       label.title = r[2];
+      C.markLevel(label, r[3]);
       wrap.appendChild(label);
       wrap.appendChild(el('div', 'ptp2re-optnote', r[2]));
-      return { key: r[0], el: box, label: label };
+      return { key: r[0], el: box, label: label, level: r[3] };
     });
     return wrap;
   };
@@ -5212,7 +5197,9 @@
     this.boxes.forEach(function (b) {
       var off = !on || (b.key === 'silent' && idle);
       b.el.disabled = off;
+      // The class is rewritten whole, so the level goes back on with it.
       b.label.className = 'ptp2re-opt' + (b.key === 'silent' && idle ? ' ptp2re-opt-off' : '');
+      C.markLevel(b.label, b.level);
     });
   };
 
@@ -5753,7 +5740,7 @@
 
   AutoRun.prototype.log = function (kind, message) {
     if (kind === 'INFO') return;             // the dialog's progress narration; no dialog here
-    if (this.settings.g1LogToConsole) console.info('[' + PLUGIN_NAME + '] ' + message);
+    if (logsToConsole(PLUGIN_ID)) console.info('[' + PLUGIN_NAME + '] ' + message);
   };
 
   // Gathers a reverse path's sources for one target. Paged, like every other query in
@@ -6125,7 +6112,7 @@
             wrote.scene[b.id] = true;
             evictWritten(wrote);
             invalidateButtonProbes();
-            if (s.g1LogToConsole) {
+            if (logsToConsole(PLUGIN_ID)) {
               console.info('[' + PLUGIN_NAME + '] depropagate assist removed ' +
                 plural(keys.length, 'tag', 'tags') + ' from scene ' + b.id);
             }
@@ -6367,9 +6354,9 @@
   }
 
   // The takeover itself, shared by the two string settings a dialog edits: the
-  // line that replaces Stash's value, and the teal button that replaces its Edit.
+  // line that replaces Stash's value, and the button that replaces its Edit.
   // Returns the line, or null where the row is not on the page.
-  function takeOverRow(key, lineId, btnId, taskName) {
+  function takeOverRow(key, lineId, btnId, taskName, level) {
     var row = settingRow(PLUGIN_ID, key);
     if (!row) return null;
 
@@ -6380,23 +6367,16 @@
     }
     // Beside Stash's own value rather than inside it: React owns that subtree and
     // reconciles it on every re-render, and a node of ours in the middle of one is
-    // the kind of thing that survives until it does not.
-    // The row itself where Stash renders no value span, never its first child - which
-    // on the second tick is the line we appended on the first, and appending a node
-    // into itself is a HierarchyRequestError in a browser and a silent unlink here.
+    // the kind of thing that survives until it does not. After the description, where
+    // every row says what its settings are (Core's `afterDescription`).
     var slot = byClass(row, 'value');
-    var host = slot ? slot.parentNode : row;
-    if (line.parentNode !== host) {
-      if (slot) host.insertBefore(line, slot.nextSibling);
-      else host.appendChild(line);
-    }
+    C.afterDescription(row, line);
     hide(slot);
 
     var btn = document.getElementById(btnId);
     if (!btn) {
-      btn = el('button', 'btn btn-sm ' + READONLY_BTN_VARIANT, taskName);
+      btn = C.settingButton(taskName);
       btn.id = btnId;
-      btn.type = 'button';
       btn._ptp2reOwn = true;
       btn.addEventListener('click', function (e) {
         if (e.preventDefault) e.preventDefault();
@@ -6407,11 +6387,12 @@
     var btnHost = edit ? edit.parentNode : row;
     if (btn.parentNode !== btnHost) btnHost.appendChild(btn);
     hide(edit);
+    C.levelRow(row, level, btn);
     return line;
   }
 
   function pathFieldTick() {
-    var line = takeOverRow('b1Paths', FIELD_LINE_ID, FIELD_BTN_ID, TASK_PATHS);
+    var line = takeOverRow('b1Paths', FIELD_LINE_ID, FIELD_BTN_ID, TASK_PATHS, 'semi');
     if (!line) return;
 
     var s = settingsOr(pathFieldTick);
@@ -6491,7 +6472,10 @@
     ['target', 'source'].forEach(function (side) {
       if (!cols[side].lines) cols[side].appendChild(el('div', 'ptp2re-pathstring-mode', 'none'));
     });
+
     box.appendChild(list);
+    // The one switch here that writes on a click, under the buttons, in its level while on.
+    if (s.a2SaveImmediately) box.appendChild(C.markLevel(el('div', 'ptp2re-btnstring-now', 'Save Immediately'), true));
   }
 
   // The settings cache, or null with a redraw of `tick` queued for when it lands:
@@ -6505,10 +6489,10 @@
   }
 
   function buttonsFieldTick() {
-    var line = takeOverRow('a1ManualButtons', BTN_LINE_ID, BTN_BTN_ID, TASK_BUTTONS);
+    var line = takeOverRow('a1ManualButtons', BTN_LINE_ID, BTN_BTN_ID, TASK_BUTTONS, true);
     var s = line && settingsOr(buttonsFieldTick);
     if (!s) return;
-    var canon = formatButtons(s.buttons) + '\u0000' + formatPaths(s.paths);
+    var canon = formatButtons(s.buttons) + '\u0000' + formatPaths(s.paths) + '\u0000' + !!s.a2SaveImmediately;
     if (line._ptp2reText === canon) return;
     line._ptp2reText = canon;
     renderButtonString(line, s);
@@ -6525,11 +6509,11 @@
       box.appendChild(el('div', null, 'Off - nothing is written when Stash saves an entity.'));
       return;
     }
-    on.forEach(function (r) { box.appendChild(el('div', 'ptp2re-pathstring-on', r[1])); });
+    on.forEach(function (r) { box.appendChild(C.markLevel(el('div', 'ptp2re-pathstring-on', r[1]), r[3])); });
   }
 
   function autoFieldTick() {
-    var line = takeOverRow('a3AutoPropagation', AUTO_LINE_ID, AUTO_BTN_ID, TASK_AUTO);
+    var line = takeOverRow('a3AutoPropagation', AUTO_LINE_ID, AUTO_BTN_ID, TASK_AUTO, 'strong');
     var s = line && settingsOr(autoFieldTick);
     if (!s) return;
     var canon = formatAuto(s.auto);
@@ -6538,14 +6522,27 @@
     renderAutoString(line, s);
   }
 
-  // The two rows that name a tag, each with its own link and its own lookup cache.
+  // ── The exclusion filters, one row and a dialog ───────────────────────────
+  //
+  // Seven settings about what a propagation leaves alone were seven rows of the group, and
+  // with the three rows above them the page read as a wall. They are one row now, opened
+  // into a dialog of Core's (`settingsDialog`): stored under the same keys, so nothing
+  // already set moves and config.yml still edits them; each keeps its whole description on
+  // hover. The eighth filter stays in Path Settings, beside the paths it is about.
+  //
+  // The two boxes that name a tag each get a link to the tag it resolves to, and the one
+  // naming a custom field its ⓕ, beside the box - where the rows used to carry them. A name
+  // typed into a box says nothing about whether it names anything, and getting it wrong does
+  // not make the filter do less: it stops the run, because writing to the entities the filter
+  // protects is the one direction nothing here can undo. Nothing, rather than a warning, when
+  // a name resolves to nothing: a box being typed into is empty, then wrong, then right.
   var TAG_ROWS = [
     { key: F1_KEY, linkId: 'ptp2re-exclusion-tag' },
     { key: F8_KEY, linkId: 'ptp2re-exclusion-subtree' },
   ];
   var EXCL_MARK = '🔗';      // link symbol
   var EXCL_TTL_MS = 15000;             // so a tag created just now is found without a reload
-  var _excl = {};                      // per row: { name, at, wait }
+  var _excl = {};                      // per box: { name, at, wait }
 
   function lookupExclusionTag(row, name) {
     var st = _excl[row.key] || (_excl[row.key] = { name: null, at: 0, wait: null });
@@ -6578,70 +6575,131 @@
     return st.wait;
   }
 
-  function dropExclusionLink(row) {
-    var node = document.getElementById(row.linkId);
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-  }
-
-  function exclusionTagTick() {
-    TAG_ROWS.forEach(tagRowTick);
-  }
-
-  function tagRowTick(tagRow) {
-    var KEY = tagRow.key;
-    if (!settingRow(PLUGIN_ID, KEY)) return;
-    // From the cache rather than the row: Stash renders a STRING setting's value into
-    // a span, and the dialog's own saves never reach the React state behind it. Asked
-    // for here rather than left to `pathFieldTick`, which happens to run first and fill
-    // the same cache: a tick that depends on the order of its neighbours is one an edit
-    // somewhere else can silence.
-    if (!settingsOr(exclusionTagTick)) return;
-    var name = String(_autoSettings[KEY] || '').trim();
-    if (!name) { dropExclusionLink(tagRow); return; }
-    lookupExclusionTag(tagRow, name).then(function (tag) {
-      var row = settingRow(PLUGIN_ID, KEY);
-      if (!row || name !== _excl[KEY].name) return;      // the box moved on while we asked
-      if (!tag) { dropExclusionLink(tagRow); return; }
-      var node = document.getElementById(tagRow.linkId);
-      if (!node) {
-        node = el('a', 'ptp2re-tagicon', EXCL_MARK);
-        node.id = tagRow.linkId;
-        node.target = linkTarget();
-        node.rel = 'noopener noreferrer';
-      }
+  // The link to the tag `name` resolves to, or null: what the dialog draws beside the box.
+  function exclusionMark(tagRow, name) {
+    if (!name) return null;
+    return lookupExclusionTag(tagRow, name).then(function (tag) {
+      if (!tag) return null;
+      var node = el('a', 'ptp2re-tagicon', EXCL_MARK);
+      node.id = tagRow.linkId;
+      node.target = linkTarget();
+      node.rel = 'noopener noreferrer';
       node.href = entityHref('tag', tag.id);
       // The tooltip goes through `tagTip`, which draws it as a `title` and reopens it as a
       // box with the tag's picture above it wherever the tag has one.
       tagTip(node, tag.id, tagLinkTitle(tag,
         tag.name === name ? null : 'Matched on "' + name + '", one of its aliases.'));
-      // At the end of Stash's own `.value`, so the link is on the same line as the name
-      // it resolves and to the left of the Edit button. Both other placements were
-      // tried and neither is that line: `.setting` is `display:flex;align-items:center`
-      // with the heading, the value and the sub-heading stacked in one flex child and
-      // the Edit button alone in the other, so a node placed *beside* `.value` starts a
-      // line of its own beneath it, and one placed next to Edit is centred against the
-      // whole stack rather than against the value.
-      //
-      // That means a node of ours inside a subtree React owns, which is the one thing
-      // the paths row above is careful not to do - and the answer is the same one that
-      // makes every other injection here safe: the tick re-adds it, so a re-render
-      // dropping it costs a second.
-      var host = byClass(row, 'value') || row;
-      if (node.parentNode !== host) host.appendChild(node);
+      return node;
     });
   }
 
+  var EXCL_FIELDS = [
+    { key: 'f1ExcludeTargetWithTagName', label: 'Exclude Target Entities Carrying This Tag', warn: 'semi', text: true, wide: true,
+      mark: function (v) { return exclusionMark(TAG_ROWS[0], v); },
+      tip: 'Enter one tag name. Nothing is ever copied onto an entity carrying that tag.\n\nMatched by ' +
+        'exact name, case-sensitive; a tag one of whose aliases is that exact string counts too, with ' +
+        'the name winning where both match. A link to the tag appears beside the box once it resolves - ' +
+        'if it does not, nothing here names anything, and a run will stop rather than write to the ' +
+        'entities this is meant to protect. The tag must be carried directly - a parent of it does not ' +
+        'count. It is also never copied onto anything itself, since that would permanently exclude ' +
+        'whatever received it.\n\nIf you also run ᝯㄝₓ Merge Performer Tags To Scenes and have never set ' +
+        'this one, its equivalent is adopted the first time this plugin loads, and saved here as yours. ' +
+        'It is asked once: change it here from then on, and a value you set - including switching a ' +
+        'toggle back off - is never replaced.' },
+    { key: 'f2ExcludeTargetOrganized', label: 'Exclude Target Entities Marked as Organized', warn: 'semi',
+      tip: 'Skip any entity whose Organized flag is set.\n\nIn Stash 0.31 only scenes, images and galleries ' +
+        'have that flag among this plugin\'s targets; groups have none, so this setting cannot skip ' +
+        'them.\n\nIf you also run ᝯㄝₓ Merge Performer Tags To Scenes and have never set this one, its ' +
+        'equivalent is adopted the first time this plugin loads, and saved here as yours. It is asked ' +
+        'once: change it here from then on, and a value you set - including switching a toggle back off ' +
+        '- is never replaced.' },
+    { key: 'f3ExcludeTagWithIgnoreAutoTag', label: 'Never Copy Tags Set to Ignore Auto Tag', warn: 'semi',
+      tip: 'Tags with "Ignore Auto Tag" enabled are never copied onto anything.\n\nIf you also run ᝯㄝₓ ' +
+        'Merge Performer Tags To Scenes and have never set this one, its equivalent is adopted the first ' +
+        'time this plugin loads, and saved here as yours. It is asked once: change it here from then on, ' +
+        'and a value you set - including switching a toggle back off - is never replaced.' },
+    { key: 'f4ExcludeTagWithCustomFieldName', label: 'Never Copy Tags Marked via This Custom Field', warn: 'semi', text: true, wide: true,
+      mark: function (v) { return v ? cfTipMark(v) : null; },
+      tip: 'Enter a custom field name. A tag carrying this custom field is never copied onto ' +
+        'anything.\n\nOnly the presence of the field matters - its value is ignored, so any value at all ' +
+        'excludes the tag. Remove the field from a tag to have it copied again.\n\nThis one has a ' +
+        'default, unlike every other box here: ᱜ╦╦🞮_Do_Not_Propagate_Tag, written in the first time the ' +
+        'plugin loads so that you can see the name to mark tags with. Clearing the box switches the ' +
+        'filter off, and it stays off - the default is written once and never again. If you also run ᝯㄝₓ ' +
+        'Custom Fields Bulk Editor, a description of the field is filed there the first time too.\n\nIf ' +
+        'you also run ᝯㄝₓ Merge Performer Tags To Scenes and have never set this one, its equivalent is ' +
+        'adopted the first time this plugin loads and saved here as yours, in place of the default - ' +
+        'which then leaves a description filed against a field nothing reads, listed as an orphan in ᝯㄝₓ ' +
+        'Custom Fields Bulk Editor\'s descriptions dialog and cleared with its Prune button. It is asked ' +
+        'once: change it here from then on, and a value you set - including switching a toggle back off ' +
+        '- is never replaced.' },
+    { key: 'f6ExcludeTagNameContains', label: 'Exclude Tags Whose Name Contains', warn: 'semi', text: true, wide: true,
+      tip: 'Enter one or more substrings separated by spaces. A tag whose name contains any of them is ' +
+        'never copied onto anything.\n\nMatched anywhere in the name, case-sensitive, and any Unicode ' +
+        'character can be used - handy for namespace-markers. A substring cannot itself contain a space ' +
+        'unless you set a separator below.' },
+    { key: 'f7TagNameSeparator', label: 'Separator for "Name Contains"', warn: 'semi', text: true,
+      tip: 'Leave this empty to separate those substrings on spaces.\n\nEnter any character - a comma, a ' +
+        'pipe, or any Unicode character you do not use in tag names - to separate on that instead, which ' +
+        'is how a substring can then contain a space. It is matched literally, so punctuation needs no ' +
+        'escaping, and surrounding whitespace is trimmed from each substring.' },
+    { key: 'f8ExcludeTagSubtreeName', label: 'Exclude This Tag and All Its Child Tags', warn: 'semi', text: true, wide: true,
+      mark: function (v) { return exclusionMark(TAG_ROWS[1], v); },
+      tip: 'Enter one tag name. That tag, and every tag anywhere under it in the hierarchy, is never copied ' +
+        'onto anything.\n\nMatched by exact name, case-sensitive; a tag one of whose aliases is that ' +
+        'exact string counts too, with the name winning where both match. A link to the tag appears ' +
+        'beside the box once it resolves - if it does not, nothing here names anything, and a run will ' +
+        'stop rather than copy the tags this is meant to keep out. Descendants are found through each ' +
+        'tag\'s parents, however deep, so a tag reached through two different parents is excluded once ' +
+        'either of them is.' },
+  ];
+
+  // What the filters say now, in one line: each one that does something, or that none does.
+  // Each tag with its 🔗 and the field with its ⓕ after them, as the dialog draws them: a
+  // summary's own link ids, beside the dialog's, and the same lookup cache.
+  function exclusionSummary(s) {
+    var q = function (k) { return String(s[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var link = function (n, name) {
+      var row = { key: TAG_ROWS[n].key, linkId: TAG_ROWS[n].linkId + '-sum' };
+      return { text: '"' + name + '"', mark: function () { return exclusionMark(row, name); } };
+    };
+    var on = [], field = q(F4_KEY);
+    if (q(F1_KEY)) on.push(['targets tagged ', link(0, q(F1_KEY))]);
+    if (s.f2ExcludeTargetOrganized) on.push(['Organized targets']);
+    if (s.f3ExcludeTagWithIgnoreAutoTag) on.push(['tags set to Ignore Auto Tag']);
+    if (field) on.push(['tags carrying the custom field ', { cf: field }]);
+    if (q('f6ExcludeTagNameContains')) on.push(['tags whose name contains ' +
+      splitTerms(q('f6ExcludeTagNameContains'), q('f7TagNameSeparator')).map(function (t) { return '"' + t + '"'; }).join(' or ')]);
+    if (q(F8_KEY)) on.push([link(1, q(F8_KEY)), ' and every tag under it']);
+    if (!on.length) return 'Nothing is excluded.';
+    // Each exclusion in force in the semi level, as the dialog names them.
+    var parts = ['Leaving alone: '];
+    on.forEach(function (c, i) { parts = parts.concat(i ? ['; '] : [], C.atLevel(c, 'semi')); });
+    return parts.concat('.');
+  }
+
+  var exclusionDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'ptp2re', key: 'exclusions', title: 'Exclusion Filters',
+    line: 'Which targets and which tags a propagation leaves alone: a tag or Organized on the target, ' +
+      'Ignore Auto Tag, a custom field, words in a tag\'s name, and a tag with everything under it. ' +
+      'Seven settings, in a dialog; the eighth is in Path Settings.',
+    fields: EXCL_FIELDS,
+    summary: exclusionSummary,
+    settings: function () { return _autoSettings || DEFAULTS; },
+    load: function () { return loadSettings(true).then(function (r) { return r.settings; }); },
+    saved: function () { invalidateAutoSettings(); return autoSettings(); },
+  });
+
   function settingsTick() {
-    page.decorate(page.group());
+    var group = page.group();
+    page.decorate(group);
     paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
     pathFieldTick();
     buttonsFieldTick();
     autoFieldTick();
-    exclusionTagTick();
-    // The one setting here that names a custom field. From the settings cache rather than
-    // the row, for the reason `exclusionTagTick` reads it there.
-    cfTipTick(PLUGIN_ID, F4_KEY, _autoSettings
-      ? String(_autoSettings[F4_KEY] || '').replace(/^\s+|\s+$/g, '') : '');
+    // The summary reads the cache; asking for it here fills it the first time.
+    settingsOr(settingsTick);
+    exclusionDialog.tick(group);
   }
 
   // No MutationObserver here, unlike a button injection: this is decoration in a
@@ -8014,6 +8072,8 @@
     pathMode: pathMode,
     settingsFrom: settingsFrom,
     describeFilters: describeFilters,
+    openExclusions: exclusionDialog.open,
+    exclusionSummary: exclusionSummary,
     pairedBoth: pairedBoth,
     buildPasses: buildPasses,
     buildBatches: buildBatches,

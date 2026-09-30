@@ -2,8 +2,8 @@ id: FindEntitiesByTextContent
 name: ᝯㄝₓ Find & Replace Entities by Text Content
 metadata:
   description: "Which entities in your library mention this text? Stash cannot search every text field at once, and cannot filter on custom fields at all. This plugin can.\n\nRun it from Settings - Tasks - Plugin Tasks. Type the text, turn on the types to search (Scenes, Images, Galleries, Performers, Studios, Groups, Tags) and press Search. It reads every text field, custom field names and values included. Each result is a link, with the attributes that matched and the text around the match.\n\nA long search can be paused and resumed, and it pauses itself once 1000 results are on screen; Continue clears the screen and carries on. Copy log keeps every result.\n\nTick Replace to rewrite the text in every entity on the list. The attribute filters narrow what a Replace covers, and Undo takes it back while the dialog stays open. With Replace off, nothing is ever written.\n\nBACKING UP YOUR DATABASE BEFORE THE FIRST REPLACE IS STRONGLY RECOMMENDED.\n\nScene markers are not searched. Requires Stash 0.31.0 or newer."
-version: 4.0.5
-date: "2026-09-28 06:15:23"
+version: 4.0.13
+date: "2026-09-30 07:10:11"
 requires:
 - GTTxCore
 files:

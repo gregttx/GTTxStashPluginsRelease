@@ -26,11 +26,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[tbc] ᝯㄝₓ Tag Bundle Clipboard cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[tbc] ᝯㄝₓ Tag Bundle Clipboard cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -43,7 +43,7 @@
     insertBeforeImportantAction = C.insertBeforeImportantAction,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape;
   // Every plugin's settings through Core's one shared read.
-  var pluginConfig = C.pluginConfig;
+  var pluginConfig = C.pluginConfig, logsToConsole = C.logsToConsole;
 
   var PLUGIN_ID   = 'TagBundleClipboard';
   var PLUGIN_NAME = 'ᝯㄝₓ Tag Bundle Clipboard';
@@ -65,7 +65,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '3.0.4';
+  var PLUGIN_VERSION = '3.1.8';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -99,7 +99,7 @@
   // renders white text, unlike stock Bootstrap's dark - checked live, 2026-08-11 - so
   // nothing here overrides the foreground.
   var PASTE_BTN_VARIANT = 'btn-warning';
-  var COPY_BTN_VARIANT  = 'btn-info';
+  var COPY_BTN_VARIANT  = 'btn-primary';   // Stash's blue: copying writes nothing
 
   var LOG_RENDER_CAP = 1000;   // log lines kept in the DOM; all of them stay in memory
   var FLASH_MS       = 1500;   // how long a button shows its result before reverting
@@ -181,7 +181,6 @@
   // strands the old value in the config.
   var DEFAULTS = {
     a1MaxBundles: '',
-    b1LogToConsole: false,
   };
 
   // Stash has no default for a plugin setting - `PluginSettingConfig` carries a
@@ -231,7 +230,7 @@
 
   // ── Button gating diagnostics ────────────────────────────────────────────
   //
-  // Core's `[tbc gate]` channel: off unless `__GTTx__.StashPluginCoop.debugButtons = true`
+  // Core's `[tbc gate]` channel: off unless `__GTTx__.StashPluginCoop.logButtonVisInfo = true`
   // is typed into the browser console (or Dev Mods' Debug is on), read at call time so it
   // takes effect on the next tick. On the shared object because every plugin here that
   // draws a button into these rows answers to it, and "why is this button missing" is
@@ -277,7 +276,7 @@
   }
 
   function logToConsole(msg) {
-    if (settings().b1LogToConsole) console.info('[tbc] ' + msg);
+    if (logsToConsole(PLUGIN_ID)) console.info('[tbc] ' + msg);
   }
 
   // ── The clipboard ─────────────────────────────────────────────────────────
@@ -541,25 +540,25 @@
     // better on it than on the lighter #30404d.
     '.tbc-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.tbc-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.tbc-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.tbc-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.tbc-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.tbc-title{font-size:1.1rem;font-weight:600;}' +
-    '.tbc-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.tbc-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.tbc-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.tbc-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.tbc-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.tbc-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.tbc-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.tbc-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.tbc-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;' +
     'font-size:.8rem;line-height:1.35;min-height:14rem;}' +
     '.tbc-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.tbc-spin{color:#a7b6c2;}' +
+    '.tbc-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.tbc-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
-    '.tbc-ERROR{color:#ff7373;} .tbc-WARN{color:#ffb648;} .tbc-TAG{color:#84d68a;}' +
-    '.tbc-INFO{color:#a7b6c2;}' +
-    '.tbc-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.tbc-ERROR{color:#ff7373;} .tbc-WARN{color:var(--gttx-highlight,#ffc107);} .tbc-TAG{color:#84d68a;}' +
+    '.tbc-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.tbc-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.tbc-foot button{margin-right:.5rem;}' +
     '.tbc-selall{margin-left:auto;}' +
@@ -581,12 +580,12 @@
     // `.tbc-cols` rather than `.tbc-panes`: CustomFieldsBulkEditor already has a
     // `.panes` and it is a different layout (padded, `flex: 2 1 auto`, no divider). A
     // name two plugins share has to mean the same thing in both.
-    '.tbc-cols{flex:1 1 auto;display:flex;min-height:0;border-bottom:1px solid #394b59;}' +
+    '.tbc-cols{flex:1 1 auto;display:flex;min-height:0;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.tbc-pane{overflow:auto;padding:.5rem 0;}' +
     // The bundle list holds one line each; the tag list holds everything. A quarter
     // and three quarters, rather than the third the two panes started at - the tag
     // pane is where the columns below have to fit.
-    '.tbc-pane-bundles{flex:0 0 24%;border-right:1px solid #394b59;}' +
+    '.tbc-pane-bundles{flex:0 0 24%;border-right:1px solid var(--gttx-border,#394b59);}' +
     '.tbc-pane-tags{flex:1 1 auto;}' +
     // Native CSS multi-column, with the pane as the scroll container and the list
     // inside it left at auto height: that is what makes the browser *balance* the
@@ -595,14 +594,14 @@
     // columns to fill the pane - so a wide modal gets fewer, wider columns and a
     // narrow one gets a single column, with no breakpoint of ours to maintain.
     '.tbc-taglist{column-width:20rem;column-gap:1.5rem;padding:0 1rem;}' +
-    '.tbc-empty{padding:.5rem 1rem;color:#7d8f9c;}' +
+    '.tbc-empty{padding:.5rem 1rem;color:var(--gttx-dim,#7d8f9c);}' +
     '.tbc-bundle{display:flex;align-items:baseline;gap:.5rem;padding:.35rem 1rem;' +
     'cursor:pointer;border-left:3px solid transparent;}' +
-    '.tbc-bundle:hover{background:#3c4f5d;}' +
-    '.tbc-bundle-on{background:#425a6b;border-left-color:#7cc4ff;}' +
+    '.tbc-bundle:hover{background:var(--gttx-raised,#3c4f5d);}' +
+    '.tbc-bundle-on{background:var(--gttx-raised,#425a6b);border-left-color:var(--gttx-accent,#7cc4ff);}' +
     '.tbc-bundle-name{flex:1 1 auto;word-break:break-word;}' +
-    '.tbc-bundle-meta{color:#7d8f9c;font-size:.8rem;white-space:nowrap;}' +
-    '.tbc-bundle-drop{border:0;background:none;color:#7d8f9c;cursor:pointer;padding:0 .25rem;' +
+    '.tbc-bundle-meta{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;white-space:nowrap;}' +
+    '.tbc-bundle-drop{border:0;background:none;color:var(--gttx-dim,#7d8f9c);cursor:pointer;padding:0 .25rem;' +
     'font-size:.9rem;line-height:1;}' +
     '.tbc-bundle-drop:hover{color:#ff7373;}' +
     // `break-inside:avoid` is what keeps a row from being split across two columns.
@@ -624,10 +623,10 @@
     // its floor without pinning its basis lets a narrow column squash the box itself.
     '.tbc-tagrow>*{min-width:0;}' +
     '.tbc-tagrow input{flex:0 0 auto;width:13px;height:13px;margin:4px 0 0;}' +
-    '.tbc-tagrow:hover{background:#3c4f5d;}' +
-    '.tbc-tagrow-fixed{cursor:default;color:#7d8f9c;}' +
+    '.tbc-tagrow:hover{background:var(--gttx-raised,#3c4f5d);}' +
+    '.tbc-tagrow-fixed{cursor:default;color:var(--gttx-dim,#7d8f9c);}' +
     '.tbc-tagrow-fixed:hover{background:none;}' +
-    '.tbc-have-mark{font-size:.8rem;color:#7d8f9c;}' +
+    '.tbc-have-mark{font-size:.8rem;color:var(--gttx-dim,#7d8f9c);}' +
     // ── One colour per reason a box is in the state it is in ────────────────
     //
     // Five states, and the two axes are independent: *ticked* says whether the tag
@@ -646,18 +645,18 @@
     // effect wanted anyway - the three fixed states are meant to read as quieter
     // than the two live ones.
     '.tbc-tag-off input{accent-color:#ff7373;}' +
-    '.tbc-tag-have input,.tbc-tag-pruned input{accent-color:#7d8f9c;}' +
-    '.tbc-tag-rolled input{accent-color:#ffb648;}' +
-    '.tbc-tag-rolled,.tbc-tag-rolled .tbc-have-mark{color:#ffb648;}' +
+    '.tbc-tag-have input,.tbc-tag-pruned input{accent-color:var(--gttx-dim,#7d8f9c);}' +
+    '.tbc-tag-rolled input{accent-color:var(--gttx-highlight,#ffc107);}' +
+    '.tbc-tag-rolled,.tbc-tag-rolled .tbc-have-mark{color:var(--gttx-highlight,#ffc107);}' +
     // The redundancy mode, in the footer beside Add - the control that decides what
     // one press covers, the same place CustomFieldsBulkEditor puts its "Apply to".
-    '.tbc-mode{background:#30404d;color:#f5f8fa;border:1px solid #394b59;' +
+    '.tbc-mode{background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.15rem .35rem;font-size:.85rem;max-width:100%;}' +
     // Amber while it is set to something, the same amber the rolled-up rows wear
     // and the same rule the repo's buttons follow: this is the control that makes
     // the press add or drop a tag the bundle did not name. A <select> has no
     // Bootstrap variant to borrow, so the colour has to be written.
-    '.tbc-mode-on{border-color:#ffb648;color:#ffb648;}' +
+    '.tbc-mode-on{border-color:var(--gttx-highlight,#ffc107);color:var(--gttx-highlight,#ffc107);}' +
     // Stash's own .sub-heading is white-space: normal, so this plugin's description
     // would collapse into one paragraph. Scoped to the group we marked, never to
     // .sub-heading at large: another plugin's description is not ours to reflow.
@@ -672,13 +671,13 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // A per-setting description shows its first paragraph and hides the rest in a
     // tooltip. The mark is the only thing saying there is one - a hover that opens with
     // no invitation is a hover nobody makes. Built rather than borrowed: a native
@@ -698,7 +697,7 @@
     // a flicker loop for as long as it is hovered.
     '.tbc-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
     'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.tbc-tipped.tbc-tip-open .tbc-tipbox{display:block;}' +
@@ -707,7 +706,7 @@
     // the first paragraph is the only thing that shortens it.
     '.tbc-desc-collapsed .tbc-p:not(:first-child){display:none;}' +
     '.tbc-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
     // Our own row under the tab strip, for the detail pages that render no action row
     // (Scene, Gallery, and Image if it is the same). This is the one container the
@@ -715,21 +714,7 @@
     // `applyButtonSpacing`'s branches apply - the row spaces its own children instead,
     // which is the `column-gap` case that helper already knows to keep its hands off.
     '.tbc-src-row{display:flex;flex-wrap:wrap;column-gap:.5rem;row-gap:.25rem;' +
-    'margin:.5rem 0;}' +
-    // ── Colour-coded toggles ────────────────────────────────────────────────
-    //
-    // Teal for the one setting that only talks to the console, matching every sibling.
-    // The bundle limit keeps Stash's blue: it chooses what the clipboard *holds*, not
-    // what anything does on its own, and marking everything would mark nothing.
-    //
-    // Keyed on the id SettingsPluginsPanel.tsx builds from the plugin id and the
-    // setting key, the same anchor Core's `settingElement` uses, rather than on position or
-    // heading text. Two shapes because the switch is Stash's to render: `::before` is
-    // the track of the react-bootstrap Form.Switch it renders today, and `accent-color`
-    // covers a plain checkbox if that ever changes.
-    '#plugin-TagBundleClipboard-b1LogToConsole{accent-color:#17a2b8;}' +
-    '#plugin-TagBundleClipboard-b1LogToConsole:checked~.custom-control-label::before' +
-    '{background-color:#17a2b8;border-color:#17a2b8;}';
+    'margin:.5rem 0;}';
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -1048,7 +1033,7 @@
       'it is on and red when you have turned it off; a box you cannot tick says who ' +
       'decided instead - grey and ticked for a tag this ' +
       (ENTITIES[this.type] ? ENTITIES[this.type].label : 'entity') +
-      ' already carries, grey and clear for one Prune found redundant, amber and ' +
+      ' already carries, grey and clear for one Prune found redundant, orange and ' +
       'ticked for one Roll-Up brings in. Hover a tag for its aliases, parents, ' +
       'children and description.'));
     this.modal.appendChild(head);

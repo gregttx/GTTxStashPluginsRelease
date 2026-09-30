@@ -55,7 +55,7 @@ afterwards.
 
 - **Tick** — every line starts ticked. Untick one to leave that occurrence alone. A match
   written in another case than the old name — `jane doe` for `Jane Doe` — is marked
-  **case differs** in amber and starts unticked, since it may be other words; tick it to
+  **case differs** in the Highlighted Text Color and starts unticked, since it may be other words; tick it to
   replace it too.
 - **Unselect All / Select All** — at the right end of the footer, untick or tick every line
   the filters show; a line a filter
@@ -64,7 +64,7 @@ afterwards.
   and the fields it is recognised by, or for a tag its aliases, parents, children and
   description. It is read on the first hover, so a listing nobody hovers costs nothing.
 - **Filters** — one row of toggles for the [<abbr title="Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.">entity-types</abbr>](../GLOSSARY.md#entity-type) found and one for the attribute
-  names found, amber while on. Turning one off hides its lines *and* leaves them alone. It
+  names found, orange while on. Turning one off hides its lines *and* leaves them alone. It
   never changes a tick, so turning it back on brings back exactly the selection that was
   there.
 - **All On / All Off** — sets every filter at once. Same rule: filters only. Each is
@@ -162,8 +162,9 @@ are for.
 - **Refuse Above This Many Matches** — the scan stops past this many occurrences and Proceed
   stays disabled. Default 2000. Counted in occurrences, not entities: one long description
   can hold several.
-- **Log to the Browser Console** — print the dialog's messages under the `[enm]` prefix as
-  well.
+
+Console logging is **Log Entity Name Maintainer to the Browser Console** in ᝯㄝₓ Core's **Dev
+Mods**: the dialog's messages under the `[enm]` prefix as well.
 
 ## Relationship to the other plugins in this repo
 
@@ -241,9 +242,9 @@ switch on first. Read it top to bottom:
 
 Paste that output into a bug report; it names no values from your library, only field names.
 
-For a running commentary instead of a summary, the
-[debug switch](../GTTxCore/README.md#the-debug-switch) (`__GTTx__.StashPluginCoop.debugButtons = true`)
-prints the same lines to the console as they happen.
+For a running commentary instead of a summary, ᝯㄝₓ Core's
+[Log Button Visibility to the Browser Console](../GTTxCore/README.md#logging-button-visibility) (or
+`__GTTx__.StashPluginCoop.logButtonVisInfo = true`) prints the same lines to the console as they happen.
 
 **The settings page shows nothing formatted.** If the folder was updated half-way — the `.yml`
 replaced and the `.js` not, or the reverse — the plugin can be looking for a heading that has

@@ -60,7 +60,7 @@ have turned it off; a box you cannot tick tells you who decided instead:
 |---|---|
 | **grey, ticked** | the entity already carries this tag |
 | **grey, clear** | [<abbr title="Normalize Parent Tags removing a tag an entity already carries through a more specific one.">Prune</abbr>](../GLOSSARY.md#prune) found it redundant |
-| **amber, ticked** | [<abbr title="Normalize Parent Tags adding the parents implied by an entity's tags.">Roll-Up</abbr>](../GLOSSARY.md#roll-up) brings it in |
+| **Highlighted Text Color, ticked** | [<abbr title="Normalize Parent Tags adding the parents implied by an entity's tags.">Roll-Up</abbr>](../GLOSSARY.md#roll-up) brings it in |
 
 The list is ordered the same way: what you can still change first (on, then off), then what was
 decided for you, with the tags the entity already has last. Within each group it sorts the way Stash
@@ -127,13 +127,13 @@ differently for one paste would not survive it.
 
 **⮺ Tags** goes on the detail view — in the row of actions beside Delete on a Performer or a
 Group, and in a small row of its own under the tab strip on a Scene or a Gallery, which render no
-action row there. It is teal, because it only reads.
+action row there. It is Stash's blue, because it only reads.
 
-**📋Tags…** goes in the edit form's button row, between Save and Delete. It is amber, the colour
+**📋Tags…** goes in the edit form's button row, between Save and Delete. It is orange, the colour
 every plugin here uses for a control that changes something — in this case the form, not the
 library. The trailing "…" is this repo's convention for a button that asks before it acts. **Add**
-in the dialog wears the same amber, and so does the redundancy dropdown beside it once it is set to
-Prune or Roll-Up: that is the press, and the control deciding what the press covers.
+in the dialog wears the same orange: that is the press. The redundancy dropdown beside it, the control
+deciding what the press covers, is outlined in the Highlighted Text Color once it is set to Prune or Roll-Up.
 
 Both captions are an icon and a noun, which only says what the button is about to somebody who
 already knows. **Hover either one**: its title opens with the words the caption gave up — *Copy
@@ -147,7 +147,10 @@ rather than whichever loaded first.
 | Setting | |
 |---|---|
 | **Bundles Kept on the Clipboard** | How many bundles to keep before the oldest is discarded. Leave it empty for 5. Anything from 1 to 50; a value outside that is clamped rather than refused. Lowering it discards nothing until the next copy. |
-| **Log to the Browser Console** | Print each copy and each paste under the `[tbc]` prefix, so a session can be read back after the dialog has been closed. |
+
+Console logging is **Log Tag Bundle Clipboard to the Browser Console** in ᝯㄝₓ Core's **Dev Mods**:
+each copy and each paste under the `[tbc]` prefix, so a session can be read back after the dialog has
+been closed.
 
 ## Relationship to the other plugins in this repo
 
@@ -187,8 +190,8 @@ landed, the settings page can look completely normal while the buttons are gone 
 found by ids built from the plugin id, which no rename moves, while everything else matches on the
 name.
 
-**Why is this button hidden?** Turn on the [debug switch](../GTTxCore/README.md#the-debug-switch)
-(`__GTTx__.StashPluginCoop.debugButtons = true` in the browser console) and each button reports
+**Why is this button hidden?** Turn on ᝯㄝₓ Core's [Log Button Visibility to the Browser Console](../GTTxCore/README.md#logging-button-visibility)
+(or `__GTTx__.StashPluginCoop.logButtonVisInfo = true` in the browser console) and each button reports
 whether it is shown or hidden and why, prefixed `[tbc gate]`, on the next tick.
 
 **A bundle I copied in another tab is not in the list.** The list is read when the dialog opens.

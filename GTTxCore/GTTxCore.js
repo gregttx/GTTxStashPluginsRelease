@@ -21,15 +21,12 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '4.3.1';
+  var PLUGIN_VERSION = '4.16.1';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
   var STALE_ID = 'gttxcore-stale-notice';
   var STYLE_ID = 'gttxcore-style';
-  // Amber for a control of ours that writes, teal for one that only reads. Nothing in
-  // this plugin writes to the library at all, so every control it draws is teal.
-  var PLUGIN_BTN_VARIANT = 'btn-info';
   var SETTINGS_TTL_MS = 10000;
   var OBSERVE_MS = 100;
   var TICK_MS = 1000;
@@ -199,13 +196,14 @@
   }
 
 
+  // The plugins' shared state, under the one global this repo takes. Never read off or written
+  // to a bare `window.StashPluginCoop`: that name is anybody's, and adopting an object found
+  // there would hand a stranger our leases.
   function coopObject() {
     var ns = window.__GTTx__;
     if (!ns || typeof ns !== 'object') ns = window.__GTTx__ = {};
-    var c = ns.StashPluginCoop || window.StashPluginCoop;
-    if (!c || typeof c !== 'object') c = {};
-    ns.StashPluginCoop = c;
-    if (window.StashPluginCoop !== c) window.StashPluginCoop = c;
+    var c = ns.StashPluginCoop;
+    if (!c || typeof c !== 'object') c = ns.StashPluginCoop = {};
     return c;
   }
 
@@ -1581,7 +1579,7 @@
   // ── The Scene Tagger's duration mismatch ──────────────────────────────────
   //
   // Stash's tagger prints "Duration off by at least Ns" as a plain sentence among the
-  // other result fields, in the same weight and colour as everything beside it - and it
+  // other result fields, in the same weight and color as everything beside it - and it
   // is the one line on that card that decides whether a match is the right file. Read off
   // `ui/v2.5/src/components/Tagger/scenes/StashSearchResult.tsx`: `getDurationStatus`
   // returns a wrapped, bolded, icon-carrying element when the duration *matches*, and a
@@ -1601,7 +1599,7 @@
   function durationBand(n) {
     if (!(n >= 0)) return null;
     if (n > 5) return 'red';
-    if (n > 1) return 'amber';
+    if (n > 1) return 'orange';
     return null;
   }
 
@@ -1717,21 +1715,28 @@
 
   // ── Dev Mods ──────────────────────────────────────────────────────────────
   //
-  // Three switches that change no behaviour of their own: each one sets a flag on the
-  // shared object that the other plugins already read, or that this one does. They are a
+  // Switches that change no behaviour of their own: each one sets a flag on the shared
+  // object that the other plugins already read, or that this one does. They are a
   // *setting* rather than a console incantation because the console line was the thing
   // nobody could remember - but they are all off by default and none of them is meant to
-  // be left on.
+  // be left on. The first three are about the plugins' chrome; the rest are each plugin's
+  // console logging, which was a row of that plugin's own group until the groups were
+  // made smaller - five rows of the same switch, for working on a plugin rather than using it.
   //
   // Stored as one string in one key, the shape `NormalizeParentTags` settled on for its
   // own modes: parsing forgives - any order, any spacing, unknown names carried through
   // untouched - and formatting is strict.
+  // The console logs first - why each control shows or hides, then each plugin's own - and the
+  // two switches that change what the page shows last, so the logs read as one group.
+  var LOG_BUTTON_VIS = { key: 'LOG_BUTTON_VIS', flag: 'logButtonVisInfo',
+    label: 'Log Button Visibility to the Browser Console',
+    tip: 'Print to the browser console why each control a ᝯㄝₓ plugin draws into Stash’s pages - ' +
+      'its buttons, and Scene Variants’ Variants tab - is shown or hidden, under each plugin’s ' +
+      '[<prefix> gate] prefix.\n\nOne line per control, and again only when its answer changes. Read ' +
+      'at call time, so it takes effect on the next tick. __GTTx__.StashPluginCoop.logButtonVisInfo = ' +
+      'true does the same from the console. It says why a control is there or not, never what a ' +
+      'plugin wrote: that is each plugin’s own switch below.' };
   var DEV_MODS = [
-    { key: 'DEBUG', flag: 'debugMode', label: 'Debug mode',
-      tip: 'Turns on the [<prefix> gate] console channel in every ᝯㄝₓ plugin that ' +
-        'draws a control into Stash’s own rows, explaining for each one whether it ' +
-        'is shown or hidden and why. Read at call time, so it takes effect on the next ' +
-        'tick. This is what __GTTx__.StashPluginCoop.debugMode does from the console.' },
     { key: 'LAYOUT', flag: 'layoutEdit', label: 'Layout edit mode',
       tip: 'Outlines every control these plugins have injected into Stash’s own ' +
         'chrome and labels it with the plugin that put it there. For working out which ' +
@@ -1741,16 +1746,61 @@
         'appears beside Stash’s own Reload plugins without waiting for a real ' +
         'mismatch. Nothing else changes, and no plugin’s own banner is affected.' },
   ];
+  // Each plugin's console logging. `legacy` is the plugin's own setting it replaced, read
+  // while Dev Mods has never been saved with this switch in it.
+  var LOG_MODS = [
+    { key: 'LOG_PTP2RE', plugin: 'PropagateTagsAndPerformers', legacy: 'g1LogToConsole',
+      label: 'Log Propagate Tags and Performers to the Browser Console',
+      tip: 'Log each tag and performer Propagate Tags and Performers copies to the browser\'s ' +
+        'JavaScript console, at Info level.\n\nThat is F12 - Console, not the Stash server log or the ' +
+        'Logs page.' },
+    { key: 'LOG_SVR', plugin: 'SceneVariants', legacy: 'b1LogToConsole',
+      label: 'Log Scene Variants to the Browser Console',
+      tip: 'Print each variant lookup Scene Variants makes to the browser console.\n\nIt names the ' +
+        'scene, how many variants were found and what they were matched on, under the [svr] prefix. ' +
+        'A failed variant query is always reported, with or without this switch.' },
+    { key: 'LOG_MPTTS', plugin: 'MergePerformerTagsToScenes', legacy: 'd1LogMergesToConsole',
+      label: 'Log Merge Performer Tags to the Browser Console',
+      tip: 'Log each performer tag Merge Performer Tags merges to the browser\'s JavaScript console, ' +
+        'at Info level.\n\nThat is F12 - Console, not the Stash server log or the Logs page.' },
+    { key: 'LOG_ENM', plugin: 'EntityNameMaintainer', legacy: 'd1LogToConsole',
+      label: 'Log Entity Name Maintainer to the Browser Console',
+      tip: 'Print every message the Entity Name Maintainer dialog shows to the browser console as ' +
+        'well.\n\nThe lines are the same ones the dialog logs, under the [enm] prefix, so a session can ' +
+        'be read back after the dialog has been closed. It is separate from Copy log, which hands over ' +
+        'the counters, the whole listing and the messages as text.' },
+    { key: 'LOG_TBC', plugin: 'TagBundleClipboard', legacy: 'b1LogToConsole',
+      label: 'Log Tag Bundle Clipboard to the Browser Console',
+      tip: 'Print each copy and each paste Tag Bundle Clipboard makes to the browser console.\n\nIt ' +
+        'names the entity, the number of tags and which bundle was used, under the [tbc] prefix, so a ' +
+        'session can be read back after the dialog has been closed. It is separate from the log inside ' +
+        'the dialog, which Copy log hands over as text.' },
+  ];
+  DEV_MODS = [LOG_BUTTON_VIS].concat(LOG_MODS, DEV_MODS);
+  // Every plugin's stored settings, as the last read of them found them: where a log switch
+  // falls back to the plugin's own setting it replaced.
+  var _pluginsRaw = {};
 
   function parseDevMods(raw) {
-    var out = {};
+    var out = {}, named = {};
     DEV_MODS.forEach(function (m) { out[m.key] = false; });
     String(raw == null ? '' : raw).split(',').forEach(function (piece) {
       var bits = piece.split('=');
       if (bits.length !== 2) return;
       var k = bits[0].replace(/\s+/g, '').toUpperCase();
-      if (hasOwn(out, k)) out[k] = bits[1].replace(/\s+/g, '').toUpperCase() === 'ON';
+      if (hasOwn(out, k)) { out[k] = bits[1].replace(/\s+/g, '').toUpperCase() === 'ON'; named[k] = true; }
     });
+    // COMPAT: each plugin's own "Log to the Browser Console" setting (since GTTxCore 4.4.0);
+    // remove when every plugin's map has been through a Dev Mods save, which names every switch.
+    LOG_MODS.forEach(function (m) {
+      if (!named[m.key]) out[m.key] = truthy((_pluginsRaw[m.plugin] || {})[m.legacy]);
+    });
+    // COMPAT: `DEBUG`, this switch's name when it was "Debug mode" (since GTTxCore 4.4.6);
+    // remove when every stored Dev Mods string has been saved since, which names the new key.
+    if (!named.LOG_BUTTON_VIS) {
+      var old = /(?:^|,)\s*DEBUG\s*=\s*ON\s*(?:,|$)/i.test(String(raw == null ? '' : raw));
+      if (old) out.LOG_BUTTON_VIS = true;
+    }
     return out;
   }
 
@@ -1760,19 +1810,227 @@
     }).join(', ');
   }
 
-  // **`debugMode`, and `debugButtons` still answers.** The flag was named for the buttons
-  // and long ago stopped being only about them; renaming it is what this switch is for.
-  // The old name is still read, because it is the one people have written down, and still
-  // written, because a console that sets it must go on working.
+  // **One flag, `logButtonVisInfo`.** It was `debugButtons`, then `debugMode` as well, and
+  // "debug" said nothing about what it does - log why each control shows or hides - nor that
+  // it is not the plugins' own logging. Neither old name is read or written any more.
   function applyDevMods(state) {
     var c = coop();
-    c.debugMode = !!state.DEBUG;
-    c.debugButtons = !!state.DEBUG;
+    c.logButtonVisInfo = !!state.LOG_BUTTON_VIS;
     c.layoutEdit = !!state.LAYOUT;
     // A key in the same map every plugin's `anyStale` already scans, so the demo needs no
     // plugin to know about it: one entry that is not a plugin id, cleared when it is off.
     if (state.STALEDEMO) c.staleUI.demo = true;
     else delete c.staleUI.demo;
+    c.logConsole = {};
+    LOG_MODS.forEach(function (m) { c.logConsole[m.plugin] = !!state[m.key]; });
+  }
+
+  // The log switches from every plugin's settings as read, on whichever read brings them:
+  // Core reads its own only on a page that draws something of its own, and a plugin logging
+  // on a scene page must not wait for one. Every plugin's settings read comes through
+  // `pluginConfig`, so the switches are as fresh as the plugin's own settings.
+  function applyLogMods(plugins) {
+    _pluginsRaw = plugins || {};
+    applyColors(_pluginsRaw[PLUGIN_ID] || {});
+    var state = parseDevMods((_pluginsRaw[PLUGIN_ID] || {}).b1DevMods), c = coop();
+    c.logConsole = {};
+    LOG_MODS.forEach(function (m) { c.logConsole[m.plugin] = !!state[m.key]; });
+  }
+
+  // **The UI Customizations colors**: the Highlighted Text Color - the glyphs (ⓕ, 🖬, ⸎) and
+  // the highlighted text and warnings every ᝯㄝₓ plugin draws - and the result and background
+  // colors beside it. Each is one CSS variable on the page's root, which every plugin's CSS
+  // reads as `var(--gttx-highlight,#ffc107)` and so on, so a plugin needs nothing of Core's
+  // for them and a page where the settings are not read yet shows the defaults. The highlight
+  // keeps the key it was first stored under. Anything but `#rrggbb` is the default.
+  var HIGHLIGHT_DEFAULT = '#ffc107';
+  var COLORS = [
+    { key: 'a9HighlightColour', css: '--gttx-highlight', dflt: HIGHLIGHT_DEFAULT },
+    { key: 'd1GoodColor', css: '--gttx-good', dflt: '#84d68a' },
+    { key: 'd2AverageColor', css: '--gttx-average', dflt: '#ffb648' },
+    { key: 'd3BadColor', css: '--gttx-bad', dflt: '#ff7b72' },
+    { key: 'd6AccentColor', css: '--gttx-accent', dflt: '#7cc4ff' },
+    { key: 'd4ErrorBgColor', css: '--gttx-error-bg', dflt: '#7a3b3b' },
+    { key: 'd5MatchBgColor', css: '--gttx-match-bg', dflt: '#3f6b46' },
+  ];
+  function colorOf(v, dflt) {
+    v = String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
+    return /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : dflt;
+  }
+  function applyColors(s) {
+    var st = document.documentElement && document.documentElement.style;
+    if (!st || typeof st.setProperty !== 'function') return;
+    COLORS.forEach(function (c) {
+      var v = colorOf(s[c.key], c.dflt);
+      if (typeof st.getPropertyValue !== 'function' || st.getPropertyValue(c.css) !== v) st.setProperty(c.css, v);
+    });
+  }
+
+  // **The greys, from the Stash theme**, where Follow the Stash Theme is on. Stash publishes
+  // no theme color to read, and a theme restyles through selectors, so Core asks the page: a
+  // hidden sample of Stash's own dialog, card and muted text, read with `getComputedStyle`
+  // under whatever theme is active, and the greys every plugin's CSS reads as
+  // `var(--gttx-bg,#202b33)` and so on derived from it and put on the page root. Off, the
+  // variables are taken away, so every site shows its own hex. Read every tick, so a theme
+  // switched live follows within a second; written only when a value moves. The sample sits
+  // in `<body>`, outside `#root`, where the shared observer does not look.
+  var THEME_VARS = ['--gttx-bg', '--gttx-fg', '--gttx-fg2', '--gttx-muted', '--gttx-dim', '--gttx-card',
+    '--gttx-sunken', '--gttx-raised', '--gttx-border', '--gttx-border-faint', '--gttx-border-strong'];
+  var _probe = null, _themeKey = '';
+  function rgbOf(v) {
+    var m = /rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:[,\s/]+([\d.]+))?/.exec(String(v || ''));
+    if (!m || (m[4] !== undefined && Number(m[4]) < 0.5)) return null;   // transparent, or near it
+    return [Number(m[1]), Number(m[2]), Number(m[3])];
+  }
+  function hexOf(c) {
+    return '#' + c.map(function (v) {
+      var x = Math.round(Math.max(0, Math.min(255, v))).toString(16);
+      return x.length < 2 ? '0' + x : x;
+    }).join('');
+  }
+  function mixOf(a, b, t) { return [0, 1, 2].map(function (i) { return a[i] + (b[i] - a[i]) * t; }); }
+  function lumOf(c) { return (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255; }
+  function followsTheme() {
+    var raw = _pluginsRaw[PLUGIN_ID];
+    return truthy(raw && hasOwn(raw, 'd7FollowTheme') ? raw.d7FollowTheme : settings().d7FollowTheme);
+  }
+  function themeTick() {
+    var st = document.documentElement && document.documentElement.style;
+    if (!st || typeof st.setProperty !== 'function') return;
+    if (!followsTheme() || !document.body || typeof window.getComputedStyle !== 'function') {
+      if (_probe && _probe.parentNode) _probe.parentNode.removeChild(_probe);
+      _probe = null;
+      if (_themeKey && typeof st.removeProperty === 'function') THEME_VARS.forEach(function (k) { st.removeProperty(k); });
+      _themeKey = '';
+      return;
+    }
+    if (!_probe || !_probe.parentNode) {
+      _probe = el('div', 'gttx-probe');
+      _probe.setAttribute('aria-hidden', 'true');
+      _probe.style.cssText = 'position:absolute;left:-9999px;top:0;width:40px;visibility:hidden;pointer-events:none;';
+      // Nested as Stash's own dialogs are: a theme colors `.modal .modal-body`, and Stash's own
+      // leaves `.modal-content` transparent. `.modal` is display:none, which computes colors all
+      // the same.
+      var content = _probe.appendChild(el('div', 'modal')).appendChild(el('div', 'modal-dialog'))
+        .appendChild(el('div', 'modal-content'));
+      _probe._content = content;
+      _probe._modal = content.appendChild(el('div', 'modal-body'));
+      _probe._muted = _probe._modal.appendChild(el('span', 'text-muted', 'x'));
+      _probe._card = _probe.appendChild(el('div', 'card'));
+      document.body.appendChild(_probe);
+    }
+    var cs = function (n) { return window.getComputedStyle(n) || {}; };
+    var body = cs(document.body), modal = cs(_probe._modal), card = cs(_probe._card);
+    var bg = rgbOf(modal.backgroundColor) || rgbOf(card.backgroundColor) || rgbOf(body.backgroundColor) || [32, 43, 51];
+    var fg = rgbOf(modal.color) || rgbOf(body.color) || [245, 248, 250];
+    var cardBg = rgbOf(card.backgroundColor) || mixOf(bg, fg, 0.08);
+    var border = rgbOf(cs(_probe._content).borderTopColor);
+    // A border that is the text color is `currentColor`, not a border a theme chose.
+    if (!border || hexOf(border) === hexOf(bg) || hexOf(border) === hexOf(fg)) border = mixOf(bg, fg, 0.2);
+    var muted = rgbOf(cs(_probe._muted).color) || mixOf(fg, bg, 0.3);
+    var light = lumOf(bg) > 0.5;
+    var vals = [bg, fg, mixOf(fg, bg, 0.15), muted, mixOf(muted, bg, 0.35), cardBg,
+      // A log pane sits below the dialog: darker on a dark theme, a shade darker on a light one.
+      mixOf(bg, [0, 0, 0], light ? 0.06 : 0.4), mixOf(cardBg, fg, 0.1),
+      border, mixOf(bg, fg, 0.1), mixOf(bg, fg, 0.3)].map(hexOf);
+    var key = vals.join();
+    if (key === _themeKey) return;
+    _themeKey = key;
+    THEME_VARS.forEach(function (k, i) { st.setProperty(k, vals[i]); });
+  }
+
+  // **ᝯㄝₓ in a font that has it.** A theme that asks first for a font claiming these three
+  // characters with an empty box (Pulsar asks for Helvetica, and some installed Helvetica does)
+  // leaves the browser nothing to fall back from, so the name shows as boxes. Core carries the
+  // three glyphs itself - Noto Sans Tagbanwa's ᝯ, Noto Sans TC's ㄝ and Noto Sans' ₓ, each cut
+  // to its one character and renamed GTTx Brand (`.tools/cut-fonts.py brand`; SIL Open Font
+  // License 1.1, `OFL.txt`) - as a family whose faces cover those three code points and nothing
+  // else, put first wherever the name is drawn: every other character keeps the theme's font.
+  var BRAND_FONT = {
+    ta: 'd09GMgABAAAAAANQAAsAAAAAB2AAAAMEAAIAQgAAAAAAAAAAAAAAAAAAAAAAAAAABmAANBEICoEYgS4BNgIkAwgLBgAEIAWJRAcgG68GyB4HzukrRrxIhU4UXlK/gudpv19n7puPi1aShEL0BFW0mWXTBElEduMSyopfruUWbIWjLdGRLDCHDh6yN0nuUVWZGln98pUvUAzvvgAgwgHSrP5eNaViBDYFH2A0ohErpd4EI1QqvXDpILEG9Csl3SyxjMcgABrf69eJ9RFZ+jyqK3nOTJ45ewIthw1jAumVBkD19maqUVQREGuTaJMW0QAAOACA8jvfh447uZOO/fcKOlaFAigA8ZATEAAAAQzARR8KcNFPAECjUeD+/v8X5mMUBRBV17Q9eBk0oIB0QBUoggAq3br3RvU8qqB13/2B78H40olV751W6B475x+rbwXonvSwmphRPXsP/ySje7eVbhOdOGVKa29Vum1H62tnoT/7P1ufLMPTy3Gs9pItJ4EfYQPr9n4tIY36sSJs6bzsMBz8Ljgpus7DR8FDZy63AZ8nbeEAAAoQiv7J1y9N9jlfLfqMD8B9wr8zAHzOfi6CM2A4SBfADAFAAbuYsWqieXrQJkCkwVsJdE+nExqip+zZw0BpS2AaKhQuviDYsQaDAh1oQgImvAqBGUHlwZySmmFBVIuwJKILWFHUN1iTNxmwIWfaYKuCZO2V7EjbO8VIrsnIJFIOigQiEXQjpaAzxCHogkFKFMFBmwpOihgWmpFynJy1xOdLZK+/eYHzCKTKpxGHxIjmWD6HSXCMVsfM2nfjRgPaYjCadEVJFCoYM43Cxeco7J5hFTi7uTOLsncUw8rUNRTxBAKhhMWDxV5LNmMhBgUMRlKq3l3LEImf30dIokJBhzTBc4pYNTTlTR90/ERGSz7RDuVan+y+oTDVxqcUCXFNiLpLo0t7AQckXt/nPIn33phtCRWOexw+yFWN+2HWcgpSVr+RckzujQ2ha3bk1FmmFWm5ioygaPaP0aJqpJVJusEWuHboBDpnyOuu/AmsWRg8CJrQdwSSMtwyHLusGiZTwfB4k/VkEGIzbbqs250lmCOyREoFco7lsTp9Cw8xEr5ze06AfB/q7f+kJAA=',
+    e: 'd09GMk9UVE8AAAZgAA8AAAAADXQAAAYMAAIBBgAAAAAAAAAAAAAAAAAAAAAAAAAAGYFSDYMmGyAcQgZgDggANAE2AiQDBgQGBZBCByAXJBgGG2cMEcXEJvhDgXaEZRfmHcUjgpNujdBq/9Go77qB1cURqcCxM6oU+KPII47op6xub2IUfAmeaoz9273DVULCE0MUbWrVG0PVRmhE74SG/3//x7xbRdF/o49bg0aJDSStOKlK1+ITrODhY+335759mGTR0DwRJXkVsek0PDE0Kpko9l1K0ekmO3Xz8e31d+EQzArksaFhlwWYyNhA4dbesGW2u2270dOujBMPPKIPMfFI27Xv9DPXSai6lnNroD+3r4s5iZI4w8qT9RdgR3ABoZ26+WsWRRAlmvWBB7wGZpFlHIZd1tbJOX676LcLZdQCS+I0gxJZltn//8vU/DNAA5jyUnDOgi1iLHf+1ruFkr5V/wmV1rx7wHqnVoAWKAIdNBgQiT/t1cztv5D1hIhDCLFI29s+9U0hwNmAAhbHjq6pDjxTR64COsdYBnTeOBt4lowzgWfZiAsoRwDKihQr0S4OAMNy583fIkwXmNTCdMQSyC5MpdH5zhCbIDHVjtN7an4wkZl3dx0gJoPNICG+Sa0Pz1b0x68yofeU8jd7nCLLW8in1NMc2Sf2HwfmYfNqq4ltCVByPHC3muH/aRpelfTVitxvhvjXIOcY4ug5uPKUX+rzf26r3+1E3IQzPnq4AyvBervD4x2OetzHZVU7M7qThODfQLr3F1/c0F+gyXouVldBmCOn1cY4rzvlbOyHSw3VlNIQ35+K/UMBhjh8zFwhjvsQGqLjpb9oTeru1wMHrMLyLz/a0G/rl4xb/de5f9DN1KuoZvhKOWH3zxvbR1G7vaXLlSPn+kb6ycX/A5TR3/4744euq54/y8L4sixfTHdi+/W3+Sp+pPfO4vB98easeMVL0RAXn7eBxPY7zE8z3aPxjvI7b6/qiwOBAFfhIokjruKxgP8/ALS5laodYxGLWMQikxGI4nKTPMYhNvQgkwK0pSfLqGA0AC1ygBPBGbRr6lsMglCjmOfETKQjsHthAxCA1jLeIJojgVkHgAID/BmS2la0ss0FOdX/04XHuw8CcF8NR7bP7wO//QET8w68bo5G0qbx9MAniYYjXwE/ALv3f8V80SmRnEAnISG8ZlocdAMFXu4wSdYF6AdtIvz1i/I0Jka1kljxrsTBkIs4io1KcVIf4+LMNc7FJfZjJa7hamrFTWW2XdzlZ1fFI3OYPV3HU35evymbXNly5OP6sQidj58LWhIkgsBnOSEa90Kh/VlKMdTfXomRWugLZUDTDkAbM5zEGspsVQxeTAZj8Ntz9P4J8LYiHhJfMM6fEPMsXbEhtVSn9Q9yPGOC2QFny5BKDz5z60HNKCG5ZQodIOjkK8q1K9dOXcjpt/Dyo38hTssDBpA1JPKVZSVAXw0GCMlUEBhxYsqSpmtHpMQ+Z25kY2jkr0cTLbBfuLnOUDxlKewg4zsQIY1R4AOEH6eQUk+y3UWNnPfFA7BkCrkIdClgaMsRvJoaYbllzwGGUIm+quOIWZWKFWOjG5VI/SBDEms4Jhp8feJ48GDTXx9uK9pzeeh8BxlCfuiA7NtkwFjL3AA8Hy5+hkLi44woOiA22bU4Dfyf7s6mgeliPVEF1ZCeGT0JIW7SHMY7qgxmRMv3vugqxQmkHkxlRpMKek2DkQKKCWCwWM6SPnDCeB6NiILXCSCmesetSlpMWbKDWKuquezE1p+h9VczepVpfAFD2fLuVQtrIzBnpy2Z2meSB8cNyzFDaTedL2ERy7w9cM+s2ETI1clshVFD0awlCml5fSX6yKn5GyTlXvMEAqL2JURDaZX47erKgMghpOnIFFgwTXQME6cg9X3QqFFnOJ89EMgktQU3RrZEpkbTJM63WjbAiG/jD+1YqO8H/zKiDS080mPTsrb2v9FGeghYjxoMLXpVFwS06b3qI49/PM0RFRwJZFUit+YfNJi+BFKvbdX1FbujKnn5Eeq7EqTIGvpcE7PSjBSoqjhhZJZYjaohMBAqOoC0D1zSJBI61bK6Sjg2YHTYQIq95f0xPVMxdzLl6D/QizGrITzFsyoKYZnQQt/UcyBtnDtpGuVOvv43H0zKO6hIcoGoSMKDAAAA',
+    x: 'd09GMgABAAAAAANMAA4AAAAACAQAAAL8AAID1wAAAAAAAAAAAAAAAAAAAAAAAAAAGhQbIBw2BmAANBEICjBOATYCJAMICwYABCAFijQHIBspBxGVnHoEXyZwmyp8Vg9U1HF8vMXWtoNOCJ1WY5d+BDXNe83xEL/ftzPz7oo6EDWp1bWEeSompZBFE3lDQTUUiPxLncolHNYfg3LiAlCIpvYMMgQkn/QO8LRkagDk5O05bMCFiWLiww3A5Tg9/0E57ftL9S5dDziz428CdMQRq8U3BeiDpFS6YGsgsQCHS7NMyL4FLBSwjMe2GTb4S0MRESJHhMhzeEagFRD6Gs1GjYt9B3I10qhADQRswY02K580fHoku2T2vGQdMnvFRE5mnY9Byd1xh2yS19ZaOLpqFsdsjD1kS12WupJZAAFwsFj8IK/ApJL+v3ImrhMiIAdzjUkFiQq9KoFexSSKIpi8X6PinIB0nM4dgwSFbGp9iB4QrSvL+0sr+4tLe8uLe1dfBqun1qg1ehqu5v9Pv4u/xSMBgaxer511x4+3/XW7+oOPy893uxzU1nK+EfUSBDFLuWoKaI25k0MdmauOaU0Fcs1Tu2MdXq6L0oSnZIfQ6ylSuzVUdpE3KGZjEHUWtW2oNx130GCf9hCNNsQ/NFmXk2h2Yu0QWuzIB2i1LX+hLaarae3bbS37ZryIcCQDz0cwMoYBNZ9BQaCAkhRtZiM8RegLqSDmI4bqWte9AP3Iorbo6Rz8r7uCo9K7JgY87UnGOml7JINuN7DjH7XaEJ6lyZ0K86KuKY3D4FuAWEChIkttj3GMbDCpguc5GDSTPbsBRNeMUPj92wixfpZe0lN6kT5zzqyWlBFp6X5cBgpMaJSmw3rCDmQs4UMI7xiDXO6F5sVPcBQasl+ArPes9OCL2wMcfGXR3d7+GjN7x3cxB6wRYOyOF0NT8CUZoRHasv1aROmKaXYwLVAvZDdjlseSrE2iQxy9F3tBUmHkBJEqxBLPvzNLqKZMHKReYWCMcaoYV2kw4sGVBCzVoepXDoph77ngzIGMVH/amKVzrKSD7ncTwr5Zn4ppkZAflJJg3udTebcbr6HCvwFlyyBERVXQpUJ6evE95+b6EE4GAA==',
+  };
+  var BRAND_CHARS = /[\u176F\u311D\u2093]/;
+  var BRAND_PREFIXES = ['gttxcore', 'cfbe', 'enm', 'fretc', 'cpt2s', 'npt', 'ptp2re', 'sfm', 'svr', 'tbc'];
+  var _brandBody = null;
+  function brandFont(ff) { return '"GTTx Brand", ' + (ff || 'sans-serif'); }
+  // Our own dialogs and tooltips read the page's fonts behind GTTx Brand from a variable, so one
+  // opened between ticks has it at once; Stash's own text holding the name - on the settings
+  // pages, where the plugins' names and descriptions are - takes it on the element, once.
+  function brandTick() {
+    if (typeof window.getComputedStyle !== 'function' || !document.body) return;
+    injectStyle();                        // the faces and the dialogs' rule, whoever opens first
+    var root = document.documentElement, st = root && root.style;
+    var ff = (window.getComputedStyle(document.body) || {}).fontFamily || '';
+    if (ff !== _brandBody && st && typeof st.setProperty === 'function') {
+      _brandBody = ff;
+      st.setProperty('--gttx-brand-font', brandFont(ff));
+    }
+    if (!/^\/settings\b/.test(String((window.location || {}).pathname || ''))) return;
+    var app = document.getElementById('root');
+    if (app) brandWalk(app);
+  }
+  function brandMark(el) {
+    if (!el || el._gttxBrand || !el.style) return;
+    var have = (window.getComputedStyle(el) || {}).fontFamily || '';
+    if (have.indexOf('GTTx Brand') === -1) el.style.fontFamily = brandFont(have);
+    el._gttxBrand = true;
+  }
+  function brandWalk(node) {
+    var kids = node.childNodes || [];
+    // An element whose text is its own, with no nodes under it, is read by its text.
+    if (!kids.length && node.tagName && BRAND_CHARS.test(node.textContent || '')) brandMark(node);
+    for (var i = 0; i < kids.length; i++) {
+      var k = kids[i];
+      if (k.nodeType === 3) { if (BRAND_CHARS.test(k.nodeValue || '')) brandMark(k.parentNode); }
+      else if (k.tagName && k.tagName !== 'SCRIPT' && k.tagName !== 'STYLE') brandWalk(k);
+    }
+  }
+
+  // **The plugins' own glyphs, where the machine has no font for them.** Their defaults write
+  // ᱜ, 🞮, 🛈 and 🖫 into custom field and tag names, Stash's pages show them, and the plugins draw
+  // ⓕ, 🖬, ⸎ and ⮺: Windows has them all, a Mac or a Linux desktop without Noto may not. Core
+  // carries them as GTTx Symbols - cut from Noto Sans Symbols 2, Ol Chiki, Symbols and Sans
+  // (`.tools/cut-fonts.py symbols`; `OFL.txt`) - and names it last after the page's fonts and
+  // the marks' monospace, so it only fills a gap: every character a font before it has keeps
+  // that font. Off Windows only: there the fonts are known to be there, and the family named
+  // last with no face behind it is skipped, so nothing on a Windows screen changes.
+  var SYMBOL_FONT = {
+    sym2: 'd09GMgABAAAAAASwAA4AAAAACiwAAAReAAICDAAAAAAAAAAAAAAAAAAAAAAAAAAAGyAcIAZgAIEQCoREg3kBNgIkAxgLDgAEIAWJUgcgFyQYDhveCBHFzCP4cRi7oRfCtXGtA4MTDaNNY9TqW7oHD71OfR9MkhwvAaXx5RSGMpNdWnEiwIkQKKLd7HkqIUYpCCXK+H1zeWVjvyxu0qi+c2W0wVkITZYOlD+nerZmdrcsV8jSFNUJ2SpbY5hk2QFaAnWnS6rxdRTfB0AjUNh/xUKheSLRTMv8WyJiTp2aqn3Uf3sIwCBIPKJGrQYt8KIB/v8HALa/VpXFInaQIdkGqO9nE50oFNVQIMHhydZu3Li2OJq1//9/nfM3hM6RowABIG21DThIQAMKSAY0UAOFAJJRGEANNA6g0Qggm92pr9RHAGAB0AAAcEHmjxouxNcN6tCIrxvVoRDfzqqDQHzf3AwJgJt+dCRwAHwDANoLBRrPqpGRpra8OmBFxGil6HW7ddfQNSKmXidm+CphyhXSKnydiKnXiBG6QphytaRzaL+YegAt597bRpmydSuDWqIWJ29V1xXAwNSjAiKiZ/jCDjF1+3kjdHZrf6KlGRaH3QjtlJO2bOWaesQMhA+xphw0BpliqukPA8SuA6WljBCrvV9ZLYVJC3vyNqYwaitT+KWBwlQWbfzCEEbL+2V/m3ZeVWvSpFqrOne2eq+PmDrHyzq1bDirbK9eZWc1bCh60QtTQzlpg5hoHYxPjCxVEIystXxIzyFsjh8//oIKjRvnSsefv3D+/Phx9dgkv32zqKBCQcIJJ2ZlTMOjTqXHjvOokuOXPXLyq1XLuuiJixt5mmQ71kWOGlU6mBgcHCwMDomT0pSUMUdtO6oIj/a17SGpxpWvVa533TptTupce27ltvYb+3Vh7KrYlQX2dXvxgwa7GpBy9e27q0Vx35GxY4++WW3ff93pm9C88DwACEBKa8W3r3weqPDVq9QLgCsfqoQBDxtd+UjR/83qnKoBuJHd5t/cr/5AAorM31aVccs2dC4B+aU5CJpZ3AKlh2zxomUdtM7qQKf9FLF84EEEgm0DUoSdoNTwD1p6bnApUS64pVYHPGo0gldm28EnvTtgqDa7YKo0tcBSYWaAv0R59KlGKLU9co1N1hxD0QLIpDIZ+KEReMMCBh8c1iK1AC5FgcYcDw5ZekMx8eaSsGLAg6KKUGODxEj+rxIbBV7CWxtUWM87cu/HjxX4Bl7eF6JEvZKDmdBG4XAeZS+q+PEERyzqH+J45oARZIRU6kLtVLWctT6DanhQQrVTapABVe4Akxe/x5jSI/BoVBNe8RKjaxNgJCxeMUaqI3yDpmCr6T9Iabh9LtKAyho4mg03+MTbm6traUYENUdrAohCLUnoRUKhDY9oJ1G9IGqY6A+9Us9dosLwvcZwsFwrJjO4Uc+okZGf1xEj3GDnCZmv/vboBbwPp48D6C8kdNo5GejcaM071HV8awYcC3GZhHiqt/Ysd8ZcsncufUaTgzlsWNir99c17REWRupXITBHSby789Id2qF0/huFXr+Lrfez1ItjhZeTrCf/H+0B/uqWbHK/xtkA',
+    olck: 'd09GMgABAAAAAANsAAsAAAAAB+QAAAMfAAIAxQAAAAAAAAAAAAAAAAAAAAAAAAAABmAANBEICoEwgUYBNgIkAwgLBgAEIAWKLgcgGzEHEYWUUfxMiMccTSUIxswvFCu/u/euj6eHk727/U2TIAginAVBnEQcJxClEmXQft9m34mZxasiJpgmGkR+AGzq8ttOi8ZHOwWemPeADAErZ8lJ/n/u5+sibRO4C3yAG+lEMjGaI4uTdny8442RFCk6m+YH+m9TSmrPCIew1iREQjzELUx1SQ1W6JsKBtxGv/KELrHFGDRwvXs5YUc8vHnRa/x/B3oXogAI0BN1BhcABQs4gg4BZnrSgAkmcA6n0Qri2yACyMhCwyWxmAEBO3hAGQzZY8qenkjuMw5mK398FPFvGts6Yy17QApyHrk19Pl+ngycsP7VsbHhxb6B1+W3/VzIpId9qTCWmIIo+8EUN5kCh4RUExfbGB0z+/RgfnpxXmU5U3dD9UDeRG1DQfJg/t46pgrW0vTroq03Yup2agoOiiYGNt6iSpPuayrFsipMsmK2vEUNzyEKWbahCfoABNTh9IefdFFc5n+Zueh+g98T73fwN/L5qEP7R2VTj7ChAAF3tf1ySNDoBIEJaIMRWYQ6GmsP88NMB2tYkGEBfGAChDC6gMJpCejYOwB6yoQZGPhHGxgpkgJgYp8xYKZK/gAL5woDK9tGAxtLqg/YmVOfgSOydOIPz8mQ3hJ2cOq30VsncJAdHMCvQ3gnIfiMVGMpcJXEUWSYO5GeL7S2XlwqVEmdDrL3NhSENbWb0vnGLx5+fyf42XYF89X4G21q83jVA3YnzO0wcyq4O7IQQv5jZL9vgAOVZYeXIGLyJHQbg6h7D/vqjJCPmE83x1VVcUC+zmaTfT7SM+SQGPMKOyZzA2R2fyCyLcJTKNUb+W/e9mv+fv+tD5ZvvEXzWBv7i3m3BvQrevxLhrfyIRnjcfdZWEGxBRXWCi8aFSphV4xPh7Ims6NFtSiJWCNaoqY7IVcGyZIqz8+A0JrqPqpU+HEYGV1Ho5A3rfUlBjZrTMGYIloSpinx5+kVPrRrg3ztqwxqnT9wqH0+EaazoHp2QBxD7uNjLNq1akyjsDrur74mveUCsitjQMf/QS+s2LeKotUf96+7xj3kROs4AAAA',
+    sym: 'd09GMgABAAAAAAN4AA8AAAAACFgAAAMjAAIAxQAAAAAAAAAAAAAAAAAAAAAAAAAAGhYbIAZgADQRCAqBJIFDATYCJAMICwYABCAFigwHIBckGAYbbAdRVEh+UvxIsG3RpytEHwjVq3vx8P7a57lvZgtAEE8kfyuJ3NY2ja9C1ADoiGZ/um9aM57SbzKd644EqaUPQiUAri7VlIYHmrIp+IAhjsimNvvJzXuw2pdG/5xGGU8oYB0bYANt45WUs8jucsQSb0agGiCQhBCoopkWYtyEafNUkkNRAPJsSRxQRtqVFmFqOGGs0CfGkKqWpbwsTykHcgATZ86c6EK7O66l7Ma/a7irpCEISI3SLbQCCRnqyQSJzLVC3hu0u1MUmPGom4B8NFRrQnjJkTMMi8AtkNWLyepdd0nsuEeq7r5DlG7XF+wuRRKvr1fZRepKuLkwqxJTKbZl+/c67o+hqirpy4D5R0euXz/y6PwFI48UsAJx4Ugle2TB/AbEliMLBk4pDVi9ekBpypQMFrDCbAq9ydqlWoOab6qzfU3LYx437jam/pw+c2oBgeRqz2cbmq6sOexbpZrZe7j97fYbeH7hkLKouJkdyAIVJBAcLQ7BLh6LLJQxDyktsgKn5uGGyYZr051qOiUTeWWUUwGhkXJIajgJmXEuQa5TVIAy86IHVNAhdkJF4+IEVNIlPkNlnVIDqGJMGgFVjUglqGZYOgfVo036/V/XMCBvZqzF1E0xOM+wmC0W8OsR3okJPiOVqBmuMnuKCU48c5cOReEC+6yEpqZoiclSy6lIU6OoTqcPv78j/DS/3ze6XMvY1QzkOJzsJjJllSbDp0D0H3f7RIFaWIjZbHkEZiszkw8tw0k/FzuxEtvLtVkroSVMLrFy/cyQQAI/SoNNx8gKyF7vgcjVCK+vN+KNWuKpQ3gaXnTrtbrZT63uTm9x93Y3/xdl0/QqNKAmAIk2Tq6KN5MSxSEZE24XypdDHCpeUD8FhKFZgxqGmTibwP36Ey3fv0QKP6dIeTjVKp75tjpobNNu87nCYkgs81/h/zy9wsfcxhbe+ApjudB+UZZ5IpP6e7qzK1/Atl6GWqqbLg9/jYKk9OqrYjof4GfSpP99sft/FhERavELoisYM00wbSiViWMW5X2cI2qJr/+rZe9J139HWUEAgGhu/E/XAQAA',
+    sans: 'd09GMgABAAAAAAQMAA0AAAAACOgAAAO7AAID1wAAAAAAAAAAAAAAAAAAAAAAAAAAGyAcNgZgADQRCAqCKIISATYCJAMICwYABCAFikQHIBvpBxGVnJxkPw9jY+XhkVD3Hcny8seuSHQvB/F8XVbv9x+2AnYmycK98IlWzwK+wkcZdx0zqJN1D0LRgYuKWC/niuQbs/IwPQLFLH8m2HI6yeZAm3fq/+dyer+tZ3nvN+gWUMSJzI33fuP5ATU23WmTel4UUIdNoA24gSINSDNdbi5PYGI3s6ZnI0CcBEVIi1YdehBFA6RSANDnqE1dtJ43fO60CZQbPW3k+Ng+YeiMSb1GA/u1aiqbCIFaowa0j9fKIGpLM1BmSOmQVh4nAOC9aN25c2suV3eqO7payTvoEbIWEACVp+4CpdCAAgwgCwMBstCUAjQagepOKmUKnvwRQELq17gAKAA0YAKjgRmgAVWmo7VOmKZ+W3d+sje3CfbvJ4j/RA8xGSI2E8RlSPKS2QWCbVk21vbtBOc7114UuZbYOyoG2eZOcaSme4jgsNlRkRPfBoHL2Lpi0iPoIfckeeBAGT/ady/HCzMvdp7oleqasPuMz6hYLf9rwQr/pN9wqX/T77jef+kfauc1z/fqeJEG2ef8c9kNIvl1vfwW+U7/O/6d/g/ST1c5ne6UcQp5ol3WjzsV/+hC2xVIYGLy5hwfeNL313WaWFCqacLuMyA9c3qW9xUABFDGq40v93qD3Qb/ohHjN8CH4NkvwLfhl0/hlnw+Q3+rxAdhCoDge+LfY+OGgc5MUevj15AKUEb7GSD0Q66zDHIx4CQEijx/qDgeoqGFf9QqVQpDetQGwyq0DyNadBWjqiyMMZVWE+OGrA+aGu00WhrsP9qVMWr/U0f962FCy70ZIV8AgYaahgZwFZDAnoY0cGRoEYlDYMRBAc2wQEEAoZw14PH4QijgMASnpTwZDWmKlkGWJ0GhUKbKZ0hSrIof7ddLJEJc0cLV1Qu4eEsxWsI6k3xOgjIjtMCdBoXLeVoOY2eDirjwTjKs8PgMaCBq6tqGAEIK5SAtiFO45RUPdUQP0UJ0VbUJbUzcy9Co6p2HFoYsQEG9QQlS2k8xeGYhWNA0/5AEtrYmiB39GfSWt6ZWUMo/JPiLVzJ8FE3JKxv95VcSlbZ8SxIA8waotzCjtAKsGJLA/aIsF1QcQrCwk3rmU4R/sU6asT4Zo9swPFCVHqsbFlrIEcLSVfDImTltCVweltDzoUGGe8NUDR4/Yx8g4QQIMBlkVv3FyhY4bKjOFlVvYaj0JBnUg2WYqf227CQFPVAOlSj2+ZknM8OUUeZGTmI+GgAek8VZKOdQsISlBGH+Kvg8B3NbgHzLfKX2qQ0AAA=='
+  };
+  var SYMBOL_RANGES = { sym2: 'U+1F7AE,U+1F6C8,U+1F5AB,U+1F5AC,U+2BBA', olck: 'U+1C5C', sym: 'U+24D5', sans: 'U+2E0E' };
+  var SYMBOLS = '"GTTx Symbols"';
+  var SYMBOLS_ON = !/^win/i.test(String((window.navigator || {}).platform || ''));
+  var SYMBOL_FACES = SYMBOLS_ON ? Object.keys(SYMBOL_RANGES).map(function (k) {
+    return '@font-face{font-family:"GTTx Symbols";font-display:block;unicode-range:' + SYMBOL_RANGES[k] + ';' +
+      'src:url(data:font/woff2;base64,' + SYMBOL_FONT[k] + ') format("woff2");}';
+  }).join('') : '';
+  var _symbolsLoading = false;
+  // Stash's page font, from `<body>`, with GTTx Symbols after it - once: the theme's fonts are
+  // read as the page loads, and a change of them shows after a reload. The faces are loaded
+  // outright, once: Chrome loads a face named after an installed font only when that face is
+  // asked for first, so behind monospace or a theme's font it stayed unloaded and the gap a box.
+  function symbolsTick() {
+    var b = document.body, fonts = document.fonts;
+    if (!SYMBOLS_ON || typeof window.getComputedStyle !== 'function' || !b || !b.style) return;
+    if (!_symbolsLoading && fonts && typeof fonts.load === 'function') {
+      _symbolsLoading = true;
+      injectStyle();
+      fonts.load('1em ' + SYMBOLS, '\u1C5C\uD83D\uDFAE\uD83D\uDEC8\uD83D\uDDAB\uD83D\uDDAC\u2BBA\u24D5\u2E0E')
+        .then(null, function () {});
+    }
+    if (String(b.style.fontFamily || '').indexOf('GTTx Symbols') !== -1) return;
+    b.style.fontFamily = ((window.getComputedStyle(b) || {}).fontFamily || 'sans-serif') + ', ' + SYMBOLS;
+  }
+
+  // Whether `pluginId`'s Dev Mods switch has it log to the browser console. Read at call time.
+  function logsToConsole(pluginId) {
+    var l = coop().logConsole;
+    return !!(l && l[pluginId]);
   }
 
   // Outline what these plugins put on the page, and say whose it is. `_coopOwner` is
@@ -3702,6 +3960,14 @@
     a6CaseSensitive: false,
     a7CardFieldCount: true,
     a8CardFileCount: true,
+    a9HighlightColour: '',
+    d1GoodColor: '',
+    d2AverageColor: '',
+    d3BadColor: '',
+    d4ErrorBgColor: '',
+    d5MatchBgColor: '',
+    d6AccentColor: '',
+    d7FollowTheme: false,
     b1DevMods: '',
     // Undo History. An absent key reads as the default here, and the Plugins tab writes
     // the defaults in once (`seedSettings`) so its boxes show them - which is how two
@@ -3783,6 +4049,7 @@
       var wait = _configWait = gqlRequest('query GTTxPluginConfig { configuration { plugins } }', null).then(function (d) {
         if (_configWait === wait) _configWait = null;
         if (gen === _configGen) { _config = d; _configAt = Date.now(); }
+        applyLogMods((d && d.configuration || {}).plugins);
         return d;
       }, function (e) {
         if (_configWait === wait) _configWait = null;
@@ -3806,7 +4073,8 @@
     var gen = _configGen;
     var wait = _settingsInFlight = pluginConfig(force)
       .then(function (data) {
-        var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+        _pluginsRaw = (data.configuration || {}).plugins || {};
+        var raw = _pluginsRaw[PLUGIN_ID] || {};
         var out = {}, k;
         for (k in DEFAULTS) if (hasOwn(DEFAULTS, k)) out[k] = hasOwn(raw, k) ? raw[k] : DEFAULTS[k];
         // The one heading-counts switch replaced two, `a4TagCount` and `a5PerformerCount`,
@@ -3896,6 +4164,7 @@
     SEEDS.a5LogLinesKept = LOG_KEEP;
     SEEDS.c1JournalKeepDays = String(JOURNAL_KEEP_DAYS);
     SEEDS.c2JournalSizeMB = JOURNAL_SIZE_MB;
+    COLORS.forEach(function (c) { SEEDS[c.key] = c.dflt; });
   }());
   // What each absent key is seeded with: its default, but the heading-counts switch on
   // where either old key was, as `loadSettings` reads it. `showDefaults` shows the same.
@@ -4031,16 +4300,45 @@
     var on = function (k) { return truthy(s[k]); };
     var records = ['edits made in Stash\'s pages', 'deletes and merges', 'settings changes', 'library-wide image writes']
       .filter(function (x, i) { return on(['c4JournalHandEdits', 'c7JournalDeletes', 'c9JournalSettings', 'c5JournalImageRuns'][i]); });
-    return 'Kept ' + (/^forever$/i.test(days) ? 'forever' : days + ' days') + ', up to ' + mb + ' MB' +
+    var text = 'Kept ' + (/^forever$/i.test(days) ? 'forever' : days + ' days') + ', up to ' + mb + ' MB' +
       (on('c3JournalSinceBackup') ? ', only since the last backup' : '') + '. Records ' +
-      (records.length ? records.join(', ') : 'nothing from Stash\'s pages') + '.' +
-      (on('c8JournalUndoTakesOut') ? ' An undo takes what it undid out of the history.' : '');
+      (records.length ? records.join(', ') : 'nothing from Stash\'s pages') + '.';
+    // The one setting here that loses history, in its level while it is on.
+    return on('c8JournalUndoTakesOut') ? [text + ' ', { text: 'An undo takes what it undid out of the history.', hl: true }] : text;
   }
 
   // One settings dialog for a list of fields in `JOURNAL_FIELDS`' shape - a box a field,
   // its label, the tip's first paragraphs under it - and `spec` saying what it is called and
   // what it says once read. `spec.open` is the one open now. Where the fields are not keys of
   // their own, `spec.read(settings)` gives their values and `spec.write(values)` the patch.
+  // Core's own settings unless `spec.load()` and `spec.save(patch)` say whose: that is how a
+  // plugin's `settingsDialog` uses it. A field is a switch, or a box with `text` or `number`;
+  // `wide` gives a box room for a name or a list, and `mark(value)` - a node, a promise of one,
+  // or null - is drawn after the box as it opens and again as it is typed into: what the name
+  // resolves to, the way a row of Stash's page would have said it.
+  // A color at work: lines as the plugins draw them, in the color the box holds, so a pick
+  // shows before Save does - the default while the settings are still being read. A sample
+  // is its parts: plain words, `{ dim }` in the grey the plugins give asides, and `{ hl }`
+  // in the color, as text or, for a `bg` field, as the background behind it.
+  function drawDemo(f, box, demos) {
+    var col = el('div', 'gttxcore-demo');
+    col.title = 'How the ᝯㄝₓ plugins draw with this color, in the one in the box. Made-up samples.';
+    var spans = [];
+    f.demo.forEach(function (sample) {
+      var line = col.appendChild(el('div', 'gttxcore-demoline'));
+      sample.forEach(function (p) {
+        if (typeof p === 'string') markGlyphs(line.appendChild(el('span')), p, true);
+        else if (p.dim != null) line.appendChild(el('span', 'gttxcore-demodim', p.dim));
+        else spans.push(line.appendChild(el('span', p.cls || (f.bg ? 'gttxcore-demomark' : null), p.hl)));
+      });
+    });
+    demos.push(function () {
+      var c = box.disabled ? f.dflt : box.value;
+      spans.forEach(function (n) { n.style[f.bg ? 'backgroundColor' : 'color'] = c; });
+    });
+    return col;
+  }
+
   function openFieldsDialog(spec) {
     if (spec.open) { if (spec.open.modal.scrollIntoView) spec.open.modal.scrollIntoView(); return; }
     injectStyle();
@@ -4048,38 +4346,81 @@
     var modal = el('div', 'gttxcore-modal gttxcore-narrow');
     backdrop.appendChild(modal);
     var head = el('div', 'gttxcore-head');
-    head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - ' + spec.title));
+    head.appendChild(el('div', 'gttxcore-title', (spec.shortName || PLUGIN_SHORT_NAME) + ' - ' + spec.title));
     var note = el('div', 'gttxcore-note', 'Reading the current settings…');
     head.appendChild(note);
     modal.appendChild(head);
     var body = el('div', 'gttxcore-body');
-    var boxes = {};
+    var boxes = {}, demos = [];
     spec.fields.forEach(function (f) {
-      var row = el('div', 'gttxcore-devrow');
-      var label = el('label', 'gttxcore-devlabel' + (f.warn ? ' gttxcore-warnlabel' : ''));
+      var row = el('div', 'gttxcore-devrow' + (f.demo ? ' gttxcore-demorow' : ''));
+      // A field with samples: its line and help on the left, the samples beside them.
+      var main = f.demo ? row.appendChild(el('div', 'gttxcore-devmain')) : row;
+      var label = markLevel(el('label', 'gttxcore-devlabel' + (f.warn ? ' gttxcore-warnlabel' : '')), f.warn);
       label.title = f.tip;
       var box = document.createElement('input');
-      box.type = f.text || f.number ? 'text' : 'checkbox';
-      box.className = f.text || f.number ? 'gttxcore-jbox' : 'gttxcore-devbox';
+      box.type = f.color ? 'color' : f.text || f.number ? 'text' : 'checkbox';
+      box.className = f.color ? 'gttxcore-colorbox'
+        : f.text || f.number ? 'gttxcore-jbox' + (f.wide ? ' gttxcore-wide' : '') : 'gttxcore-devbox';
       box.disabled = true;
       box.addEventListener(box.type === 'checkbox' ? 'change' : 'input', function () { refreshSave(); });
       boxes[f.key] = box;
-      var name = markGlyphs(el('span', 'gttxcore-devname'), f.label);
+      var name = markGlyphs(el('span', 'gttxcore-devname'), f.label, spec.plainNames);
       if (box.type === 'checkbox') { label.appendChild(box); label.appendChild(name); }
-      else { label.appendChild(name); label.appendChild(box); }
-      row.appendChild(label);
-      row.appendChild(markGlyphs(el('div', 'gttxcore-devhelp' + (f.warn ? ' gttxcore-warnhelp' : '')),
+      else if (!f.color) { label.appendChild(name); label.appendChild(box); }
+      // The label and its mark on one line: beside the label rather than in it, so a click on
+      // the mark is not a click on the box, and in a line of their own so the mark follows the
+      // box rather than wrapping under it.
+      var line = main.appendChild(el('div', 'gttxcore-devline'));
+      // A color has no empty box to fall back from, so its default is a button away. Box and
+      // button lead, left-aligned like the switches whatever the name's length; the button stays
+      // out of the label, so the label names the box by id.
+      if (f.color) {
+        box.id = 'gttxcore-field-' + f.key;
+        label.htmlFor = box.id;
+        label.appendChild(name);
+        line.appendChild(box);
+        var reset = line.appendChild(button('Default', 'gttxcore-colorreset'));
+        reset.title = 'Put the default, ' + f.dflt + ', back in the box. Nothing is written until you press Save.';
+        reset.addEventListener('click', function () { if (!box.disabled) { box.value = f.dflt; refreshSave(); } });
+      }
+      line.appendChild(label);
+      if (f.mark) {
+        var slot = line.appendChild(el('span', 'gttxcore-fieldmark'));
+        var asked = 0, wait = null;
+        box._mark = function () {
+          var ask = ++asked;
+          Promise.resolve(f.mark(String(box.value).replace(/^\s+|\s+$/g, ''))).then(function (node) {
+            if (ask !== asked) return;                            // typed on while it was asked
+            while (slot.firstChild) slot.removeChild(slot.firstChild);
+            if (node) slot.appendChild(node);
+          }, function () {});
+        };
+        box.addEventListener('input', function () { clearTimeout(wait); wait = setTimeout(box._mark, 400); });
+      }
+      // The description stays plain: the level is on the name, its box and its tick.
+      main.appendChild(markGlyphs(el('div', 'gttxcore-devhelp'),
         f.tip.split('\n\n').slice(0, 2).join(' ')));
+      if (f.demo) row.appendChild(drawDemo(f, box, demos));
       body.appendChild(row);
     });
     modal.appendChild(body);
     var foot = el('div', 'gttxcore-foot');
     var saveBtn = button('Save', 'gttxcore-save');
-    saveBtn.className = saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    // Stash's blue: it writes a setting, never the library.
+    saveBtn.className = saveBtn.className.replace('btn-secondary', 'btn-primary');
     var closeBtn = button('Close', 'gttxcore-close');
     closeBtn.title = 'Close without saving.';
     foot.appendChild(saveBtn);
     foot.appendChild(closeBtn);
+    // Every field back to its default in its box, written only by Save like any other change:
+    // Close, and the dialog opened again, gives back what is stored.
+    var resetBtn = null;
+    if (spec.resetAll) {
+      resetBtn = foot.appendChild(button('Set All to Default', 'gttxcore-resetall'));
+      resetBtn.disabled = true;
+      resetBtn.title = 'Still reading the current settings.';
+    }
     modal.appendChild(foot);
     var run = { modal: modal, backdrop: backdrop, closeBtn: closeBtn, stored: null };
     var values = function () {
@@ -4092,6 +4433,7 @@
       return out;
     };
     function refreshSave() {
+      demos.forEach(function (d) { d(); });
       var v = values(), s = run.stored, moved = false;
       if (s) spec.fields.forEach(function (f) { if (String(v[f.key]) !== String(s[f.key])) moved = true; });
       saveBtn.disabled = !s || !moved;
@@ -4105,32 +4447,50 @@
       spec.open = null;
     }
     closeBtn.addEventListener('click', shut);
-    saveBtn.addEventListener('click', function () {
-      if (saveBtn.disabled) return;
+    function store() {
       saveBtn.disabled = true;
       closeBtn.disabled = true;
+      if (resetBtn) resetBtn.disabled = true;
       note.textContent = 'Saving…';
-      writeOwnSettings(spec.write ? spec.write(values()) : values()).then(shut, function (e) {
+      (spec.save || writeOwnSettings)(spec.write ? spec.write(values()) : values()).then(shut, function (e) {
         closeBtn.disabled = false;
+        if (resetBtn) resetBtn.disabled = false;
         note.textContent = 'The settings could not be saved: ' + (e && e.message ? e.message : e);
         refreshSave();
       });
+    }
+    saveBtn.addEventListener('click', function () { if (!saveBtn.disabled) store(); });
+    if (resetBtn) resetBtn.addEventListener('click', function () {
+      if (resetBtn.disabled) return;
+      spec.fields.forEach(function (f) {
+        var b = boxes[f.key];
+        if (b.type === 'checkbox') b.checked = !!SEEDS[f.key];
+        else b.value = f.dflt == null ? '' : String(f.dflt);
+      });
+      refreshSave();
     });
     spec.open = run;
     wireEscape(run, 'gttxcore', closeOnly);
     document.body.appendChild(backdrop);
-    loadSettings(true).then(function (s) {
+    (spec.load ? spec.load() : loadSettings(true)).then(function (s) {
       if (spec.open !== run) return;
       if (spec.read) s = spec.read(s);
       run.stored = {};
       spec.fields.forEach(function (f) {
         var b = boxes[f.key], v = s[f.key];
+        if (f.color) v = colorOf(v, f.dflt);
         if (b.type === 'checkbox') b.checked = truthy(v);
-        else b.value = v == null || v === '' ? String(f.dflt) : String(v);
+        else b.value = v == null || v === '' ? (f.dflt == null ? '' : String(f.dflt)) : String(v);
         run.stored[f.key] = b.type === 'checkbox' ? b.checked : (f.number && /^\d+$/.test(b.value) ? Number(b.value) : b.value);
         b.disabled = false;
+        if (b._mark) b._mark();
       });
       note.textContent = spec.ready;
+      if (resetBtn) {
+        resetBtn.disabled = false;
+        resetBtn.title = 'Put every setting here back to its default. Nothing is written until you press ' +
+          'Save; Close leaves the settings as they were.';
+      }
       refreshSave();
     }, function (e) {
       if (spec.open !== run) return;
@@ -4144,54 +4504,192 @@
     saveTip: 'Store these settings. They apply from the next thing recorded.' };
   function openJournalSettings() { openFieldsDialog(JOURNAL_DIALOG); }
 
-  // Dev Mods: three switches stored as one string. Save applies them before the write lands
+  // Dev Mods: its switches stored as one string. Save applies them before the write lands
   // as well as after it: the flags are what it was pressed for, and a round trip is not a
   // reason to wait for them.
   var DEV_DIALOG = { title: 'Dev Mods', fields: DEV_MODS, open: null,
     ready: 'Switches for working on these plugins, not for using them. Each one sets a flag ' +
-      'on the object the ᝯㄝₓ plugins share, so it reaches every one of them at once and ' +
-      'none of them writes anything because of it. All three are off by default and none ' +
-      'is meant to be left on.',
-    saveTip: 'Store these three switches and apply them now.',
+      'on the object the ᝯㄝₓ plugins share, so it reaches them at once and none of them ' +
+      'writes anything because of it. All are off by default; the logs may be left on, the last ' +
+      'two are not meant to be.',
+    saveTip: 'Store these switches and apply them now.',
     read: function (s) { return parseDevMods(s.b1DevMods); },
     write: function (v) { applyDevMods(v); return { b1DevMods: formatDevMods(v) }; } };
   function openDevMods() { openFieldsDialog(DEV_DIALOG); }
 
-  // ⓕ and 🖬 amber wherever the settings name them, as on the cards (`CARD_AMBER`) and as
-  // Scene Variants' ⸎ in its own setting's name. Appended to `node`, which is returned.
-  var CARD_MARKS = /(ⓕ|🖬)/;
-  function markGlyphs(node, text) {
+  // **How much a setting can do on its own, in three levels of one color.** A field's `warn`,
+  // a summary piece's `hl`: `'semi'` for what only decides what the writes below touch (a
+  // filter, a path, a title rule) - the Highlighted Text Color blended toward the text; `true`
+  // for what writes on its own, skips the review, renames files or has another large side
+  // effect - the color itself; `'strong'` for what writes on its own with no dialog at all -
+  // red, the Bad Result Text Color for now. A setting's name wears its level always, its
+  // summary piece only while it is on, a switch its tick, an edit box its border, never its
+  // description; a row wears its settings' highest level
+  // on its heading, `'strong'` counting as `true`, and any level makes its button orange.
+  var LEVEL_COLOR = {
+    semi: 'color-mix(in srgb,var(--gttx-highlight,#ffc107) 55%,var(--gttx-fg,#f5f8fa))',
+    hl: 'var(--gttx-highlight,#ffc107)',
+    strong: 'var(--gttx-bad,#ff7b72)',
+  };
+  function levelOf(w) { return w === 'semi' || w === 'strong' ? w : w ? 'hl' : ''; }
+  function parentLevel(list) {
+    var ls = (list || []).map(levelOf);
+    return ls.indexOf('hl') !== -1 || ls.indexOf('strong') !== -1 ? 'hl' : ls.indexOf('semi') !== -1 ? 'semi' : '';
+  }
+  // `node` in `w`'s level, and in no other: its class alone moves, so a tick repeating it
+  // changes nothing on the page. Returns `node`.
+  function markLevel(node, w) {
+    if (!node) return node;
+    var lv = levelOf(w), had = String(node.className || '');
+    var cls = had.replace(/(^|\s)gttx-lv-\w+/g, '').replace(/^\s+|\s+$/g, '');
+    if (lv) cls = (cls ? cls + ' ' : '') + 'gttx-lv-' + lv;
+    if (cls !== had) node.className = cls;
+    return node;
+  }
+  // Summary pieces - words, `{ text }`, `{ cf }` - every one in `w`'s level: what a setting
+  // says while it is on.
+  function atLevel(pieces, w) {
+    return (pieces || []).map(function (p) {
+      if (typeof p === 'string') return { text: p, hl: w };
+      var q = {};
+      for (var k in p) if (Object.prototype.hasOwnProperty.call(p, k)) q[k] = p[k];
+      q.hl = w;
+      return q;
+    });
+  }
+  // A row's heading in its level and its button - ours, never Stash's hidden Edit - orange
+  // for any level: a row of Stash's own a plugin took over, or one Core draws. Idempotent.
+  function levelRow(row, w, btn) {
+    if (!row || !row.querySelector) return;
+    var lv = parentLevel([w]);
+    markLevel(row.querySelector('h3'), lv);
+    if (!btn) return;
+    var had = String(btn.className || '');
+    var want = had.replace(/(^|\s)btn-(primary|warning)(?=\s|$)/, '$1' + (lv ? 'btn-warning' : 'btn-primary'));
+    if (want !== had) btn.className = want;
+  }
+
+  // ⓕ, 🖬 and Scene Variants' ⸎ in the Highlighted Text Color wherever a summary or a dialog
+  // names them, as on the cards (`CARD_HIGHLIGHT`); `plain` leaves the color off, as a row's
+  // description does. The three are in monospace at one size wherever they are drawn
+  // (`.gttx-glyph`, as the custom-field mark `.gttx-cftip` and the card counters are), so they
+  // look the same whatever font is around them. Appended to `node`, which is returned.
+  var CARD_MARKS = /(ⓕ|🖬|⸎)/;
+  function markGlyphs(node, text, plain) {
     String(text).split(CARD_MARKS).forEach(function (part, i) {
-      if (part) node.appendChild(el('span', i % 2 ? 'gttxcore-amber-mark' : null, part));
+      if (!part) return;
+      var cls = i % 2 ? (plain ? '' : 'gttxcore-hl-mark ') + 'gttx-glyph' : '';
+      node.appendChild(el('span', cls || null, part));
     });
     return node;
   }
 
-  // A group row standing for a dialog, in the shape of Stash's own: a heading, a line, what
-  // the settings say now, and the button where Edit would be - before the first of the rest
-  // of the group's settings, so a row drawn later lands above one drawn earlier.
+  // A summary's words: a setting's own value - what stands between a pair of double quotes -
+  // in the value font the row inherits (`.gttx-lit`), and the words around it, the quotes with
+  // them, in the page's sans-serif at the same size (`.gttx-prose`), so a value reads apart
+  // from what is said about it.
+  function summaryText(node, text) {
+    String(text).split(/("[^"]*")/).forEach(function (part, i) {
+      if (!part) return;
+      if (i % 2) {
+        node.appendChild(el('span', 'gttx-prose', '"'));
+        markGlyphs(node.appendChild(el('span', 'gttx-lit')), part.slice(1, -1));
+        node.appendChild(el('span', 'gttx-prose', '"'));
+      } else markGlyphs(node.appendChild(el('span', 'gttx-prose')), part);
+    });
+    return node;
+  }
+
+  // A row's summary: a string, or a list of pieces - a string; `{ text, hl, mark }`, where
+  // `hl` colors it as the dialog colors a switch that writes on its own, and `mark()` gives
+  // the node to put after it (a node, a promise of one, or null): a tag's 🔗 with the tooltip
+  // it carries in the dialog; or `{ cf }`, a custom field's name, quoted with its ⓕ inside the
+  // quotes, the mark being part of the name; or `{ swatch }`, a `#rrggbb` color after a square
+  // of it. `summaryKey` is what says it changed.
+  function summaryKey(sum) {
+    if (typeof sum === 'string') return sum;
+    return (sum || []).map(function (p) {
+      return typeof p === 'string' ? p : p.cf != null ? '#' + levelOf(p.hl) + '#' + p.cf : p.swatch != null ? '%' + p.swatch
+        : (p.hl ? '!' + levelOf(p.hl) : '') + (p.mark ? '@' : '') + p.text;
+    }).join('\u0000');
+  }
+  // Where the pieces are the same pieces - the same count, each colored or not, a field or
+  // not and marked or not as before - only a piece whose words moved is drawn again, inside its
+  // own span, and only it asks for its mark again: a piece taken out and put back is a flicker
+  // under the pointer.
+  function drawSummary(node, sum) {
+    injectStyle();                        // a plugin's own row can be the first thing drawn
+    if (typeof sum === 'string') sum = [sum];
+    var want = (sum || []).map(function (p) {
+      if (typeof p === 'string') return { text: p };
+      if (p.cf != null) return { text: String(p.cf), cf: true, hl: levelOf(p.hl), mark: function () { return cfTipMark(p.cf); } };
+      if (p.swatch != null) return { text: String(p.swatch), swatch: true };
+      return { text: p.text, hl: levelOf(p.hl), mark: p.mark || null };
+    });
+    var had = node._pieces;
+    var same = !!had && had.length === want.length && had.every(function (h, i) {
+      return h.hl === (want[i].hl || '') && h.cf === !!want[i].cf && h.swatch === !!want[i].swatch && h.mark === !!want[i].mark;
+    });
+    var fillMark = function (piece, p) {
+      var slot = piece.slot, asked = piece.asked = (piece.asked || 0) + 1;
+      Promise.resolve(p.mark()).then(function (m) {
+        if (m && piece.asked === asked && slot.parentNode) slot.appendChild(m);
+      }, function () {});
+    };
+    var fill = function (piece, p) {
+      var span = piece.span;
+      while (span.firstChild) span.removeChild(span.firstChild);
+      piece.text = p.text;
+      if (p.cf) {
+        span.appendChild(el('span', 'gttx-prose', '"'));
+        markGlyphs(span.appendChild(el('span', 'gttx-lit')), p.text);
+        piece.slot = span.appendChild(el('span', 'gttxcore-cfslot'));
+        span.appendChild(el('span', 'gttx-prose', '"'));
+      } else {
+        if (p.swatch) span.appendChild(el('span', 'gttxcore-swatch')).style.backgroundColor = p.text;
+        summaryText(span, p.text);
+        if (p.mark) piece.slot = span.appendChild(el('span', 'gttxcore-summark'));
+      }
+      if (p.mark) fillMark(piece, p);
+    };
+    if (same) {
+      want.forEach(function (p, i) { if (had[i].text !== p.text) fill(had[i], p); });
+      return;
+    }
+    while (node.firstChild) node.removeChild(node.firstChild);
+    node._pieces = want.map(function (p) {
+      var piece = { hl: p.hl || '', cf: !!p.cf, swatch: !!p.swatch, mark: !!p.mark,
+        span: node.appendChild(el('span', p.hl === 'hl' ? 'gttxcore-hl-mark' : p.hl ? 'gttx-lv-' + p.hl : null)) };
+      fill(piece, p);
+      return piece;
+    });
+  }
+
   function dialogRowTick(group, r) {
-    var id = 'gttxcore-' + r.key + '-row', had = document.getElementById(id);
-    var text = r.summary(settings());
+    var P = r.prefix || 'gttxcore';
+    var id = P + '-' + r.key + '-row', had = document.getElementById(id);
+    var sum = r.summary(r.settings ? r.settings() : settings()), text = summaryKey(sum);
     if (had) {
-      if (had._text !== text) { had._text = text; had._sum.textContent = ''; markGlyphs(had._sum, text); }
+      if (had._text !== text) { had._text = text; drawSummary(had._sum, sum); }
       return;
     }
     // The group's own heading is a `.setting` too, beside the `.collapsible-section` of the rest.
     var rows = group.querySelectorAll ? group.querySelectorAll('.setting') : [], first = null;
     for (var i = 0; i < rows.length && !first; i++) if (rows[i].parentNode !== group) first = rows[i];
-    var row = el('div', 'setting gttxcore-' + r.key + '-row');
+    var row = el('div', 'setting gttxcore-dialog-row ' + P + '-' + r.key + '-row');
     row.id = id;
     var left = el('div');
     left.appendChild(el('h3', null, r.heading));
-    left.appendChild(markGlyphs(el('div', 'sub-heading'), r.line));
+    // The row's description plain, its summary below it colored: the marks are what the summary
+    // says is on, not what the description is about.
+    left.appendChild(markGlyphs(el('div', 'sub-heading'), r.line, true));
     row._text = text;
-    row._sum = left.appendChild(markGlyphs(el('div', 'value gttxcore-' + r.key + '-sum'), text));
+    row._sum = left.appendChild(el('div', 'value ' + P + '-' + r.key + '-sum'));
+    drawSummary(row._sum, sum);
     row.appendChild(left);
     var right = el('div');
-    var btn = button(r.button, 'gttxcore-' + r.key + '-btn');
-    btn.className = btn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    btn._coopOwner = PLUGIN_ID;
+    var btn = settingButton(r.button, P + '-' + r.key + '-btn');
+    btn._coopOwner = r.owner || PLUGIN_ID;
     btn.title = r.title;
     btn.addEventListener('click', function (ev) {
       if (ev && ev.preventDefault) ev.preventDefault();
@@ -4200,30 +4698,72 @@
     });
     right.appendChild(btn);
     row.appendChild(right);
-    if (first && first.parentNode) first.parentNode.insertBefore(row, first);
+    levelRow(row, r.level, btn);
+    var last = rows.length ? rows[rows.length - 1] : null;
+    if (r.at === 'end' && last && last.parentNode !== group) last.parentNode.insertBefore(row, last.nextSibling);
+    else if (first && first.parentNode) first.parentNode.insertBefore(row, first);
     else group.appendChild(row);
   }
 
+  // ── A plugin's settings as one row of its group, and a dialog ─────────────
+  //
+  // What Core does for its own UI Customizations and Undo History, for any plugin: settings
+  // that made the group read as a wall become one row - a heading, a line saying what is
+  // inside, what they say now, and a button - and a dialog holding them, each with its full
+  // description on hover. They leave the plugin's `.yml` and keep their keys, so what is
+  // stored does not move and config.yml still edits them; the plugin still seeds their
+  // defaults. `o`:
+  //   id, shortName, prefix   the plugin's id, short name, and CSS prefix (the row's id)
+  //   key, title, line        the row: a key for its id, the heading, the line under it
+  //   fields                  `{ key, label, tip, text | number, wide, dflt }` - a switch without
+  //                           `text` or `number`; `tip` is the setting's whole description
+  //   summary(s)              what the settings say now, from the plugin's settings `s`
+  //   settings()              the plugin's settings as last read (the row's summary)
+  //   load()                  a promise of them read fresh (the dialog, as it opens)
+  //   saved(patch)            called once a save lands, to re-read them
+  // Returns `{ tick(group), open() }`; a plugin calls `tick` from its own settings tick, and
+  // rows land in the group in the order they are ticked, after its own settings.
+  function settingsDialog(o) {
+    var spec = { title: o.title, fields: o.fields, open: null, shortName: o.shortName, load: o.load,
+      ready: o.ready || 'Hover a line for all it does. Nothing is written until you press Save.',
+      saveTip: 'Store these settings. They apply from the next thing they decide.',
+      save: function (patch) {
+        return writePluginSettings(o.id, patch, o.prefix + 'Dialog').then(function () { return o.saved ? o.saved(patch) : null; });
+      } };
+    var row = { key: o.key, prefix: o.prefix, owner: o.id, at: 'end', heading: o.title, line: o.line,
+      level: parentLevel(o.fields.map(function (f) { return f.warn; })),
+      summary: o.summary, settings: o.settings, button: o.title + '...',
+      title: 'Open the ' + o.title + ' settings. Nothing is written until you press Save there.',
+      open: function () { openFieldsDialog(spec); } };
+    return {
+      open: row.open,
+      tick: function (group) { if (group) dialogRowTick(group, row); },
+    };
+  }
+
   var JOURNAL_ROW = { key: 'journal', heading: 'Undo History', summary: journalSummary,
+    level: parentLevel(JOURNAL_FIELDS.map(function (f) { return f.warn; })),
     line: 'How long Undo History keeps what was changed and what it records: edits in Stash\'s pages, ' +
       'deletes and merges, settings changes, library-wide image writes. Nine settings, in a dialog.',
     button: 'Undo History Settings...', open: openJournalSettings,
     title: 'Open the Undo History settings. Nothing is written until you press Save there.' };
   function journalRowTick(group) { dialogRowTick(group, JOURNAL_ROW); }
 
-  // ── General Globals: the rest of Core's settings, in a dialog of their own ─
+  // ── UI Customizations: the rest of Core's settings, in a dialog of their own ─
   //
-  // Eight settings about eight different things made the group read as a wall with Undo
-  // History and Dev Mods lost in it, so they are one row as Undo History's are, and the group
-  // shows General Globals, Undo History and Dev Mods and nothing else. Stored under their keys
+  // Settings about many different things made the group read as a wall with Undo History and
+  // Dev Mods lost in it, so they are one row as Undo History's are, and the group shows UI
+  // Customizations, Undo History, Maximum Log Lines Kept, Case-Sensitive Matching and Dev Mods
+  // (the log cap is a `.yml` NUMBER: not a look). Stored under their keys
   // as before (`version.test.js`' `DIALOG_ONLY`), seeded and read as before.
   var GLOBAL_FIELDS = [
     { key: 'a1TaggerDuration', label: 'Emphasise a Tagger Duration Mismatch',
       tip: 'Emphasise the Scene Tagger\'s duration mismatch. Off by default.\n\nStash\'s tagger prints ' +
         '"Duration off by at least Ns" among the other fields on a search result, in the same weight and ' +
-        'colour as everything beside it - and it is the one line there that decides whether a match is the ' +
-        'right file. With this on, that sentence is drawn larger, capitalised and red when the gap is more ' +
-        'than five seconds, and amber when it is more than one; anything closer is left alone.\n\nIt ' +
+        'color as everything beside it - and it is the one line there that decides whether a match is the ' +
+        'right file. With this on, that sentence is drawn larger, capitalised and in the Bad Result Text ' +
+        'Color when the gap is more than five seconds, and in the Highlighted Text Color when it is more ' +
+        'than one; anything closer is left alone.\n\nIt ' +
         'restyles a page this plugin does not own, and only how the sentence looks: nothing is hidden, ' +
         'reordered, acted on or written.' },
     { key: 'a2SelectPaste', label: 'Right-Click Paste in Tags and Performers Boxes',
@@ -4245,11 +4785,6 @@
         'performer, studio, group or tag, the heading reads Tags (12), Performers (3) or Custom Fields (5) ' +
         'instead of the bare word, counted off what the page shows. It changes only the heading\'s text, ' +
         'and nothing is read from your library for it.' },
-    { key: 'a6CaseSensitive', label: 'Case-Sensitive Matching',
-      tip: 'Where the Case-sensitive box starts in every ᝯㄝₓ dialog that searches text. Off by ' +
-        'default.\n\nOff, "beach" finds "Beach" and "BEACH" too. On, the box starts ticked and only the ' +
-        'text written exactly so is found. Ticking or unticking the box in a dialog lasts for that dialog ' +
-        'and leaves this setting as it is.' },
     { key: 'a7CardFieldCount', label: 'Show ⓕ Custom Field Count on Cards',
       tip: 'Put ⓕ and the number of custom fields an entity holds last in the row of counters under its ' +
         'card. On by default.\n\nOn scene, image, gallery, performer, studio, group and tag cards, where ' +
@@ -4259,30 +4794,97 @@
       tip: 'Put 🖬 and the number of files last in the row of counters under a scene\'s card, where the ' +
         'scene has more than one file. On by default.\n\nIts tooltip names them, the first being the one ' +
         'Stash plays and names the scene by. Nothing is read from your library for it.' },
-    { key: 'a5LogLinesKept', label: 'Maximum Log Lines Kept', number: true, dflt: LOG_KEEP,
-      tip: 'How many log lines a ᝯㄝₓ dialog keeps for Copy log: 1000 to 5000000, clamped. Default ' +
-        '200000.\n\nEvery dialog draws only its last thousand lines but keeps the rest so Copy log can ' +
-        'hand over the whole run. Past this number the oldest are dropped and the copy says how many went. ' +
-        'About 200 bytes a line: 200000 lines is roughly 40 MB.' },
+    { key: 'd7FollowTheme', label: 'Follow the Stash Theme',
+      tip: 'Draw the ᝯㄝₓ dialogs, tooltips and panes in the greys of the Stash theme you run. Off by ' +
+        'default, which keeps their own dark greys.\n\nThe greys are read off a hidden sample of Stash\'s ' +
+        'own dialog under the active theme - its background, its text and its muted text - and the ' +
+        'borders and shades are worked out from those, so a theme that restyles Stash\'s dialogs restyles ' +
+        'these too, within a second of switching. The colors below keep their own values either way, ' +
+        'and links always take the theme\'s link color.' },
+    { key: 'a9HighlightColour', label: 'Highlighted Text Color', color: true, dflt: HIGHLIGHT_DEFAULT,
+      tip: 'The color of the ⓕ, 🖬 and ⸎ marks, of the text a ᝯㄝₓ plugin highlights - a switch that ' +
+        'writes without a review or risks losing history, a match in another case, a Rescan that another ' +
+        'tab made stale, the ↶ in the top bar - and of warnings. Default #ffc107, a yellow.\n\nPick it in ' +
+        'the box, or press Default to go back. Every color here applies on every page as soon as it is ' +
+        'saved, and on a page opened later once the ᝯㄝₓ settings are read.',
+      demo: [
+        [{ hl: 'ⓕ', cls: 'gttx-glyph' }, ' 4\u2003', { hl: '🖬', cls: 'gttx-glyph' }, ' 2\u2003', { hl: '⸎', cls: 'gttx-glyph' }, ' 3'],
+        [{ hl: 'Duration off by at least 3s', cls: 'gttx-durwarn gttx-durwarn-orange' }],
+        ['On: ', { hl: 'Auto-Merge on Performer Save' }],
+        ['"beach" also found ', { hl: 'BEACH' }, ' and ', { hl: 'Beach' }],
+        [{ hl: 'Rescan', cls: 'btn btn-secondary btn-sm gttxcore-demorescan' }, { dim: '  another tab renamed 12 tags' }],
+        [{ hl: 'Over 5000 tags: the scan may take a while' }],
+      ] },
+    { key: 'd1GoodColor', label: 'Good Result Text Color', color: true, dflt: '#84d68a',
+      tip: 'The color of a good result: Scene Variants\' lowest drift-score, and the added lines in Undo ' +
+        'History and in Normalize Parent Tags\' log. Default #84d68a, a green.',
+      demo: [
+        ['⸎ Summer Pool Party ', { dim: '· 4 files' }, ' ', { hl: '1', cls: 'gttxcore-demobold' }],
+        ['tags: ', { hl: '+', cls: 'gttxcore-hplus' }, 'Sunset, ', { hl: '+', cls: 'gttxcore-hplus' }, 'Golden Hour'],
+        [{ hl: 'ADD  Scene Picnic at Dawn - Tag Meadow' }],
+        [{ hl: 'ADD  Image IMG_0042 - Tag Suspiciously Fluffy' }],
+      ] },
+    { key: 'd2AverageColor', label: 'Average Result Text Color', color: true, dflt: '#ffb648',
+      tip: 'The color of an average result: Scene Variants\' medium drift-score. Default #ffb648, an orange.',
+      demo: [
+        ['⸎ Lighthouse Keeper ', { dim: '· 3 files' }, ' ', { hl: '46', cls: 'gttxcore-demobold' }],
+        ['⸎ Rooftop Tango (Take 2) ', { dim: '· 2 files' }, ' ', { hl: '38', cls: 'gttxcore-demobold' }],
+      ] },
+    { key: 'd3BadColor', label: 'Bad Result Text Color', color: true, dflt: '#ff7b72',
+      tip: 'The color of a bad result: Scene Variants\' high drift-score, and the Scene Tagger\'s duration ' +
+        'mismatch past five seconds when Emphasise a Tagger Duration Mismatch is on. Default #ff7b72, a red.',
+      demo: [
+        [{ hl: 'Duration off by at least 42s', cls: 'gttx-durwarn gttx-durwarn-red' }],
+        ['⸎ The Long Goodbye ', { dim: '· 5 files' }, ' ', { hl: '187', cls: 'gttxcore-demobold' }],
+      ] },
+    { key: 'd6AccentColor', label: 'Accent Color', color: true, dflt: '#7cc4ff',
+      tip: 'The color of what a ᝯㄝₓ plugin sets apart without judging it: Normalize Parent Tags\' ' +
+        'removed lines, Propagate Tags and Performers\' performer lines and paths, what Scene Variants ' +
+        'marks as differing, the show-more under a description, and the bundle Tag Bundle Clipboard has ' +
+        'active. Default #7cc4ff, a light blue.\n\nLinks are not among them: they take the link color ' +
+        'of Stash or of its theme.',
+      demo: [
+        [{ hl: 'REMOVE  Scene Rainy Tuesday - Tag Sunshine' }],
+        [{ hl: 'PERF  Gallery Harbour Lights - Captain Obvious' }],
+        ['Differs: ', { hl: 'date, studio, rating' }],
+        [{ dim: 'Keeps a tag bundle a click away… ' }, { hl: 'Show more', cls: 'gttxcore-demotoggle' }],
+      ] },
+    { key: 'd4ErrorBgColor', label: 'Error Message Background Color', color: true, dflt: '#7a3b3b',
+      tip: 'The background a Custom Fields Bulk Editor value flashes when copying it to the clipboard ' +
+        'failed. Default #7a3b3b, a dark red.', bg: true,
+      demo: [
+        ['Mood: ', { hl: 'Suspiciously Calm', cls: 'gttxcore-demopill' }, { dim: '  copy failed' }],
+        ['Catchphrase: ', { hl: 'We\'ll fix it in post', cls: 'gttxcore-demopill' }, { dim: '  copy failed' }],
+      ] },
+    { key: 'd5MatchBgColor', label: 'Match Background Color', color: true, dflt: '#3f6b46',
+      tip: 'The background behind the text a search found, in Entity Name Maintainer\'s and Find & Replace ' +
+        'Entities by Text Content\'s listings, and behind a Custom Fields Bulk Editor value copied to the ' +
+        'clipboard. Default #3f6b46, a dark green.', bg: true,
+      demo: [
+        ['Scene: Moonlit ', { hl: 'Beach' }, ' Bonfire'],
+        ['Details: …a picnic on the ', { hl: 'beach' }, ', then rain…'],
+        ['Mood: ', { hl: 'Suspiciously Calm', cls: 'gttxcore-demopill' }, { dim: '  copied' }],
+      ] },
   ];
 
   function globalsSummary(s) {
-    var on = GLOBAL_FIELDS.filter(function (f) { return !f.number && truthy(s[f.key]); })
+    var on = GLOBAL_FIELDS.filter(function (f) { return !f.color && truthy(s[f.key]); })
       .map(function (f) { return f.label; });
-    var lines = s.a5LogLinesKept == null || s.a5LogLinesKept === '' ? LOG_KEEP : s.a5LogLinesKept;
-    return (on.length ? 'On: ' + on.join(', ') : 'Every switch off') + '. Log lines kept: ' + lines + '.';
+    var out = [(on.length ? 'On: ' + on.join(', ') : 'Every switch off') + '. Colors: '];
+    COLORS.forEach(function (c, i) { out.push(i ? ', ' : '', { swatch: colorOf(s[c.key], c.dflt) }); });
+    return out.concat('.');
   }
 
-  var GLOBALS_DIALOG = { title: 'General Globals', fields: GLOBAL_FIELDS, open: null,
+  var GLOBALS_DIALOG = { title: 'UI Customizations', fields: GLOBAL_FIELDS, open: null, plainNames: true, resetAll: true,
     ready: 'Settings that reach every ᝯㄝₓ plugin, or a page none of them owns. Hover a line for all it does.',
-    saveTip: 'Store these settings. They apply from the next thing drawn.' };
+    saveTip: 'Store these settings. They apply from the next thing drawn; the colors at once.' };
   function openGlobals() { openFieldsDialog(GLOBALS_DIALOG); }
 
-  var GLOBALS_ROW = { key: 'globals', heading: 'General Globals', summary: globalsSummary,
-    line: 'The tagger emphasis, right-click Paste, where links open, counts on headings, case-sensitive ' +
-      'matching, the ⓕ and 🖬 counters on cards, and how many log lines a dialog keeps. Eight settings, ' +
-      'in a dialog.',
-    button: 'General Globals...', open: openGlobals,
+  var GLOBALS_ROW = { key: 'globals', heading: 'UI Customizations', summary: globalsSummary,
+    line: 'The tagger emphasis, right-click Paste, where links open, counts on headings, the ⓕ and 🖬 ' +
+      'counters on cards, whether the dialogs follow the Stash theme, and the text and background colors ' +
+      'every ᝯㄝₓ plugin draws in. Fourteen settings, in a dialog.',
+    button: 'UI Customizations...', open: openGlobals,
     title: 'Open the settings every ᝯㄝₓ plugin shares. Nothing is written until you press Save there.' };
   // Drawn after Undo History's row, so it lands above it.
   function globalsRowTick(group) { dialogRowTick(group, GLOBALS_ROW); }
@@ -4291,6 +4893,28 @@
     var b = el('button', 'btn btn-secondary btn-sm ' + (className || ''), label);
     b.type = 'button';
     return b;
+  }
+
+  // The button of a row on Settings → Plugins, drawn as Stash draws its own Edit there: a
+  // bare react-bootstrap `<Button>`, so `btn-primary` at the normal size.
+  function settingButton(label, className) {
+    var b = el('button', 'btn btn-primary ' + (className || ''), label);
+    b.type = 'button';
+    return b;
+  }
+
+  // A summary line of a row of Stash's own that a plugin took over, placed after the
+  // description, where every row says what its settings are. Stash draws its `.value` - the
+  // raw string, hidden by the caller - above the description. The row itself where there is
+  // neither, never `row.childNodes[0]`: on the second tick that is the line itself.
+  function afterDescription(row, line) {
+    var sub = byClass(row, 'sub-heading'), slot = byClass(row, 'value');
+    var after = sub || (slot !== line ? slot : null);
+    var host = after ? after.parentNode : row;
+    if (line.parentNode !== host || (after && line.previousSibling !== after)) {
+      if (after) host.insertBefore(line, after.nextSibling);
+      else host.appendChild(line);
+    }
   }
 
   // Core's own dialogs close on Escape through Close alone - Cancel on them is not a way out.
@@ -4509,7 +5133,7 @@
     return a;
   }
 
-  // A custom field's name, teal, carrying the box every custom field named here opens:
+  // A custom field's name, blue, carrying the box every custom field named here opens:
   // its description where Custom Fields Bulk Editor keeps one, and what carries it.
   function historyCfName(field) {
     var node = el('span', 'gttx-cftipped');
@@ -4675,8 +5299,8 @@
     modal.appendChild(H.listEl);
 
     var foot = el('div', 'gttxcore-foot');
-    var amber = function (b) { b.className = b.className.replace('btn-secondary', 'btn-warning'); return b; };
-    H.undoBtn = amber(button('Undo Selected...', 'gttxcore-hundo'));
+    var orange = function (b) { b.className = b.className.replace('btn-secondary', 'btn-warning'); return b; };
+    H.undoBtn = orange(button('Undo Selected...', 'gttxcore-hundo'));
     H.deleteBtn = button('Delete Selected...', 'gttxcore-hdelete');
     H.unselAllBtn = button('Unselect All', 'gttxcore-hunselall');
     H.selAllBtn = button('Select All', 'gttxcore-hselall');
@@ -4690,7 +5314,7 @@
       'Unticked, the undo is recorded and can be undone in turn. It starts as the Undo Takes It ' +
       'Out of the History setting says, and this box decides for this undo.';
     H.popBox.addEventListener('change', function () { historyFoot(H); });
-    H.proceedBtn = amber(button('Proceed', 'gttxcore-hproceed gttxcore-hidden'));
+    H.proceedBtn = orange(button('Proceed', 'gttxcore-hproceed gttxcore-hidden'));
     H.backBtn = button('Back', 'gttxcore-hback gttxcore-hidden');
     H.exportBtn = button('Export', 'gttxcore-hexport');
     H.importBtn = button('Import...', 'gttxcore-himport');
@@ -5558,15 +6182,22 @@
   // own copy of them for the moment; they are identical, so a duplicate rule costs
   // nothing, and removing them is a separate edit to eight pinned stylesheets.
   var CSS =
+    '@font-face{font-family:"GTTx Brand";font-display:block;unicode-range:U+176F;' +
+    'src:url(data:font/woff2;base64,' + BRAND_FONT.ta + ') format("woff2");}' +
+    '@font-face{font-family:"GTTx Brand";font-display:block;unicode-range:U+311D;' +
+    'src:url(data:font/woff2;base64,' + BRAND_FONT.e + ') format("woff2");}' +
+    '@font-face{font-family:"GTTx Brand";font-display:block;unicode-range:U+2093;' +
+    'src:url(data:font/woff2;base64,' + BRAND_FONT.x + ') format("woff2");}' +
+    SYMBOL_FACES +
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-gloss{text-decoration:underline dotted;text-underline-offset:2px;cursor:help;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // Over the picture's top corners, positioned against the fixed box itself - the
     // .7rem/.85rem insets are the box's own padding plus a step inside the picture.
     '.gttx-tip-rating{position:absolute;top:.7rem;left:.85rem;background:#ffb648;' +
@@ -5582,34 +6213,38 @@
     // pseudo-element shares the column and is unharmed; a long entry now scrolls inside
     // the input rather than widening the row, which is the better of the two anyway.
     '.gttx-selectpaste .react-select__input-container{grid-template-columns:0 1fr;}' +
-    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
+    // ⓕ, after a field's name wherever one is named: one small gap, monospace at one size
+    // (`monospace` twice, or the browser shrinks a relative size set in monospace alone).
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
+    '.gttx-glyph{font-family:monospace,monospace;font-size:1.25em;line-height:1;}' +
+    // A summary: the words about a setting in the page's sans-serif, its values as the row has them.
+    '.gttx-prose{font-family:var(--font-family-sans-serif,var(--bs-font-sans-serif,sans-serif));}' +
     // A listed setting: our names stand in for Stash's text of the value, each with
     // its mark close behind it.
     '.gttx-cflisted .value > span:not(.gttx-cftipped){display:none;}' +
-    '.gttx-cfname+.gttx-cftip{margin-left:.3rem;}' +
-    '.gttx-cfinline .gttx-cftip{margin-left:.3rem;}' +
     '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
     'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
 
-    // **The duration warning.** Bootstrap's own `text-danger` / `text-warning` are the
-    // colours Stash already uses for the tagger's match icons, so the two bands read as
-    // the same vocabulary rather than as a second one; the size and the capitals are what
-    // this adds. `inherit` on the family so it stays the card's own typeface.
+    // **The duration warning.** The Bad Result Text Color past five seconds, the Highlighted
+    // Text Color past one - UI Customizations' colors, so the bands follow what the user
+    // picked there; the size and the capitals are what this adds. `inherit` on the family so it stays the card's own typeface.
     '.gttx-durwarn{font-family:inherit;text-transform:uppercase;letter-spacing:.02em;}' +
-    '.gttx-durwarn-red{font-size:1.25em;font-weight:700;color:#ff7373;}' +
-    '.gttx-durwarn-amber{color:#ffb366;font-weight:600;}' +
+    '.gttx-durwarn-red{font-size:1.25em;font-weight:700;color:var(--gttx-bad,#ff7b72);}' +
+    '.gttx-durwarn-orange{color:var(--gttx-highlight,#ffc107);font-weight:600;}' +
 
     // Layout edit mode. An outline rather than a border, so nothing moves when it comes
-    // on, and the owner's id in a corner label drawn from the attribute itself.
-    '.gttx-layoutmark{outline:1px dashed #6ad1ff !important;outline-offset:1px;' +
+    // on, and the owner's id in a corner label drawn from the attribute itself. Magenta,
+    // which nothing else draws in, so an outlined control is never taken for a plugin's own.
+    '.gttx-layoutmark{outline:1px dashed #ff00ff !important;outline-offset:1px;' +
     'position:relative;}' +
     '.gttx-layoutmark::after{content:attr(data-gttx-owner);position:absolute;' +
     'left:0;bottom:100%;font-size:.6rem;line-height:1;padding:1px 3px;' +
-    'background:#6ad1ff;color:#0b1116;border-radius:2px;pointer-events:none;' +
+    'background:#ff00ff;color:#0b1116;border-radius:2px;pointer-events:none;' +
     'white-space:nowrap;z-index:5;}' +
 
     // ── The shared chrome and the settings page ──────────────────────────
@@ -5623,31 +6258,32 @@
     '.gttxcore-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;' +
     'background:rgba(0,0,0,.6);z-index:1600;display:flex;align-items:center;' +
     'justify-content:center;}' +
-    '.gttxcore-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;' +
+    '.gttxcore-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:4px;width:min(100rem,94vw);max-height:88vh;display:flex;' +
     'flex-direction:column;}' +
-    '.gttxcore-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.gttxcore-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.gttxcore-title{font-size:1.1rem;font-weight:600;}' +
-    '.gttxcore-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.gttxcore-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.gttxcore-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.gttxcore-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;' +
-    'color:#a7b6c2;white-space:pre-wrap;}' +
+    '.gttxcore-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.gttxcore-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.gttxcore-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.gttxcore-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);' +
+    'color:var(--gttx-muted,#a7b6c2);white-space:pre-wrap;}' +
     '.gttxcore-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;' +
     'font-family:monospace;font-size:.8rem;line-height:1.35;min-height:14rem;}' +
     '.gttxcore-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.gttxcore-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;' +
+    '.gttxcore-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;' +
     'gap:.5rem;flex-wrap:wrap;align-items:center;}' +
     '.gttxcore-hunselall{margin-left:auto;}' +
+    '.gttxcore-resetall{margin-left:auto;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
     // one of these rules is a single class, so the last one written wins - and this one
     // is written before the strips and rows that set their own `display`. A `-hidden` on
     // one of those did nothing at all, which is how Find & Replace shipped a row that
     // stayed on screen with the checkbox that reveals it switched off.
     '.gttxcore-hidden{display:none !important;}' +
-    '.gttxcore-spin{color:#a7b6c2;}' +
+    '.gttxcore-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.gttxcore-spinner{display:inline-block;width:.9em;height:.9em;margin-right:.45em;' +
-    'vertical-align:-.1em;border:2px solid #a7b6c2;border-right-color:transparent;' +
+    'vertical-align:-.1em;border:2px solid var(--gttx-muted,#a7b6c2);border-right-color:transparent;' +
     'border-radius:50%;animation:gttxcore-turn .8s linear infinite;}' +
     '@keyframes gttxcore-turn{to{transform:rotate(360deg);}}' +
     '.gttxcore-own-group .gttxcore-sub-heading{white-space:pre-wrap;}' +
@@ -5656,7 +6292,7 @@
     'margin-bottom:0;}' +
     '.gttxcore-desc-collapsed .gttxcore-p:not(:first-child){display:none;}' +
     '.gttxcore-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
     '.gttxcore-stale{margin:.5rem 0;padding:.6rem .75rem;' +
     'border-left:4px solid #ff7373;background:rgba(255,115,115,.14);color:#ff7373;' +
@@ -5667,16 +6303,16 @@
     '.gttxcore-tip:hover,.gttxcore-tip:focus{opacity:1;outline:none;}' +
     '.gttxcore-tipbox{display:none;position:absolute;left:0;' +
     'bottom:calc(100% + .35rem);z-index:1500;width:max-content;max-width:100%;' +
-    'padding:.5rem .65rem;background:#202b33;color:#d6dee4;border:1px solid #425a6b;' +
+    'padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);' +
     'border-radius:3px;font-size:.92rem;line-height:1.45;white-space:pre-wrap;' +
     'pointer-events:none;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttxcore-tipped.gttxcore-tip-open .gttxcore-tipbox{display:block;}' +
-    '.gttxcore-readme{color:#7cc4ff;font-size:.8rem;margin-top:.35rem;' +
+    '.gttxcore-readme{font-size:.8rem;margin-top:.35rem;' +
     'display:inline-block;}' +
     // This plugin's own: the dialog has no log and no counters, so it has a body and
     // three rows instead.
     // The shared modal is 100rem wide because the other dialogs hold monospace log
-    // lines naming an entity, an id and two values. This one holds three switches and
+    // lines naming an entity, an id and two values. This one holds a few switches and
     // a sentence each, so at that width the text is a thin strip against the left edge
     // and the box reads as off-centre. A plugin-local modifier beside the pinned rule,
     // the way `.cfbe-tall` adds a height, rather than an edit to what eight share.
@@ -5688,65 +6324,113 @@
     // this plugin's alone, so the modifier stays byte-identical with the sibling's.
     '.gttxcore-modal.gttxcore-narrow{width:min(58rem,94vw);}' +
     '.gttxcore-body{padding:.75rem 1rem;overflow:auto;min-height:16rem;}' +
-    '.gttxcore-devrow{padding:.5rem 0;border-bottom:1px solid #2b3a45;}' +
+    '.gttxcore-devrow{padding:.5rem 0;border-bottom:1px solid var(--gttx-border-faint,#2b3a45);}' +
     '.gttxcore-devlabel{display:flex;align-items:center;gap:.5rem;margin:0;' +
     'cursor:pointer;font-weight:600;}' +
     '.gttxcore-devname{font-size:.95rem;}' +
-    '.gttxcore-devhelp{font-size:.82rem;color:#a7b6c2;margin-top:.25rem;' +
+    '.gttxcore-devhelp{font-size:.82rem;color:var(--gttx-muted,#a7b6c2);margin-top:.25rem;' +
     'margin-left:1.6rem;}' +
-    '.gttxcore-devline{margin:.1rem 0 .25rem;}' +
     // Undo History Settings: a text box beside its caption; the one setting that can lose
     // history amber, caption and help, as a warning is everywhere here.
-    '.gttxcore-jbox{margin-left:.5rem;width:7rem;background:#30404d;color:#f5f8fa;border:1px solid #394b59;' +
+    '.gttxcore-jbox.gttxcore-wide{width:min(24rem,60vw);}' +
+    '.gttxcore-devline{display:flex;align-items:center;flex-wrap:wrap;}' +
+    '.gttxcore-fieldmark{margin-left:.4rem;}' +
+    // A dialog's or a summary's ⓕ and 🔗 at the size the settings rows and the cards draw them.
+    '.gttxcore-fieldmark,.gttxcore-summark{font-size:1.25em;line-height:1;}' +
+    '.gttxcore-summark{margin-left:.3rem;}' +
+    // A mark that resolved to nothing leaves no gap before the words after it.
+    '.gttxcore-summark:empty{display:none;}' +
+    // A color in a summary: a square of it before its code, outlined in black so a color close to
+    // the page's own still reads as a square.
+    '.gttxcore-swatch{display:inline-block;width:.8em;height:.8em;margin-right:.3em;vertical-align:-.05em;' +
+    'border:1px solid #000;border-radius:1px;}' +
+    // Those two are at the marks' size already, so a ⓕ in one is not made larger again.
+    '.gttxcore-fieldmark .gttx-cftip,.gttxcore-summark .gttx-cftip{font-size:1em;margin-left:0;}' +
+    '.gttxcore-colorbox{width:3rem;height:1.6rem;padding:0 .1rem;background:var(--gttx-card,#30404d);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;vertical-align:middle;cursor:pointer;}' +
+    '.gttxcore-colorreset{margin:0 .5rem;}' +
+    // UI Customizations' samples: a column on the right of each color's row, lined up with it,
+    // under the row's text at a narrow width. The marks and pills as ENM's and CFBE's are.
+    '.gttxcore-demorow{display:flex;gap:1rem;flex-wrap:wrap;align-items:center;}' +
+    '.gttxcore-devmain{flex:1 1 22rem;min-width:0;}' +
+    '.gttxcore-demo{flex:0 1 21rem;min-width:14rem;padding:.35rem .6rem;border:1px solid var(--gttx-border,#394b59);' +
+    'border-radius:3px;font-size:.82rem;line-height:1.6;}' +
+    '.gttxcore-demoline{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}' +
+    '.gttxcore-demodim{color:var(--gttx-muted,#a7b6c2);}' +
+    '.gttxcore-demobold{font-weight:600;}' +
+    '.gttxcore-demomark{border-radius:2px;padding:0 .1rem;}' +
+    '.gttxcore-demopill{border-radius:3px;padding:0 .3rem;background:var(--gttx-card,#30404d);}' +
+    '.gttxcore-demotoggle{font-size:.8rem;text-decoration:underline;}' +
+    // The stale Rescan's own breathing, in the box's color rather than its !important one;
+    // inline-block with a margin, so the line's overflow does not clip the glow.
+    '.gttxcore-demorescan{display:inline-block;margin:4px 4px 4px 3px;padding:0 .45rem;font-size:inherit;' +
+    'font-weight:700;cursor:default;pointer-events:none;animation:gttx-breathe 1s ease-in-out infinite;}' +
+    '.gttxcore-jbox{margin-left:.5rem;width:7rem;background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.1rem .35rem;}' +
-    '.gttxcore-warnlabel .gttxcore-devname,.gttxcore-warnhelp{color:#ffc107;}' +
-    // ⓕ and 🖬 in General Globals, amber as on the cards.
-    '.gttxcore-amber-mark{color:#ffc107;}' +
-    // A Rescan whose listing another tab has since changed: bold amber, breathing white and
-    // green about once a second.
-    '@keyframes gttx-breathe{0%,100%{box-shadow:0 0 0 2px #f5f8fa;border-color:#f5f8fa;}' +
+    // The three levels (`levelOf`): text in the level, a box's tick too. `:root` outranks
+    // Stash's own `.setting h3` and a plugin's label color.
+    ':root .gttx-lv-semi{color:' + LEVEL_COLOR.semi + '}:root .gttx-lv-hl{color:' + LEVEL_COLOR.hl + '}' +
+    ':root .gttx-lv-strong{color:' + LEVEL_COLOR.strong + '}' +
+    ':root .gttx-lv-semi input[type=checkbox]{accent-color:' + LEVEL_COLOR.semi + '}' +
+    ':root .gttx-lv-hl input[type=checkbox]{accent-color:' + LEVEL_COLOR.hl + '}' +
+    ':root .gttx-lv-strong input[type=checkbox]{accent-color:' + LEVEL_COLOR.strong + '}' +
+    // An edit box its border, in the same level.
+    ':root .gttx-lv-semi input[type=text]{border-color:' + LEVEL_COLOR.semi + '}' +
+    ':root .gttx-lv-hl input[type=text]{border-color:' + LEVEL_COLOR.hl + '}' +
+    ':root .gttx-lv-strong input[type=text]{border-color:' + LEVEL_COLOR.strong + '}' +
+    // ⓕ and 🖬 in the UI Customizations row, in the highlight as on the cards.
+    '.gttxcore-hl-mark{color:var(--gttx-highlight,#ffc107);}' +
+    // A Rescan whose listing another tab has since changed: bold, in the Highlighted Text
+    // Color, breathing white and green about once a second.
+    '@keyframes gttx-breathe{0%,100%{box-shadow:0 0 0 2px var(--gttx-fg,#f5f8fa);border-color:var(--gttx-fg,#f5f8fa);}' +
     '50%{box-shadow:0 0 0 3px #28a745;border-color:#28a745;}}' +
-    '.gttx-stale-rescan{font-weight:700 !important;color:#ffc107 !important;' +
+    '.gttx-stale-rescan{font-weight:700 !important;color:var(--gttx-highlight,#ffc107) !important;' +
     'animation:gttx-breathe 1s ease-in-out infinite;}' +
     // Undo History: the list, a run a row, its changes indented under it.
     '.gttxcore-modal.gttxcore-history{width:min(100rem,94vw);}' +
-    '.gttxcore-hfilter{padding:.35rem 1rem;border-bottom:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.gttxcore-hfilter{padding:.35rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;font-size:.8rem;}' +
-    '.gttxcore-hfind{flex:1 1 14rem;min-width:8rem;background:#1f2b33;color:#f5f8fa;' +
-    'border:1px solid #394b59;border-radius:3px;padding:.15rem .4rem;}' +
-    '.gttxcore-hselect,.gttxcore-hdate{background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;' +
+    '.gttxcore-hfind{flex:1 1 14rem;min-width:8rem;background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.15rem .4rem;}' +
+    '.gttxcore-hselect,.gttxcore-hdate{background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.1rem .3rem;}' +
     // Whole pixels down the list: at .8rem the text's own line height is a fraction of a
     // pixel, rows land on fractional offsets, and a native checkbox snapped there draws a
     // pixel taller on every third row or so. So the line height, the paddings and the box
     // are all in px.
     '.gttxcore-hlist{font-family:monospace;font-size:.8rem;min-height:16rem;line-height:20px;}' +
-    '.gttxcore-hrun{padding:2px 0;border-bottom:1px solid #2b3a45;}' +
+    '.gttxcore-hrun{padding:2px 0;border-bottom:1px solid var(--gttx-border-faint,#2b3a45);}' +
     // A run's line and a change's line are text that flows, not flex columns: as columns
     // a long name wrapped inside a column of its own and the change beside it in another.
     // The box is inline, its margins summing to the 20px line, and a hanging indent
     // starts every wrapped line after it.
     '.gttxcore-hhead{padding-left:19px;text-indent:-19px;}' +
-    '.gttxcore-hplus{color:#84d68a;font-weight:600;}.gttxcore-hminus{color:#ff7b72;font-weight:600;}' +
-    '.gttxcore-hcfname{color:#17a2b8;cursor:help;}' +
-    '.gttxcore-hbackto{margin-left:.75rem;font-size:.8rem;color:#a7b6c2;white-space:nowrap;}' +
+    '.gttxcore-hplus{color:var(--gttx-good,#84d68a);font-weight:600;}.gttxcore-hminus{color:#ff7b72;font-weight:600;}' +
+    '.gttxcore-hcfname{color:#48aff0;cursor:help;}' +
+    '.gttxcore-hbackto{margin-left:.75rem;font-size:.8rem;color:var(--gttx-muted,#a7b6c2);white-space:nowrap;}' +
     '.gttxcore-hpop{margin:0 .5rem;align-self:center;cursor:pointer;}' +
     '.gttxcore-htoggle{cursor:pointer;white-space:pre-wrap;word-break:break-word;}' +
-    '.gttxcore-hentries{padding:2px 0 4px 26px;color:#a7b6c2;}' +
+    '.gttxcore-hentries{padding:2px 0 4px 26px;color:var(--gttx-muted,#a7b6c2);}' +
     '.gttxcore-hentry{padding-left:19px;text-indent:-19px;white-space:pre-wrap;word-break:break-word;}' +
     // An undone change dims its words, not its box: a dim box reads as disabled.
     '.gttxcore-hlist .gttxcore-hbox{width:13px;height:13px;margin:4px 6px 3px 0;vertical-align:top;}' +
     '.gttxcore-hundone>:not(.gttxcore-hbox){opacity:.55;}' +
-    '.gttxcore-elink{color:#7cc4ff;text-decoration:none;}' +
+    '.gttxcore-elink{text-decoration:none;}' +
     '.gttxcore-elink:hover{text-decoration:underline;}' +
-    '.gttxcore-hSKIP{color:#ffb648;} .gttxcore-hERROR{color:#ff7373;} .gttxcore-hUNDO{color:#84d68a;}' +
+    '.gttxcore-hSKIP{color:var(--gttx-highlight,#ffc107);} .gttxcore-hERROR{color:#ff7373;} .gttxcore-hUNDO{color:#84d68a;}' +
     '.gttxcore-hmore{margin-top:.5rem;}' +
     '.gttxcore-navbtn{font-size:1.15rem;line-height:1;}' +
-    // Amber ink, the colour of a control that writes: an Undo does. By id, because Stash's
+    // Amber ink, the color of a control that writes: an Undo does. By id, because Stash's
     // own `button.minimal:hover:not(:disabled)` outranks any class selector, and every state
-    // is named since Stash sets the colour on each. Its hover background stays Stash's.
+    // is named since Stash sets the color on each. Its hover background stays Stash's.
     '#gttxcore-undo-nav,#gttxcore-undo-nav:hover,#gttxcore-undo-nav:focus,' +
-    '#gttxcore-undo-nav:active{color:#ffb648;}';
+    '#gttxcore-undo-nav:active{color:var(--gttx-highlight,#ffc107);}' +
+    // Every ᝯㄝₓ dialog and tooltip: GTTx Brand before the page's own fonts (`brandTick`), above
+    // any plugin's own `font-family:inherit` there. Unset, the variable leaves them inheriting.
+    BRAND_PREFIXES.map(function (p) { return ':root .' + p + '-modal,:root .' + p + '-tipbox'; }).join(',') +
+    ',:root .gttx-tipbox,:root .gttx-cftipbox{font-family:var(--gttx-brand-font);}' +
+    // The marks' monospace with GTTx Symbols after it, above each plugin's copy of `.gttx-cftip`.
+    ':root .gttx-cftip,:root .gttx-glyph{font-family:monospace,monospace,' + SYMBOLS + ';}';
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -5759,7 +6443,7 @@
   // ── The Dev Mods setting row, taken over by the dialog that edits it ──────
   //
   // Stash renders a STRING setting as a value span and an Edit button opening a one-line
-  // text modal - which for three flags spelled `DEBUG=ON, LAYOUT=OFF, STALEDEMO=OFF` is a
+  // text modal - which for eight flags spelled `LOG_BUTTON_VIS=ON, LOG_PTP2RE=OFF, …` is a
   // place to make a typo in. The value is replaced with the switches in words and Stash's
   // own button with one opening the dialog; both of Stash's are hidden rather than
   // removed, because React owns them and the setting must stay editable if this script
@@ -5767,36 +6451,37 @@
   var DEV_LINE_ID = 'gttxcore-devmods-line';
   var DEV_BTN_ID = 'gttxcore-devmods-button';
 
+  // What the switches say now, the way UI Customizations' row says its own: the ones on, or that
+  // none is. The logs' shared "to the Browser Console" is left off, or three of them on would
+  // read as a paragraph.
+  function devSummary(state) {
+    var on = DEV_MODS.filter(function (m) { return state[m.key]; })
+      .map(function (m) { return m.label.replace(/ to the Browser Console$/, ''); });
+    return on.length ? 'On: ' + on.join(', ') + '.' : 'Every switch off.';
+  }
+
   function devFieldTick() {
     var row = settingRow(PLUGIN_ID, 'b1DevMods');
     if (!row) return;
     var slot = byClass(row, 'value');
-    var state = parseDevMods(settings().b1DevMods);
-    var on = DEV_MODS.filter(function (m) { return state[m.key]; })
-      .map(function (m) { return m.label; });
     var line = document.getElementById(DEV_LINE_ID);
     if (!line) {
-      line = el('div', 'gttxcore-devline');
+      // The element the rows Core draws itself carry their summary in, so it reads as theirs.
+      line = el('div', 'value gttxcore-devmods-sum');
       line.id = DEV_LINE_ID;
     }
-    line.textContent = on.length ? on.join(', ') : 'All off';
-    // The row itself where there is no `.value`, never `row.childNodes[0]` - on the second
-    // tick that first child is the line the first tick appended.
-    var host = slot ? slot.parentNode : row;
-    if (line.parentNode !== host) {
-      if (slot) host.insertBefore(line, slot.nextSibling);
-      else host.appendChild(line);
-    }
-    if (slot) hide(slot);
+    var text = devSummary(parseDevMods(settings().b1DevMods));
+    if (line._sumText !== text) { line._sumText = text; drawSummary(line, text); }
+    afterDescription(row, line);
+    if (slot && slot !== line) hide(slot);
 
     var btn = document.getElementById(DEV_BTN_ID);
     if (!btn) {
-      btn = button('Dev Mods...', 'gttxcore-devbtn');
+      btn = settingButton('Dev Mods...', 'gttxcore-devbtn');
       btn.id = DEV_BTN_ID;
-      btn.className = btn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
       btn._coopOwner = PLUGIN_ID;
-      btn.title = 'Three switches for working on these plugins. Nothing here changes ' +
-        'your library, and all three are off by default.';
+      btn.title = 'Switches for working on these plugins, and each plugin\'s console logging. ' +
+        'Nothing here changes your library, and all are off by default.';
       btn.addEventListener('click', function (ev) {
         if (ev && ev.preventDefault) ev.preventDefault();
         openDevMods();
@@ -5825,6 +6510,9 @@
     if (group || cards.length || boxes.length || heads.length) {
       try { loadSettings(false); } catch (e) { /* a settings read is never fatal */ }
     }
+    try { themeTick(); } catch (e) { fail(e); }
+    try { symbolsTick(); } catch (e) { fail(e); }   // before brandTick, which reads the fonts it sets
+    try { brandTick(); } catch (e) { fail(e); }
     try { durationTick(cards); } catch (e) { fail(e); }
     try { selectPasteTick(boxes); } catch (e) { fail(e); }
     try { headCountTick(heads); } catch (e) { fail(e); }
@@ -5903,11 +6591,12 @@
   // The counters, drawn like Stash's own: a minimal button in a wrapper div, the mark where
   // their icon is. `own` draws the rule and the group too, for a card Stash drew none on.
   // Amber, as Scene Variants' ⸎ beside them is.
-  var CARD_AMBER = { color: '#ffc107' };
+  var CARD_HIGHLIGHT = { color: 'var(--gttx-highlight,#ffc107)' };
   // A circled letter sits inside the cap height, so at the button's own size ⓕ read smaller
   // than the icons beside it and than the same ⓕ on the settings page. Scaled up to match that
   // one; line-height 1 keeps the counter row its height. The number to tune if it looks off.
-  var CARD_FIELD_MARK = { marginRight: '7px', fontSize: '1.25em', lineHeight: 1 };
+  // ⓕ and 🖬 alike, and as Scene Variants' ⸎ counter (`.svr-vcount-mark`): monospace at one size.
+  var CARD_MARK = { marginRight: '7px', fontSize: '1.25em', lineHeight: 1, fontFamily: 'monospace, monospace, ' + SYMBOLS };
   function CardCounts(React, Bootstrap) {
     return function (props) {
       var t = props.t, ent = props.ent;
@@ -5924,14 +6613,14 @@
         return function () { live = false; };
       }, [ent.id]);
       var kids = [];
-      var counter = function (cls, title, mark, count, markStyle) {
+      var counter = function (cls, title, mark, count) {
         kids.push(React.createElement('div', { key: cls, className: cls, title: title },
-          React.createElement(Bootstrap.Button, { className: 'minimal', style: CARD_AMBER },
-            React.createElement('span', { className: 'gttx-card-mark', style: markStyle || { marginRight: '7px' } }, mark),
+          React.createElement(Bootstrap.Button, { className: 'minimal', style: CARD_HIGHLIGHT },
+            React.createElement('span', { className: 'gttx-card-mark', style: CARD_MARK }, mark),
             React.createElement('span', null, String(count)))));
       };
       var n = fields && truthy(s.a7CardFieldCount) ? Object.keys(fields).length : 0;
-      if (n) counter('gttx-cfields', cardFieldTip(fields), '\u24d5', n, CARD_FIELD_MARK);
+      if (n) counter('gttx-cfields', cardFieldTip(fields), '\u24d5', n);
       var files = t.files && truthy(s.a8CardFileCount) ? ent.files || [] : [];
       if (files.length > 1) counter('gttx-cfiles', cardFileTip(files), '\ud83d\uddac', files.length);
       if (!kids.length) return null;
@@ -6228,11 +6917,11 @@
     }, function () { return null; });
   }
 
-  // The `[<prefix> gate]` console channel Dev Mods' Debug switch opens: `log` every line,
-  // `once` a line only when it differs from the last on its channel.
+  // The `[<prefix> gate]` console channel Dev Mods' Log Button Visibility switch opens: `log`
+  // every line, `once` a line only when it differs from the last on its channel.
   function gate(prefix) {
     var last = {};
-    var on = function () { var c = coop(); return !!(c.debugMode || c.debugButtons); };
+    var on = function () { return !!coop().logButtonVisInfo; };
     return {
       log: function (line) { if (on()) console.info('[' + prefix + ' gate] ' + line); },
       once: function (channel, line) {
@@ -6707,7 +7396,7 @@
     ensureRowSpacing: ensureRowSpacing, applyButtonSpacing: applyButtonSpacing, insertOrdered: insertOrdered,
     insertBeforeImportantAction: insertBeforeImportantAction, findEditContainer: findEditContainer,
     showDefaults: showDefaults,
-    settingsPage: settingsPage, lease: lease, foreignLease: foreignLease, installedVersion: installedVersion,
+    settingsPage: settingsPage, settingsDialog: settingsDialog, drawSummary: drawSummary, settingButton: settingButton, levelOf: levelOf, parentLevel: parentLevel, atLevel: atLevel, markLevel: markLevel, levelRow: levelRow, LEVEL_COLOR: LEVEL_COLOR, afterDescription: afterDescription, logsToConsole: logsToConsole, lease: lease, foreignLease: foreignLease, installedVersion: installedVersion,
     gate: gate, ownTaskName: ownTaskName, paintButton: paintButton, paintTaskButtons: paintTaskButtons,
     wireEscape: wireEscape, unwireEscape: unwireEscape, firstBasename: firstBasename, displayName: displayName,
     fakeOk: fakeOk, mutationSucceeded: mutationSucceeded, writePluginSettings: writePluginSettings, button: button,

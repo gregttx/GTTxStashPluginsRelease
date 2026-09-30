@@ -1,7 +1,7 @@
 name: ᝯㄝₓ Custom Fields Bulk Editor
 description: "View and bulk edit custom fields across a selection or your whole library. Select entities in any Scenes, Images, Galleries, Performers, Studios, Groups or Tags list and pick \"Custom Fields...\" from the \"...\" menu, or run the task to cover everything.\n\nThe dialog lists every custom field in scope, one line per entity and field, with filters on type, field name, entity and value. Click an entity to open it, or a name or value to copy it.\n\nPick one field and Add it where it is missing, Overwrite it, Remove it or Rename it. The write covers exactly the lines the filters leave showing. Nothing is written until you press Apply, and Undo puts the old values back while the dialog stays open.\n\nThe Manage Custom Field Descriptions and Locks... task gives each field a description, shown as a tooltip on its name. Descriptions are stored in a tag, so they are in your database backup and the same in every browser.\n\nAn entity carrying the custom field named below is hidden from Stash's pick-lists while you edit something else.\n\nScene markers have no custom fields and are not offered. Requires Stash 0.31.0 or newer."
 url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/CustomFieldsBulkEditor/README.md"
-version: 4.0.5
+version: 4.0.15
 ui:
   # Loaded before this script, and installed with it. `plugins.tsx` topologically
   # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished

@@ -32,11 +32,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[fretc] ᝯㄝₓ Find & Replace Entities by Text Content cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[fretc] ᝯㄝₓ Find & Replace Entities by Text Content cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -68,7 +68,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '4.0.5';
+  var PLUGIN_VERSION = '4.0.13';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -86,11 +86,11 @@
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/FindEntitiesByTextContent/README.md';
   var STYLE_ID = 'fretc-style';
 
-  // **Amber, because Replace writes.** The repo's rule is that a plugin's own control is
-  // amber where it writes and `btn-info` where it only reads, and the task button is the
-  // way to the dialog that offers the write - exactly the shape of
-  // `MergePerformerTagsToScenes`' amber task button, whose task also writes nothing until
-  // a second, deliberate press. The filter toggles wear the same amber for the colour's
+  // **Orange (`btn-warning`), because Replace writes.** The repo's rule is that a plugin's
+  // own control is orange where it writes and Stash's blue where it only reads, and the task
+  // button is the way to the dialog that offers the write - exactly the shape of
+  // `MergePerformerTagsToScenes`' orange task button, whose task also writes nothing until
+  // a second, deliberate press. The filter toggles wear the same orange for the colour's
   // other job, marking a control as ours; they are a separate constant so the two reasons
   // cannot be read as one.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
@@ -224,26 +224,26 @@
     // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
     '.fretc-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.fretc-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.fretc-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.fretc-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.fretc-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.fretc-title{font-size:1.1rem;font-weight:600;}' +
-    '.fretc-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.fretc-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.fretc-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.fretc-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.fretc-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.fretc-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.fretc-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.fretc-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.fretc-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
     '.fretc-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.fretc-spin{color:#a7b6c2;}' +
+    '.fretc-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.fretc-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
-    '.fretc-ERROR{color:#ff7373;} .fretc-WARN{color:#ffb648;} .fretc-INFO{color:#a7b6c2;}' +
+    '.fretc-ERROR{color:#ff7373;} .fretc-WARN{color:var(--gttx-highlight,#ffc107);} .fretc-INFO{color:var(--gttx-muted,#a7b6c2);}' +
     // The green the siblings give a line that says something landed in the library.
     '.fretc-EDIT{color:#84d68a;}' +
-    '.fretc-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.fretc-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.fretc-foot button{margin-right:.5rem;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
@@ -252,10 +252,10 @@
     // one of those did nothing at all, which is how Find & Replace shipped a row that
     // stayed on screen with the checkbox that reveals it switched off.
     '.fretc-hidden{display:none !important;}' +
-    '.fretc-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
+    '.fretc-search{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
-    '.fretc-label{color:#a7b6c2;font-size:.85rem;white-space:nowrap;}' +
-    '.fretc-textbox{background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
+    '.fretc-label{color:var(--gttx-muted,#a7b6c2);font-size:.85rem;white-space:nowrap;}' +
+    '.fretc-textbox{background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
     'padding:.25rem .5rem;flex:1 1 12rem;min-width:8rem;}' +
     // The × that empties the box, inside it. `NormalizeParentTags` got here first and
     // these two rules are its, byte-identical with the prefix swapped - a class two
@@ -263,9 +263,9 @@
     // padding above is what keeps the text clear of the icon.
     '.fretc-inputwrap{position:relative;display:flex;align-items:center;flex:1 1 0;}' +
     '.fretc-clear{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);' +
-    'background:none;border:0;color:#a7b6c2;font-size:1.1rem;line-height:1;cursor:pointer;' +
+    'background:none;border:0;color:var(--gttx-muted,#a7b6c2);font-size:1.1rem;line-height:1;cursor:pointer;' +
     'padding:0 .35rem;}' +
-    '.fretc-clear:hover{color:#f5f8fa;}' +
+    '.fretc-clear:hover{color:var(--gttx-fg,#f5f8fa);}' +
     // The right padding that keeps the typed text clear of the icon, as a modifier
     // beside the pinned `.textbox` rule rather than an edit to it - `EntityNameMaintainer`
     // shares that rule and its box has no ×.
@@ -280,7 +280,7 @@
     //
     // The filter strip, byte-identical to `EntityNameMaintainer`'s: same control, same
     // meaning, one row of small toggles under the head.
-    '.fretc-filters{padding:.4rem 1rem;border-bottom:1px solid #394b59;display:flex;' +
+    '.fretc-filters{padding:.4rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;' +
     'flex-direction:column;gap:.3rem;}' +
     '.fretc-filterrow{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;}' +
     '.fretc-filterbtn{font-size:.78rem;padding:.05rem .4rem;}' +
@@ -292,20 +292,20 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
-    '.fretc-ent{color:#7cc4ff;text-decoration:none;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
+    '.fretc-ent{text-decoration:none;}' +
     '.fretc-ent:hover{text-decoration:underline;}' +
-    '.fretc-attr{color:#a7b6c2;}' +
+    '.fretc-attr{color:var(--gttx-muted,#a7b6c2);}' +
     // Amber: the one thing on a result line that asks for a second look before Replace.
-    '.fretc-casediff{color:#ffc107;white-space:nowrap;}' +
+    '.fretc-casediff{color:var(--gttx-highlight,#ffc107);white-space:nowrap;}' +
     '.fretc-ctx{overflow-wrap:anywhere;word-break:break-word;}' +
-    '.fretc-mark{background:#3f6b46;border-radius:2px;padding:0 .1rem;}' +
+    '.fretc-mark{background:var(--gttx-match-bg,#3f6b46);border-radius:2px;padding:0 .1rem;}' +
     '.fretc-spacer{flex:1 1 auto;}' +
     // One entity per line. Not `.fretc-hitrow`: `EntityNameMaintainer`'s row is a decision
     // with a checkbox in it, and this one is a link - a class two plugins share has to
@@ -314,21 +314,21 @@
     // beside it. A hanging indent sets every wrapped line in from the first.
     '.fretc-result{padding:.1rem .25rem .1rem 1.25rem;text-indent:-1rem;overflow-wrap:anywhere;}' +
     '.fretc-result>*{margin-right:.5rem;}' +
-    '.fretc-result:hover{background:#3c4f5d;}' +
+    '.fretc-result:hover{background:var(--gttx-raised,#3c4f5d);}' +
     // The two remembering controls, grouped so that they line up with each other and
     // sit a clear step away from the search box rather than at the row's own gap.
     '.fretc-opts{display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;' +
     'margin-left:.5rem;}' +
-    '.fretc-num{background:#30404d;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
+    '.fretc-num{background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
     'padding:.25rem .35rem;width:4rem;}' +
-    '.fretc-check{display:flex;align-items:center;gap:.35rem;color:#a7b6c2;font-size:.85rem;' +
+    '.fretc-check{display:flex;align-items:center;gap:.35rem;color:var(--gttx-muted,#a7b6c2);font-size:.85rem;' +
     'white-space:nowrap;cursor:pointer;margin:0;}' +
     // A checkbox carries browser margins that put it off the row's centre line.
     '.fretc-check input{margin:0;}' +
     // The sentence beside the replacement box. The log's own dim grey, and allowed to
     // wrap onto its own line on a narrow window - the row is already `flex-wrap`.
-    '.fretc-hint{color:#7d8f9c;font-size:.8rem;}' +
-    '.fretc-readme{color:#7cc4ff;font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
+    '.fretc-hint{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;}' +
+    '.fretc-readme{font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
     // ── The settings page ───────────────────────────────────────────────────
     //
     // Stash renders the description as one text node in a `.sub-heading` that is
@@ -343,7 +343,7 @@
     '.fretc-own-group .sub-heading .fretc-p:last-child{margin-bottom:0;}' +
     '.fretc-desc-collapsed .fretc-p:not(:first-child){display:none;}' +
     '.fretc-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     // **No per-setting hover box and no colour-coded toggle**, because this plugin
     // declares no settings: both would style rows Stash never renders for it. The teal is
     // not lost - it is on the task button, which Core's `paintTaskButtons` sets.

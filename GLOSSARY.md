@@ -35,7 +35,8 @@ it means here.
 | <a id="roll-up"></a>roll-up | Normalize Parent Tags adding the parents implied by an entity's tags. |
 | <a id="redundancy"></a>redundancy, redundant | A tag implied by a more specific one on the same entity. |
 | <a id="variant"></a>variant, multi-variant | Scene Variants: scenes that are the same content - a full version and its trailers or cuts. |
-| <a id="full-duration"></a>full-duration, partial-duration | The full-length member of a variant set, and the shorter ones. |
+| <a id="full-duration"></a>full-duration | Scene Variants: a variant that is the whole work, not a cut out of it - told by the Full-duration tag. |
+| <a id="partial-duration"></a>partial-duration | Scene Variants: a variant that is a cut out of the whole work - a trailer, a promo, a clip - told by the Partial-duration tag. |
 | <a id="base-title"></a>base-title | The title a variant set's partials are named after. |
 | <a id="postfix"></a>postfix | What follows the base-title in a partial's title, before its index: " - Promo ". |
 | <a id="pseudo-stash-id"></a>pseudo-stash-id | A stand-in stash-id Scene Variants writes to group scenes that no stash-box knows. |

@@ -34,25 +34,30 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 
 ## What you actually see
 
-Eight things: five are off until you turn them on, two counters on the cards are on, and one is
-a number with a default — and [Undo History](#undo-history), which is on.
+Fourteen things: five are off until you turn them on, two counters on the cards are on and seven are
+colors — and [Undo History](#undo-history), which is on.
 
-Those eight are one dialog: the first row of this plugin's settings, **General Globals**, says what
-they are now, and its **General Globals...** button opens them. Below it are the rows for
-[Undo History](#undo-history)'s settings and for [Dev Mods](#dev-mods), and nothing else.
+Those fourteen are one dialog: the first row of this plugin's settings, **UI Customizations**, says
+what they are now, and its **UI Customizations...** button opens them. **Set All to Default**, at
+the bottom right of that dialog, puts all fourteen back to their defaults in their boxes; **Save**
+writes them, and **Close** leaves the settings as they were, so opening the dialog again brings the
+stored ones back. Below that
+row are the row for [Undo History](#undo-history)'s settings, **Maximum Log Lines Kept**
+([below](#how-many-log-lines-a-dialog-keeps)), the **Case-Sensitive Matching** switch
+([below](#where-every-case-sensitive-box-starts)) and [Dev Mods](#dev-mods).
 
 ### The Scene Tagger's duration mismatch
 
 Stash's [<abbr title="Stash's Scene Tagger, which matches scenes against a stash-box.">tagger</abbr>](../GLOSSARY.md#tagger) prints **“Duration off by at least Ns”** among the other fields on a search result,
-in the same weight and colour as everything beside it — and it is the one line on that card that
+in the same weight and color as everything beside it — and it is the one line on that card that
 decides whether a match is the right file.
 
 Turn on **Emphasise a Tagger Duration Mismatch** and that sentence is drawn:
 
 | Gap | How it looks |
 |---|---|
-| more than 5 seconds | larger, capitalised, **red** |
-| more than 1 second | **amber** |
+| more than 5 seconds | larger, capitalised, in the **Bad Result Text Color** (a red by default) |
+| more than 1 second | in the **Highlighted Text Color** (a yellow by default) |
 | 1 second or less | left exactly as Stash wrote it |
 
 It changes only how the sentence looks. Nothing is hidden, reordered, acted on or written, and
@@ -116,7 +121,7 @@ heading goes back to Stash's own word on the next tick.
 ### Counters on the cards
 
 Last in the row of counters Stash draws under a card — tags, performers, groups — two of this
-plugin's, in amber, each drawn only where it has something to say. On a scene card Scene Variants'
+plugin's, in the [Highlighted Text Color](#the-colors), each drawn only where it has something to say. On a scene card Scene Variants'
 ⸎ goes before them:
 
 - **ⓕ and a number**: the custom fields the entity holds, on scene, image, gallery, performer,
@@ -138,6 +143,70 @@ ticking or unticking the box there lasts for that dialog without changing this s
 
 With it off, the Turkish `İ` is matched as a plain `i`, so `istanbul` finds `İstanbul`.
 
+### The colors
+
+Seven color pickers in **UI Customizations...** set the colors every ᝯㄝₓ plugin draws in. Each
+picker's box leads its row with **Default** beside it, which puts its default back, and the name
+comes after them, so the boxes line up. On the right of each, a few made-up lines show that color
+at work the way the plugins draw it - card counters, a stale **Rescan** breathing, a [<abbr title="How far a variant set's members have moved apart - tags, performers, cover and other attributes - each difference priced by a weight.">drift-score</abbr>](../GLOSSARY.md#drift-score), a
+log line, a copied value -
+in the color the box holds, so a pick shows before Save does. They apply on every open page as soon
+as they are saved, and on a page opened later once the ᝯㄝₓ settings are read; until then that page
+shows the defaults. The defaults are written in the first time the Plugins tab of the settings page
+is opened. The row's summary lists each color in force after a square of it, outlined in black.
+
+**Follow the Stash Theme**, a switch above them, draws the ᝯㄝₓ dialogs, tooltips and panes in the
+greys of the theme you run instead of their own dark ones. The greys are read off a hidden sample of
+Stash's own dialog - its background, text and muted text - and the borders and shades are worked out
+from those, within a second of switching themes. It is off by default; the seven colors keep their
+values either way.
+
+Links are not among them: every link a ᝯㄝₓ plugin draws takes the link color of Stash, or of the
+theme you run it under.
+
+| Color | Default | Used for |
+|---|---|---|
+| **Highlighted Text Color** | `#ffc107`, a yellow | The ⓕ, 🖬 and ⸎ marks; a setting that writes without a review or risks losing history, and a paler shade of it for one that decides what those writes touch; a match in another case; a Rescan another tab made stale; the **↶** in the top bar; warnings in every plugin's dialogs; the tagger's duration mismatch past one second |
+| **Good Result Text Color** | `#84d68a`, a green | Scene Variants' lowest drift-score; the added lines in Undo History and in Normalize Parent Tags' log |
+| **Average Result Text Color** | `#ffb648`, an orange | Scene Variants' medium drift-score |
+| **Bad Result Text Color** | `#ff7b72`, a red | Scene Variants' high drift-score; the tagger's duration mismatch past five seconds; a setting that writes with no dialog at all |
+| **Accent Color** | `#7cc4ff`, a light blue | What a plugin sets apart without judging it: Normalize Parent Tags' REMOVE lines, Propagate Tags and Performers' PERF lines and performer arrows, the values and attributes Scene Variants marks as changed or differing, the **Show more** under a description, the [<abbr title="Tag Bundle Clipboard: a set of tags copied from one entity to paste on others.">bundle</abbr>](../GLOSSARY.md#bundle) Tag Bundle Clipboard has active, Scene Filename Manager's `!token` |
+| **Error Message Background Color** | `#7a3b3b`, a dark red | A Custom Fields Bulk Editor value whose copy to the clipboard failed |
+| **Match Background Color** | `#3f6b46`, a dark green | The text a search found, in Entity Name Maintainer's and Find & Replace Entities by Text Content's listings; a Custom Fields Bulk Editor value copied to the clipboard |
+
+**How much a setting does on its own** is shown the same way in every ᝯㄝₓ plugin, in three shades:
+a paler Highlighted Text Color for a setting that only decides what the automatic writes touch (a
+filter, a path, a title rule); the color itself for one that writes on its own, skips the review,
+decides the names written to disk or has another large side effect; and the Bad Result Text Color
+for one that writes with no dialog at all. A setting's name and its box always wear its shade (its description does not), and
+the summary on its row wears it while the setting is on. A row's heading takes the strongest shade
+of the settings inside it, and its button turns orange.
+
+In the dialog the ⓕ and 🖬 in a setting's name are drawn plain, and those in its description in the
+Highlighted Text Color. On the settings page it is the other way round for a row: plain in its
+description, colored in the summary under it.
+
+Every summary a ᝯㄝₓ row draws shows a setting's own value - a tag's name, a postfix, a custom field -
+in the row's monospace, between double quotes, and the words around it in the page's sans-serif at
+the same size, so what you typed reads apart from what is said about it. A custom field is quoted
+with its **ⓕ** inside the quotes, since the mark is part of its name. ⓕ, 🖬 and ⸎ are drawn the
+same way everywhere - after a field's name, on the cards and in the text - in monospace at one size,
+so the three line up in a card's row of counters; ⓕ sits a small gap after a field's name.
+
+### The name in any theme
+
+A theme can ask first for a font that claims the characters of **ᝯㄝₓ** but draws each as an empty
+box, and the browser then has nothing to fall back from. So Core carries those three glyphs itself,
+cut from the Noto fonts (SIL Open Font License; `OFL.txt` beside the plugin), and puts them first
+wherever the name is drawn - its own dialogs and tooltips, and Stash's own text on the settings
+pages. Every other character keeps the theme's font.
+
+The plugins' own symbols get the same care where the machine lacks them. Their defaults put ᱜ, 🞮,
+🛈 and 🖫 in custom field and tag names, and they draw ⓕ, 🖬, ⸎ and ⮺: Windows has a font for all of
+them, but a Mac or a Linux desktop may not. Off Windows, Core carries those eight too and names them
+last, after the theme's fonts, so they fill only a gap - a symbol a font already draws keeps that
+font. On Windows nothing changes.
+
 ### How many log lines a dialog keeps
 
 Every ᝯㄝₓ dialog shows the last 1,000 lines of its log — a node per line is a page that stops
@@ -147,9 +216,9 @@ library-wide run grows: ᝯㄝₓ Normalize Parent Tags over 100,000 scenes and 
 the page.
 
 **Maximum Log Lines Kept** is how many are kept, 200,000 by default and anywhere from 1,000 to
-5,000,000; a number outside that is clamped. It is set in **General Globals...**, which shows the
-number in force, and the default is written in the first time the Plugins tab of the settings page
-is opened.
+5,000,000; a number outside that is clamped. It is a setting of its own on the settings page, and
+the default is written in the first time the Plugins tab of the settings page is opened, so the box
+shows the number in force.
 Past it the oldest lines are dropped and the copy opens by saying how many went. Nothing else is
 affected: the listing, the counters, what is written and what Undo can take back are all whole.
 
@@ -158,22 +227,23 @@ large runs; lower it on a machine short of memory. A run of a few thousand lines
 
 ### Dev Mods
 
-Three switches for working on these plugins rather than for using them. Press **Dev Mods…** in the
-settings to open them; all three are off by default, none of them writes anything, and none is
-meant to be left on.
+Switches for working on these plugins rather than for using them. Press **Dev Mods…** in the
+settings to open them; all are off by default and none of them writes anything. The logs may be left
+on; the last two switches are not meant to be. In the order the dialog lists them:
 
 | Switch | What it does |
 |---|---|
-| **Debug mode** | The [debug switch](#the-debug-switch): every control a ᝯㄝₓ plugin draws into Stash's own rows explains on the console whether it is shown or hidden and why. |
-| **Layout edit mode** | Outlines every control these plugins have injected into Stash's [<abbr title="Stash's own interface around the page content - top bar, tab strips, toolbars - where these plugins add their controls.">chrome</abbr>](../GLOSSARY.md#chrome) and labels it with the plugin that put it there — for working out who owns a button in a row that holds several. |
+| **Log Button Visibility to the Browser Console** | [Why a control shows or hides](#logging-button-visibility): every control a ᝯㄝₓ plugin draws into Stash's pages says on the console whether it is shown or hidden and why. |
+| **Log … to the Browser Console** | One switch each for Propagate Tags and Performers, Scene Variants, Merge Performer Tags, Entity Name Maintainer and Tag Bundle Clipboard: that plugin prints what it does to the browser's console (F12 - Console), under its own prefix. Until Dev Mods is first saved, a plugin whose own logging setting was on keeps logging. |
+| **Layout edit mode** | Outlines every control these plugins have injected into Stash's [<abbr title="Stash's own interface around the page content - top bar, tab strips, toolbars - where these plugins add their controls.">chrome</abbr>](../GLOSSARY.md#chrome) in dashed magenta, a color nothing else draws in, and labels it with the plugin that put it there — for working out who owns a button in a row that holds several. |
 | **Stale UI demo** | Makes the red **Reload UI** button appear beside Stash's own **Reload plugins** without waiting for a real version mismatch. |
 
 They set flags on the object the ᝯㄝₓ plugins share, so each one reaches all of them at once. The
 console still works and uses the same flags:
 
 ```js
-__GTTx__.StashPluginCoop.debugButtons = true;   // Debug mode
-__GTTx__.StashPluginCoop.layoutEdit   = true;   // Layout edit mode
+__GTTx__.StashPluginCoop.logButtonVisInfo = true;   // Log Button Visibility to the Browser Console
+__GTTx__.StashPluginCoop.layoutEdit       = true;   // Layout edit mode
 ```
 
 ## Links, cards and tooltips
@@ -182,12 +252,12 @@ Every link a ᝯㄝₓ plugin draws opens where the [Core setting](#where-every-
 tab by default, or the tab you are in.
 
 An **entity name** - a scene, performer, studio, tag, gallery, image or group named in a dialog, a
-listing or a log - hovers to a **card**: its picture, with the rating as an amber banner and a 📦
+listing or a log - hovers to a **card**: its picture, with the rating as an orange banner and a 📦
 mark where the entity is Organized. A **tag** or a **setting** hovers to a **tooltip**: the tag's
 description, or the setting's own help text. Both are fetched on the first hover and kept for the
 page.
 
-A setting that names a **custom field** carries an amber **ⓕ** mark, the same as on the cards, at the end of its value. Hover
+A setting that names a **custom field** carries an **ⓕ** mark in the GTTx highlight color, the same as on the cards, at the end of its value. Hover
 it and the tooltip names the field, its description if it has one, and what in the library carries
 it - a count and the first few entities by name and id, a scene, image or gallery with no title by
 its file. The tooltip opens *above* the mark rather
@@ -196,7 +266,7 @@ than under the pointer, so the pointer does not cover its first line. A setting 
 of its own behind it.
 
 An **uncommon term** - a word Stash or these plugins use in a sense of their own, such as
-[<abbr title="Normalize Parent Tags adding the parents implied by an entity's tags.">Roll-Up</abbr>](../GLOSSARY.md#roll-up), [<abbr title="The link from an entity in your library to its entry on a stash-box: the box's address and the entry's id.">stash-id</abbr>](../GLOSSARY.md#stash-id) or [<abbr title="How far a variant set's members have moved apart - tags, performers, cover and other attributes - each difference priced by a weight.">drift-score</abbr>](../GLOSSARY.md#drift-score) - carries a dotted underline, and hovering it, focusing it or
+[<abbr title="Normalize Parent Tags adding the parents implied by an entity's tags.">Roll-Up</abbr>](../GLOSSARY.md#roll-up), [<abbr title="The link from an entity in your library to its entry on a stash-box: the box's address and the entry's id.">stash-id</abbr>](../GLOSSARY.md#stash-id) or drift-score - carries a dotted underline, and hovering it, focusing it or
 tapping it opens its meaning from the repo's [glossary](../GLOSSARY.md). Once per place: the first
 time it appears in a plugin's group on Settings → Plugins or Settings → Tasks, and in the head of
 each ᝯㄝₓ dialog. A single word such as *flag* is underlined only where it means what the glossary
@@ -226,16 +296,19 @@ bulk: who is writing, what, and until when.
 It is **advisory**. A foreign lease makes a manual action warn you in its dialog; it never blocks
 one. Only the automatic, react-to-save modes stand down.
 
-## The debug switch
+## Logging button visibility
+
+**Log Button Visibility to the Browser Console** under [Dev Mods](#dev-mods), or from the console:
 
 ```js
-__GTTx__.StashPluginCoop.debugButtons = true;
+__GTTx__.StashPluginCoop.logButtonVisInfo = true;
 ```
 
-Every control a ᝯㄝₓ plugin draws into Stash's own chrome then explains itself on the
-`[<prefix>] gate` console channel: shown or hidden, and why. It takes effect on the next tick, so
-no reload is needed, and **Debug mode** under [Dev Mods](#dev-mods) sets the same flag (`debugMode`
-is read as well). It is not the plugins' user-facing logging.
+Every control a ᝯㄝₓ plugin draws into Stash's pages - its buttons, and Scene Variants' [<abbr title="Scene Variants: scenes that are the same content - a full version and its trailers or cuts.">Variants</abbr>](../GLOSSARY.md#variant) tab -
+then says on the `[<prefix> gate]` console channel whether it is shown or hidden, and why: one line
+per control, and again only when its answer changes. It takes effect on the next tick, so no reload
+is needed. It explains the page, not the library: what a plugin wrote is that plugin's own **Log …
+to the Browser Console** switch.
 
 ## The stale-script banner and the Reload UI button
 
@@ -266,12 +339,12 @@ does.
 
 What the ᝯㄝₓ plugins write, and what you save in Stash's own pages in this browser, is kept in this
 browser so it can be undone later — after the dialog that wrote it has closed, days later if need be.
-Open it from **Settings → Tasks → Undo History...**, or from the amber **↶** button in Stash's top bar,
+Open it from **Settings → Tasks → Undo History...**, or from the **↶** button in Stash's top bar, in the GTTx highlight color,
 beside Settings.
 
 - **The list** shows the history newest first, a run a row: when, who — *Your edit*, a plugin, or an
   *Undo* — what, and how many changes. Click a row for its changes: the entity, with its hover card,
-  the field, and the value before and after; a custom field is named in teal, with the box its
+  the field, and the value before and after; a custom field is named in blue, with the box its
   name opens elsewhere. Tags, performers, studios, groups and the other related
   entities are named with their id — `+Blonde (105)` — each a link with its hover card, and so is
   the tag a merge went into: `merged into Tag "Blonde" [105]`. The list
@@ -305,7 +378,7 @@ beside Settings.
   in when it first loads are not recorded.
 - **Another tab's change marks an open dialog's Rescan.** When another tab of this Stash records a
   change while a ᝯㄝₓ dialog is open here, that dialog's **Rescan** (**Refresh** in Find & Replace)
-  turns bold amber and breathes, white and green, until you press it; its tooltip says why. Closing the dialog after an undo refreshes the
+  turns bold in the GTTx highlight color and breathes, white and green, until you press it; its tooltip says why. Closing the dialog after an undo refreshes the
   page behind it, so the scene or list you are on shows what was put back.
 - **Undoing a create deletes what was created** — never its files.
 - **A deleted or merged tag comes back where it was**: on everything that carried it, with its own
@@ -348,7 +421,7 @@ what they are now, and its **Undo History Settings...** button opens them.
 | Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
 | Record Deletes and Merges | on | keeps what a delete or a tag merge takes away, so it can be put back; a delete of something large reads a lot first |
 | Record Settings Changes | on | every plugin's settings saved in this browser, each setting a change of its own; not the defaults a plugin seeds |
-| Undo Takes It Out of the History | off | **amber: it risks history loss.** Where the review's **Take it out of the history** box starts; the box, beside Proceed, still decides for each undo |
+| Undo Takes It Out of the History | off | **in the GTTx highlight color: it risks history loss.** Where the review's **Take it out of the history** box starts; the box, beside Proceed, still decides for each undo |
 
 The history lives in this browser's own storage, per browser and per device, and goes if you clear
 this site's data. The dialog says how much it holds, how old the oldest run is, whether the browser

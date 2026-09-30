@@ -21,11 +21,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[npt] ᝯㄝₓ Normalize Parent Tags cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[npt] ᝯㄝₓ Normalize Parent Tags cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -46,10 +46,10 @@
     entityTipDetail = C.entityTipDetail, entityTip = C.entityTip,
     cfTipCarriers = C.cfTipCarriers, cfTipTitle = C.cfTipTitle, cfTipLoad = C.cfTipLoad,
     cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen, cfTipArm = C.cfTipArm,
-    cfTipTick = C.cfTipTick, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
+    cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
     entityTipName = C.entityTipName, splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny;
-  var writePluginSettings = C.writePluginSettings;
+  var writePluginSettings = C.writePluginSettings, settle = C.settle;
   var tagHasDetail = C.tagHasDetail, tagTooltip = C.tagTooltip, lowerId = C.lowerId, partsText = C.partsText;
   var runLog = C.runLog, LOG_RENDER_CAP = C.runLogCap;   // log lines kept in the DOM; all stay in `lines`
 
@@ -71,7 +71,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.0.5';
+  var PLUGIN_VERSION = '6.1.12';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -111,9 +111,8 @@
   // nothing overrides the foreground. `btn-dark` is worth knowing about and not worth
   // using: Stash themes it identically to `btn-secondary`.
   //
-  // The amber is pinned to the same string the two siblings use for their own buttons.
+  // The orange is pinned to the same string the two siblings use for their own buttons.
   var PLUGIN_BTN_VARIANT   = 'btn-warning';
-  var READONLY_BTN_VARIANT = 'btn-info';
 
   var PAGE_SIZE      = 1000;  // entities per find query
   var CHUNK_SIZE     = 100;   // entity ids per bulk mutation
@@ -1254,26 +1253,26 @@
     // selection - and they separate better on it than on the lighter #30404d.
     '.npt-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.npt-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.npt-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.npt-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.npt-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.npt-title{font-size:1.1rem;font-weight:600;}' +
-    '.npt-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.npt-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.npt-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.npt-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.npt-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.npt-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.npt-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.npt-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.npt-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
     '.npt-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.npt-spin{color:#a7b6c2;}' +
+    '.npt-spin{color:var(--gttx-muted,#a7b6c2);}' +
     // An entity named in the log is a link to it. The same blue the siblings' result
     // lines use, underlined only on hover so a log full of them does not read as a
     // page of underlines. It is the colour a REMOVE line is already written in, so on
     // those lines the hover and the pointer are the whole affordance - which is the
     // same bargain the tag tooltips took, and better than a rule that only this
     // plugin's copy of the shared chrome would carry.
-    '.npt-elink{color:#7cc4ff;text-decoration:none;}' +
+    '.npt-elink{text-decoration:none;}' +
     '.npt-elink:hover{text-decoration:underline;}' +
     // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
     // picture. Fixed to the viewport and placed from the node, because the logs these
@@ -1283,18 +1282,19 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // The mark beside a setting that names a custom field. Grey and `cursor:help`,
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -1313,13 +1313,13 @@
     // would fire mouseleave on the mark, close, hand the pointer back and reopen.
     '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
     'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
-    '.npt-ERROR{color:#ff7373;} .npt-WARN{color:#ffb648;} .npt-REMOVE{color:#7cc4ff;}' +
-    '.npt-ADD{color:#84d68a;} .npt-INFO{color:#a7b6c2;}' +
-    '.npt-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.npt-ERROR{color:#ff7373;} .npt-WARN{color:var(--gttx-highlight,#ffc107);} .npt-REMOVE{color:var(--gttx-accent,#7cc4ff);}' +
+    '.npt-ADD{color:var(--gttx-good,#84d68a);} .npt-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.npt-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.npt-foot button{margin-right:.5rem;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
@@ -1328,44 +1328,44 @@
     // one of those did nothing at all, which is how Find & Replace shipped a row that
     // stayed on screen with the checkbox that reveals it switched off.
     '.npt-hidden{display:none !important;}' +
-    '.npt-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
+    '.npt-search{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
     '.npt-find-wrap{flex:1 1 0;display:flex;align-items:center;gap:.4rem;}' +
     '.npt-inputwrap{position:relative;display:flex;align-items:center;flex:1 1 0;}' +
-    '.npt-find-input{flex:1 1 auto;background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;' +
+    '.npt-find-input{flex:1 1 auto;background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.25rem 1.9rem .25rem .5rem;}' +
-    '.npt-find-count{color:#7d8f9c;font-size:.75rem;white-space:nowrap;min-width:5rem;}' +
-    '.npt-search-input{flex:1 1 auto;background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;' +
+    '.npt-find-count{color:var(--gttx-dim,#7d8f9c);font-size:.75rem;white-space:nowrap;min-width:5rem;}' +
+    '.npt-search-input{flex:1 1 auto;background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.25rem 1.9rem .25rem .5rem;}' +
     '.npt-clear{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);' +
-    'background:none;border:0;color:#a7b6c2;font-size:1.1rem;line-height:1;cursor:pointer;' +
+    'background:none;border:0;color:var(--gttx-muted,#a7b6c2);font-size:1.1rem;line-height:1;cursor:pointer;' +
     'padding:0 .35rem;}' +
-    '.npt-clear:hover{color:#f5f8fa;}' +
+    '.npt-clear:hover{color:var(--gttx-fg,#f5f8fa);}' +
     '.npt-split{flex:1 1 auto;display:flex;min-height:18rem;overflow:hidden;}' +
     '.npt-tree{flex:2 1 0;overflow:auto;padding:.5rem 0;font-size:.85rem;}' +
-    '.npt-inspect{flex:1 1 0;overflow:auto;padding:.5rem 1rem;border-left:1px solid #394b59;' +
+    '.npt-inspect{flex:1 1 0;overflow:auto;padding:.5rem 1rem;border-left:1px solid var(--gttx-border,#394b59);' +
     'font-size:.8rem;min-width:14rem;}' +
     '.npt-row{padding:.1rem 1rem;cursor:pointer;white-space:nowrap;}' +
-    '.npt-row:hover{background:#3c4f5d;}' +
-    '.npt-row-sel{background:#425a6b;}' +
-    '.npt-twisty{display:inline-block;width:1.1rem;color:#a7b6c2;}' +
+    '.npt-row:hover{background:var(--gttx-raised,#3c4f5d);}' +
+    '.npt-row-sel{background:var(--gttx-raised,#425a6b);}' +
+    '.npt-twisty{display:inline-block;width:1.1rem;color:var(--gttx-muted,#a7b6c2);}' +
     '.npt-tag-name{font-family:monospace;}' +
     '.npt-badge{margin-left:.5rem;font-size:.72rem;padding:0 .3rem;border-radius:3px;}' +
-    '.npt-b-diamond{color:#7cc4ff;} .npt-b-repeat{color:#a7b6c2;font-style:italic;}' +
-    '.npt-b-prot{color:#ffb648;} .npt-b-cycle{color:#ff7373;} .npt-b-dim{color:#7d8f9c;}' +
+    '.npt-b-diamond{color:var(--gttx-accent,#7cc4ff);} .npt-b-repeat{color:var(--gttx-muted,#a7b6c2);font-style:italic;}' +
+    '.npt-b-prot{color:var(--gttx-highlight,#ffc107);} .npt-b-cycle{color:#ff7373;} .npt-b-dim{color:var(--gttx-dim,#7d8f9c);}' +
     '.npt-b-act{cursor:pointer;text-decoration:underline dotted;}' +
-    '.npt-b-act:hover{background:#3c4f5d;}' +
+    '.npt-b-act:hover{background:var(--gttx-raised,#3c4f5d);}' +
     '.npt-i-link{cursor:pointer;text-decoration:underline dotted;}' +
-    '.npt-i-link:hover{color:#7cc4ff;}' +
+    '.npt-i-link:hover{color:var(--gttx-accent,#7cc4ff);}' +
     // `display:block` because it is an `<a>` now: an inline box would drop the margin
     // under it, and the colour is inherited so the link still reads as the heading it
     // is rather than as Stash's blue.
     '.npt-i-title{display:block;font-size:1rem;font-weight:600;margin-bottom:.4rem;' +
     'font-family:monospace;color:inherit;text-decoration:none;}' +
     '.npt-i-title:hover{color:inherit;text-decoration:underline;}' +
-    '.npt-i-label{color:#7cc4ff;margin-top:.6rem;}' +
-    '.npt-i-body{color:#d6dee4;white-space:pre-wrap;word-break:break-word;}' +
-    '.npt-i-hint{color:#7d8f9c;}' +
+    '.npt-i-label{color:var(--gttx-accent,#7cc4ff);margin-top:.6rem;}' +
+    '.npt-i-body{color:var(--gttx-fg2,#d6dee4);white-space:pre-wrap;word-break:break-word;}' +
+    '.npt-i-hint{color:var(--gttx-dim,#7d8f9c);}' +
     // The per-type mode selectors, in the head of the run dialog and as the whole
     // body of the settings one. A grid rather than a flex row: seven labels of very
     // different lengths line their selects up only if the columns are shared. The
@@ -1378,32 +1378,32 @@
     // select it names rather than at the opposite end of the row, which is what made
     // the aligned column read as belonging to the next type along.
     '.npt-mode-row{display:flex;align-items:center;gap:.4rem;}' +
-    '.npt-mode-name{color:#d6dee4;font-size:.9rem;flex:1;text-align:right;}' +
+    '.npt-mode-name{color:var(--gttx-fg2,#d6dee4);font-size:.9rem;flex:1;text-align:right;}' +
     // Byte-identical with TagBundleClipboard's .tbc-mode: a mode select in a dialog
     // is the same thing in both, so the shared-CSS suite is right to insist.
-    '.npt-mode{background:#30404d;color:#f5f8fa;border:1px solid #394b59;' +
+    '.npt-mode{background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.15rem .35rem;font-size:.85rem;max-width:100%;}' +
     // Amber wherever the selector is set to something that writes, the same rule the
     // buttons follow. A <select> has no Bootstrap variant to borrow.
-    '.npt-mode-on{border-color:#ffb648;color:#ffb648;}' +
+    '.npt-mode-on{border-color:var(--gttx-highlight,#ffc107);color:var(--gttx-highlight,#ffc107);}' +
     // Set All: and its three buttons - beside the keep-this-selection box in the run
     // dialog, under the grid, at its left, in the settings one.
-    '.npt-modes-all{display:flex;align-items:center;gap:.4rem;color:#a7b6c2;font-size:.85rem;}' +
+    '.npt-modes-all{display:flex;align-items:center;gap:.4rem;color:var(--gttx-muted,#a7b6c2);font-size:.85rem;}' +
     '.npt-persist-line{display:flex;align-items:center;flex-wrap:wrap;gap:.35rem 1.5rem;' +
     'margin:.35rem 0 0;}' +
     // The run dialog's panel lives in the padded head; the settings dialog's is the
     // whole body, so it brings its own side padding rather than touching the border.
     '.npt-modesbody{padding:.5rem 1rem;}' +
-    '.npt-persist{display:flex;align-items:center;gap:.4rem;color:#a7b6c2;' +
+    '.npt-persist{display:flex;align-items:center;gap:.4rem;color:var(--gttx-muted,#a7b6c2);' +
     'font-size:.85rem;margin:0;}' +
     // The string the settings dialog is about to write, shown in the form the setting
     // holds it - monospace, because it is a value rather than a sentence.
-    '.npt-modestring{font-family:monospace;font-size:.85rem;color:#a7b6c2;' +
+    '.npt-modestring{font-family:var(--font-family-sans-serif,var(--bs-font-sans-serif,sans-serif));font-size:.85rem;color:var(--gttx-muted,#a7b6c2);' +
     'margin:.25rem 0 .5rem;word-break:break-word;}' +
     // Amber for the same reason the selectors are: a type that is not Off is one this
     // plugin writes to by itself. Nothing else on the line is coloured - marking the
     // whole of it would mark none of it.
-    '.npt-modestring-on{color:#ffb648;}' +
+    '.npt-modestring-on{color:var(--gttx-highlight,#ffc107);}' +
     '.npt-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
@@ -1441,7 +1441,7 @@
     // a flicker loop for as long as it is hovered.
     '.npt-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
     'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.npt-tipped.npt-tip-open .npt-tipbox{display:block;}' +
@@ -1450,49 +1450,8 @@
     // but the first paragraph is the only thing that shortens it.
     '.npt-desc-collapsed .npt-p:not(:first-child){display:none;}' +
     '.npt-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
-    // ── Colour-coded toggles ────────────────────────────────────────────────
-    //
-    // Amber for the two switches that make this plugin write on its own. They are
-    // the only settings here that do - the rest choose what a task covers - and Auto
-    // Prune in particular *deletes* tag assignments with no dialog, no review and no
-    // undo, which is the one thing on this page worth a second glance before it is
-    // ticked. Every other setting keeps Stash's blue: marking everything would mark
-    // nothing.
-    //
-    // Keyed on the ids SettingsPluginsPanel.tsx builds from the plugin id and the
-    // setting key, the same anchor `settingElement` uses, rather than on position
-    // or heading text.
-    //
-    // Two shapes because the switch is Stash's to render: `::before` is the track
-    // of a react-bootstrap Form.Switch, which is what it renders today, and
-    // `accent-color` covers a plain checkbox if that ever changes. Whichever is not
-    // in use costs nothing.
-    //
-    // This plugin has no console-logging setting, so it has no teal twin of the
-    // rule the two siblings carry - only the read-only task button below is teal.
-    //
-    // The auto-mode setting is a text field rather than a switch, and marking it amber
-    // with a `border-color` on the input was wrong on a live page:
-    // the field's border *is* the line the user reads as the divider between that
-    // setting row and the next, so the mark did not read as "this one writes on its
-    // own", it read as a broken separator. The two switch shapes stay - they cost
-    // nothing and cover a Stash that renders this as a control instead - but nothing
-    // here paints a border, because no border on this page is only ours. (This setting
-    // is a STRING, so Stash renders neither shape today; see `modeFieldTick`.)
-    '#plugin-NormalizeParentTags-a1AutoModes{accent-color:#ffc107;}' +
-    '#plugin-NormalizeParentTags-a1AutoModes:checked~.custom-control-label::before' +
-    '{background-color:#ffc107;border-color:#ffc107;}' +
-
-    // A third attempt, an inset amber bar, went the same way: on the
-    // settings row it drew a heavy rule down the left of a row whose value line was
-    // already amber where it mattered, and on the teal task button a 3px sliver read
-    // as a rendering artifact rather than as a state. **The value itself is the mark
-    // now** - `Scenes=Prune` in amber says which types are armed and, unlike a bar,
-    // says which ones. Nothing on the Tasks page repeats it; that button opens the
-    // dialog that shows the same seven modes, one click away.
-
     // The value line stands where Stash's own rendering of the raw string was, inside
     // its row, so it takes that row's spacing rather than the dialog's.
     '#npt-modes-line{margin:.1rem 0 .25rem;}';
@@ -1532,7 +1491,10 @@
       var row = el('div', 'npt-mode-row');
       // A type carrying a `note` says so beside its name as well as in the title: a
       // tooltip nobody knows to hover for is not a warning.
+      // In the settings dialog each name is a mode that writes on its own as its type is
+      // saved, so it wears Core's highlight level; in the run dialog it is only this pass.
       var name = el('span', 'npt-mode-name');
+      if (quiet) C.markLevel(name, true);
       name.appendChild(el('span', null, t.plural));
       if (t.note && !quiet) name.appendChild(el('span', 'npt-i-hint', ' (slow)'));
       row.appendChild(name);
@@ -3572,9 +3534,16 @@
   }
 
   // Called from the fetch wrapper once the mutation is known to have succeeded.
+  // Resolves once the reaction is over - written, stood down, or nothing to do.
   function autoReact(type, ids) {
-    if (!ids || !ids.length) return;
-    autoNormalize(type, ids);
+    if (!ids || !ids.length) return Promise.resolve();
+    return autoNormalize(type, ids);
+  }
+
+  // The name Core's settling registry keys an entity-type by, the one a reader waits on:
+  // `settled('scene', ids)`.
+  function settleKey(type) {
+    return type.key === 'galleries' ? 'gallery' : type.key.replace(/s$/, '');
   }
 
   // Built once per type per slot and cached on the type: the wrapper runs on every
@@ -3670,27 +3639,16 @@
     }
     // Beside Stash's own value rather than inside it: React owns that subtree and
     // reconciles it on every re-render, and a node of ours in the middle of one is
-    // the kind of thing that survives until it does not.
-    //
-    // The row itself where there is no value span, never its first child - which on
-    // the second tick is the line the first tick appended, so `host.appendChild(line)`
-    // appends a node into itself: a HierarchyRequestError thrown out of the interval
-    // in a browser, and a silent unlink anywhere that is more forgiving. Unreachable
-    // while Stash renders a `.value` for a STRING setting, which is why it went unseen
-    // for so long; `PropagateTagsAndPerformers` found it in a fixture that had none.
+    // the kind of thing that survives until it does not. After the description, where
+    // every row says what its settings are (Core's `afterDescription`).
     var slot = byClass(row, 'value');
-    var host = slot ? slot.parentNode : row;
-    if (line.parentNode !== host) {
-      if (slot) host.insertBefore(line, slot.nextSibling);
-      else host.appendChild(line);
-    }
+    C.afterDescription(row, line);
     hide(slot);
 
     var btn = document.getElementById(FIELD_BTN_ID);
     if (!btn) {
-      btn = el('button', 'btn btn-sm ' + READONLY_BTN_VARIANT, TASK_MODES);
+      btn = C.settingButton(TASK_MODES);
       btn.id = FIELD_BTN_ID;
-      btn.type = 'button';
       btn._nptOwn = true;
       btn.addEventListener('click', function (e) {
         if (e.preventDefault) e.preventDefault();
@@ -3703,6 +3661,7 @@
     var btnHost = edit ? edit.parentNode : row;
     if (btn.parentNode !== btnHost) btnHost.appendChild(btn);
     hide(edit);
+    C.levelRow(row, true, btn);           // the auto-modes write on their own
 
     if (!_autoSettings) {
       // Drawn when the answer lands rather than on the next tick: the re-entry is
@@ -3730,26 +3689,104 @@
 
   // Re-applied every tick rather than once: React re-renders these panels and hands
   // back its own elements. The task buttons are on a different tab from the settings,
-  // so they are painted whether or not our group is showing. Amber says "this rewrites
-  // the library", which is the run task alone: the other two edit a setting and browse
-  // a tree.
+  // so they are painted whether or not our group is showing. Every task of ours is
+  // orange, as every ᝯㄝₓ plugin's is, whether it writes or not.
   function settingsTick() {
-    page.decorate(page.group());
-    paintTaskButtons(PLUGIN_NAME, TASKS, function (name) {
-      return name === TASK_RUN ? PLUGIN_BTN_VARIANT : READONLY_BTN_VARIANT;
-    });
+    var group = page.group();
+    page.decorate(group);
+    paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
     modeFieldTick();
-    // Two settings name a custom field here, one per direction. From the settings cache
-    // rather than the row: this plugin's own dialog writes settings that React's state
-    // behind the page never hears about.
-    ['c5ExcludeAddTagWithCustomFieldName', 'c6ExcludeRemoveTagWithCustomFieldName']
-      .forEach(function (k) {
-        cfTipTick(PLUGIN_ID, k, _autoSettings
-          ? String(_autoSettings[k] || '').replace(/^\s+|\s+$/g, '') : '');
-      });
+    exclusionDialog.tick(group);
   }
 
-  // The `[npt gate]` console channel Dev Mods' Debug switch opens, from Core.
+  // ── The exclusion filters, one row and a dialog ───────────────────────────
+  //
+  // Eight settings about what Prune and Roll-Up leave alone were eight rows of the group, and
+  // the page read as a wall. They are one row now, opened into a dialog of Core's
+  // (`settingsDialog`): stored under the same keys, so nothing already set moves and
+  // config.yml still edits them; each keeps its whole description on hover. The two boxes
+  // naming a custom field get its ⓕ beside them, where the rows used to carry it.
+  var EXCL_FIELDS = [
+    { key: 'b1ExcludeEntityWithTagName', label: 'Exclude Entities Carrying This Tag', warn: 'semi',
+      text: true, wide: true,
+      tip: 'Enter one tag name. Any entity carrying that tag is left untouched by both tasks.\n\nMatched by ' +
+        'exact name, case-sensitive. The tag must be carried directly - a parent of it does not count. ' +
+        'For markers, carrying it as the primary tag also excludes the marker.' },
+    { key: 'b2ExcludeOrganized', label: 'Exclude Entities Marked as Organized', warn: 'semi',
+      tip: 'Skip any entity whose Organized flag is set.\n\nIn Stash 0.31 only scenes, images, galleries ' +
+        'and studios have that flag; performers, groups and markers have none, so this setting cannot ' +
+        'skip them. If a later Stash adds the flag to more types, they are covered without a plugin ' +
+        'update.' },
+    { key: 'c1ExcludeTagWithIgnoreAutoTag', label: 'Never Add or Remove Tags Set to Ignore Auto Tag', warn: 'semi',
+      tip: 'Tags with "Ignore Auto Tag" enabled are neither added by Roll-Up nor removed by Prune.\n\nThey ' +
+        'still count as present, so they can still imply the removal of their own parents.' },
+    { key: 'c2ExcludeAddTagNameContains', label: 'Never Add Tags Whose Name Contains', warn: 'semi',
+      text: true, wide: true,
+      tip: 'Enter one or more substrings separated by spaces. Roll-Up will not add a tag whose name ' +
+        'contains any of them.\n\nMatched anywhere in the name, case-sensitive, and any Unicode ' +
+        'character can be used - handy for namespace-markers. A substring cannot itself contain a space ' +
+        'unless you set a separator below. Skipping a tag does not stop its own parents from being added.' },
+    { key: 'c3ExcludeRemoveTagNameContains', label: 'Never Remove Tags Whose Name Contains', warn: 'semi',
+      text: true, wide: true,
+      tip: 'Enter one or more substrings separated by spaces. Prune will not remove a tag whose name ' +
+        'contains any of them, even when a descendant tag makes it redundant.\n\nMatched anywhere in the ' +
+        'name, case-sensitive, and any Unicode character can be used - handy for namespace-markers. A ' +
+        'substring cannot itself contain a space unless you set a separator below.' },
+    { key: 'c4TagNameSeparator', label: 'Separator for the Two "Name Contains"', warn: 'semi',
+      text: true,
+      tip: 'Leave this empty to separate those substrings on spaces.\n\nEnter any character - a comma, a ' +
+        'pipe, or any Unicode character you do not use in tag names - to separate on that instead, which ' +
+        'is how a substring can then contain a space. It is matched literally, so punctuation needs no ' +
+        'escaping, and surrounding whitespace is trimmed from each substring.' },
+    { key: 'c5ExcludeAddTagWithCustomFieldName', label: 'Never Add Tags Marked via This Custom Field', warn: 'semi',
+      text: true, wide: true, mark: function (v) { return v ? cfTipMark(v) : null; },
+      tip: 'Enter a custom field name. Roll-Up will not add a tag that has this custom field.\n\nOnly the ' +
+        'presence of the field matters - its value is ignored, so any value at all excludes the tag. ' +
+        'Remove the field from a tag to have it added again. Skipping a tag does not stop its own ' +
+        'parents from being added.' },
+    { key: 'c6ExcludeRemoveTagWithCustomFieldName', label: 'Never Remove Tags Marked via This Custom Field', warn: 'semi',
+      text: true, wide: true, mark: function (v) { return v ? cfTipMark(v) : null; },
+      tip: 'Enter a custom field name. Prune will not remove a tag that has this custom field, even when a ' +
+        'descendant tag makes it redundant.\n\nOnly the presence of the field matters - its value is ' +
+        'ignored, so any value at all protects the tag.' },
+  ];
+
+  // What the filters say now, in one line: each one that does something, or that none does.
+  function exclusionSummary(s) {
+    var q = function (k) { return String(s[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var words = function (k) {
+      return splitTerms(q(k), q('c4TagNameSeparator')).map(function (t) { return '"' + t + '"'; }).join(' or ');
+    };
+    // A field with its ⓕ after it, as the dialog draws it.
+    var cf = function (k) { return { cf: q(k) }; };
+    var on = [];
+    if (q('b1ExcludeEntityWithTagName')) on.push(['entities tagged "' + q('b1ExcludeEntityWithTagName') + '"']);
+    if (s.b2ExcludeOrganized) on.push(['Organized entities']);
+    if (s.c1ExcludeTagWithIgnoreAutoTag) on.push(['tags set to Ignore Auto Tag']);
+    if (q('c2ExcludeAddTagNameContains')) on.push(['Roll-Up adds no tag whose name contains ' + words('c2ExcludeAddTagNameContains')]);
+    if (q('c3ExcludeRemoveTagNameContains')) on.push(['Prune removes no tag whose name contains ' + words('c3ExcludeRemoveTagNameContains')]);
+    if (q('c5ExcludeAddTagWithCustomFieldName')) on.push(['Roll-Up adds no tag carrying the custom field ', cf('c5ExcludeAddTagWithCustomFieldName')]);
+    if (q('c6ExcludeRemoveTagWithCustomFieldName')) on.push(['Prune removes no tag carrying the custom field ', cf('c6ExcludeRemoveTagWithCustomFieldName')]);
+    if (!on.length) return 'Nothing is excluded.';
+    // Each exclusion in force in the semi level, as the dialog names them.
+    var parts = ['Leaving alone: '];
+    on.forEach(function (c, i) { parts = parts.concat(i ? ['; '] : [], C.atLevel(c, 'semi')); });
+    return parts.concat('.');
+  }
+
+  var exclusionDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'npt', key: 'exclusions', title: 'Exclusion Filters',
+    line: 'Which entities and which tags Prune and Roll-Up leave alone: a tag or Organized on the entity, ' +
+      'Ignore Auto Tag, and words in a tag\'s name or a custom field on it, for adding and removing apart. ' +
+      'Eight settings, in a dialog.',
+    fields: EXCL_FIELDS,
+    summary: exclusionSummary,
+    settings: function () { return _autoSettings || DEFAULTS; },
+    load: function () { return loadSettings(true).then(function (r) { return r.settings; }); },
+    saved: function () { invalidateAutoSettings(); return autoSettings(); },
+  });
+
+  // The `[npt gate]` console channel Dev Mods' Log Button Visibility switch opens, from Core.
   var gate = C.gate('npt'), gateLog = gate.log, gateLogOnce = gate.once;
 
   // ── Manual buttons on an entity page ──────────────────────────────────────
@@ -4273,9 +4310,20 @@
         // Whether to stand down for someone else's lease is decided inside
         // autoNormalize, once the settings say an auto-mode is actually on - asking
         // here would announce "standing down" for a plugin that is not running.
+        //
+        // Registered now, synchronously, on Core's settling registry, so a sibling reading
+        // this entity after the save - Scene Variants' offer - waits for the prune or
+        // roll-up rather than reading the tags it is about to change. Only where this type's
+        // auto-mode is on, or not known yet (the settings are read asynchronously, and the
+        // reaction ends at once if it turns out off); released whatever the reaction does -
+        // writes, stands down for a lease, finds nothing, fails.
+        var reacting = !_autoSettings || modeOf(_autoSettings, type) !== MODE_OFF;
+        var dones = reacting ? ids.map(function (id) { return settle(settleKey(type), String(id)); }) : [];
+        var release = function () { dones.forEach(function (d) { d(); }); };
         mutationSucceeded(p).then(function (ok) {
-          if (ok) autoReact(type, ids);
-        });
+          if (!ok) { release(); return; }
+          autoReact(type, ids).then(release, release);
+        }, release);
       });
     } catch (e) {
       // Not JSON, or no variables - nothing to match on.

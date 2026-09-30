@@ -118,18 +118,20 @@ Whichever way tags get merged, every merge can optionally be logged to your brow
 
 The two buttons appear in different places, because each one sits where the content it acts on is visible.
 
-Both are **amber**, where Stash's own row actions are grey. Amber is this repo's
+Both are **orange**, where Stash's own row actions are grey. Orange is this repo's
 colour for "a plugin put this here, and pressing it writes to entities other than the one in front
 of you" — the same colour `PropagateTagsAndPerformers` uses, so a row holding buttons from both
 reads as one kind of thing rather than two. It is deliberately not the blue of a primary action:
 Save is still the primary action on those pages. The plugin's task button in
-**Settings → Tasks → Plugin Tasks** is amber too, and so are **Proceed** and **Undo** in the review
+**Settings → Tasks → Plugin Tasks** is orange too, and so are **Proceed** and **Undo** in the review
 dialog — the two buttons in that footer that change anything.
 
-Four of the settings are colour-coded on the same principle. **Save Immediately** and the two
-**Auto-Merge** switches are amber — they are what make the plugin write without showing you a plan
-first — and the logging switch below is teal, for one that only talks to the console. Everything
-else stays Stash's blue.
+The settings are color-coded on the same principle: in the **Buttons and Auto-Merge**
+dialog, **Save Immediately** and the two **Auto-Merge** switches are in the Highlighted Text Color — they are what make the
+plugin write without showing you a plan first — and the four **Exclusion Filters** in a paler
+shade of it, since they decide what those writes leave alone. The buttons on the rows that open the
+two dialogs look like Stash's own Edit buttons, but orange, and each row's heading takes the shade
+of the settings inside it.
 
 **Performer page** — enable **Show Manual Buttons** in settings, then open any performer's page. If they have at least one tag and at least one scene, a **"Add Tags to all Scenes..."** button appears in the button bar on the detail view, just before the Delete button. Clicking it opens the review dialog scoped to that performer: it lists every tag it would add to every one of their scenes, and writes nothing until you press **Proceed**. Scenes already having all the tags are skipped, and **Undo** takes the merge back while the dialog stays open.
 
@@ -177,16 +179,18 @@ Additionally, if the staging mode fails, the button opens that same dialog and l
 
 ### Exclusion filters
 
-Four optional exclusion filters in settings let you protect certain scenes or tags from being touched:
+Four optional exclusion filters let you protect certain scenes or tags from being touched. They are
+in one dialog, opened from the **Exclusion Filters** row of the plugin's settings, which says which
+of them do something now; each has its whole description when you hover it there:
 
-- **Exclude scenes carrying this tag** — enter a tag name; any scene carrying that tag is skipped. The tag is looked up by exact name, and a tag one of whose aliases is that exact string counts too, with the name winning where both match; the result is re-checked periodically, so creating, deleting or recreating the tag is picked up without a page reload. Once it resolves, a **🔗** appears on the value's own line, just after the name and left of **Edit**, linking to the tag it found — so a typo shows up as a missing link rather than as a merge that refuses to run. Hover it for what that tag is: its picture, its aliases, its [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parents</abbr>](../GLOSSARY.md#parent), its children and its description. **If no tag by that name exists, nothing is merged at all** — a typo would otherwise leave every scene you meant to protect unprotected, and merging cannot be undone once it has happened. Create the tag, or clear the setting; the browser console says which. The exclusion tag itself is never merged into a scene, even if one of the performers carries it.
-- **Exclude scenes marked as Organized** — scenes with the "organized" flag set are skipped entirely.
-- **Never merge tags set to Ignore Auto Tag** — performer tags that have "Ignore Auto Tag" enabled in their tag settings are not merged into scenes.
-- **Never merge tags marked via a Custom Field** — enter a custom field name; performer tags carrying that custom field are not merged into scenes. **Only the presence of the field matters** — the value is never looked at, so any value at all (including a blank one) excludes the tag. To have a tag merged again, remove the field from it rather than trying to set it to something falsy. Once it is set, a **ⓕ** appears beside the value: hover it for what the field is — the description `ᝯㄝₓ Custom Fields Bulk Editor` holds for it, how many entities carry it, and the first ten of them by name and type. Nothing is read until you hover, because finding the carriers means seven filtered queries and this page redraws every second ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)).
+- **Exclude Scenes Carrying This Tag** — enter a tag name; any scene carrying that tag is skipped. The tag is looked up by exact name, and a tag one of whose aliases is that exact string counts too, with the name winning where both match; the result is re-checked periodically, so creating, deleting or recreating the tag is picked up without a page reload. Once it resolves, a **🔗** appears beside its box in the dialog, linking to the tag it found — so a typo shows up as a missing link rather than as a merge that refuses to run. Hover it for what that tag is: its picture, its aliases, its [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parents</abbr>](../GLOSSARY.md#parent), its children and its description. **If no tag by that name exists, nothing is merged at all** — a typo would otherwise leave every scene you meant to protect unprotected, and merging cannot be undone once it has happened. Create the tag, or clear the setting; the browser console says which. The exclusion tag itself is never merged into a scene, even if one of the performers carries it.
+- **Exclude Scenes Marked as Organized** — scenes with the "organized" flag set are skipped entirely.
+- **Never Merge Tags Set to Ignore Auto Tag** — performer tags that have "Ignore Auto Tag" enabled in their tag settings are not merged into scenes.
+- **Never Merge Tags Marked via This Custom Field** — enter a custom field name; performer tags carrying that custom field are not merged into scenes. **Only the presence of the field matters** — the value is never looked at, so any value at all (including a blank one) excludes the tag. To have a tag merged again, remove the field from it rather than trying to set it to something falsy. Where `ᝯㄝₓ Custom Fields Bulk Editor` describes the field, a **ⓕ** appears beside its box: hover it for what the field is — that description, how many entities carry it, and the first ten of them by name and type. The carriers are not read until you hover, because finding them means seven filtered queries ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)).
 
 ### Logging merges to the browser console
 
-Enable **Log every merge to the Browser Console (Info level)** to have every tag the plugin adds reported, one line per tag and scene, at `info` level:
+Turn on **Log Merge Performer Tags to the Browser Console** in ᝯㄝₓ Core's **Dev Mods** to have every tag the plugin adds reported, one line per tag and scene, at `info` level:
 
 ```
 [MergePerformerTagsToScenes] Tag "Blonde" (12) saved to Scene "My Scene" (345)
@@ -203,7 +207,7 @@ As soon as the plugin picks the setting up it says so once, so you can tell it i
 [MergePerformerTagsToScenes] merge logging enabled — one line will appear here per tag merged into a scene. The number in brackets after a name is that tag's or scene's id.
 ```
 
-If you tick the setting and that line never appears, check in this order: you are looking at the browser's console rather than the Stash log; the console's level filter is not hiding **Info** messages (Chrome collapses them under "Verbose"/"Info" in the level dropdown); and the browser is not still running an older copy of the plugin's JavaScript — the version line the plugin logs at load says which one it is, and reloading the page (F5) picks up a newly copied file.
+If you turn the switch on and that line never appears, check in this order: you are looking at the browser's console rather than the Stash log; the console's level filter is not hiding **Info** messages (Chrome collapses them under "Verbose"/"Info" in the level dropdown); and the browser is not still running an older copy of the plugin's JavaScript — the version line the plugin logs at load says which one it is, and reloading the page (F5) picks up a newly copied file.
 
 The action tells you where the tag went:
 
@@ -212,24 +216,29 @@ The action tells you where the tag went:
 
 Only tags that actually changed something are logged: a tag the scene already carried, a scene skipped by an exclusion filter, and a scene whose update failed all produce no line (failures are reported separately as errors). A merge that had nothing to do is therefore silent — which is why the banner above exists. Scenes without a title are named by their file name.
 
-This setting is independent of everything else — it does not change what gets merged, only what is reported. The extra fields the log line needs (tag names, scene titles) are requested from Stash only while it is enabled.
+This switch is independent of everything else — it does not change what gets merged, only what is reported. The extra fields the log line needs (tag names, scene titles) are requested from Stash only while it is enabled.
 
 ## Settings
 
-All in **Settings → Plugins → ᝯㄝₓ Merge Performer Tags To Scenes**; every switch is off and every
-box empty until you change it.
+All in **Settings → Plugins → ᝯㄝₓ Merge Performer Tags To Scenes**, in two rows, each saying what
+its settings are set to and opening a dialog that holds them; every switch is off and every box empty
+until you change it. Each is stored under its own key as a row of its own would be, so `config.yml`
+still edits them, and the sibling plugin still reads the filters from there.
 
 | Setting | Default | What it does |
 |---|---|---|
+| **Buttons and Auto-Merge** | every switch off | The row and dialog holding the next four. |
 | **Show Manual Buttons** | off | Draws the two [manual buttons](#usage), on the performer detail view and the scene Edit tab. |
 | **Save Immediately** | off | Makes the scene button review in a dialog instead of [staging into the form](#review-before-saving-in-scene-edit-tab-manual-merge). |
 | **Auto-Merge when the Scene is Saved** | off | Whenever a scene is saved, its performers' tags are merged in, with no dialog; only ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history) can take it back. |
 | **Auto-Merge when the Performer is Saved** | off | Whenever a performer is saved, their tags are merged into all of their scenes, the same way. |
-| **Exclude scenes carrying this tag** | empty | A scene carrying this tag is skipped — see [Exclusion filters](#exclusion-filters). |
-| **Exclude scenes marked as Organized** | off | A scene with Stash's [<abbr title="Stash's per-scene, image and gallery flag saying you have finished organizing it.">Organized</abbr>](../GLOSSARY.md#organized) flag set is skipped. |
-| **Never merge tags set to Ignore Auto Tag** | off | A performer tag with "Ignore Auto Tag" set is not merged. |
-| **Never merge tags marked via a Custom Field** | empty | A performer tag carrying this custom field is not merged. |
-| **Log every merge to the Browser Console (Info level)** | off | One console line per tag merged — see [Logging merges to the browser console](#logging-merges-to-the-browser-console). |
+| **Exclusion Filters** | nothing excluded | The row and dialog holding the next four — see [Exclusion filters](#exclusion-filters). |
+| **Exclude Scenes Carrying This Tag** | empty | A scene carrying this tag is skipped. |
+| **Exclude Scenes Marked as Organized** | off | A scene with Stash's [<abbr title="Stash's per-scene, image and gallery flag saying you have finished organizing it.">Organized</abbr>](../GLOSSARY.md#organized) flag set is skipped. |
+| **Never Merge Tags Set to Ignore Auto Tag** | off | A performer tag with "Ignore Auto Tag" set is not merged. |
+| **Never Merge Tags Marked via This Custom Field** | empty | A performer tag carrying this custom field is not merged. |
+
+Console logging is in ᝯㄝₓ Core's **Dev Mods** — see [Logging merges to the browser console](#logging-merges-to-the-browser-console).
 
 ## Relationship to the other plugins in this repo
 
@@ -295,7 +304,7 @@ both plugins only ever add tags, so running both is redundant work and doubled l
 wrong data. Nothing is suppressed and nothing blocks; disable one if you would rather not see it
 twice.
 
-**Settings → Plugins says so too, right after this plugin's name on its heading line**, in amber: that plugin
+**Settings → Plugins says so too, right after this plugin's name on its heading line**, in the Highlighted Text Color: that plugin
 is present and functionally supersedes this one — named short, with the full name on hover.
 The mark appears only while its performer-tags-onto-scenes path is actually enabled: installed
 with that path switched off, it replaces nothing and nothing is said. **Disabled in Stash counts as
@@ -325,7 +334,7 @@ actually honours, which is not the same one for both kinds of row Stash uses her
   - It always covers **every scene featuring the performer**, as does auto-merge on performer update. Neither reads the scene list's filter or selection — the scenes come from a server query keyed only on the performer, so the plugin never sees what the list is showing. Only the exclusion filters narrow it.
 - **Exclusion filters**
   - They apply to both manual button clicks and auto-merge.
-  - The "Exclude scenes carrying this tag" value must match a tag's name, or one of its aliases, exactly (case-sensitive); every name is tried before any alias. Stash's own name search is case-insensitive and treats `_` and `%` as wildcards, so the plugin fetches all candidates and re-checks on the client to be sure it excludes the tag you meant.
+  - The "Exclude Scenes Carrying This Tag" value must match a tag's name, or one of its aliases, exactly (case-sensitive); every name is tried before any alias. Stash's own name search is case-insensitive and treats `_` and `%` as wildcards, so the plugin fetches all candidates and re-checks on the client to be sure it excludes the tag you meant.
   - The "Never merge tags marked via a Custom Field" value must match the custom field name exactly (case-sensitive). The plugin only queries tag custom fields when this setting is non-empty, so leaving it blank keeps them out of every merge query.
   - If the exclusion-tag lookup fails (server restart, network blip), the merge aborts rather than running unfiltered — merging into a scene you meant to protect is not something a button click can take back, since merging only ever adds tags. A manual click reports this in an alert; an auto-merge reports it only to the browser console, so nothing visibly happens in the UI.
   - That lookup is cached — 60 seconds for a hit, 10 for a miss — so creating, renaming or deleting the tag takes up to a minute to be noticed, and a merge in the meantime can run unfiltered. Waiting the window out is enough; reload the page to apply it at once, since navigating within Stash does not clear the cache. Pointing the setting at a different name takes effect immediately.
@@ -362,7 +371,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Merge Performer Tags into All Their Scenes | 271 MB | 295 MB | 283 MB |
+| Merge Performer Tags into All Their Scenes | 271 MB | 292 MB | 283 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
@@ -377,8 +386,8 @@ and what Undo takes back are all whole.
 
 A button hides itself whenever clicking it would add nothing, and most of the reasons
 are invisible from the page — the sources' tags, the target's own tags, the exclusion filters. Turn
-on the [debug switch](../GTTxCore/README.md#the-debug-switch)
-(`__GTTx__.StashPluginCoop.debugButtons = true` in the browser console) and each button reports
+on ᝯㄝₓ Core's [Log Button Visibility to the Browser Console](../GTTxCore/README.md#logging-button-visibility)
+(or `__GTTx__.StashPluginCoop.logButtonVisInfo = true` in the browser console) and each button reports
 whether it is shown or hidden and why, prefixed `[cpt2s gate]`, on the next tick.
 
 ### The README link in settings

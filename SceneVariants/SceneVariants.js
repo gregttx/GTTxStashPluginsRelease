@@ -35,11 +35,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[svr] ᝯㄝₓ Scene Variants cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[svr] ᝯㄝₓ Scene Variants cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -49,7 +49,7 @@
   var showDefaults = C.showDefaults, coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
-    entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipTick = C.cfTipTick, cfTipMark = C.cfTipMark,
+    entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
     staleReloadButton = C.staleReloadButton, splitTerms = C.splitTerms, tipText = C.tipText,
     hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, byClass = C.byClass,
     coreSettingRow = C.settingRow, foreignLease = C.foreignLease, paintButton = C.paintButton,
@@ -71,7 +71,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '3.0.5';
+  var PLUGIN_VERSION = '3.1.13';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all.
@@ -139,7 +139,6 @@
     a2PartialLengthTag: '',
     a3VariantStashIdField: '',
     a4VariantFlagTag: '',
-    b1LogToConsole: false,
     c0ShowCardCount: false,
     c1PropagateOnSave: false,
     c3SkipRedundantTags: false,
@@ -351,7 +350,7 @@
   // save watch made the plugin reactive - it answers a scene save with a dialog, and a
   // library-wide bulk edit must not raise one per scene, so the watch samples the
   // lease *before* the save goes through and stands down while one is held. It reads
-  // `debugButtons` too - the tab is a control drawn into Stash's chrome and "why is it
+  // `logButtonVisInfo` too - the tab is a control drawn into Stash's chrome and "why is it
   // not there" is the same question that flag answers for every sibling.
 
   // A bulk run holds Core's `lease` for the duration of its writes, so a reactive plugin
@@ -361,8 +360,8 @@
 
   // ── Tab gating diagnostics ───────────────────────────────────────────────
   //
-  // Core's `[svr gate]` console channel, off unless Dev Mods' Debug switch (or
-  // `__GTTx__.StashPluginCoop.debugButtons = true`) is on - read at call time, so it takes
+  // Core's `[svr gate]` console channel, off unless Dev Mods' Log Button Visibility switch (or
+  // `__GTTx__.StashPluginCoop.logButtonVisInfo = true`) is on - read at call time, so it takes
   // effect on the next tick. Deduplicated per channel, because a React re-render can ask
   // the same question many times a second.
   var GATE = C.gate('svr');
@@ -514,7 +513,7 @@
   }
 
   function logToConsole(msg) {
-    if (settings().b1LogToConsole) console.info('[svr] ' + msg);
+    if (logsToConsole(PLUGIN_ID)) console.info('[svr] ' + msg);
   }
   // ── The tag tree ───────────────────────────────────────────────────────
   //
@@ -1324,7 +1323,7 @@
     this.syncSetBtn = button('Synchronize Set from Selected...', 'svr-syncset svr-hidden', PLUGIN_BTN_VARIANT);
     this.closeBtn = button('Close', 'svr-close');
     // Reads nothing and writes nothing: it opens the set below the open one.
-    this.nextSetBtn = button('Next Set', 'svr-nextset svr-hidden', 'btn-info');
+    this.nextSetBtn = button('Next Set', 'svr-nextset svr-hidden', 'btn-primary');
     this.copyBtn = button('Copy log', 'svr-copy');
     // Grey: it reads the library again and writes nothing. Hidden while anything is
     // in flight, like Stop's mirror image - a second scan started over a running one
@@ -2276,7 +2275,7 @@
     var line = el('div', 'svr-line svr-' + kind);
     line.textContent = '[' + kind + '] ' + message;
     this.appendLine(line, '[' + kind + '] ' + message);
-    if (settings().b1LogToConsole) console.info('[svr] ' + kind + ': ' + message);
+    if (logsToConsole(PLUGIN_ID)) console.info('[svr] ' + kind + ': ' + message);
   };
 
   // The scene is a link and a card, like every name the siblings' dialogs draw: this is
@@ -4818,7 +4817,7 @@
   var TITLE_TASK_NAME = 'Variants Title...';
 
   var TITLE_FIELDS = [
-    { key: 'c5PropagateTitleOnSave', bool: true, label: 'Rename Variants After a Title Change',
+    { key: 'c5PropagateTitleOnSave', bool: true, label: 'Rename Variants After a Title Change', warn: true,
       tip: 'Also list the title in the propagate dialog when a save changed it, each ' +
         'partial named under the new base.\n\nOff by default: a title is the one value a ' +
         'variant most deliberately owns, so pushing it is opted into twice - here and then ' +
@@ -4826,7 +4825,7 @@
         'While this is off, a dialog raised by a save that changed the title says so in its ' +
         'listing rather than silently dropping the change. Only the save-triggered dialog ' +
         'reads this: the Synchronize Variants button on the tab always lists titles, unticked.' },
-    { key: 'e1PartialPostfix', label: 'Partial-duration Title Postfix',
+    { key: 'e1PartialPostfix', label: 'Partial-duration Title Postfix', warn: 'semi',
       tip: 'What goes after the set\'s base-title to title a partial-duration scene, ' +
         'separators included: nothing is added between the base and the postfix, or between ' +
         'the postfix and the index.\n\nDefault " - Promo ", so a cut of \'Song\' is \'Song - ' +
@@ -4834,7 +4833,7 @@
         '\'Song - Promo 1\' and \'Song - Promo 2\'. \' - cut #\' with a first index of \'00\' ' +
         'gives \'Song - cut #00\'. Empty means no postfix: \'Song1\' and \'Song2\', or \'Song\' ' +
         'alone with no first index either.' },
-    { key: 'e2FirstIndex', label: 'First Partial Index',
+    { key: 'e2FirstIndex', label: 'First Partial Index', warn: 'semi',
       tip: 'The index the first partial of a set gets when a set has more than one - or ' +
         'always, with the switch below - and how the rest are counted: its spelling is the ' +
         'rule.\n\n"1" counts 1, 2, 3; "01" counts 01, 02 and on past 99; "A" counts A to Z ' +
@@ -4842,11 +4841,11 @@
         'Indexes are handed out longest scene first, and an index a title already carries in ' +
         'the expected shape is kept. Empty means no index at all: every partial wears the ' +
         'postfix alone.' },
-    { key: 'e2bIndexLonePartial', bool: true, label: 'Index a Set\'s Only Partial',
+    { key: 'e2bIndexLonePartial', bool: true, label: 'Index a Set\'s Only Partial', warn: 'semi',
       tip: 'On, a set with a single partial-duration scene gets the first index too: ' +
         '\'Song - Promo 1\'. Off, it wears the postfix alone: \'Song - Promo\'.\n\nNothing ' +
         'changes without a first index.' },
-    { key: 'e2cRenumberByDuration', bool: true, label: 'Renumber by Duration',
+    { key: 'e2cRenumberByDuration', bool: true, label: 'Renumber by Duration', warn: 'semi',
       tip: 'On, every partial of a set is expected to carry the index its duration gives ' +
         'it, longest first, so a set numbered the other way round is title drift and each ' +
         'dialog offers the swap.\n\nOff, a partial already carrying an index in the expected ' +
@@ -4854,7 +4853,7 @@
         'one. The box in the Rename Variants dialog starts from this and overrides it for ' +
         'that dialog only. A scene marked in the no-rename field or wearing the no-rename ' +
         'tag keeps its title either way.' },
-    { key: 'e3BaseNameField', cfDefault: BASE_FIELD_DEFAULT, label: 'Variant Base-Title Custom Field',
+    { key: 'e3BaseNameField', cfDefault: BASE_FIELD_DEFAULT, label: 'Variant Base-Title Custom Field', warn: 'semi',
       tip: 'The custom field whose value names a variant set: whatever is written in it on ' +
         'any scene of the set is the base every partial is titled from, before the postfix ' +
         'and the index. Empty means the default name, ' + BASE_FIELD_DEFAULT + '.\n\n' +
@@ -4872,13 +4871,13 @@
         'and never checked against the titles: a value left on a partial from a set it ' +
         'used to belong to names the whole set. A scene marked in the no-rename field or ' +
         'wearing the no-rename tag keeps its title whatever the base is.' },
-    { key: 'e4NoRenameField', cfDefault: SKIP_FIELD_DEFAULT, label: 'Variant No-Rename Custom Field',
+    { key: 'e4NoRenameField', cfDefault: SKIP_FIELD_DEFAULT, label: 'Variant No-Rename Custom Field', warn: 'semi',
       tip: 'A custom field that, set to anything on a scene, keeps every title rule from ' +
         'proposing a title for it. Empty means the default name, ' + SKIP_FIELD_DEFAULT +
         '.\n\nFor the partial that falls outside the rule. The scene is still counted as ' +
         'a member of its set - its title is simply never the one the set would give it, ' +
         'and never counted as drift.' },
-    { key: 'e5NoRenameTag', label: 'Exclude Scenes Carrying This Tag From Renaming',
+    { key: 'e5NoRenameTag', label: 'Exclude Scenes Carrying This Tag From Renaming', warn: 'semi',
       tip: 'The name of a tag: a scene carrying it, or any tag filed under it, is left ' +
         'alone by every title rule, the same way the no-rename field leaves one alone.\n\n' +
         'Matched by name or alias, without regard to case, like the tags on the settings ' +
@@ -4911,7 +4910,7 @@
     this.modal.appendChild(head);
     this.body = el('div', 'svr-form');
     TITLE_FIELDS.forEach(function (f) {
-      var row = el('label', 'svr-field');
+      var row = C.markLevel(el('label', 'svr-field'), f.warn);
       row.title = f.tip;
       var box = el('input', 'svr-field-box');
       box.type = f.bool ? 'checkbox' : 'text';
@@ -5036,17 +5035,23 @@
   // What the eight settings say now, in one line under the row's description, the way
   // Stash shows a setting's value under its own.
   // Text, with each custom field's name as `{ cf }` so the row can mark it.
+  // The title rules, always in force, in the semi level; the renaming offer in the highlight
+  // while it is on, as the dialog names them.
   function titleSummaryParts(s) {
     var nm = naming(s);
-    return ['Postfix "' + (nm.postfix || '') + '"' + (nm.postfix ? '' : ' (none)') +
+    var rules = C.atLevel(['Postfix "' + (nm.postfix || '') + '"' + (nm.postfix ? '' : ' (none)') +
       (nm.first ? ', indexes from "' + nm.first + '"' + (nm.loneIndex ? ', a lone partial indexed too' : '') +
         (nm.renumber ? ', renumbered by duration' : ', indexes kept') : ', no index') +
-      '; base-title in "', { cf: nm.baseField }, '", no-rename in "', { cf: nm.skipField }, '"' +
-      (nm.skipTag ? ' or tagged "' + nm.skipTag + '"' : '') +
-      '; a title change after a save is ' + (s.c5PropagateTitleOnSave ? '' : 'not ') + 'offered to the variants.'];
+      '; base-title in ', { cf: nm.baseField }, ', no-rename in ', { cf: nm.skipField },
+      nm.skipTag ? ' or tagged "' + nm.skipTag + '"' : ''].filter(function (p) { return p !== ''; }), 'semi');
+    return rules.concat(s.c5PropagateTitleOnSave
+      ? ['; ', { text: 'a title change after a save is offered to the variants.', hl: true }]
+      : ['; a title change after a save is not offered to the variants.']);
   }
   function titleSummary(s) {
-    return titleSummaryParts(s).map(function (p) { return typeof p === 'string' ? p : p.cf; }).join('');
+    return titleSummaryParts(s).map(function (p) {
+      return typeof p === 'string' ? p : p.cf != null ? '"' + p.cf + '"' : p.text;
+    }).join('');
   }
   // A custom field's ⓕ after its name, where Custom Fields Bulk Editor describes it.
   function markField(nameNode, field) {
@@ -5055,16 +5060,11 @@
       nameNode.parentNode.insertBefore(mark, nameNode.nextSibling);
     });
   }
+  // Drawn as Core draws every row's summary: the values in the row's font, the words around
+  // them in sans-serif, each custom field quoted with its ⓕ inside the quotes.
   function drawTitleSummary(node, s) {
-    while (node.firstChild) node.removeChild(node.firstChild);
     node._summary = titleSummary(s);
-    titleSummaryParts(s).forEach(function (p) {
-      if (typeof p === 'string') { node.appendChild(el('span', null, p)); return; }
-      var name = el('span', 'svr-cfname', p.cf);
-      name._cf = p.cf;
-      node.appendChild(name);
-      markField(name, p.cf);
-    });
+    C.drawSummary(node, titleSummaryParts(s));
   }
 
   function ensureTitleRow(group) {
@@ -5090,7 +5090,7 @@
     drawTitleSummary(row._sum, settings());
     row.appendChild(left);
     var right = el('div');
-    var btn = button(TITLE_TASK_NAME, 'svr-title-btn', PLUGIN_BTN_VARIANT);
+    var btn = C.settingButton(TITLE_TASK_NAME, 'svr-title-btn');
     btn.title = 'Open the title rules. Nothing is written until you press Save there.';
     btn.addEventListener('click', function (e) {
       if (e && e.preventDefault) e.preventDefault();
@@ -5099,6 +5099,7 @@
     });
     right.appendChild(btn);
     row.appendChild(right);
+    C.levelRow(row, C.parentLevel(TITLE_FIELDS.map(function (f) { return f.warn; })), btn);
     (host || group).appendChild(row);
   }
 
@@ -5726,14 +5727,14 @@
     // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
     '.svr-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.svr-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.svr-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.svr-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.svr-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.svr-title{font-size:1.1rem;font-weight:600;}' +
-    '.svr-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.svr-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.svr-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.svr-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.svr-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.svr-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.svr-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.svr-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.svr-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
@@ -5744,15 +5745,15 @@
     // An entity named in the log is a link to it. The same blue the siblings' result
     // lines use, underlined only on hover so a log full of them does not read as a
     // page of underlines.
-    '.svr-elink{color:#7cc4ff;text-decoration:none;}' +
+    '.svr-elink{text-decoration:none;}' +
     '.svr-elink:hover{text-decoration:underline;}' +
-    '.svr-spin{color:#a7b6c2;}' +
-    '.svr-ERROR{color:#ff7373;} .svr-WARN{color:#ffb648;} .svr-INFO{color:#a7b6c2;}' +
-    '.svr-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.svr-spin{color:var(--gttx-muted,#a7b6c2);}' +
+    '.svr-ERROR{color:#ff7373;} .svr-WARN{color:var(--gttx-highlight,#ffc107);} .svr-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.svr-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.svr-foot button{margin-right:.5rem;}' +
-    '.svr-foot-label{color:#7d8f9c;}' +
-    '.svr-foot-sep{color:#7d8f9c;padding:0 .75rem;}' +
+    '.svr-foot-label{color:var(--gttx-dim,#7d8f9c);}' +
+    '.svr-foot-sep{color:var(--gttx-dim,#7d8f9c);padding:0 .75rem;}' +
     '.svr-unselall{margin-left:auto;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
     // one of these rules is a single class, so the last one written wins - and this one
@@ -5773,10 +5774,10 @@
     // already borrow from the tab's roles: green where the tag goes on, amber where it
     // comes off.
     '.svr-op-flag{color:#84d68a;}' +
-    '.svr-op-unflag{color:#ffb648;}' +
+    '.svr-op-unflag{color:var(--gttx-highlight,#ffc107);}' +
     // A [GROUP?] candidate is a question rather than a plan, so it wears the log's own
     // link blue - neither the green of a write going on nor the amber of one coming off.
-    '.svr-op-cand{color:#7cc4ff;}' +
+    '.svr-op-cand{color:var(--gttx-accent,#7cc4ff);}' +
     '.svr-cand-box{width:13px;height:13px;margin:3px 8px 2px 0;vertical-align:top;}' +
     // The synchronize listing colours the *change*, not the line. One vocabulary
     // across every dialog here, explained in each head's legend: what a variant loses
@@ -5791,7 +5792,7 @@
     // holds is a paragraph and the whole point is to show all of it.
     '.svr-difftip{display:none;position:fixed;left:0;top:0;z-index:1700;' +
     'width:min(60rem,90vw);max-height:70vh;overflow:hidden;padding:.5rem .65rem;' +
-    'background:#202b33;color:#f5f8fa;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.8rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.svr-difftip.svr-difftip-open{display:block;}' +
@@ -5803,22 +5804,22 @@
     // Left-aligned labels, centred marks, and the log's own borders so it reads as
     // part of the dialog rather than as a web page's table.
     '.svr-settable table{border-collapse:collapse;}' +
-    '.svr-settable th,.svr-settable td{border:1px solid #394b59;padding:.15rem .5rem;' +
+    '.svr-settable th,.svr-settable td{border:1px solid var(--gttx-border,#394b59);padding:.15rem .5rem;' +
     'text-align:center;white-space:nowrap;}' +
-    '.svr-settable th{color:#a7b6c2;font-weight:600;}' +
-    '.svr-settable-meta{font-weight:400;font-size:.9em;color:#7d8f9c;}' +
-    '.svr-settable-label{text-align:left !important;color:#f5f8fa !important;}' +
+    '.svr-settable th{color:var(--gttx-muted,#a7b6c2);font-weight:600;}' +
+    '.svr-settable-meta{font-weight:400;font-size:.9em;color:var(--gttx-dim,#7d8f9c);}' +
+    '.svr-settable-label{text-align:left !important;color:var(--gttx-fg,#f5f8fa) !important;}' +
     // `width:0;min-width:100%` is the caption trick: the note contributes nothing to
     // the box's shrink-to-fit width and then wraps at the table's, so a long sentence
     // cannot widen a box sized to its table.
-    '.svr-settable-note{color:#a7b6c2;margin-top:.35rem;white-space:normal;' +
+    '.svr-settable-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;white-space:normal;' +
     'width:0;min-width:100%;}' +
     '.svr-mark-ok{color:#84d68a;}' +
     '.svr-mark-bad{color:#ff7b72;margin-left:.15rem;}' +
     '.svr-coverfig{display:inline-block;vertical-align:top;margin:0 .4rem 0 0;' +
     'border:2px solid transparent;border-radius:3px;}' +
     '.svr-coverfig img{display:block;width:24rem;max-width:40vw;aspect-ratio:16/9;' +
-    'object-fit:contain;background:#111a20;}' +
+    'object-fit:contain;background:var(--gttx-sunken,#111a20);}' +
     '.svr-covercap{font-size:.75rem;text-align:center;padding:.15rem 0;}' +
     '.svr-cover-old{border-color:#ff7b72;}' +
     '.svr-cover-old .svr-covercap{color:#ff7b72;}' +
@@ -5826,14 +5827,14 @@
     '.svr-cover-new .svr-covercap{color:#84d68a;}' +
     '.svr-del{color:#ff7b72;}' +
     '.svr-add{color:#84d68a;}' +
-    '.svr-mod{color:#7cc4ff;}' +
+    '.svr-mod{color:var(--gttx-accent,#7cc4ff);}' +
     // The pane's one button, spaced off the summary above and the rows below.
     '.svr-sync-btn{margin:.25rem 0 .75rem;}' +
     // The All boxes' own strip, between the counters and the log: one label per
     // attribute, wrapping on a narrow window. The log's INFO grey - it is a control
     // strip, not a message.
-    '.svr-allbar{padding:.4rem 1rem;border-bottom:1px solid #394b59;display:flex;' +
-    'gap:1rem;flex-wrap:wrap;color:#a7b6c2;font-size:.85rem;}' +
+    '.svr-allbar{padding:.4rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;' +
+    'gap:1rem;flex-wrap:wrap;color:var(--gttx-muted,#a7b6c2);font-size:.85rem;}' +
     '.svr-all{display:inline-flex;align-items:center;gap:.35rem;margin:0;' +
     'cursor:pointer;}' +
     '.svr-all-box{margin:0;}' +
@@ -5844,7 +5845,7 @@
     // A size up from the log's .8rem monospace, from live feedback - at the log's own
     // size the arrow reads as punctuation, and it is the click target. The padding
     // widens that target a little without moving the text beside it.
-    '.svr-expand{cursor:pointer;color:#7cc4ff;font-size:1.35em;line-height:18px;' +
+    '.svr-expand{cursor:pointer;color:var(--gttx-accent,#7cc4ff);font-size:1.35em;line-height:18px;' +
     'vertical-align:top;padding:0 2px;}' +
     '.svr-expand:hover{text-decoration:underline;}' +
     '.svr-sub{margin-left:3.5rem;}' +
@@ -5869,8 +5870,8 @@
     'max-height:46vh;color-scheme:dark;padding:0 1rem;font-family:ui-monospace,' +
     'SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;line-height:19px;}' +
     '.svr-splitbar{flex:0 0 auto;height:8px;margin:.15rem 1rem .35rem;' +
-    'cursor:ns-resize;background:#2b3a45;border-radius:4px;}' +
-    '.svr-splitbar:hover{background:#425a6b;}' +
+    'cursor:ns-resize;background:var(--gttx-border-faint,#2b3a45);border-radius:4px;}' +
+    '.svr-splitbar:hover{background:var(--gttx-raised,#425a6b);}' +
     // The log after the bar - the shared `.log` rule stays as every sibling has it.
     '.svr-splitbar+.svr-log{flex-shrink:100000;}' +
     '.svr-set{white-space:pre-wrap;}' +
@@ -5878,17 +5879,17 @@
     // red as a set drifts further apart. The weights decide where the bands fall, so
     // a user who reprices a difference reprices the colours with it.
     '.svr-score{font-weight:600;}' +
-    '.svr-score-none{color:#84d68a;}' +
+    '.svr-score-none{color:var(--gttx-good,#84d68a);}' +
     '.svr-score-low{color:#ffe066;}' +
-    '.svr-score-mid{color:#ffb648;}' +
-    '.svr-score-high{color:#ff7b72;}' +
+    '.svr-score-mid{color:var(--gttx-average,#ffb648);}' +
+    '.svr-score-high{color:var(--gttx-bad,#ff7b72);}' +
     '.svr-src-box{width:13px;height:13px;margin:3px 6px 3px 0;vertical-align:top;}' +
     // The weights: a number box narrow enough that four of them and the label fit one
     // line, and wide enough for three digits.
     '.svr-weight{display:inline-flex;align-items:center;gap:.35rem;margin:0;' +
     'cursor:pointer;}' +
-    '.svr-weight-box{width:4rem;background:#30404d;color:#f5f8fa;border:1px solid ' +
-    '#425a6b;border-radius:3px;padding:0 .25rem;}' +
+    '.svr-weight-box{width:4rem;background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid ' +
+    'var(--gttx-border-strong,#425a6b);border-radius:3px;padding:0 .25rem;}' +
     // Two steps of the strip's own gap, so Remember reads as the thing beside the
     // numbers rather than the last of them.
     '.svr-remember{margin-left:2rem;}' +
@@ -5899,13 +5900,14 @@
     '.svr-modal.svr-tall{height:88vh;}' +
     '.svr-form{padding:.5rem 1rem;overflow:auto;}' +
     '.svr-field{display:flex;flex-wrap:wrap;align-items:center;gap:.45rem;' +
-    'margin:.6rem 0;color:#d6dee4;font-size:.9rem;cursor:pointer;}' +
+    'margin:.6rem 0;color:var(--gttx-fg2,#d6dee4);font-size:.9rem;cursor:pointer;}' +
     '.svr-field-label{font-weight:600;}' +
-    '.svr-field-box[type=text]{flex:1 1 14rem;background:#30404d;color:#f5f8fa;' +
-    'border:1px solid #425a6b;border-radius:3px;padding:.15rem .4rem;}' +
-    '.svr-field-box[type=checkbox]{accent-color:#ffc107;margin:0;}' +
-    '.svr-field-note{flex:1 0 100%;color:#7d8f9c;font-size:.8rem;}' +
-    '.svr-all-label{color:#7d8f9c;}' +
+    '.svr-field-box[type=text]{flex:1 1 14rem;background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;padding:.15rem .4rem;}' +
+    // A switch's tick takes its label's level from Core's `.gttx-lv-*`.
+    '.svr-field-box[type=checkbox]{margin:0;}' +
+    '.svr-field-note{flex:1 0 100%;color:var(--gttx-dim,#7d8f9c);font-size:.8rem;}' +
+    '.svr-all-label{color:var(--gttx-dim,#7d8f9c);}' +
     '.svr-item-box{width:13px;height:13px;margin:3px 6px 2px 0;vertical-align:top;}' +
     // A box that is settled by a write, or locked while one runs, is dimmed well past the
     // browser's own disabled grey, which on this dark modal reads almost as live.
@@ -5913,8 +5915,8 @@
     // The partner count inside a [FLAG] line: blue where there is exactly one other
     // scene, amber where there is a real choice. The blue is the log's own link blue,
     // so nothing new is introduced.
-    '.svr-num-one{color:#7cc4ff;font-weight:600;}' +
-    '.svr-num-many{color:#ffb648;font-weight:600;}' +
+    '.svr-num-one{color:var(--gttx-accent,#7cc4ff);font-weight:600;}' +
+    '.svr-num-many{color:var(--gttx-highlight,#ffc107);font-weight:600;}' +
     // ── The tab itself ──────────────────────────────────────────────────────
     //
     // Amber, so the one tab in the strip that Stash did not put there says so. This is the
@@ -5933,7 +5935,7 @@
     // appended after Stash's, so source order settles it without an `!important`. Hover,
     // focus and the active tab are named because Bootstrap sets each of them separately.
     '.nav-tabs .svr-tab-link,.nav-tabs .svr-tab-link:hover,' +
-    '.nav-tabs .svr-tab-link:focus,.nav-tabs .svr-tab-link.active{color:#ffb648;}' +
+    '.nav-tabs .svr-tab-link:focus,.nav-tabs .svr-tab-link.active{color:var(--gttx-highlight,#ffc107);}' +
     // The full-duration button: centred in the tab row, and bold so it reads as the way out.
     '.svr-full-item{display:flex;align-items:center;margin-left:.5rem;}' +
     '.svr-full-btn{font-weight:600;white-space:nowrap;}' +
@@ -5950,14 +5952,15 @@
     // plugins share has to mean the same thing in both, and a *tab* pane is not that.
     // A scene card's variant count, amber - mark and number - and the mark spaced like
     // Stash's own icons beside theirs. The selector outranks Stash's `.btn.minimal`.
-    '.card-popovers .svr-vcount .btn.minimal{color:#ffc107;}' +
-    '.svr-vcount-mark{margin-right:7px;}' +
-    // The same mark in its setting's name, amber like on the card it switches.
-    '.svr-amber-mark{color:#ffc107;}' +
+    '.card-popovers .svr-vcount .btn.minimal{color:var(--gttx-highlight,#ffc107);}' +
+    // As ᝯㄝₓ Core draws ⓕ and 🖬 beside it - monospace, then Core's GTTx Symbols where the
+    // machine has no ⸎ - but larger: a punctuation mark, ⸎ read smaller than the two at their
+    // 1.25em. 1.5em at `line-height:1` is the button's own line, so the row keeps its height.
+    '.svr-vcount-mark{margin-right:7px;font-family:monospace,monospace,"GTTx Symbols";font-size:1.5em;line-height:1;}' +
     '.svr-tabpane{padding:1rem;}' +
-    '.svr-summary{color:#7d8f9c;margin-bottom:.5rem;}' +
-    '.svr-drift{color:#7d8f9c;margin-bottom:.5rem;}' +
-    '.svr-boxlinks{color:#7d8f9c;margin:-.25rem 0 .5rem;}' +
+    '.svr-summary{color:var(--gttx-dim,#7d8f9c);margin-bottom:.5rem;}' +
+    '.svr-drift{color:var(--gttx-dim,#7d8f9c);margin-bottom:.5rem;}' +
+    '.svr-boxlinks{color:var(--gttx-dim,#7d8f9c);margin:-.25rem 0 .5rem;}' +
     '.svr-boxlink{margin-right:.75rem;}' +
     '.svr-cflinks{margin-left:.5rem;}' +
     '.svr-cflink{margin-right:.5rem;}' +
@@ -5969,25 +5972,25 @@
     // clip against here.
     '.svr-variant{display:flex;align-items:center;gap:.75rem;padding:.35rem .5rem;' +
     'border-radius:3px;position:relative;}' +
-    '.svr-variant:hover{background:#3c4f5d;}' +
+    '.svr-variant:hover{background:var(--gttx-raised,#3c4f5d);}' +
     // The delta box the row opens on hover, in place of a native title, which cannot be
     // styled. z-index 1700, the shared tipbox's own lesson: level with the backdrops is a
     // stacking race decided by document order. The colours are the dialogs' - #202b33
-    // panel, #ffb648 headers, the amber every warning here already wears.
+    // panel, headers in the Highlighted Text Color every warning here wears.
     '.svr-delta{display:none;position:absolute;left:.5rem;top:100%;z-index:1700;' +
-    'background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'padding:.5rem .75rem;max-width:min(56rem,90vw);font-size:.85rem;line-height:1.4;' +
     'pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5);}' +
     '.svr-variant:hover .svr-delta{display:block;}' +
-    '.svr-delta-hdr{color:#ffb648;font-weight:600;}' +
+    '.svr-delta-hdr{color:var(--gttx-highlight,#ffc107);font-weight:600;}' +
     // The hover delta's three sections, in the listing's own colours: what this
     // variant carries and the viewed scene does not is a gain, what it lacks is a
     // loss, and an attribute they disagree on is a modification. The headers stay
     // amber - they label a section rather than name a change.
     '.svr-delta-extra{color:#84d68a;}' +
     '.svr-delta-missing{color:#ff7b72;}' +
-    '.svr-delta-attrs{color:#7cc4ff;}' +
-    '.svr-delta-ignored{color:#8a8a8a;}' +
+    '.svr-delta-attrs{color:var(--gttx-accent,#7cc4ff);}' +
+    '.svr-delta-ignored{color:var(--gttx-dim,#8a8a8a);}' +
     // The asked-for half-line of air between sections, and only between them.
     '.svr-delta-sec+.svr-delta-sec{margin-top:.5em;}' +
     // A fixed 16:9 box, so a row is the same height whatever the cover's aspect is and the
@@ -6000,7 +6003,7 @@
     'border-radius:3px;}' +
     '.svr-organized{position:absolute;top:.2rem;right:.2rem;font-size:.85rem;' +
     'line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.8));}' +
-    '.svr-thumb{width:10rem;aspect-ratio:16/9;object-fit:cover;background:#0d1317;' +
+    '.svr-thumb{width:10rem;aspect-ratio:16/9;object-fit:cover;background:var(--gttx-sunken,#0d1317);' +
     'border-radius:3px;display:block;}' +
     // A column: the title, then the facts line under it.
     '.svr-variant-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;' +
@@ -6014,17 +6017,17 @@
     // different sizes: they are read together, at a glance, and a half-step between them
     // reads as one of them being an afterthought.
     '.svr-role,.svr-meta{font-size:.85rem;white-space:nowrap;}' +
-    '.svr-meta{color:#a7b6c2;}' +
+    '.svr-meta{color:var(--gttx-muted,#a7b6c2);}' +
     // The delta badges: an icon and a count per kind, absent at zero. The metadata grey,
     // because the icon is the distinguisher and three colours here would out-shout the
     // role column. The group is one inline-flex item in the wrapping facts row, so the
     // badges break onto the next line together rather than between each other.
     '.svr-dbadges{display:inline-flex;gap:.5rem;white-space:nowrap;}' +
-    '.svr-dbadge{font-size:.85rem;color:#a7b6c2;}' +
+    '.svr-dbadge{font-size:.85rem;color:var(--gttx-muted,#a7b6c2);}' +
     // The cover badge is the one that arrives a moment after the row, so it is also
     // the one that has to be noticed once it does - amber rather than the metadata
     // grey the counts wear.
-    '.svr-dbadge-cover{color:#ffb648;}' +
+    '.svr-dbadge-cover{color:var(--gttx-highlight,#ffc107);}' +
     // Green for the full-duration one, because it is the answer the tab exists to give;
     // amber for a partial; red for the scene wearing both tags, which is a contradiction.
     // An untagged scene has no label at all, which is the only quiet state left.
@@ -6036,66 +6039,28 @@
     // beside it does not answer that at a glance. Both values are the answer; only the
     // absence of one is context.
     '.svr-role-fl{color:#84d68a;}' +
-    '.svr-role-pl{color:#ffb648;}' +
+    '.svr-role-pl{color:var(--gttx-highlight,#ffc107);}' +
     '.svr-role-bad{color:#ff7373;}' +
     // Byte-identical to TagBundleClipboard's, because a class two plugins share has to
     // mean the same thing in both and here it does: the line standing in for a list
     // that has nothing in it.
-    '.svr-empty{padding:.5rem 1rem;color:#7d8f9c;}' +
+    '.svr-empty{padding:.5rem 1rem;color:var(--gttx-dim,#7d8f9c);}' +
     // Stash's own .sub-heading is white-space: normal, so this plugin's description
     // would collapse into one paragraph. Scoped to the group we marked, never to
     // .sub-heading at large: another plugin's description is not ours to reflow.
     '.svr-own-group .sub-heading{white-space:pre-wrap;}' +
     '.svr-own-group .sub-heading .svr-p{margin:0 0 .35em;}' +
     '.svr-own-group .sub-heading .svr-p:last-child{margin-bottom:0;}' +
-    // A per-setting description shows its first paragraph and hides the rest in a
-    // tooltip. The mark is the only thing saying there is one - a hover that opens with
-    // no invitation is a hover nobody makes. Built rather than borrowed: a native
-    // `title` opens below-right of the pointer, exactly where the arrow sits, so its
-    // first line arrives half covered, and its size cannot be reached from CSS.
-    //
-    // These rules are shared with every sibling plugin and `.tests/style.test.js`
-    // compares them with the prefix stripped: keep them byte-identical, or change all
-    // of them together.
-    '.svr-tipped{position:relative;}' +
-    '.svr-tip{margin-left:.35rem;cursor:pointer;opacity:.65;font-style:normal;' +
-    'font-size:1.05em;}' +
-    '.svr-tip:hover,.svr-tip:focus{opacity:1;outline:none;}' +
-    // pointer-events:none is load-bearing, not tidiness. Opened from the setting's
-    // name the box lands over the h3, so a box that took the pointer would fire
-    // mouseleave on the name, close, hand the pointer back to the name, and reopen -
-    // a flicker loop for as long as it is hovered.
-    '.svr-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
-    'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
-    'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
-    'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
-    '.svr-tipped.svr-tip-open .svr-tipbox{display:block;}' +
     // The group description sits in the group header, outside the <Collapse>, so it is
     // on screen at whatever size whether the group is expanded or not. Hiding all but
     // the first paragraph is the only thing that shortens it.
     '.svr-desc-collapsed .svr-p:not(:first-child){display:none;}' +
     '.svr-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
     '.svr-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
-    // ── Colour-coded toggles ────────────────────────────────────────────────
-    //
-    // Teal for the one setting that only talks to the console, matching every sibling.
-    // The two tag names keep Stash's blue: they say what a row is *called*, not what
-    // anything does on its own, and marking everything would mark nothing. Nothing here
-    // is amber, because nothing here writes.
-    //
-    // Keyed on the id SettingsPluginsPanel.tsx builds from the plugin id and the
-    // setting key, the same anchor `settingElement` uses, rather than on position or
-    // heading text. Two shapes because the switch is Stash's to render: `::before` is
-    // the track of the react-bootstrap Form.Switch it renders today, and `accent-color`
-    // covers a plain checkbox if that ever changes.
-    '#plugin-SceneVariants-b1LogToConsole{accent-color:#17a2b8;}' +
-    '#plugin-SceneVariants-b1LogToConsole:checked~.custom-control-label::before' +
-    '{background-color:#17a2b8;border-color:#17a2b8;}' +
     // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
     // picture. Fixed to the viewport and placed from the node, because the logs these
     // open over are `overflow:auto` boxes that would clip a positioned child against
@@ -6104,13 +6069,13 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // Each tag name's own row, when the name in it names something. A link, so the tag
     // is one click away and the name beside it can be selected; the same blue every
     // other link this plugin draws uses.
@@ -6118,7 +6083,8 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -6137,11 +6103,11 @@
     // would fire mouseleave on the mark, close, hand the pointer back and reopen.
     '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
     'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
-    '.svr-tagicon{margin-left:.9rem;color:#7cc4ff;text-decoration:none;}' +
+    '.svr-tagicon{margin-left:.9rem;text-decoration:none;}' +
     '.svr-tagicon:hover{text-decoration:underline;}';
 
   function injectStyle() {
@@ -6615,7 +6581,7 @@
               'Change them in Settings \u2192 Tasks \u2192 ' + PLUGIN_SHORT_NAME +
               ' \u2192 ' + REVIEW_TASK_NAME + ', on the strip above the listing; ' +
               'tick Remember there and this score follows.\n' +
-              'Green is nothing to do, or one point of it; yellow, amber and red as the set drifts ' +
+              'Green is nothing to do, or one point of it; yellow, orange and red as the set drifts ' +
               'further apart.' +
               (found.coverCheck ? '' : ' Covers are not compared while Compare Cover ' +
                 'Images is off.'),
@@ -6812,7 +6778,7 @@
       var href = '/scenes/' + pick.scene.id;
       return React.createElement(Nav.Item, { className: 'svr-full-item' },
         React.createElement('a', {
-          className: 'btn btn-sm btn-info svr-full-btn', role: 'button',
+          className: 'btn btn-sm btn-primary svr-full-btn', role: 'button',
           href: href, target: linkTarget(),
           title: 'Open ' + sceneLabel(pick.scene) + ', the full-duration variant of this ' +
             'partial-duration scene.' + (pick.of > 1
@@ -7086,22 +7052,7 @@
 
   function settingRow(key) { return coreSettingRow(PLUGIN_ID, key); }
 
-  // The ⸎ in Display Variant Count on Scene Cards' name, amber as on the cards. Stash
-  // puts the name back on a re-render, so this runs on every tick and is idempotent.
-  function amberMarkSetting() {
-    var row = settingRow('c0ShowCardCount');
-    var h3 = row && row.querySelector ? row.querySelector('h3') : null;
-    if (!h3 || byClass(h3, 'svr-amber-mark')) return;
-    var t = String(h3.textContent == null ? '' : h3.textContent), at = t.indexOf('⸎');
-    if (at === -1) return;
-    h3.textContent = t.slice(0, at);
-    h3.appendChild(el('span', 'svr-amber-mark', '⸎'));
-    h3.appendChild(el('span', null, t.slice(at + 1)));
-  }
-
   var TAG_LINK_MARK = '🔗';      // link symbol
-  var TAG_LINK_KEYS = ['a1FullLengthTag', 'a2PartialLengthTag', 'a4VariantFlagTag', 'e5NoRenameTag'];
-
   function tagLinkId(key) { return 'svr-taglink-' + key; }
 
   // **The tree the classifier reads cannot answer the tooltip**, and deliberately: it is
@@ -7124,35 +7075,21 @@
     return _tagDetail[id];
   }
 
-  function dropTagLink(key) {
-    var node = document.getElementById(tagLinkId(key));
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-  }
-
-  // The flag tag's box, like the field's, means its default when empty - so its link
-  // resolves the name in force rather than the raw setting, and never drops for an
-  // empty box the way the two length tags' links do.
-  function tagLinkName(key) {
-    return key === 'a4VariantFlagTag' ? flagTagName() : trim(settings()[key]);
-  }
-
-  function tagLinkTick(key) {
-    if (!settingRow(key)) return;
-    var name = tagLinkName(key);
-    if (!name) { dropTagLink(key); return; }
-    tagTree().then(function (tags) {
-      var row = settingRow(key);
-      if (!row || tagLinkName(key) !== name) return;   // the box moved on
+  // The link to the tag `name` resolves to, or null: what the Tags and Fields dialog draws
+  // beside the box naming it. Resolved through `tagsMatchingName`, the classifier's own rule,
+  // so a link here is the tag the tab actually classifies by. Nothing, rather than a warning,
+  // for a name that resolves to nothing: a box being typed into is empty, then wrong, then right.
+  // `idSuffix`: the row's summary draws a second link of its own beside the dialog's.
+  function tagLinkMark(key, name, idSuffix) {
+    if (!name) return null;
+    return tagTree().then(function (tags) {
       var hits = tagsMatchingName(tags, name);
-      if (!hits.length) { dropTagLink(key); return; }
+      if (!hits.length) return null;
       var tag = hits[0];
-      var node = document.getElementById(tagLinkId(key));
-      if (!node) {
-        node = el('a', 'svr-tagicon', TAG_LINK_MARK);
-        node.id = tagLinkId(key);
-        node.target = linkTarget();
-        node.rel = 'noopener noreferrer';
-      }
+      var node = el('a', 'svr-tagicon', TAG_LINK_MARK);
+      node.id = tagLinkId(key) + (idSuffix || '');
+      node.target = linkTarget();
+      node.rel = 'noopener noreferrer';
       node.href = '/tags/' + tag.id;
       var note = [];
       if (tag.name !== name) {
@@ -7164,23 +7101,171 @@
       }
       // The detail lands a moment after the link does, which is invisible - and where it
       // cannot be read the tree's own entry still names the tag and its aliases, so the
-      // tooltip degrades rather than disappearing.
-      // The tooltip goes through `tagTip`, which draws it as a `title` and reopens it as a
-      // box with the tag's picture above it wherever the tag has one.
+      // tooltip degrades rather than disappearing. It goes through `tagTip`, which draws it
+      // as a `title` and reopens it as a box with the tag's picture above it where it has one.
+      tagTip(node, tag.id, tagLinkTitle(tag, note.join(' ') || null));
       tagLinkDetail(tag.id).then(function (full) {
-        tagTip(node, tag.id, tagLinkTitle(full || tag, note.join(' ') || null));
+        if (full) tagTip(node, tag.id, tagLinkTitle(full, note.join(' ') || null));
       });
-      // At the end of Stash's own `.value`, so the link is on the same line as the name
-      // it resolves and to the left of the Edit button. `.setting` is
-      // `display:flex;align-items:center` with the heading, the value and the
-      // sub-heading stacked in one flex child and Edit alone in the other, so a node
-      // beside `.value` starts a line of its own beneath it and one next to Edit is
-      // centred against the whole stack. React owns this subtree; the tick re-adds the
-      // link, so a re-render dropping it costs a second.
-      var host = byClass(row, 'value') || row;
-      if (node.parentNode !== host) host.appendChild(node);
-    }, function () { /* a link is not worth an error */ });
+      return node;
+    }, function () { return null; });   // a link is not worth an error
   }
+
+  // ── Tags and Fields, and Scene Page Behaviour: two rows and two dialogs ────
+  //
+  // Nine settings - four names and five switches - were nine rows of the group beside the
+  // Variants Title row, and the page read as a wall. They are two rows now, each opening a
+  // dialog of Core's (`settingsDialog`): stored under the same keys, so nothing already set
+  // moves and config.yml still edits them; each keeps its whole description on hover. The
+  // tag names get their links and the field its ⓕ beside their boxes, where the rows carried
+  // them; an empty field or flag tag box shows the default it means.
+  var TAG_FIELDS = [
+    { key: 'a1FullLengthTag', label: 'Full-duration Tag',
+      text: true, wide: true,
+      mark: function (v) { return tagLinkMark('a1FullLengthTag', v); },
+      tip: 'The tag you put on a scene that is the whole work.\n\nTyped rather than picked, and compared ' +
+        'without regard to case or surrounding spaces. Any of the tag\'s aliases finds it as well as its ' +
+        'name, and a scene wearing any descendant of it counts as wearing it. Leave it empty and the tab ' +
+        'still lists the variants - it simply says nothing about which of them is the full one, which is ' +
+        'the honest answer when nothing has been tagged. A link to the tag appears beside the box once ' +
+        'the name resolves; no link means it matches nothing, and every scene will list as ' +
+        'unclassified.\n\nThis is the discriminator for the one dimension the plugin knows about. It ' +
+        'reads the tag and never writes it: a scene missing the tag is listed unclassified rather than ' +
+        'corrected.' },
+    { key: 'a2PartialLengthTag', label: 'Partial-duration Tag',
+      text: true, wide: true,
+      mark: function (v) { return tagLinkMark('a2PartialLengthTag', v); },
+      tip: 'The tag you put on a scene that is a cut out of a longer one.\n\nSame rules as the ' +
+        'full-duration tag above: typed, case-insensitive, aliases and descendants included, optional, ' +
+        'and linked beside the box once it resolves. Scenes wearing it sort below the full-duration ' +
+        'ones, since the tab\'s usual question is which variant is the whole work.\n\nA scene carrying ' +
+        'this tag and the full-duration one at the same time is shown in red. The two values are ' +
+        'mutually exclusive by definition, so the plugin reports the contradiction rather than picking a ' +
+        'winner. If the two settings name the same tag, or two tags one of which is inside the other, ' +
+        'the tab warns above the list instead: every scene under the overlap would otherwise be reported ' +
+        'as a contradiction of its own.' },
+    { key: 'a3VariantStashIdField', label: 'Variant Stash-ID Custom Field',
+      text: true, wide: true, dflt: FIELD_DEFAULT,
+      mark: function (v) { return cfTipMark(v || FIELD_DEFAULT); },
+      tip: 'The custom field the migration task writes a variant\'s stash-id into.\n\nThe default, ' +
+        'ᱜ╦╦🞮_Variant_Stash_ID, is written into this box the first time the plugin loads, so what you ' +
+        'see here is the name it is actually using - Stash has no default for a plugin setting, and an ' +
+        'empty box would leave you nothing to search for in Stash\'s own custom fields panel. Clearing ' +
+        'it goes back to that same default rather than switching anything off, and a box you have ' +
+        'cleared is left cleared. The value is one line per stash-id, written as <provider>:<stash-id> - ' +
+        'stashdb.org:9f3c1e2a-… - so it stays readable in Stash\'s own custom fields panel.\n\nChange it ' +
+        'only if that name collides with a field you already use. Renaming it here does not move ' +
+        'anything already written: the tab will stop finding scenes migrated under the old name, and the ' +
+        'task will write the new one beside it.' },
+    { key: 'a4VariantFlagTag', label: 'Variant Flag Tag',
+      text: true, wide: true, dflt: FLAG_DEFAULT,
+      mark: function (v) { return tagLinkMark('a4VariantFlagTag', v || FLAG_DEFAULT); },
+      tip: 'The tag the Flag Variants task keeps on every scene that has at least one other variant in your ' +
+        'library - filter or click that tag and you have every scene offering a choice of ' +
+        'variants.\n\nThe default, ᱜ╦╦🞮⸎✱MultiVariants✅∙, is written into this box the first time the ' +
+        'plugin loads, the same way the custom field\'s name is; clearing it goes back to that same ' +
+        'default. The tag is created by the task\'s Proceed if it does not exist yet - as an orphan, ' +
+        'ignored by auto-tagging, with the alias GTTx Multiple Variants, a description saying what it ' +
+        'means, the never-propagate mark set for the merge plugins, and the hide-from-add-lists mark ' +
+        'present but off. The name is matched without regard to case, and any of the tag\'s aliases ' +
+        'finds it; a link appears beside the box once it resolves.\n\nThe tag is machine-kept and not a ' +
+        'source of truth: it says what the last run of the task found, nothing fresher. The task both ' +
+        'adds it and removes it, so a scene whose variants have since been merged away loses the flag on ' +
+        'the next run.' },
+  ];
+
+  var BEHAVIOUR_FIELDS = [
+    { key: 'c0ShowCardCount', label: 'Display Variant Count ⸎ on Scene Cards',
+      tip: 'Show ⸎ and the number of other variants on every scene card that has any, last among the ' +
+        'card\'s counters.\n\nOn by default. Hover the count for the other variants\' titles. Off, the ' +
+        'cards are as Stash draws them, and nothing is asked for them.' },
+    { key: 'c1PropagateOnSave', label: 'Offer to Propagate Edits to Variants', warn: true,
+      tip: 'When you save a scene that has variants, open a dialog offering to push the changed attributes ' +
+        'to them.\n\nOn by default - the switch is set the first time the plugin loads, so what you see ' +
+        'here is the state it is actually in. The dialog lists one checkbox line per changed attribute ' +
+        'per variant, old value to new - adds for what the save added, and removals for the tags, ' +
+        'performers or URLs it took off, on variants still carrying them, so a replaced URL can be ' +
+        'replaced on the variants too; a variant\'s own extras are never touched, and nothing is written ' +
+        'until you approve, and Undo puts it back while the dialog stays open. It only appears when the ' +
+        'save changed something the variants do not have - an unremarkable save shows nothing.\n\nTitle ' +
+        'changes are only offered when Rename Variants After a Title Change is on, in the Variants Title ' +
+        'dialog. The dialog stays away entirely while another plugin is running a bulk edit in this tab, ' +
+        'so a library-wide rewrite cannot raise one dialog per scene.' },
+    { key: 'c3SkipRedundantTags', label: 'Skip Tags the Hierarchy Makes Redundant', warn: 'semi',
+      tip: 'Do not push a tag that another tag on the same scene already implies.\n\nOn by default - the ' +
+        'switch is set the first time the plugin loads. A scene tagged both Blonde and its parent Hair ' +
+        'Colour carries one tag that says nothing the other does not; copying that onto every variant ' +
+        'spreads the redundancy, so it is left out of the listing and a line says how many were ' +
+        'dropped.\n\nWhat counts as redundant is not decided here: ᝯㄝₓ Normalize Parent Tags is asked, ' +
+        'so its own hierarchy and its own tag exclusions are what answer - a tag you have told that ' +
+        'plugin to leave alone is never dropped here either. It needs that plugin at 3.2.0 or newer ' +
+        '- absent, disabled or older, nothing can answer, and every dialog says so in its listing rather than filtering ' +
+        'silently. It affects only what is offered: nothing is ever pruned from a scene by this plugin.' },
+    { key: 'c4CheckCoverMismatch', label: 'Compare Cover Images', warn: 'semi',
+      tip: 'Also compare the variants\' cover images, and offer to push this scene\'s where they ' +
+        'differ.\n\nOff by default, because it is the one comparison here that costs a picture ' +
+        'downloaded per scene rather than a field already read. Turn it on if your covers come from a ' +
+        'stash-box and a rescan occasionally replaces one with a frame from the file: pick the variant ' +
+        'that still has the right cover as the source, and every variant that differs is offered ' +
+        'it.\n\nCompared by the image itself, not by its address - every scene has a cover URL of its ' +
+        'own whatever the pictures are - so variants already sharing a cover list nothing. A variant ' +
+        'whose own cover cannot be read is not offered one, since Undo would then have nothing to put ' +
+        'back. With this on, setting a cover on a scene that has variants also raises the propagate ' +
+        'dialog for it; a rescan does not, because nothing about it reaches your browser. Undo restores ' +
+        'the picture, which for a cover Stash generated means those same pixels come back as a stored ' +
+        'cover.' },
+    { key: 'f1AlwaysOpenFullDuration', label: 'Always Open the Full-Duration Variant', warn: true,
+      tip: 'Open a partial-duration scene\'s full-duration variant in its place, whenever it has ' +
+        'one.\n\nOff by default, so a partial-duration scene opens as itself and shows an Open ' +
+        'Full-Duration button at the end of its tab strip instead. With this on, the full-duration ' +
+        'variant is opened straight away - the same one the button would open - and a notice at the top ' +
+        'right says which scene replaced which for 10 seconds, with a link back to the partial. A ' +
+        'partial reached from its own full-duration variant is not replaced again, and nothing is ' +
+        'replaced while a queue is playing.' },
+  ];
+
+  // Each tag with its 🔗 and the field with its ⓕ after them, as the dialog draws them.
+  function tagsSummary(cfg) {
+    var q = function (k) { return trim(cfg[k]); };
+    // A box left empty keeps its piece, with a mark that draws nothing: the same pieces in the
+    // same shape either way, so setting one redraws only its own words.
+    var tag = function (key, name) {
+      return { text: name ? '"' + name + '"' : 'not set', mark: function () { return name ? tagLinkMark(key, name, '-sum') : null; } };
+    };
+    var field = fieldName(cfg), flag = flagTagName(cfg);
+    return ['Full-duration ', tag('a1FullLengthTag', q('a1FullLengthTag')),
+      ', partial-duration ', tag('a2PartialLengthTag', q('a2PartialLengthTag')),
+      '; stash-ids in the custom field ', { cf: field },
+      '; variants flagged ', tag('a4VariantFlagTag', flag), '.'];
+  }
+
+  // Each switch that is on in its level, as the dialog names it.
+  function behaviourSummary(s) {
+    var on = BEHAVIOUR_FIELDS.filter(function (f) { return !!s[f.key]; });
+    if (!on.length) return 'Every switch off.';
+    var parts = ['On: '];
+    on.forEach(function (f, i) { parts.push(i ? ', ' : '', { text: f.label, hl: f.warn }); });
+    return parts.concat('.');
+  }
+
+  // Read the way the title dialog reads them, and taken into the cache at once as its Save
+  // does: the next thing that reads them through `settingsReady` would otherwise serve the old
+  // ones for ten seconds.
+  function dialogLoad() { return loadSettings(true); }
+  function dialogSaved(patch) { var c = settings(); for (var k in patch) if (hasOwn(patch, k)) c[k] = patch[k]; }
+
+  var tagsDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'svr', key: 'tags', title: 'Tags and Fields',
+    line: 'The tags that mark a scene full-duration or partial-duration, the custom field the migration writes ' +
+      'stash-ids into, and the tag Flag Variants keeps on every scene with variants. Four settings, in a dialog.',
+    fields: TAG_FIELDS, summary: tagsSummary, settings: settings, load: dialogLoad, saved: dialogSaved,
+  });
+  var behaviourDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'svr', key: 'behaviour', title: 'Scene Page Behaviour',
+    line: 'The ⸎ count on scene cards, the offer to propagate a save to the variants and what it leaves out, ' +
+      'comparing covers, and opening the full-duration variant in a partial\'s place. Five switches, in a dialog.',
+    fields: BEHAVIOUR_FIELDS, summary: behaviourSummary, settings: settings, load: dialogLoad, saved: dialogSaved,
+  });
 
   // Every tick: React re-renders this panel whenever a setting changes and drops
   // anything we put in it, so the tick puts it back.
@@ -7188,14 +7273,11 @@
     var group = PAGE.group();
     PAGE.decorate(group);
     if (group) {
-      amberMarkSetting();
+      tagsDialog.tick(group);
+      behaviourDialog.tick(group);
       ensureTitleRow(group);
     }
     C.paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
-    for (var i = 0; i < TAG_LINK_KEYS.length; i++) tagLinkTick(TAG_LINK_KEYS[i]);
-    // `fieldName()`, not the raw setting: an empty box means the default here, and the
-    // mark has to describe the field actually in force rather than the empty string.
-    cfTipTick(PLUGIN_ID, 'a3VariantStashIdField', fieldName());
   }
 
   // The field's own display, wherever Stash shows it. `CustomFields.tsx` renders each

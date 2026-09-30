@@ -1,7 +1,7 @@
 name: ᝯㄝₓ Tag Bundle Clipboard
 description: "Copy the tags of one entity and paste them onto another.\n\nPress \"⮺ Tags\" on a Scene, Image, Gallery, Performer, Studio or Group to copy its tags as a bundle. On the Edit tab of any of those, press \"📋Tags...\", pick a bundle and tick the tags you want; they go into the tag box.\n\nThe clipboard holds the number of bundles set below, in this browser, shared by all its tabs. Tags already on the target cannot be ticked. With ᝯㄝₓ Normalize Parent Tags installed, the selection can be pruned or rolled up.\n\nNothing is written to your library: Stash's own Save commits the tags, and Undo puts the tag box back.\n\nTags and scene markers are not offered. Requires Stash 0.31.0 or newer."
 url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/TagBundleClipboard/README.md"
-version: 3.0.4
+version: 3.1.8
 ui:
   # Loaded before this script, and installed with it. `plugins.tsx` topologically
   # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished
@@ -16,7 +16,3 @@ settings:
     displayName: Bundles Kept on the Clipboard
     description: "How many tag bundles to keep before the oldest is discarded.\n\nLeave it empty for the default of 5. The clipboard is a queue: copying a bundle when it is already full drops the one copied longest ago, so the number here is how far back you can reach. Anything from 1 to 50 is accepted; a value outside that is clamped rather than refused.\n\nBundles are small - an id and a name per tag - so a larger number costs nothing worth measuring. Reducing it does not discard anything immediately: the extra bundles are dropped the next time you copy."
     type: STRING
-  b1LogToConsole:
-    displayName: Log to the Browser Console
-    description: "Print each copy and each paste to the browser console.\n\nOff by default. It names the entity, the number of tags and which bundle was used, under the [tbc] prefix, so a session can be read back after the dialog has been closed. It is separate from the log inside the dialog, which Copy log hands over as text.\n\nThis is not the button diagnostic: for that, type __GTTx__.StashPluginCoop.debugButtons = true into the console, which turns on a [tbc gate] channel in every plugin that draws a button into Stash's rows and says why each one is shown or hidden."
-    type: BOOLEAN

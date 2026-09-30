@@ -94,7 +94,7 @@ has an index.
 |---|---|
 | `title` | the scene's title |
 | `basetitle` | the [<abbr title="Scene Variants: scenes that are the same content - a full version and its trailers or cuts.">variant</abbr>](../GLOSSARY.md#variant) set's [<abbr title="The title a variant set's partials are named after.">base-title</abbr>](../GLOSSARY.md#base-title), from [ᝯㄝₓ Scene Variants](../SceneVariants/README.md); else the title |
-| `variantpostfix` | a [<abbr title="The full-length member of a variant set, and the shorter ones.">partial-duration</abbr>](../GLOSSARY.md#full-duration) scene's postfix and index (` - Promo 2`), from Scene Variants; else nothing |
+| `variantpostfix` | a [<abbr title="Scene Variants: a variant that is a cut out of the whole work - a trailer, a promo, a clip - told by the Partial-duration tag.">partial-duration</abbr>](../GLOSSARY.md#partial-duration) scene's postfix and index (` - Promo 2`), from Scene Variants; else nothing |
 | `year`, `date` | from the scene's date |
 | `studio`, `code`, `director` | as on the scene |
 | `performers` | the **Max Performers In Filename** with the most scenes, then `+N` for the rest; nothing at all when that setting is 0 |
@@ -141,21 +141,26 @@ the files back and leaves the archived names, which are still true.
 
 ### Editing the template
 
-**Edit** on the Rename Template setting opens an editor instead of Stash's one-line box:
+**Rename Template...** on the Rename Template setting opens an editor instead of Stash's one-line box.
+The template and its four limits decide the names written to disk, so the row's heading, the limits
+under it and their names in the editor are in the Highlighted Text Color and the button is orange;
+the **Original Filename Custom Field** row's heading is too, since Restore renames back to it.
+The editor holds:
 
-- the template **coloured** as it is read — a token green, a `!token` blue, anything that is not a
-  token (or a tag no tag has) red; paired braces teal, a brace without its pair orange. When the
+- the template **coloured** as it is read — a token green, a `!token` in ᝯㄝₓ Core's Accent Color (a light blue), anything that is not a
+  token (or a tag no tag has) red; paired braces blue, a brace without its pair in the Highlighted Text Color. When the
   template cannot be read, the error is shown and the character it stopped at is marked;
 - every token as a button, with what it gives on hover, put in at the cursor;
+- the four **limits** a rename is held to - see [Settings](#settings);
 - a **test value** for each token the template names, each with a **Missing** box. The token's
   name is green where it has a value in the test and red where it has none. The values you type
   are kept per token in this browser and offered again, as many as **Recent values kept** says
   (8 at first; 0 keeps none and throws away the ones kept);
 - the **test output**, with a warning for each character dropped or turned into a look-alike, for a
-  name cut to the Maximum Filename Length - which says what it would have been - and for an empty one. The editor does not know a
+  name cut to the Maximum Filename Length in the box above - which says what it would have been - and for an empty one. The editor does not know a
   file's folder, so the path limit is not in its test output.
 
-**Save** writes the setting, and is off while the template has an error. **Default Template**
+**Save** writes the template and the four limits, and is off while the template has an error. **Default Template**
 puts the default template in the box, and **Default Test Values** puts the sample value back in
 every test box, leaving the template alone.
 
@@ -213,11 +218,18 @@ lock protects is lost. What would change or drop a name already there is refused
 | Setting | Default | What it does |
 |---|---|---|
 | **Original Filename Custom Field** | `ᱜ╦╦🞮_Original_Filename` | The custom field the tasks archive into and restore from: every file's name, by file id. Written into the box the first time the plugin loads; clearing the box goes back to the default. Renaming it does not move what is already written. |
-| **Rename Template** | `{[\|studio\|] }{\|basetitle\|}{\|!basetitle\|{\|origfilename\|}}{ (\|year\|)}{ \|variantpostfix\|}{ [\|performers\|]}{ by \|director\|}{ \|autoindex2\|}` | The name Rename Files From Metadata builds, before the extension. Seeded like the field; clearing it goes back to the default. **Edit** opens the template editor. |
+| **Rename Template** | `{[\|studio\|] }{\|basetitle\|}{\|!basetitle\|{\|origfilename\|}}{ (\|year\|)}{ \|variantpostfix\|}{ [\|performers\|]}{ by \|director\|}{ \|autoindex2\|}` | The name Rename Files From Metadata builds, before the extension. Seeded like the field; clearing it goes back to the default. **Rename Template...** opens the template editor, which also holds the four limits below; the row says under the template what they are set to. |
+
+The four limits are in the template editor, beside the template whose output they hold, each with
+its whole description on hover. Each is stored under its own key as a row of its own would be, so
+`config.yml` still edits them:
+
+| Setting | Default | What it does |
+|---|---|---|
 | **Max Performers In Filename** | 3 | How many performers the `performers` token names — the ones with the most scenes, ties by name. The rest are counted as `+N`. **0 names none**, so the token writes nothing; `performercount` gives the number on its own. |
 | **List Performers Alphabetically** | off | Off: the kept performers by scene count, most first. On: the same performers alphabetically. |
 | **Maximum Filename Length** | 200 | The longest name Rename gives, extension included, in UTF-8 bytes (an accented letter is 2, an emoji 4), from 60 to 255. Most filesystems allow 255; an encrypted Synology shared folder or any eCryptfs folder about 143, so use 140 there. |
-| **Maximum Full Path Length** | Auto | The longest full path - folder, separator and name - in characters as Windows counts them: Auto, a number from 100, or 0 for none. A name that would pass it is cut further, with a warning; a folder whose own path leaves no room is skipped with a warning. Auto is 259 when Stash or your browser runs on Windows (Explorer and many Windows programs cannot open a longer path), else 1023 on macOS and 4095 on Linux; the dialog says which and why. Stash's edit box for it has a **Set to Auto** button that puts Auto back in the box; Confirm saves it. **Auto cannot see** a Linux or Docker Stash whose files you open from Windows through a share while you browse from another system — type 259 there — nor how long the share's own path is on the Windows side. |
+| **Maximum Full Path Length** | Auto | The longest full path - folder, separator and name - in characters as Windows counts them: Auto, a number from 100, or 0 for none. A name that would pass it is cut further, with a warning; a folder whose own path leaves no room is skipped with a warning. Auto is 259 when Stash or your browser runs on Windows (Explorer and many Windows programs cannot open a longer path), else 1023 on macOS and 4095 on Linux; the dialog says which and why. **Set to Auto** beside its box puts Auto back in it; Save stores it with the template. **Auto cannot see** a Linux or Docker Stash whose files you open from Windows through a share while you browse from another system — type 259 there — nor how long the share's own path is on the Windows side. |
 
 ## Relationship to the other plugins in this repo
 
@@ -247,9 +259,9 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 114 MB | 158 MB | 158 MB |
+| Archive Original Filenames | 114 MB | 161 MB | 157 MB |
 | Restore Original Filenames | 56 MB | 82 MB | 82 MB |
-| Rename Files From Metadata | 195 MB | 257 MB | 254 MB |
+| Rename Files From Metadata | 195 MB | 260 MB | 254 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 

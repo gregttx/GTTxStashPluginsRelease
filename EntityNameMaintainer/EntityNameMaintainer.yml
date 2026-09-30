@@ -1,7 +1,7 @@
 name: ᝯㄝₓ Entity Name Maintainer
 description: "Rename a performer, studio, tag or scene, and this plugin offers to update every other place in your library that mentions the old name.\n\nWhen a rename lands in the tab you are working in, it searches every text field of every entity-type, custom fields included, and lists each occurrence with the text around it. Untick what should stay, filter by type or attribute, and press Proceed. Nothing is written before that, and Undo reverses it while the dialog stays open. Each field is re-read just before it is written, so text that changed since the scan is skipped.\n\nThe scan reads the whole library. The limits below warn about a name that matches too often, then refuse it, and Images, usually the largest type, can be left out.\n\nIt stays quiet while another ᝯㄝₓ plugin runs a bulk task. Scene markers are not covered.\n\nRequires Stash 0.31.0 or newer."
 url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/EntityNameMaintainer/README.md"
-version: 3.0.5
+version: 3.1.8
 ui:
   # Loaded before this script, and installed with it. `plugins.tsx` topologically
   # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished
@@ -24,7 +24,3 @@ settings:
     displayName: Refuse Above This Many Matches
     description: "How many occurrences are too many to act on at all.\n\nLeave it empty for the default of 2000. The scan stops the moment it goes past this number, the dialog says why, and Proceed stays disabled - a name that common in your library is very unlikely to be one you meant to replace everywhere. Raise it if you disagree; the listing and Copy log still work, so you can read what it found either way. It is counted in occurrences, not in entities: one long description can hold several."
     type: STRING
-  d1LogToConsole:
-    displayName: Log to the Browser Console
-    description: "Print every message the dialog shows to the browser console as well.\n\nOff by default. The lines are the same ones the dialog logs, under the [enm] prefix, so a session can be read back after the dialog has been closed. It is separate from Copy log, which hands over the counters, the whole listing and the messages as text."
-    type: BOOLEAN

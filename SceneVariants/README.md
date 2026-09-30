@@ -13,8 +13,8 @@ The relation is derived from [<abbr title="The link from an entity in your libra
 scrapes from (stashdb.org is one); a **stash-id** is a scene's identifier there, and it names the
 **work**, not the file — so two scenes carrying the same stash-id are the same work. The stash-ids
 a scene carries, plus the lines in the custom field this plugin's migration task writes, are its
-**evidence**: sharing any one line with another scene is being the same work. [<abbr title="The full-length member of a variant set, and the shorter ones.">Full-duration</abbr>](../GLOSSARY.md#full-duration) versus
-partial-duration — the whole work or a cut out of it — is the one **dimension** the plugin knows,
+**evidence**: sharing any one line with another scene is being the same work. [<abbr title="Scene Variants: a variant that is the whole work, not a cut out of it - told by the Full-duration tag.">Full-duration</abbr>](../GLOSSARY.md#full-duration) versus
+[<abbr title="Scene Variants: a variant that is a cut out of the whole work - a trailer, a promo, a clip - told by the Partial-duration tag.">partial-duration</abbr>](../GLOSSARY.md#partial-duration) — the whole work or a cut out of it — is the one **dimension** the plugin knows,
 told apart by two tags you name in the settings.
 
 ## Usage
@@ -36,7 +36,7 @@ Details   Queue   Markers   Filter   File Info   History   2 Variants   Edit
   └────────┘
 ```
 
-The tab sits just before **Edit**, which stays last, and is amber — the one tab in the tab strip
+The tab sits just before **Edit**, which stays last, and is drawn in the Highlighted Text Color — the one tab in the tab strip
 Stash did not put there. It appears once the variants have been looked up, and only where there is
 at least one: a scene with no other variant — most often one with no stash-id — has no tab. Where
 the lookup failed, the tab reads just **Variants**, and its first line says what went wrong.
@@ -44,7 +44,7 @@ the lookup failed, the tab reads just **Variants**, and its first line says what
 Under that line, a scene with variants shows its set's **[<abbr title="How far a variant set's members have moved apart - tags, performers, cover and other attributes - each difference priced by a weight.">drift-score</abbr>](../GLOSSARY.md#drift-score)** — the same number the
 [Review Variant Sets](#finding-the-sets-worth-synchronizing) listing sorts by, counted the same
 way, priced by the weights you remembered there (or that dialog's defaults until you do), and
-coloured by the same bands: green at one or nothing to do, then yellow, amber and red as the
+colored by the same bands: green at one or nothing to do, then yellow, orange and red as the
 set drifts further apart. Hovering it gives the counts behind it, the six weights in force, and
 where to change them. With **Compare Cover Images**
 on, a differing cover is priced in once the pictures have been read, after the rows. The number
@@ -63,20 +63,20 @@ value, one per `host:id` line it holds.
 
 Rows are ordered full-duration first, then longest running time. The value starts the line under
 each title, so a short list reads as a column: **Full-duration** is green and **Partial-duration**
-amber; a scene with neither tag has no label; a scene carrying **both** is shown in red — the two
+in the Highlighted Text Color; a scene with neither tag has no label; a scene carrying **both** is shown in red — the two
 are mutually exclusive by definition, so the contradiction is reported rather than resolved. If the
 two settings resolve to the **same tag**, or to two tags one of which sits under the other, the tab
 says so in a line above the list: that is a settings mistake rather than a scene one.
 
 The tab itself writes nothing: it is two read queries and a list of links. Its one control, the
 **Synchronize Variants...** button at the top of the pane (**Synchronize Variant...** when there is one), opens the dialog described under
-[Synchronizing a variant set](#synchronizing-a-variant-set) — amber because pressing through it
+[Synchronizing a variant set](#synchronizing-a-variant-set) — orange because pressing through it
 leads to writes. While any of this plugin's dialogs is open the button is unavailable, and its
 tooltip says so; close that dialog first.
 
 ### The variant count on a scene card
 
-Every scene card in a list shows **⸎** and the number of other variants the scene has, in amber,
+Every scene card in a list shows **⸎** and the number of other variants the scene has, in the Highlighted Text Color,
 among the counters under the card — after the tags, performers, groups, the O-counter, Organized
 and the rest, and before ᝯㄝₓ Core's ⓕ and 🖬. A scene with no other variant shows none, and **Display Variant Count ⸎ on
 Scene Cards** turns it off. Hover it for the other variants' titles; the Variants tab on the scene's own page
@@ -85,7 +85,7 @@ line of the **Variant Stash-ID Custom Field**, and every card on the page is cou
 
 ### Opening the full-duration variant
 
-On a partial-duration scene whose set has a full-duration member, a teal **▶ Open Full-Duration**
+On a partial-duration scene whose set has a full-duration member, a blue **▶ Open Full-Duration**
 button sits at the end of the tab strip, after Edit. It opens that variant, in a new tab unless
 ᝯㄝₓ Core's Open Links in the Same Tab is on. Its tooltip names the scene it opens. Where the set has
 several full-duration variants, the button picks one, and the tooltip says how:
@@ -110,15 +110,15 @@ save it. Nothing is replaced while a queue is playing.
 ### What a variant's card tells you
 
 Each row wears its differences from the scene you are on at a glance: a cover carries the scene's
-rating as an amber banner in its top corner and a 📦 mark where the scene is Organized; after the
+rating as an orange banner in its top corner and a 📦 mark where the scene is Organized; after the
 resolution and running time come up to three badges — `🏷️+3` for tags the variant has that this
 scene does not, `🏷️−1` for the ones it is missing, `📋⚙4` for attributes that disagree — and, with
 **Compare Cover Images** on, a 🖼≠ badge where the variant's cover is a different picture from this
 scene's. A badge whose count is zero is not shown, and hovering one says what it counts. The
 pictures are read after the rows are drawn, so the tab never waits on them.
 
-Hover anywhere on the row and its card says the same thing in full, one amber-headed section per
-kind:
+Hover anywhere on the row and its card says the same thing in full, one section per
+kind, headed in the Highlighted Text Color:
 
 ```
 Extra 3 tags: Blonde, Outdoor, Solo
@@ -199,7 +199,7 @@ scene offering a choice of variants.
 The matching is the tab's own: a scene's lines are its stash-ids plus whatever its variant field
 holds, and sharing any one line is sharing the work. The plan lists every scene the task would
 touch and closes with how many **multi-variant sets** the scan found — **[FLAG]** with how many other
-scenes share its ids (the count in blue for exactly one, amber for a real choice), **[UNFLAG]**
+scenes share its ids (the count in the Accent Color for exactly one, the Highlighted Text Color for a real choice), **[UNFLAG]**
 where none does any more — and nothing is written until **Proceed**, captioned in the footer with
 **[Flag]/[Unflag]:** for what it writes. A scene with no title is named by its file, the way
 Stash's own lists name it, a long name cut to the start of its stem and its extension. **Undo**
@@ -305,9 +305,11 @@ looks like one that is broken. It also counts what it read: `340 covers read; 6 
 about one.`, or the covers it could not read at all, which is what a Stash serving its images from
 another origin looks like from inside the page.
 
-The number is coloured by how far apart the set is — **green** at one or nothing to do,
-**yellow** from two and below five of the cheapest difference the weight strip prices, **amber** from there, and
-**red** from whichever is larger of three attribute differences and ten cheap ones. The bands are
+The number is colored by how far apart the set is — **green** at one or nothing to do,
+**yellow** from two and below five of the cheapest difference the weight strip prices, **orange** from there, and
+**red** from whichever is larger of three attribute differences and ten cheap ones. The green,
+orange and red are ᝯㄝₓ Core's Good, Average and Bad Result Text Colors, which you can change in its
+UI Customizations; the yellow is fixed. The bands are
 read off your own weights rather than fixed in points, so repricing a difference reprices the
 colours with it.
 
@@ -420,7 +422,8 @@ now      Details: …flirting with the camera in a sunlit → candlelit room, th
 ```
 
 The words only the old value has are red, the words only the new one has are green, and the text
-they share is the light blue every changed value wears. It applies to short values too —
+they share is the Accent Color every changed value wears - a light blue unless it is changed in
+ᝯㄝₓ Core's UI Customizations. It applies to short values too —
 `Title: Ella meets Adira - Promo 1 → 2` puts the `1` in red and the `2` in green — and where two
 values share no word at all, the whole of one goes red and the whole of the other green.
 
@@ -439,7 +442,7 @@ attributes blue. Each dialog's head says so.
 
 The rules, each visible in the plan:
 
-- **Adds start ticked, replaces start unticked.** An add only ever adds, while a replace (amber)
+- **Adds start ticked, replaces start unticked.** An add only ever adds, while a replace (orange)
   overwrites the variant's own value — so overwriting is opted into, never out of, and an [INFO]
   line says so. Titles are replaces like any other, which is what protects a
   `- Variant <name>` postfix convention by default.
@@ -565,27 +568,44 @@ installed but cannot say what is locked, every custom field is treated as locked
 
 ## Settings
 
-All under **Settings → Plugins → ᝯㄝₓ Scene Variants**, all optional. The eight about how a
-partial-duration scene is titled are in one dialog, opened from the **Variants Title...** row at
-the end of the group, which says what they are set to - with a **ⓕ** after each custom field
-Custom Fields Bulk Editor describes, as in the dialog - so the page itself keeps to the tags and the
-switches the tab runs on:
+All under **Settings → Plugins → ᝯㄝₓ Scene Variants**, all optional, in three rows. Each row says
+what its settings are set to and opens a dialog holding them, where every line explains itself on
+hover and nothing is written until you press **Save**. Each setting is stored under its own key, so
+`config.yml` still edits them.
+
+**Tags and Fields...** - the names the tab and the tasks run on. A **🔗** beside a tag's box links
+the tag it resolves to once you pause typing, and a **ⓕ** beside the field's box carries its tooltip
+where Custom Fields Bulk Editor describes it
+([placement](../GTTxCore/README.md#links-cards-and-tooltips)). An empty field or flag tag box means
+its default, and the dialog shows it:
 
 | Setting | Default | What it does |
 |---|---|---|
 | Full-duration Tag | empty | The name of the tag you put on a scene that is the whole work. |
 | Partial-duration Tag | empty | The name of the tag you put on a cut of one. |
-| Variant Stash-ID Custom Field | `ᱜ╦╦🞮_Variant_Stash_ID` | The custom field the [migration task](#migrating-a-partial-duration-scenes-stash-id) writes into. A **ⓕ** beside the value carries a tooltip with the field's description, how many scenes carry it and the first ten ([placement](../GTTxCore/README.md#links-cards-and-tooltips)). |
+| Variant Stash-ID Custom Field | `ᱜ╦╦🞮_Variant_Stash_ID` | The custom field the [migration task](#migrating-a-partial-duration-scenes-stash-id) writes into. Its **ⓕ** carries a tooltip with the field's description, how many scenes carry it and the first ten. |
 | Variant Flag Tag | `ᱜ╦╦🞮⸎✱MultiVariants✅∙` | The tag the [Flag Variants task](#flagging-the-scenes-that-have-variants) keeps on every scene that has at least one other variant; the task's Proceed creates it if it does not exist yet — or renames it, where the plugin's own tag is found under an earlier default name or by its alias `GTTx Multiple Variants`. |
-| Log to the Browser Console | off | Print each variant lookup to the console under `[svr]`: the scene, how many variants were found and what they were matched on. A failed query is reported whatever this says. |
+
+**Scene Page Behaviour...** - five switches. The two that act on their own, **Offer to Propagate
+Edits to Variants** and **Always Open the Full-Duration Variant**, are in the Highlighted Text Color,
+the two that decide what the propagate dialog offers in a paler shade of it; the row's heading and
+button follow, as they do for **Variants Title...**, whose renaming switch is in the color and whose
+title rules are in the paler shade:
+
+| Setting | Default | What it does |
+|---|---|---|
 | Display Variant Count ⸎ on Scene Cards | on | Show ⸎ and the number of other variants on every scene card that has any — see [the variant count on a scene card](#the-variant-count-on-a-scene-card). Off, the cards are as Stash draws them and nothing is asked for them. |
 | Offer to Propagate Edits to Variants | on | Open the [propagate dialog](#propagating-an-edit-when-you-save) when a save changed something the variants do not have. |
 | Skip Tags the Hierarchy Makes Redundant | on | Leave out a tag another tag on the same scene already implies, as [ᝯㄝₓ Normalize Parent Tags](#relationship-to-the-other-plugins-in-this-repo) decides — see [the rules](#synchronizing-a-variant-set). |
 | Compare Cover Images | off | Also compare the variants' cover images and offer this scene's where they differ — see [the rules](#synchronizing-a-variant-set) and [the set listing](#finding-the-sets-worth-synchronizing). |
 | Always Open the Full-Duration Variant | off | Open a partial-duration scene's [full-duration variant](#opening-the-full-duration-variant) in its place, with a 10-second notice at the top right and a link back. |
 
-In the **Variants Title...** dialog - every line explains itself on hover, and nothing is written
-until you press **Save**, which writes them all at once and puts them in force at once:
+Console logging is **Log Scene Variants to the Browser Console** in ᝯㄝₓ Core's **Dev Mods**: each
+variant lookup under `[svr]` - the scene, how many variants were found and what they were matched
+on. A failed query is reported whatever it says.
+
+**Variants Title...** - how a partial-duration scene is titled; its **Save** writes them all at
+once and puts them in force at once:
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -622,7 +642,7 @@ many there are. The plugin uses all of them; the link goes to the first.
   [link target, the cards, the tooltips and the ⓕ mark](../GTTxCore/README.md#links-cards-and-tooltips),
   the [bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease), the
   [stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-script-banner-and-the-reload-ui-button)
-  and the [debug switch](../GTTxCore/README.md#the-debug-switch).
+  and [Log Button Visibility to the Browser Console](../GTTxCore/README.md#logging-button-visibility).
 - **ᝯㄝₓ Normalize Parent Tags**, 3.2.0 or newer, is asked which tags are redundant when **Skip
   Tags the Hierarchy Makes Redundant** is on, so its hierarchy and its own tag exclusions are what
   answer, and a tag you have told that plugin to leave alone is never dropped here either. With it
@@ -685,9 +705,9 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Migrate Variant Stash-IDs | 59 MB | 92 MB | 91 MB |
-| Flag Variants | 46 MB | 86 MB | 83 MB |
+| Flag Variants | 46 MB | 85 MB | 83 MB |
 | Review Variant Sets | 1951 MB | — | — |
-| Rename Variants | 637 MB | 666 MB | 666 MB |
+| Rename Variants | 637 MB | 667 MB | 667 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
@@ -724,10 +744,10 @@ and reloading the page is enough. Reload plugins only when the `.yml` changes.
 name nor an alias. Copy the name from the tag's own page rather than retyping it. If the tag list
 itself could not be read, the console says so: nothing can be classified without it.
 
-**A control is drawn where you did not expect it, or missing.** Type
-`__GTTx__.StashPluginCoop.debugButtons = true` into the console and every control this plugin draws
-into Stash's [<abbr title="Stash's own interface around the page content - top bar, tab strips, toolbars - where these plugins add their controls.">chrome</abbr>](../GLOSSARY.md#chrome) explains itself on `[svr gate]` — see
-[ᝯㄝₓ Core](../GTTxCore/README.md#the-debug-switch).
+**A control is drawn where you did not expect it, or missing.** Turn on ᝯㄝₓ Core's
+[Log Button Visibility to the Browser Console](../GTTxCore/README.md#logging-button-visibility) (or type
+`__GTTx__.StashPluginCoop.logButtonVisInfo = true` into the console) and every control this plugin draws
+into Stash's [<abbr title="Stash's own interface around the page content - top bar, tab strips, toolbars - where these plugins add their controls.">chrome</abbr>](../GLOSSARY.md#chrome) explains itself on `[svr gate]`.
 
 **The tab appeared and then stopped after a Stash upgrade.** The extension points it hangs off
 (`ScenePage.Tabs` and `ScenePage.TabContent`) are Stash's and can move. That is the first thing to

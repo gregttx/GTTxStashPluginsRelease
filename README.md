@@ -82,8 +82,11 @@ plugin scripts by their declared dependencies but does not object when one is mi
   another, and every box of the same kind between them follows.
 - **A caption ending in `...` asks before it acts.** One without it either writes nothing or stages
   something into the form in front of you, where Stash's own Save is the next step.
-- **Amber means a control of ours writes; teal means it only reads.** Stash's own buttons are grey
-  and blue, so the colour is also how you tell one of these plugins' controls from Stash's.
+- **Orange means a control of ours writes; Stash's blue means it only reads.** Stash's own action
+  buttons are grey, so orange is also how you tell one of these plugins' controls from Stash's.
+  Every task button of ours is orange, and a settings row's button is Stash's blue. The ⓕ, 🖬 and ⸎
+  marks, warnings and a switch that risks something wear the **Highlighted Text Color**, which
+  you pick in ᝯㄝₓ Core's UI Customizations (a yellow by default), beside the other colors.
 - **An id in brackets is Stash's own database id** — the number in the URL — never a stash-id.
 - **Backing up your database before the first library-wide run is strongly recommended.** A
   dialog's Undo reaches only what it wrote while open, and Undo History keeps the rest in this
@@ -97,21 +100,21 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
-| SceneFilenameManager | Archive Original Filenames | 114 MB | 158 MB | 158 MB |
+| SceneFilenameManager | Archive Original Filenames | 114 MB | 161 MB | 157 MB |
 | SceneFilenameManager | Restore Original Filenames | 56 MB | 82 MB | 82 MB |
-| SceneFilenameManager | Rename Files From Metadata | 195 MB | 257 MB | 254 MB |
+| SceneFilenameManager | Rename Files From Metadata | 195 MB | 260 MB | 254 MB |
 | SceneVariants | Migrate Variant Stash-IDs | 59 MB | 92 MB | 91 MB |
-| SceneVariants | Flag Variants | 46 MB | 86 MB | 83 MB |
+| SceneVariants | Flag Variants | 46 MB | 85 MB | 83 MB |
 | SceneVariants | Review Variant Sets | 1951 MB | — | — |
-| SceneVariants | Rename Variants | 637 MB | 666 MB | 666 MB |
+| SceneVariants | Rename Variants | 637 MB | 667 MB | 667 MB |
 | CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 552 MB | 1150 MB | 1150 MB |
 | CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 312 MB | 312 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 785 MB | 1727 MB | 1540 MB |
-| NormalizeParentTags | Normalize Parent Tags | 3818 MB | 4183 MB | 4080 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 785 MB | 1752 MB | 1541 MB |
+| NormalizeParentTags | Normalize Parent Tags | 3813 MB | 4185 MB | 4079 MB |
 | NormalizeParentTags | Auto-Mode Settings | 1 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
-| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 295 MB | 283 MB |
-| PropagateTagsAndPerformers | Propagate All | 1793 MB | 1836 MB | 1818 MB |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 292 MB | 283 MB |
+| PropagateTagsAndPerformers | Propagate All | 1782 MB | 1824 MB | 1807 MB |
 
 A task gives all of it back when its dialog is closed.
 

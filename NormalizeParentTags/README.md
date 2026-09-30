@@ -32,10 +32,10 @@ A front-end-only Stash plugin that adds three tasks to **Settings → Tasks → 
 The first lists every change *before* anything is written; nothing is saved until you press
 **Proceed**. The third never writes at all.
 
-The colours on that page say which is which. **Normalize Parent Tags...** is **amber**, the
-plugin's colour for something that rewrites your library; the other two are **teal**, since one
-edits a setting and the other only reads. What is set to run by itself is shown on the settings
-page, in the **Auto-mode per entity-type** row, with every type that is not Off in amber.
+The colors on that page say which is which. All three task buttons are **orange**, the colour
+of every ᝯㄝₓ plugin's task; **Normalize Parent Tags...** is the one that rewrites your library, while
+the other two edit a setting and only read. What is set to run by itself is shown on the settings
+page, in the **Auto-mode per entity-type** row, with every type that is not Off in the Highlighted Text Color.
 
 Either direction can also be kept up **automatically**, per entity-type, applying as Stash saves
 each entity rather than to the whole library at once — see [Auto-mode](#automatic-mode). That
@@ -182,7 +182,7 @@ so that repeated runs log identically.
 
 Nothing has been written at this point. **Cancel** walks away with your library untouched — and where the review found nothing to do, the button says **Close** instead, in green, since there is nothing to cancel and nothing left to write.
 
-**Phase 2 — apply.** **Proceed** — amber, the colour every control in these plugins that writes
+**Phase 2 — apply.** **Proceed** — orange, the colour every control in these plugins that writes
 wears — performs the changes and continues the log with what was actually written, plus any
 errors. The log is scrollable throughout, **Copy log** puts the whole
 thing on the clipboard, **Rescan** starts a fresh review pass without closing the dialog, and
@@ -207,7 +207,7 @@ before you close.
 
 ## Undo
 
-Once a run has written something, an amber **Undo** button appears. It reverses every change the dialog
+Once a run has written something, an orange **Undo** button appears. It reverses every change the dialog
 has made — Prune puts the tags it removed back, Roll-Up takes the tags it added off again — and it
 covers the whole session, so a run you applied, rescanned and applied again comes back in one go.
 
@@ -348,12 +348,15 @@ Stash saves one; a type set to **ROLLUP** has every ancestor added; **OFF** is l
 that is not mentioned at all is OFF.
 
 **The Auto-Mode Settings... dialog is the editor for it** — seven selectors, the same **Set All:**
-buttons under them, and an amber **Save**, so nobody has to type the line.
+buttons under them, and an orange **Save**, so nobody has to type the line.
 
 **On the settings page you get that dialog instead of Stash's text editor.** In the **Automatic
 mode per entity-type** row, the value is shown in words — `Performers=Off, Scenes=Prune, Scene
-Markers=Roll-Up`, with every type that is not Off in amber — and the **Edit** button beside it is
-replaced by **Auto-Mode Settings...**, which opens the dialog. The same dialog is a task in
+Markers=Roll-Up`, with every type that is not Off in the Highlighted Text Color — and the **Edit** button beside it is
+replaced by **Auto-Mode Settings...**, which opens the dialog. The row's heading and the button are
+in the Highlighted Text Color and orange, and so are the type names in the dialog: each is a mode
+that writes by itself. The **Exclusion Filters** row and its filters take a paler shade, since they
+only decide what those writes leave alone. The same dialog is a task in
 **Settings → Tasks**, and both open the same thing.
 
 The setting is still plain text underneath, and anything that writes it directly — a config file,
@@ -374,8 +377,8 @@ Whatever it understood is written back in the canonical form above.
 > you set it here.
 
 **It is the only setting here that makes the plugin write on its own** — the rest just choose what
-a run covers — so it is the one worth a second look. **Every type that is not OFF is shown in amber
-in that row**, so what will happen by itself is readable without opening anything.
+a run covers — so it is the one worth a second look. **Every type that is not OFF is shown in the
+Highlighted Text Color in that row**, so what will happen by itself is readable without opening anything.
 
 Things worth knowing:
 
@@ -384,7 +387,7 @@ Things worth knowing:
 - **Each type is separate**, so auto-pruning your scenes while leaving images alone is one line.
 - **The task dialog starts from these modes** and lets you change them for that one run — with
   Images off to begin with, whatever this setting says.
-- **All the exclusion filters below still apply**, entity-level and tag-level alike.
+- **All the [exclusion filters](#exclusion-filters) still apply**, entity-level and tag-level alike.
 - **Bulk edits count.** Editing 500 scenes from Stash's bulk edit dialog normalizes all 500. This
   is usually what you want and it is also the largest thing this mode does without asking.
 - **The console lines read like the dialog's**, `[NormalizeParentTags] Scene "My Scene" (123) -
@@ -399,12 +402,17 @@ Things worth knowing:
 
 ## Exclusion filters
 
+All eight are in one dialog, opened from the **Exclusion Filters** row of the plugin's settings,
+which says which of them do something now. Each is stored under its own key as a row of its own
+would be, so `config.yml` still edits them, and each has its whole description when you hover it
+in the dialog.
+
 Two filters protect whole entities:
 
-- **Exclude entities carrying this tag** — enter a tag name; any entity carrying it is left
+- **Exclude Entities Carrying This Tag** — enter a tag name; any entity carrying it is left
   alone. Matched by exact name, case-sensitive. The tag must be on the entity directly — carrying
   a child of it does not count. For markers, having it as the primary tag also excludes.
-- **Exclude entities marked as Organized** — skips any entity with the [<abbr title="Stash's per-scene, image and gallery flag saying you have finished organizing it.">Organized</abbr>](../GLOSSARY.md#organized) flag set. In
+- **Exclude Entities Marked as Organized** — skips any entity with the [<abbr title="Stash's per-scene, image and gallery flag saying you have finished organizing it.">Organized</abbr>](../GLOSSARY.md#organized) flag set. In
   Stash 0.31 only **scenes, images, galleries and studios** have that flag; performers, groups
   and markers have none, so this setting cannot protect them. If a future Stash adds the flag to
   more types, they are covered automatically.
@@ -412,25 +420,25 @@ Two filters protect whole entities:
 Five more protect individual tags, split by direction so you can, for example, let a tag be added
 but never removed, plus one that sets how the two name filters are written:
 
-- **Never add or remove tags set to Ignore Auto Tag** — applies in both directions. Such tags
+- **Never Add or Remove Tags Set to Ignore Auto Tag** — applies in both directions. Such tags
   still count as present, so they can still make their own parents redundant.
-- **Never add tags whose name contains (space separated substring)** / **Never remove tags whose
-  name contains (space separated substring)** — enter one or more substrings separated by spaces;
+- **Never Add Tags Whose Name Contains** / **Never Remove Tags Whose Name Contains** — enter one or more substrings separated by spaces;
   a tag whose name contains **any** of them anywhere is skipped. Case-sensitive, and any Unicode
   character works, which makes it a good fit for [<abbr title="A character put in the names of the tags that only group other tags - the headings of a tag tree, never put on an entity - so one assigned by mistake stands out wherever it lands. A naming convention the name filters here make easy to use; Stash itself has no such notion.">namespace-markers</abbr>](../GLOSSARY.md#namespace-marker) in tag names. Because spaces
   separate the substrings, a single substring cannot contain one.
 
-- **Separator for the two "name contains" settings** — leave empty to separate those substrings on
+- **Separator for the Two "Name Contains"** — leave empty to separate those substrings on
   spaces. Enter any character instead — a comma, a pipe, or any Unicode character you never use in
   tag names — and the substrings are separated on that, which is how a substring can then contain a
   space: with a separator of `,`, the entry `Body Art, Art Deco` is two substrings rather than
   four. The separator is matched literally, so punctuation needs no escaping, and spaces around
   each substring are trimmed.
-- **Never add tags marked via a Custom Field** / **Never remove tags marked via a Custom Field** —
+- **Never Add Tags Marked via This Custom Field** / **Never Remove Tags Marked via This Custom Field** —
   enter a custom field name. **Only the presence of the field matters** — the value is never
   looked at, so any value at all (including a blank one) applies the exclusion. To lift it,
-  remove the field from the tag rather than setting it to something falsy. Each shows a **ⓕ**
-  beside its value once set; hover it for what the field is — see
+  remove the field from the tag rather than setting it to something falsy. Where ᝯㄝₓ Custom Fields
+  Bulk Editor describes the field, a **ⓕ** appears beside its box in the dialog; hover it for what
+  the field is — see
   [the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips).
 
 These filters also apply wherever **another plugin borrows Prune or Roll-Up**. ᝯㄝₓ Tag Bundle
@@ -468,14 +476,15 @@ until you change it.
 | Setting | Default | What it does |
 |---|---|---|
 | **Auto-mode per entity-type** | every type Off | What happens by itself whenever Stash saves an entity, one mode per type — see [Auto-mode](#automatic-mode). |
-| **Exclude entities carrying this tag** | empty | An entity carrying this tag is left alone — see [Exclusion filters](#exclusion-filters). |
-| **Exclude entities marked as Organized** | off | An entity with Stash's Organized flag set is skipped. |
-| **Never add or remove tags set to Ignore Auto Tag** | off | Such a tag is neither added by Roll-Up nor removed by Prune. |
-| **Never add tags whose name contains (space separated substring)** | empty | Roll-Up does not add a tag whose name contains any of these. |
-| **Never remove tags whose name contains (space separated substring)** | empty | Prune does not remove a tag whose name contains any of these. |
-| **Separator for the two "name contains" settings** | empty (spaces) | The character those two lists are split on. |
-| **Never add tags marked via a Custom Field** | empty | Roll-Up does not add a tag carrying this custom field. |
-| **Never remove tags marked via a Custom Field** | empty | Prune does not remove a tag carrying this custom field. |
+| **Exclusion Filters** | nothing excluded | One row and a dialog holding the eight filters below — see [Exclusion filters](#exclusion-filters). |
+| &emsp;Exclude Entities Carrying This Tag | empty | An entity carrying this tag is left alone. |
+| &emsp;Exclude Entities Marked as Organized | off | An entity with Stash's Organized flag set is skipped. |
+| &emsp;Never Add or Remove Tags Set to Ignore Auto Tag | off | Such a tag is neither added by Roll-Up nor removed by Prune. |
+| &emsp;Never Add Tags Whose Name Contains | empty | Roll-Up does not add a tag whose name contains any of these. |
+| &emsp;Never Remove Tags Whose Name Contains | empty | Prune does not remove a tag whose name contains any of these. |
+| &emsp;Separator for the Two "Name Contains" | empty (spaces) | The character those two lists are split on. |
+| &emsp;Never Add Tags Marked via This Custom Field | empty | Roll-Up does not add a tag carrying this custom field. |
+| &emsp;Never Remove Tags Marked via This Custom Field | empty | Prune does not remove a tag carrying this custom field. |
 | **Show Prune and Roll-Up Buttons on an Entity** | off | Draws the two staging buttons on an entity's edit form (scene, image, gallery, performer, studio or group), for a scene on its Edit tab — see [Prune and Roll-Up on a single entity](#prune-and-roll-up-on-a-single-entity). |
 
 ## Relationship to the other plugins in this repo
@@ -583,7 +592,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Normalize Parent Tags | 3818 MB | 4183 MB | 4080 MB |
+| Normalize Parent Tags | 3813 MB | 4185 MB | 4079 MB |
 | Auto-Mode Settings | 1 MB | — | — |
 | Show Tag Hierarchy | 15 MB | — | — |
 

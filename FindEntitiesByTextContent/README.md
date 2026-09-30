@@ -16,7 +16,7 @@ an entity happens to carry. This plugin is that one question, with one box to ty
 **Settings → Tasks → Plugin Tasks → Find & Replace Entities by Text Content...**
 
 Type what to look for, turn on the [<abbr title="Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.">entity-types</abbr>](../GLOSSARY.md#entity-type) you want searched — they all start **off**,
-so nothing is read until you say so — and press **Search**. The amber **All On** and **All
+so nothing is read until you say so — and press **Search**. The orange **All On** and **All
 Off** pair sets them all at once, and each is disabled when pressing it would change nothing,
 so All Off is dead the moment the dialog opens.
 
@@ -43,7 +43,7 @@ Scene [<abbr title="A scene marker: a moment in a scene (a time, and optionally 
 One line per entity that matched, reading: the entity with its id in brackets, then which
 attributes matched and how many times each, then the text around the first match with the
 match marked. A line whose match is written in another case than what you typed — `Beach`
-for `beach` — says **case differs** in amber, and the log counts them: a Replace rewrites
+for `beach` — says **case differs** in the Highlighted Text Color, and the log counts them: a Replace rewrites
 those too, so tick **Case-sensitive** and search again to leave them out.
 
 The entity's name is a link to it, and **hovering it opens a card**: its picture and the
@@ -61,7 +61,7 @@ Click one to open it in a new tab, or in this one if ᝯㄝₓ Core is set that 
 search finds attributes to offer — Title, Details, Aliases, Custom field name, and so on,
 one for every attribute something has actually matched in. Turning one off hides the
 entities that only matched there, and drops that attribute's chip from the ones that also
-matched elsewhere, so a line never claims a match it is hiding. They start on; the amber
+matched elsewhere, so a line never claims a match it is hiding. They start on; the orange
 **All On** / **All Off** pair covers both rows.
 
 The two rows are not the same kind of control. **Entity-types decide what is read** — they
@@ -254,7 +254,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Find & Replace Entities by Text Content | 785 MB | 1727 MB | 1540 MB |
+| Find & Replace Entities by Text Content | 785 MB | 1752 MB | 1541 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 

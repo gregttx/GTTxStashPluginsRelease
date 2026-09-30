@@ -80,7 +80,7 @@ paths that were set a moment ago, so **Proceed** is withdrawn and **Rescan** app
 Press it to plan again with the paths you have just set.
 
 One button per path, and it is the control: it shows the state the path is in, and a click takes
-the next one. Turning a path on is a single click, and a path that is on wears the plugin's amber.
+the next one. Turning a path on is a single click, and a path that is on wears the Highlighted Text Color.
 The two paths with a third state cycle *Off → All tags → Common tags only*, with the cycle named in
 the button's tooltip — HTML has no tri-state button, so cycling is what a single control can offer,
 and it is still never more clicks than the dropdown it replaced.
@@ -100,13 +100,13 @@ button whose press would change nothing is unavailable, and says so.
 
 **System view**, from the footer, puts the same thirteen buttons on a diagram of what they do: one
 box per [<abbr title="Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.">entity-type</abbr>](../GLOSSARY.md#entity-type), with the tags and — where the type has them — the performers inside it, and one
-arrow per path leaving what it reads and entering what it writes. Green arrows carry tags, blue
-carry performers, and a dashed one reaches its source through the target's scenes, which is how a
+arrow per path leaving what it reads and entering what it writes. Green arrows carry tags, blue ones
+(ᝯㄝₓ Core's Accent Color) carry performers, and a dashed one reaches its source through the target's scenes, which is how a
 Group gets its scenes' performers and markers without having any of its own. A box is styled as one
 of Stash's own secondary buttons, so it looks like the rest of your theme, and its outline says what
-your configuration has it doing: **amber** for a box being written into, **teal** for one being read
+your configuration has it doing: **orange** for a box being written into, **blue** for one being read
 out of, **black** for neither. A box that is both — Scene and Gallery, once a few paths are on — is
-amber, since being written into is the half you are deciding about. It follows a toggle the moment
+orange, since being written into is the half you are deciding about. It follows a toggle the moment
 you press it. The picture is sized to what is on it and centred in the dialog. Each toggle sits on its
 own arrow and is the same control the list shows, so a path set in one view is set in the other and
 is what Save writes. **List view** switches back, and the dialog opens on whichever of the two you last left it in.
@@ -129,7 +129,7 @@ to reflow to.
 **A path can already be happening without being on.** With *Tags: Studio → [<abbr title="A group (formerly a movie) collects scenes in order; a group can hold other groups, its sub-groups.">Groups</abbr>](../GLOSSARY.md#group)* and
 *Tags: Groups → Scenes* both on, a studio's tags reach its groups and then those groups' scenes —
 so *Tags: Studio → Scenes* is running whether or not anyone enabled it. Such a path reads **On** in
-amber letters on the resting background rather than as a filled amber button, and its tooltip names
+letters in the Highlighted Text Color on the resting background rather than as a filled orange button, and its tooltip names
 the paths doing the work. Switching it on as well is a different thing: it adds the direct copy,
 which reaches scenes with no group. Only chains of paths set to plain *On* count — a link carrying
 just the tags all its sources share carries part of the payload, not all of it — and only chains
@@ -321,8 +321,8 @@ the last thing in the row rather than being displaced by ours. On a page with tw
 the row gets a small gap between its two lines when it wraps; the gap is on the row rather than on
 the buttons, since a margin on a button in a flex row grows Stash's own buttons taller with it.
 
-Every button this plugin draws is **amber**, where Stash's own row actions are grey.
-Amber is this repo's colour for "a plugin put this here, and pressing it writes to entities other
+Every button this plugin draws is **orange**, where Stash's own row actions are grey.
+Orange is this repo's colour for "a plugin put this here, and pressing it writes to entities other
 than the one in front of you" — the same colour `MergePerformerTagsToScenes` uses for its two
 buttons, so a row holding both reads as one kind of thing rather than two. It is deliberately not
 the blue of a primary action: Save is still the primary action on those pages. Inside the review
@@ -502,14 +502,16 @@ tags:scene>group=COMMON`) and can be typed by hand — it is read forgivingly, i
 case, and rewritten in canonical form. A path nobody names is off. Upgrading from an earlier
 release carries your existing path toggles over untouched.
 
-Seven exclusion filters follow. There is an eighth, and it is in the **Path Settings** dialog rather
-than here; it is described below.
+**Exclusion Filters** — one row, saying which filters do something now, and the button that opens
+the dialog holding seven of them. There is an eighth, and it is in the **Path Settings** dialog; it is
+described below. Each is stored under its own key as a row of its own would be, so `config.yml` still
+edits them, and each has its whole description when you hover it in the dialog. The seven:
 
-**Exclude target entities carrying this tag** — any entity carrying the tag you name is skipped.
+**Exclude Target Entities Carrying This Tag** — any entity carrying the tag you name is skipped.
 The tag is matched by exact name, case-sensitive — and a tag one of
 whose aliases is that exact string counts too, with the name winning where both match. Once it
-resolves, a **🔗** appears on the value's own line, just after the name and left of **Edit**,
-linking to the tag it found. **Hover it for what that tag is** — its name and id, the alias it
+resolves, a **🔗** appears beside its box in the dialog, linking to the tag it found, and follows
+what you type once you pause. **Hover it for what that tag is** — its name and id, the alias it
 matched on if that is how it got there, its aliases, its [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parents</abbr>](../GLOSSARY.md#parent), its children and its
 description — which is the question a name alone cannot settle in a library holding three tags
 called something similar. No link means the name
@@ -517,47 +519,46 @@ matches nothing, which is worth knowing before you start a run: a name that reso
 does not make the filter do less, it stops the run outright, because copying onto the very
 entities the filter protects is the one thing here that cannot be undone.
 
-**Exclude target entities marked as Organized** — any entity with Stash's [<abbr title="Stash's per-scene, image and gallery flag saying you have finished organizing it.">Organized</abbr>](../GLOSSARY.md#organized) flag set is skipped.
+**Exclude Target Entities Marked as Organized** — any entity with Stash's [<abbr title="Stash's per-scene, image and gallery flag saying you have finished organizing it.">Organized</abbr>](../GLOSSARY.md#organized) flag set is skipped.
 
-**Never copy tags set to Ignore Auto Tag** — a tag with "Ignore Auto Tag" set is never copied.
+**Never Copy Tags Set to Ignore Auto Tag** — a tag with "Ignore Auto Tag" set is never copied.
 
-**Never copy tags marked via a Custom Field** — a tag carrying the custom field you name is never
+**Never Copy Tags Marked via This Custom Field** — a tag carrying the custom field you name is never
 copied. It is the only box here with a **default**: `ᱜ╦╦🞮_Do_Not_Propagate_Tag`, written in the
 first time the plugin loads so you can see the name to mark tags with. Put that custom field on a
 tag — any value at all — and nothing here ever copies it anywhere. **Clearing the box switches the
 filter off**, like every other box here, and it stays off: the default is written once and never
 again.
 
-Once it is set, a **ⓕ** appears beside the value: hover it for what the field is — the description `ᝯㄝₓ Custom Fields Bulk Editor` holds for it, how many entities carry it, and the first ten of them by name and type. Nothing is read until you hover, because finding the carriers means seven filtered queries and this page redraws every second ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)).
+Where `ᝯㄝₓ Custom Fields Bulk Editor` describes the field, a **ⓕ** appears beside the box: hover it for what the field is — that description, how many entities carry it, and the first ten of them by name and type. The carriers are not read until you hover, because finding them means seven filtered queries ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)).
 
 If a value is adopted from `MergePerformerTagsToScenes` on that first load, it replaces the default
 — the field is theirs, and you have already answered this question over there. The description filed
 for the default is then an orphan: it shows as `[orphan]` in **Manage Custom Field Descriptions and [<abbr title="A custom field locked in Custom Fields Bulk Editor: added to, never changed or removed.">Locks</abbr>](../GLOSSARY.md#lock)...**
 and **Prune orphans** clears it.
 
-**Exclude tags whose name contains (space separated substring)** — one or more substrings,
+**Exclude Tags Whose Name Contains** — one or more substrings,
 separated by spaces; a tag whose name contains any of them is never copied. Matched anywhere in
 the name, case-sensitive, and any Unicode character can be used, which is what makes it handy for
 [<abbr title="A character put in the names of the tags that only group other tags - the headings of a tag tree, never put on an entity - so one assigned by mistake stands out wherever it lands. A naming convention the name filters here make easy to use; Stash itself has no such notion.">namespace-markers</abbr>](../GLOSSARY.md#namespace-marker). A substring cannot itself contain a space unless the next box sets a separator.
 
-**Separator for the "name contains" setting** — empty, and the substrings above are separated on
+**Separator for "Name Contains"** — empty, and the substrings above are separated on
 spaces. Any character — a comma, a pipe, anything you do not use in tag names — separates on that
 instead, which is how a substring can then contain a space. It is matched literally, so punctuation
 needs no escaping, and each substring is trimmed.
 
-**Exclude all child tags of this tag (included)** — one tag name; that tag and everything
+**Exclude This Tag and All Its Child Tags** — one tag name; that tag and everything
 under it in the hierarchy, however deep, is never copied. It resolves the way the first box does —
-exact name, case-sensitive, an alias counting too — and gets the same **🔗** on its own line once it
+exact name, case-sensitive, an alias counting too — and gets the same **🔗** beside its box once it
 does, with the same hover card. A name that resolves to nothing stops the run for the same reason: a
 run without the filter would copy the very tags it is there to keep out. The plan's log says which
 tag it resolved to and how many tags the subtree holds.
 
 **Skip tags Normalize Parent Tags would prune again** is the eighth filter, and the only one whose
 rule belongs to another plugin — which is why it is a checkbox under the paths in the **Path
-Settings** dialog and not a row on this page. A settings row is rendered from a static manifest and
-could never say whether that plugin is answering right now; the dialog says so on the line beneath
-the box, and greys the box out when it is not. Ticking it and pressing **Save** stores it exactly
-as a settings row did, in the same place, for every tab and both auto-modes.
+Settings** dialog, beside what it is about. The dialog says on the line beneath the box whether that
+plugin is answering right now, and greys the box out when it is not. Ticking it and pressing **Save**
+stores it for every tab and both auto-modes.
 `ᝯㄝₓ Normalize Parent Tags`' automatic **Prune** removes a tag from
 an entity when a more specific tag on the same entity already implies it. So a scene already tagged
 *Platinum* that gains *Hair Colour* from its studio loses it again on the very save this plugin
@@ -591,17 +592,21 @@ you change it, and a value you have set is never replaced — including a toggle
 back off, which is why the rule is about whether you have *touched* the setting rather than what it
 currently says.
 
-**Log every copy to the Browser Console (Info level)** — one console line per tag or performer
-added (F12 → Console; **not** the Stash server log or the Logs page — this is a UI plugin and
-cannot write there).
+Console logging is a switch in ᝯㄝₓ Core's **Dev Mods**, **Log Propagate Tags and Performers to the
+Browser Console**: one console line per tag or performer added (F12 → Console; **not** the Stash server
+log or the Logs page — this is a UI plugin and cannot write there).
 
-One of those switches is not Stash's blue: the logging switch is **teal**, for one that only
-talks to the console. The boxes inside the dialogs are **amber** — the two auto-modes and
-**Save Immediately** — the plugin's colour for a setting that makes it write without showing you
-a plan first. Everything else stays blue. In **Settings → Tasks → Plugin Tasks** the one task,
-**Propagate All...**, is amber for the same reason, and **Path Settings**, **Manual Buttons
-Settings** and **Auto-Propagation and Depropagate Assist** — wherever they appear — are teal: they write a setting,
-not your library.
+A setting's name, and its box, say how much it does on its own, in three shades of the
+**Highlighted Text Color**: the two auto-modes and **Save Immediately** in the color itself, since
+they write without showing you a plan first; **Silent Auto-propagation** in red, since it writes with
+no dialog at all; the paths, the exclusion filters, **Skip tags ᝯㄝₓ Normalize Parent Tags would
+prune again** and Depropagate assist paler, since they decide what those writes touch or offer to
+take back. The manual buttons stay plain. A row's summary shows a setting in its shade while it is on. In **Settings → Tasks → Plugin Tasks** the one task, **Propagate All...**, is orange for the
+same reason. **Path Settings...** in the run dialog and **System view** in the paths dialog are
+Stash's blue: they write a setting, or nothing, never your library. On their rows under
+**Settings → Plugins**, **Path Settings**, **Manual Buttons Settings**, **Auto-Propagation and
+Depropagate Assist** and **Exclusion Filters** look like Stash's own Edit buttons, but orange, and
+each row's heading takes the strongest shade of the settings inside it.
 
 ## Relationship to the other plugins in this repo
 
@@ -637,7 +642,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1793 MB | 1836 MB | 1818 MB |
+| Propagate All | 1782 MB | 1824 MB | 1807 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
@@ -652,8 +657,8 @@ and what Undo takes back are all whole.
 
 A button hides itself whenever clicking it would add nothing, and most of the reasons
 are invisible from the page — the sources' tags, the target's own tags, the exclusion filters. Turn
-on the [debug switch](../GTTxCore/README.md#the-debug-switch)
-(`__GTTx__.StashPluginCoop.debugButtons = true` in the browser console) and each button reports
+on ᝯㄝₓ Core's [Log Button Visibility to the Browser Console](../GTTxCore/README.md#logging-button-visibility)
+(or `__GTTx__.StashPluginCoop.logButtonVisInfo = true` in the browser console) and each button reports
 whether it is shown or hidden and why, prefixed `[ptp2re gate]`, on the next tick.
 
 **Each button copies its own path and nothing else.** With both the performer and studio

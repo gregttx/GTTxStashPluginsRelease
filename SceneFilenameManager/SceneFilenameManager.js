@@ -30,11 +30,11 @@
   // `ui: requires:` in the .yml is topologically sorted by Stash and `useScript` sets
   // `async = false`, so Core has finished running before this line - when it is present.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[sfm] ᝯㄝₓ Scene Filename Manager cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[sfm] ᝯㄝₓ Scene Filename Manager cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -55,7 +55,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '2.0.5';
+  var PLUGIN_VERSION = '2.1.10';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -294,31 +294,31 @@
     // `.tests/style.test.js` pins the overlap.
     '.sfm-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.sfm-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.sfm-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.sfm-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.sfm-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.sfm-title{font-size:1.1rem;font-weight:600;}' +
-    '.sfm-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.sfm-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.sfm-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.sfm-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.sfm-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.sfm-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.sfm-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.sfm-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.sfm-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
     '.sfm-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.sfm-elink{color:#7cc4ff;text-decoration:none;}' +
+    '.sfm-elink{text-decoration:none;}' +
     '.sfm-elink:hover{text-decoration:underline;}' +
-    '.sfm-spin{color:#a7b6c2;}' +
-    '.sfm-filter{padding:.35rem 1rem;border-bottom:1px solid #394b59;display:flex;gap:.75rem;' +
+    '.sfm-spin{color:var(--gttx-muted,#a7b6c2);}' +
+    '.sfm-filter{padding:.35rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;gap:.75rem;' +
     'flex-wrap:wrap;align-items:center;font-size:.8rem;}' +
-    '.sfm-filter-label{color:#a7b6c2;}' +
+    '.sfm-filter-label{color:var(--gttx-muted,#a7b6c2);}' +
     '.sfm-filter-kind{display:inline-flex;gap:.25rem;align-items:center;margin:0;cursor:pointer;}' +
-    '.sfm-filter-cut{color:#a7b6c2;}' +
-    '.sfm-filter-find{flex:1 1 12rem;min-width:8rem;background:#1f2b33;color:#f5f8fa;' +
-    'border:1px solid #394b59;border-radius:3px;padding:.15rem .4rem;}' +
-    '.sfm-ERROR{color:#ff7373;} .sfm-WARN{color:#ffb648;} .sfm-INFO{color:#a7b6c2;}' +
-    '.sfm-EDIT,.sfm-RENAME{color:#84d68a;} .sfm-SAME{color:#7d8f9c;}' +
-    '.sfm-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.sfm-filter-cut{color:var(--gttx-muted,#a7b6c2);}' +
+    '.sfm-filter-find{flex:1 1 12rem;min-width:8rem;background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.15rem .4rem;}' +
+    '.sfm-ERROR{color:#ff7373;} .sfm-WARN{color:var(--gttx-highlight,#ffc107);} .sfm-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.sfm-EDIT,.sfm-RENAME{color:#84d68a;} .sfm-SAME{color:var(--gttx-dim,#7d8f9c);}' +
+    '.sfm-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.sfm-foot button{margin-right:.5rem;}' +
     '.sfm-hidden{display:none !important;}' +
@@ -327,20 +327,20 @@
     '.sfm-edit-body{flex:1 1 auto;overflow:auto;padding:.75rem 1rem;}' +
     '.sfm-tpl-wrap{position:relative;}' +
     '.sfm-tpl-mirror,.sfm-tpl-input{font-family:monospace;font-size:.95rem;line-height:1.45;' +
-    'padding:.5rem .65rem;border:1px solid #394b59;border-radius:3px;white-space:pre-wrap;' +
+    'padding:.5rem .65rem;border:1px solid var(--gttx-border,#394b59);border-radius:3px;white-space:pre-wrap;' +
     'word-break:break-all;margin:0;box-sizing:border-box;}' +
-    '.sfm-tpl-mirror{min-height:4.5rem;background:#10161a;color:#f5f8fa;}' +
+    '.sfm-tpl-mirror{min-height:4.5rem;background:var(--gttx-sunken,#10161a);color:var(--gttx-fg,#f5f8fa);}' +
     '.sfm-tpl-input{position:absolute;top:0;left:0;width:100%;height:100%;resize:none;' +
-    'overflow:hidden;background:transparent;color:transparent;caret-color:#f5f8fa;outline:none;}' +
-    '.sfm-hl-tok{color:#84d68a;} .sfm-hl-not{color:#7cc4ff;} .sfm-hl-bad{color:#ff7373;}' +
-    '.sfm-hl-pair{color:#3fc1c9;} .sfm-hl-open{color:#ffb648;}' +
+    'overflow:hidden;background:transparent;color:transparent;caret-color:var(--gttx-fg,#f5f8fa);outline:none;}' +
+    '.sfm-hl-tok{color:#84d68a;} .sfm-hl-not{color:var(--gttx-accent,#7cc4ff);} .sfm-hl-bad{color:#ff7373;}' +
+    '.sfm-hl-pair{color:#48aff0;} .sfm-hl-open{color:var(--gttx-highlight,#ffc107);}' +
     '.sfm-hl-err{background:rgba(255,115,115,.4);}' +
     '.sfm-tpl-error{color:#ff7373;margin-top:.35rem;}' +
     '.sfm-palette{display:flex;flex-wrap:wrap;gap:.3rem;margin:.6rem 0;}' +
-    '.sfm-vhead{color:#a7b6c2;margin:.6rem 0 .3rem;font-weight:600;}' +
+    '.sfm-vhead{color:var(--gttx-muted,#a7b6c2);margin:.6rem 0 .3rem;font-weight:600;}' +
     '.sfm-values{display:grid;grid-template-columns:max-content 1fr max-content;gap:.3rem .6rem;' +
     'align-items:center;}' +
-    '.sfm-val{background:#30404d;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
+    '.sfm-val{background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
     'padding:.15rem .4rem;}' +
     '.sfm-val-name{font-weight:700;}' +
     '.sfm-val-on{color:#84d68a;} .sfm-val-off{color:#ff7373;}' +
@@ -348,9 +348,14 @@
     '.sfm-vhead-row{display:flex;align-items:center;justify-content:space-between;}' +
     '.sfm-kept{display:flex;align-items:center;gap:.35rem;margin:0;font-weight:400;' +
     'font-size:.85rem;white-space:nowrap;}' +
-    '.sfm-num{background:#30404d;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
+    '.sfm-limits{display:flex;flex-wrap:wrap;gap:.35rem 1.25rem;margin-bottom:.25rem;}' +
+    '.sfm-limit{display:inline-flex;align-items:center;gap:.4rem;margin:0;font-weight:400;cursor:help;}' +
+    '.sfm-limit-box{width:5.5rem;background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
+    'padding:.1rem .35rem;}' +
+    '.sfm-limits-line{font-family:var(--font-family-sans-serif,var(--bs-font-sans-serif,sans-serif));color:var(--gttx-muted,#a7b6c2);font-size:.85rem;margin-top:.15rem;}' +
+    '.sfm-num{background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
     'padding:.25rem .35rem;width:4rem;}' +
-    '.sfm-out{font-family:monospace;padding:.4rem .65rem;background:#10161a;border-radius:3px;' +
+    '.sfm-out{font-family:monospace;padding:.4rem .65rem;background:var(--gttx-sunken,#10161a);border-radius:3px;' +
     'word-break:break-all;}' +
     // The settings page: the description in paragraphs, all but the first behind
     // Show more, and each setting's detail in a hover box. Scoped to our own group.
@@ -363,13 +368,13 @@
     '.sfm-tip:hover,.sfm-tip:focus{opacity:1;outline:none;}' +
     '.sfm-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
     'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.sfm-tipped.sfm-tip-open .sfm-tipbox{display:block;}' +
     '.sfm-desc-collapsed .sfm-p:not(:first-child){display:none;}' +
     '.sfm-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
     '.sfm-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
@@ -519,8 +524,8 @@
   // argument are listed in the form the palette inserts.
   var TOKEN_HELP = {
     title: 'The scene’s title.',
-    basetitle: 'The variant set’s base title from ᯯㄝₓ Scene Variants, else the title.',
-    variantpostfix: 'The partial-duration postfix and index from ᯯㄝₓ Scene Variants, ' +
+    basetitle: 'The variant set’s base title from ᝯㄝₓ Scene Variants, else the title.',
+    variantpostfix: 'The partial-duration postfix and index from ᝯㄝₓ Scene Variants, ' +
       'else nothing.',
     year: 'The year of the scene’s date.',
     date: 'The scene’s date, 2021-05-01.',
@@ -533,7 +538,7 @@
     filename: 'The file’s name now, without its extension.',
     origfilename: 'The file’s archived original name, else its name now.',
     ocount: 'The O-count, when it is not 0.',
-    stashid: 'The scene’s stash-id, else its Variant Stash ID from ᯯㄝₓ Scene ' +
+    stashid: 'The scene’s stash-id, else its Variant Stash ID from ᝯㄝₓ Scene ' +
       'Variants: stashdb.org:9f3c1e2a-…',
     organized: 'Present when the scene is organized: the prefix and postfix alone, or 1.',
     fileresolution: 'The file’s width x height, 1920x1080.',
@@ -1047,7 +1052,7 @@
           // A missing field may be added whatever the lock, and a present one added to.
           if (names.raw != null && run.locked && !keepsAll(names, withEveryFile(scene, names.map))) {
             run.msg('WARN', who + ' is skipped: its name is not archived, and "' + field +
-              '" is locked in ᯯㄝₓ Custom Fields Bulk Editor, so it cannot be added.');
+              '" is locked in ᝯㄝₓ Custom Fields Bulk Editor, so it cannot be added.');
             return;
           }
           archive = archive || { scene: slim, value: archiveValue(withEveryFile(scene, names.map)),
@@ -1076,15 +1081,15 @@
 
   function titlePartsFor(run, api) {
     if (!api || typeof api.titleParts !== 'function') {
-      run.msg('INFO', 'ᯯㄝₓ Scene Variants is not installed, so a base title is the ' +
+      run.msg('INFO', 'ᝯㄝₓ Scene Variants is not installed, so a base title is the ' +
         'scene’s title and a variant postfix is empty.');
       return null;
     }
-    run.progressEl.textContent = 'Asking ᯯㄝₓ Scene Variants for the variant sets…';
+    run.progressEl.textContent = 'Asking ᝯㄝₓ Scene Variants for the variant sets…';
     return api.titleParts().then(function (parts) {
       run.titleParts = parts || {};
     }, function (e) {
-      run.msg('WARN', 'ᯯㄝₓ Scene Variants could not read the variant sets (' +
+      run.msg('WARN', 'ᝯㄝₓ Scene Variants could not read the variant sets (' +
         (e && e.message ? e.message : e) + '), so a base title is the scene’s title and ' +
         'a variant postfix is empty.');
     });
@@ -1094,14 +1099,14 @@
     // COMPAT: a Scene Variants older than its `stashIds` (since SceneFilenameManager 0.4.0);
     // remove when never on its own: each plugin is updated on its own.
     if (!api || typeof api.stashIds !== 'function') {
-      run.msg('INFO', 'ᯯㄝₓ Scene Variants is not installed, or is older than the ' +
+      run.msg('INFO', 'ᝯㄝₓ Scene Variants is not installed, or is older than the ' +
         'stashid token, so stashid is empty.');
       return null;
     }
     return api.stashIds().then(function (worker) {
       run.stashIdsOf = worker.of;
     }, function (e) {
-      run.msg('WARN', 'ᯯㄝₓ Scene Variants could not read its settings (' +
+      run.msg('WARN', 'ᝯㄝₓ Scene Variants could not read its settings (' +
         (e && e.message ? e.message : e) + '), so stashid is empty.');
     });
   }
@@ -2193,12 +2198,60 @@
     if (_editor || _active) return;
     _editor = { opening: true };
     settingsReady().then(function (s) {
-      _editor = new TemplateEditor(templateOf(s), maxNameBytes(s));
+      _editor = new TemplateEditor(templateOf(s), s);
     }, function () { _editor = null; });
   }
 
-  function TemplateEditor(template, nameBytes) {
-    this.nameBytes = nameBytes || NAME_BYTES_DEFAULT;
+  // The four limits a rename is held to, edited in the template editor beside the template
+  // whose output they hold: four rows of the settings group about one thing made it read as a
+  // wall. No row of their own (`version.test.js`' `DIALOG_ONLY`); stored under the same keys,
+  // so nothing already set moves and config.yml still edits them. Each line carries the
+  // setting's whole description on hover.
+  var LIMIT_FIELDS = [
+    { key: 'b2MaxPerformers', label: 'Max Performers In Filename',
+      dflt: MAX_PERFORMERS_DEFAULT,
+      tip: 'How many performers the performers token names: the ones with the most scenes, ties by name. ' +
+        'The rest are counted as +N after them. Default 3.\n\n0 names none, so the performers token ' +
+        'writes nothing and the group around it is left out. The performercount token gives the number ' +
+        'of performers on its own, whatever this is set to.' },
+    { key: 'b3PerformersAlphabetical', label: 'List Performers Alphabetically',
+      bool: true,
+      tip: 'Off: the performers kept are listed by their number of scenes, most first. On: the same ' +
+        'performers, alphabetically. Which performers are kept is the same either way.' },
+    { key: 'b4MaxNameBytes', label: 'Maximum Filename Length',
+      dflt: NAME_BYTES_DEFAULT,
+      tip: 'The longest name Rename Files From Metadata gives a file, extension included, in bytes: an ' +
+        'accented letter takes 2 and an emoji 4. A longer name is cut before its index, never through ' +
+        'it. Default 200, from 60 to 255.\n\nMost filesystems allow 255 - ext4, Btrfs, ZFS, NTFS, exFAT, ' +
+        'APFS. An encrypted folder allows far less: a Synology encrypted shared folder or any eCryptfs ' +
+        'folder takes about 143, so use 140 there.' },
+    { key: 'b5MaxPathLength', label: 'Maximum Full Path Length',
+      dflt: PATH_AUTO,
+      tip: 'The longest full path Rename Files From Metadata lets a file have - its folder\'s path, a ' +
+        'separator and its name - in characters, the way Windows counts them. Auto (the default), a ' +
+        'number from 100, or 0 for no limit. A name that would pass it is cut before its index, with a ' +
+        'warning; a folder whose own path leaves no room is skipped with a warning.\n\nAuto picks 259 ' +
+        'when Stash or this browser runs on Windows - Stash renames past that, but Explorer and many ' +
+        'Windows programs then cannot open or copy the file - else 1023 on macOS and 4095 on Linux, the ' +
+        'operating system\'s own limit. The dialog says which it picked and why.\n\nWhat Auto cannot ' +
+        'see: Stash on Linux (or in Docker, which reports Linux even on a Windows host) whose files you ' +
+        'open from Windows through a share, while you run these tasks from a browser not on Windows. ' +
+        'Auto picks 4095 there - type 259. Nor can it see how long the share\'s own path is on the ' +
+        'Windows side (\\\\nas\\videos\\ against /data/videos/): leave a margin if yours is longer.' },
+  ];
+
+  // What the limits say now, in one line: the template row shows it under the template.
+  function limitsSummary(cfg) {
+    var n = maxPerformers(cfg), bytes = maxNameBytes(cfg), path = maxPathLength(cfg);
+    var alpha = String(cfg.b3PerformersAlphabetical) === 'true';
+    return 'Performers: ' + (n ? 'up to ' + n + (alpha ? ', alphabetically' : ', most scenes first') : 'none') +
+      '. Filenames up to ' + bytes + ' bytes. Full paths: ' +
+      (path === PATH_AUTO ? 'Auto' : path ? 'up to ' + path + ' characters' : 'no limit') + '.';
+  }
+
+  function TemplateEditor(template, cfg) {
+    cfg = cfg || {};
+    this.nameBytes = maxNameBytes(cfg);
     var self = this;
     this.values = {};     // token → { value, missing }
     this.rows = {};       // token → its row of test inputs
@@ -2211,7 +2264,7 @@
     var head = el('div', 'sfm-head');
     head.appendChild(el('div', 'sfm-title', PLUGIN_SHORT_NAME + ' - Rename Template'));
     head.appendChild(el('div', 'sfm-legend', 'Green is a token, blue a !token, red a name ' +
-      'that is not one; teal braces are paired, orange ones are not. A token below goes in ' +
+      'that is not one; blue braces are paired, orange ones are not. A token below goes in ' +
       'at the cursor. The test values are kept per token in this browser; Missing gives a ' +
       'token no value.'));
     this.modal.appendChild(head);
@@ -2232,12 +2285,46 @@
     var palette = el('div', 'sfm-palette');
     Object.keys(TOKEN_HELP).forEach(function (tok) {
       var b = button(tok, 'sfm-chip');
-      paintButton(b, 'btn-info');
+      paintButton(b, 'btn-primary');
       b.title = TOKEN_HELP[tok];
       b.addEventListener('click', function () { self.insert(tok); });
       palette.appendChild(b);
     });
     body.appendChild(palette);
+
+    body.appendChild(el('div', 'sfm-vhead', 'Limits'));
+    var limits = el('div', 'sfm-limits');
+    this.limits = {};
+    LIMIT_FIELDS.forEach(function (f) {
+      // Each limit decides the names a rename writes to disk: Core's highlight level.
+      var label = C.markLevel(el('label', 'sfm-limit'), true);
+      label.title = f.tip;
+      var box = el('input', f.bool ? 'sfm-limit-check' : 'sfm-limit-box');
+      box.type = f.bool ? 'checkbox' : 'text';
+      var v = cfg[f.key];
+      if (f.bool) box.checked = String(v) === 'true';
+      else box.value = v == null || trim(v) === '' ? String(f.dflt) : String(v);
+      if (f.bool) { label.appendChild(box); label.appendChild(el('span', null, f.label)); }
+      else { label.appendChild(el('span', null, f.label)); label.appendChild(box); }
+      limits.appendChild(label);
+      // The test output is cut at the length being typed, not the one stored.
+      if (f.key === 'b4MaxNameBytes') {
+        box.addEventListener('input', function () { self.nameBytes = maxNameBytes({ b4MaxNameBytes: box.value }); self.update(); });
+      }
+      if (f.key === 'b5MaxPathLength') {
+        var auto = button('Set to Auto', 'sfm-path-auto');
+        paintButton(auto, 'btn-primary');
+        auto.title = 'Put Auto in the box: 259 when Stash or this browser runs on Windows, else 1023 on ' +
+          'macOS and 4095 on Linux. Save stores it with the template.';
+        auto.addEventListener('click', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          box.value = PATH_AUTO;
+        });
+        label.appendChild(auto);
+      }
+      self.limits[f.key] = box;
+    });
+    body.appendChild(limits);
 
     var vhead = el('div', 'sfm-vhead sfm-vhead-row');
     vhead.appendChild(el('span', null, 'Test values'));
@@ -2340,7 +2427,7 @@
     this.test(nodes && !problems.length ? nodes : null);
     this.saveBtn.disabled = !!err || (problems.length > 0 && !!trim(s));
     this.saveBtn.title = this.saveBtn.disabled ? 'Correct the template first.'
-      : 'Save the template as the Rename Template setting.';
+      : 'Save the template and the four limits.';
   };
 
   // One row per token the template names, in its order; a row's values outlive it, so
@@ -2444,6 +2531,13 @@
     if (this.saveBtn.disabled) return;
     this.saveBtn.disabled = true;
     patch[TEMPLATE_KEY] = this.input.value;
+    // The limits go with it, each in the shape its box stored before: a whole number as a
+    // number, the path limit as text, the order as a switch.
+    LIMIT_FIELDS.forEach(function (f) {
+      var box = self.limits[f.key];
+      patch[f.key] = f.bool ? !!box.checked
+        : f.key !== 'b5MaxPathLength' && /^\s*\d+\s*$/.test(box.value) ? Number(box.value) : trim(box.value);
+    });
     C.writePluginSettings(PLUGIN_ID, patch, 'SFMSaveTemplate').then(function () {
       _settingsAt = 0;
       refreshConfiguration();
@@ -2524,11 +2618,46 @@
 
   function settingsTick() {
     C.paintTaskButtons(PLUGIN_NAME, TASK_NAMES, function () { return PLUGIN_BTN_VARIANT; });
+    // Found by the row's own id, like the click that opens the editor.
+    templateRowTick();
     var group = page.group();
     if (!group) return;
     page.decorate(group);
     // `fieldName()`, not the raw box: an empty one means the default.
     cfTipTick(PLUGIN_ID, 'a1FilenameField', fieldName());
+    // Restore renames the files back to what this field holds: its heading in Core's highlight
+    // level. The row's button is Stash's own Edit, left as Stash draws it.
+    C.levelRow(coreSettingRow(PLUGIN_ID, 'a1FilenameField'), true);
+  }
+
+  // The template row: what the limits say, after the description, and a Rename
+  // Template... where Stash's Edit was - both open the editor (the click listener below
+  // catches any button in the row), ours says what it opens. Stash's Edit is hidden rather
+  // than removed: React owns it, and the setting must stay editable if this script stops.
+  var LIMITS_LINE_ID = 'sfm-limits-line', TEMPLATE_BTN_ID = 'sfm-template-button';
+  function templateRowTick() {
+    var row = coreSettingRow(PLUGIN_ID, TEMPLATE_KEY);
+    if (!row) return;
+    var line = document.getElementById(LIMITS_LINE_ID);
+    if (!line) { line = el('div', 'sfm-limits-line'); line.id = LIMITS_LINE_ID; }
+    var text = limitsSummary(settings());
+    if (line.textContent !== text) line.textContent = text;
+    C.markLevel(line, true);              // the limits are always in force
+    C.afterDescription(row, line);
+    var btn = document.getElementById(TEMPLATE_BTN_ID);
+    if (!btn) {
+      btn = C.settingButton('Rename Template...', 'sfm-template-btn');
+      btn.id = TEMPLATE_BTN_ID;
+      btn._coopOwner = PLUGIN_ID;
+      btn.title = 'Open the template editor: the template, the name it gives for test values, and the ' +
+        'four limits a rename is held to. Nothing is written until you press Save there.';
+    }
+    var edit = null, all = row.querySelectorAll ? row.querySelectorAll('button') : [];
+    for (var i = 0; i < all.length && !edit; i++) if (all[i] !== btn) edit = all[i];
+    var btnHost = edit ? edit.parentNode : row;
+    if (btn.parentNode !== btnHost) btnHost.appendChild(btn);
+    if (edit && edit.style && edit.style.display !== 'none') edit.style.display = 'none';
+    C.levelRow(row, true, btn);           // the template names the files a rename writes
   }
 
   // ── The field's description, filed with Custom Fields Bulk Editor ─────────
@@ -2557,48 +2686,8 @@
   // ── Wiring ────────────────────────────────────────────────────────────────
   //
   // Decoration only, so a one-second timer and no `domBus` subscription.
-  // **Set to Auto, in Stash's own edit box for Maximum Full Path Length.** Stash opens a
-  // modal to edit a STRING setting, headed with its display name; the button fills the
-  // box with Auto the way typing does - through the input's native value setter and an
-  // `input` event, since React owns the box and a bare `.value` is undone on its next
-  // render - and Stash's Confirm saves it. Nothing is written from here.
-  var PATH_SETTING_NAME = 'Maximum Full Path Length';
-  function pathModalTick() {
-    var heads = document.querySelectorAll ? document.querySelectorAll('.modal-header') : [];
-    for (var i = 0; i < heads.length; i++) {
-      var head = heads[i];
-      if (trim(head.textContent).indexOf(PATH_SETTING_NAME) !== 0) continue;
-      var box = head.parentNode, foot = null, input = null;
-      var kids = box && box.querySelectorAll ? box.querySelectorAll('.modal-footer') : [];
-      foot = kids[0] || null;
-      var inputs = box && box.querySelectorAll ? box.querySelectorAll('input') : [];
-      input = inputs[0] || null;
-      if (!foot || !input || foot._sfmAuto) continue;
-      foot._sfmAuto = true;
-      var btn = button('Set to Auto', 'sfm-path-auto');
-      paintButton(btn, 'btn-info');
-      btn.title = 'Put Auto in the box: 259 when Stash or this browser runs on Windows, else ' +
-        '1023 on macOS and 4095 on Linux. Press Confirm to save it.';
-      btn.addEventListener('click', setAuto(input));
-      foot.insertBefore(btn, foot.firstChild);
-    }
-  }
-  function setAuto(input) {
-    return function (e) {
-      if (e && e.preventDefault) e.preventDefault();
-      var proto = window.HTMLInputElement && window.HTMLInputElement.prototype;
-      var desc = proto && Object.getOwnPropertyDescriptor(proto, 'value');
-      if (desc && desc.set) desc.set.call(input, PATH_AUTO); else input.value = PATH_AUTO;
-      try {
-        if (input.dispatchEvent) input.dispatchEvent(new window.Event('input', { bubbles: true }));
-      } catch (err) { /* a browser without Event: the box shows Auto, typing once saves it */ }
-      if (input.focus) input.focus();
-    };
-  }
-
   function tick() {
     try { settingsTick(); } catch (e) { console.error('[sfm] settings tick:', e); }
-    try { pathModalTick(); } catch (e) { console.error('[sfm] path box tick:', e); }
   }
 
   coop().respecters[PLUGIN_ID] = true;

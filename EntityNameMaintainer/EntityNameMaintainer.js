@@ -36,17 +36,17 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[enm] ᝯㄝₓ Entity Name Maintainer cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[enm] ᝯㄝₓ Entity Name Maintainer cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
   // Every plugin's settings through Core's one shared read.
-  var pluginConfig = C.pluginConfig;
+  var pluginConfig = C.pluginConfig, logsToConsole = C.logsToConsole;
   var showDefaults = C.showDefaults, caseSensitive = C.caseSensitive, fold = C.fold, coop = C.coop,
     fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
     copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
@@ -74,7 +74,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '3.0.5';
+  var PLUGIN_VERSION = '3.1.8';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -193,7 +193,6 @@
     a1SkipImages: false,
     b1WarnAbove: '200',
     c1StopAbove: '2000',
-    d1LogToConsole: false,
   };
 
   function numSetting(s, key) {
@@ -245,8 +244,8 @@
     return taken.length;
   }
 
-  // Core's `[enm gate]` channel: off unless Dev Mods' Debug switch is on or
-  // `__GTTx__.StashPluginCoop.debugButtons = true` is typed into the browser console - no
+  // Core's `[enm gate]` channel: off unless Dev Mods' Log Button Visibility switch is on or
+  // `__GTTx__.StashPluginCoop.logButtonVisInfo = true` is typed into the browser console - no
   // setting, no reload, and read at call time so it takes effect on the next rename. The
   // shared switch rather than one of our own, because the question it answers - "why did
   // nothing happen when I renamed that" - is the same shape as "why is this button not
@@ -373,14 +372,14 @@
     // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
     '.enm-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.enm-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.enm-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.enm-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.enm-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.enm-title{font-size:1.1rem;font-weight:600;}' +
-    '.enm-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.enm-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.enm-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.enm-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.enm-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.enm-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.enm-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.enm-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.enm-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
@@ -388,12 +387,12 @@
     // snaps a pixel taller: 1.35 of .8rem is 17.28px, so the lines here are a whole 18.
     '.enm-modal .enm-log{line-height:18px;}' +
     '.enm-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.enm-spin{color:#a7b6c2;}' +
+    '.enm-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.enm-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
-    '.enm-ERROR{color:#ff7373;} .enm-WARN{color:#ffb648;} .enm-INFO{color:#a7b6c2;}' +
-    '.enm-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.enm-ERROR{color:#ff7373;} .enm-WARN{color:var(--gttx-highlight,#ffc107);} .enm-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.enm-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.enm-foot button{margin-right:.5rem;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
@@ -402,20 +401,20 @@
     // one of those did nothing at all, which is how Find & Replace shipped a row that
     // stayed on screen with the checkbox that reveals it switched off.
     '.enm-hidden{display:none !important;}' +
-    '.enm-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
+    '.enm-search{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
-    '.enm-label{color:#a7b6c2;font-size:.85rem;white-space:nowrap;}' +
-    '.enm-check{display:flex;align-items:center;gap:.35rem;color:#a7b6c2;font-size:.85rem;' +
+    '.enm-label{color:var(--gttx-muted,#a7b6c2);font-size:.85rem;white-space:nowrap;}' +
+    '.enm-check{display:flex;align-items:center;gap:.35rem;color:var(--gttx-muted,#a7b6c2);font-size:.85rem;' +
     'white-space:nowrap;cursor:pointer;margin:0;}' +
     // A checkbox carries browser margins that put it off the row's centre line.
     '.enm-check input{margin:0;}' +
     // Amber: the one thing on a hit line that asks for a second look before ticking.
-    '.enm-casediff{color:#ffc107;white-space:nowrap;}' +
+    '.enm-casediff{color:var(--gttx-highlight,#ffc107);white-space:nowrap;}' +
     // `.enm-textbox` rather than `.enm-input`: `CustomFieldsBulkEditor` already defines
     // `.cfbe-input`, and a class name two plugins share has to mean the same thing in
     // both - its box is a filter that flexes with three others beside it, this one is
     // the only control in its row.
-    '.enm-textbox{background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
+    '.enm-textbox{background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
     'padding:.25rem .5rem;flex:1 1 12rem;min-width:8rem;}' +
     // A fixed height rather than the shared `max-height` alone: ticking a box changes
     // the counters and the Proceed caption, and a content-sized modal would resize
@@ -432,7 +431,7 @@
     '.enm-search-wrap{flex-wrap:wrap;}' +
     // The two filter rows are a block of their own rather than more `.enm-search`
     // strips, because they are built and rebuilt as one thing when a scan finishes.
-    '.enm-filters{padding:.4rem 1rem;border-bottom:1px solid #394b59;display:flex;' +
+    '.enm-filters{padding:.4rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;' +
     'flex-direction:column;gap:.3rem;}' +
     '.enm-filterrow{display:flex;gap:.35rem;align-items:center;flex-wrap:wrap;}' +
     // The filter toggles are Bootstrap buttons so they take Stash's own hover and focus
@@ -452,19 +451,19 @@
     'overflow-wrap:anywhere;}' +
     '.enm-hitrow>*{margin-right:8px;}' +
     '.enm-hitrow input{width:13px;height:13px;margin:3px 8px 2px 0;vertical-align:top;}' +
-    '.enm-hitrow:hover{background:#3c4f5d;}' +
-    '.enm-hitrow-off{color:#7d8f9c;}' +
-    '.enm-ent{color:#7cc4ff;text-decoration:none;}' +
+    '.enm-hitrow:hover{background:var(--gttx-raised,#3c4f5d);}' +
+    '.enm-hitrow-off{color:var(--gttx-dim,#7d8f9c);}' +
+    '.enm-ent{text-decoration:none;}' +
     '.enm-ent:hover{text-decoration:underline;}' +
-    '.enm-attr{color:#a7b6c2;}' +
+    '.enm-attr{color:var(--gttx-muted,#a7b6c2);}' +
     // The context string breaks mid-word if it has to.
     '.enm-ctx{overflow-wrap:anywhere;word-break:break-word;}' +
     // The occurrence itself, inside its surroundings. Green rather than amber: it marks
     // what is there now, not what is about to change.
-    '.enm-mark{background:#3f6b46;border-radius:2px;padding:0 .1rem;}' +
-    '.enm-was{color:#7d8f9c;}' +
+    '.enm-mark{background:var(--gttx-match-bg,#3f6b46);border-radius:2px;padding:0 .1rem;}' +
+    '.enm-was{color:var(--gttx-dim,#7d8f9c);}' +
     '.enm-spacer{flex:1 1 auto;}' +
-    '.enm-readme{color:#7cc4ff;font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
+    '.enm-readme{font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
     // ── The settings page ───────────────────────────────────────────────────
     //
     // Stash renders the description as one text node in a `.sub-heading` that is
@@ -479,7 +478,7 @@
     '.enm-own-group .sub-heading .enm-p:last-child{margin-bottom:0;}' +
     '.enm-desc-collapsed .enm-p:not(:first-child){display:none;}' +
     '.enm-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
     // The per-setting hover box: a summary on the row, the rest behind a ⓘ that opens
     // from the mark, the summary or the setting's own name. Stash's `title` slot cannot
@@ -496,36 +495,22 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // pointer-events:none is load-bearing, not tidiness. Opened from the setting's name
     // the box lands over the h3, so a box that took the pointer would fire mouseleave on
     // the name, close, hand the pointer back and reopen - a flicker loop.
     '.enm-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
     'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
-    '.enm-tipped.enm-tip-open .enm-tipbox{display:block;}' +
-    // ── Colour-coded toggles ────────────────────────────────────────────────
-    //
-    // Teal for the one setting that only talks to the console, matching every sibling.
-    // The two thresholds and the image switch keep Stash's blue: they choose what a
-    // scan *covers*, not what anything does on its own, and marking everything would
-    // mark nothing.
-    //
-    // Keyed on the id SettingsPluginsPanel.tsx builds from the plugin id and the setting
-    // key, the same anchor `settingElement` uses. Two shapes because the switch is
-    // Stash's to render: `::before` is the track of the react-bootstrap Form.Switch it
-    // renders today, and `accent-color` covers a plain checkbox if that ever changes.
-    '#plugin-EntityNameMaintainer-d1LogToConsole{accent-color:#17a2b8;}' +
-    '#plugin-EntityNameMaintainer-d1LogToConsole:checked~.custom-control-label::before' +
-    '{background-color:#17a2b8;border-color:#17a2b8;}';
+    '.enm-tipped.enm-tip-open .enm-tipbox{display:block;}';
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -1030,7 +1015,7 @@
     this.logDropped = (this.logDropped || 0) + keepLog(this.logText);
     if (this.spinEl) this.logEl.appendChild(this.spinEl);   // back to the end
     this.scrollLog();
-    if (this.settings.d1LogToConsole) enm('[enm] ' + kind + ': ' + message);
+    if (logsToConsole(PLUGIN_ID)) enm('[enm] ' + kind + ': ' + message);
     return line;
   };
 
@@ -2154,7 +2139,7 @@
     _stats.fetches++;
     if (!init || typeof init.body !== 'string') {
       // Not an error: most requests a page makes are not this. Worth one line under the
-      // debug switch, because `fetch(new Request(...))` carries its body on the request
+      // button-visibility log, because `fetch(new Request(...))` carries its body on the request
       // rather than on `init`, and that is where it would show up.
       gate.once('body', 'a request went past with no readable body on init; if renames are ' +
         'not being noticed at all, this is why.');

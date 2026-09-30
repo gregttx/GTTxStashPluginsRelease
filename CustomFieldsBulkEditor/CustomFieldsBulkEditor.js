@@ -27,11 +27,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -60,7 +60,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '4.0.5';
+  var PLUGIN_VERSION = '4.0.15';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -610,24 +610,24 @@
     // chosen against it.
     '.cfbe-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.cfbe-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.cfbe-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.cfbe-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.cfbe-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.cfbe-title{font-size:1.1rem;font-weight:600;}' +
-    '.cfbe-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.cfbe-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.cfbe-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.cfbe-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.cfbe-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.cfbe-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.cfbe-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.cfbe-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.cfbe-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
     '.cfbe-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.cfbe-spin{color:#a7b6c2;}' +
+    '.cfbe-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.cfbe-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
-    '.cfbe-ERROR{color:#ff7373;} .cfbe-WARN{color:#ffb648;} .cfbe-INFO{color:#a7b6c2;}' +
-    '.cfbe-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.cfbe-ERROR{color:#ff7373;} .cfbe-WARN{color:var(--gttx-highlight,#ffc107);} .cfbe-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.cfbe-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.cfbe-foot button{margin-right:.5rem;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
@@ -638,7 +638,7 @@
     '.cfbe-hidden{display:none !important;}' +
     // The filter row, shared with NormalizeParentTags' find bar: same position in the
     // dialog (a strip under the head), same job, so the same rule.
-    '.cfbe-search{padding:.5rem 1rem;border-bottom:1px solid #394b59;position:relative;' +
+    '.cfbe-search{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);position:relative;' +
     'display:flex;gap:.5rem;align-items:center;}' +
     // ── This dialog's own ───────────────────────────────────────────────────
     //
@@ -662,7 +662,7 @@
     // and `LIST_RENDER_CAP` is what keeps it bounded - the same trade the siblings
     // make with `LOG_RENDER_CAP`.
     '.cfbe-list{width:100%;height:100%;min-height:0;box-sizing:border-box;overflow:auto;' +
-    'background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;border-radius:3px;' +
+    'background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
     'font-family:monospace;font-size:.8rem;line-height:1.9;padding:.35rem .5rem;}' +
     // A modifier on the shared `.cfbe-log`, not an edit to it: that rule is pinned
     // byte-identical across the four dialogs (`.tests/style.test.js`) and its 14rem
@@ -675,12 +675,12 @@
     // copies with line breaks nobody selected, and copying the listing as text is the
     // reason this list exists at all. Vertical padding is 0 for the same reason it
     // would otherwise overlap the line above.
-    '.cfbe-pill{display:inline;border-radius:3px;padding:0 .3rem;background:#30404d;}' +
-    '.cfbe-pill-act{background:#394b59;color:#a7b6c2;}' +
-    '.cfbe-pill-ent{background:#2c4a63;color:#7cc4ff;text-decoration:none;}' +
+    '.cfbe-pill{display:inline;border-radius:3px;padding:0 .3rem;background:var(--gttx-card,#30404d);}' +
+    '.cfbe-pill-act{background:var(--gttx-raised,#394b59);color:var(--gttx-muted,#a7b6c2);}' +
+    '.cfbe-pill-ent{background:#2c4a63;text-decoration:none;}' +
     '.cfbe-pill-cf{cursor:pointer;}' +
-    '.cfbe-pill-ent:hover,.cfbe-pill-cf:hover{background:#425a6b;}' +
-    '.cfbe-pill-copied{background:#3f6b46;}' +
+    '.cfbe-pill-ent:hover,.cfbe-pill-cf:hover{background:var(--gttx-raised,#425a6b);}' +
+    '.cfbe-pill-copied{background:var(--gttx-match-bg,#3f6b46);}' +
     // Real text, so it takes the selection highlight like the rest of the line;
     // `selectionText` is what keeps it out of what gets copied.
     // One rule for both, so the legend's ␀ cannot drift from the list's. The mark is
@@ -688,17 +688,17 @@
     // its own; the legend is not monospace, but it quotes the list, so the two have to
     // agree. Font only - the legend keeps its own colour and size.
     '.cfbe-none,.cfbe-nonemark{font-family:sans-serif;}' +
-    '.cfbe-none{color:#a7b6c2;}' +
+    '.cfbe-none{color:var(--gttx-muted,#a7b6c2);}' +
     // The type mark after a value, and the same mark beside the value box saying what
     // that box will store. Small, grey and sans-serif like the ␀ it sits next to: it
     // is a fact *about* the value rather than part of it, and a listing full of them
     // still has to read as a list of values.
-    '.cfbe-vtype{color:#7d8f9c;font-size:.8rem;font-family:sans-serif;}' +
-    '.cfbe-pill-failed{background:#7a3b3b;}' +
-    '.cfbe-editor{padding:.5rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    '.cfbe-vtype{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;font-family:sans-serif;}' +
+    '.cfbe-pill-failed{background:var(--gttx-error-bg,#7a3b3b);}' +
+    '.cfbe-editor{padding:.5rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
-    '.cfbe-label{color:#a7b6c2;font-size:.85rem;white-space:nowrap;}' +
-    '.cfbe-input,.cfbe-select{background:#1f2b33;color:#f5f8fa;border:1px solid #394b59;' +
+    '.cfbe-label{color:var(--gttx-muted,#a7b6c2);font-size:.85rem;white-space:nowrap;}' +
+    '.cfbe-input,.cfbe-select{background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.25rem .5rem;}' +
     '.cfbe-input{flex:1 1 10rem;min-width:8rem;}' +
     // The × that empties a filter box, inside the box. `NormalizeParentTags` got here
@@ -708,9 +708,9 @@
     // `.cfbe-input` at large does not, since the editor's two boxes have no ×.
     '.cfbe-inputwrap{position:relative;display:flex;align-items:center;flex:1 1 0;}' +
     '.cfbe-clear{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);' +
-    'background:none;border:0;color:#a7b6c2;font-size:1.1rem;line-height:1;cursor:pointer;' +
+    'background:none;border:0;color:var(--gttx-muted,#a7b6c2);font-size:1.1rem;line-height:1;cursor:pointer;' +
     'padding:0 .35rem;}' +
-    '.cfbe-clear:hover{color:#f5f8fa;}' +
+    '.cfbe-clear:hover{color:var(--gttx-fg,#f5f8fa);}' +
     '.cfbe-filterbox{padding-right:1.9rem;}' +
     // Stash marks its own dropdowns with a stacked ▲/▼ (Settings - Logs - Log Level);
     // a bare <select> gets whatever single chevron the browser draws. `appearance:none`
@@ -736,7 +736,7 @@
     // classes deep and outranks it. Without that pair, "mark Rename" marks all four.
     '.cfbe-bad{color:#ff7373;}' +
     'select.cfbe-bad{border-color:#ff7373;}' +
-    'select.cfbe-bad option{color:#f5f8fa;}' +
+    'select.cfbe-bad option{color:var(--gttx-fg,#f5f8fa);}' +
     'select.cfbe-bad option.cfbe-bad{color:#ff7373;}' +
     // ── The manage-descriptions dialog ──────────────────────────────────────
     //
@@ -744,33 +744,33 @@
     // `.tests/style.test.js` correctly leaves them alone - the pinning is for rules two
     // dialogs both draw, and no other dialog here has a second pane.
     '.cfbe-panes{display:flex;gap:.5rem;padding:.5rem 1rem;flex:2 1 auto;min-height:0;}' +
-    '.cfbe-names{flex:0 0 20rem;overflow:auto;min-height:8rem;background:#1f2b33;' +
-    'border:1px solid #394b59;border-radius:3px;padding:.25rem 0;}' +
+    '.cfbe-names{flex:0 0 20rem;overflow:auto;min-height:8rem;background:var(--gttx-bg,#1f2b33);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.25rem 0;}' +
     '.cfbe-name{display:block;width:100%;box-sizing:border-box;text-align:left;border:0;' +
-    'background:none;color:#f5f8fa;font-family:monospace;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-fg,#f5f8fa);font-family:monospace;font-size:.8rem;cursor:pointer;' +
     'padding:.1rem .5rem;}' +
-    '.cfbe-name:hover{background:#3c4f5d;}' +
-    '.cfbe-name-on{background:#425a6b;}' +
-    '.cfbe-name-orphan{color:#ffb648;}' +
+    '.cfbe-name:hover{background:var(--gttx-raised,#3c4f5d);}' +
+    '.cfbe-name-on{background:var(--gttx-raised,#425a6b);}' +
+    '.cfbe-name-orphan{color:var(--gttx-highlight,#ffc107);}' +
     // Not the orphan amber: a store-tag field is accounted for, not a loose end.
     '.cfbe-name-store{color:#48aff0;}' +
     // After the two above, so a locked orphan or store-tag field still reads as locked.
     '.cfbe-name-locked{color:#ff7373;}' +
     '.cfbe-detail{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:.35rem;}' +
-    '.cfbe-detail-head{color:#a7b6c2;font-size:.85rem;display:flex;align-items:center;' +
+    '.cfbe-detail-head{color:var(--gttx-muted,#a7b6c2);font-size:.85rem;display:flex;align-items:center;' +
     'gap:.35rem;flex-wrap:wrap;}' +
     // The selected field's name *is* the rename box - the heading was already showing
     // it, so an editable one is the same words with a caret in them. Monospace, like
     // every other place a field name is shown here.
-    '.cfbe-namebox{flex:1 1 12rem;min-width:8rem;background:#1f2b33;color:#f5f8fa;' +
-    'border:1px solid #394b59;border-radius:3px;padding:.15rem .4rem;' +
+    '.cfbe-namebox{flex:1 1 12rem;min-width:8rem;background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.15rem .4rem;' +
     'font-family:monospace;font-size:.8rem;}' +
     '.cfbe-readonly-row button{display:none;}' +
     '.cfbe-rename,.cfbe-lock{padding:.05rem .4rem;line-height:1.2;flex:0 0 auto;}' +
     // Grey, not amber: the glyph drowned on the orange. Large enough to read as a switch.
     '.cfbe-lock{font-size:1.25rem;padding:0 .35rem;}' +
-    '.cfbe-text{width:100%;box-sizing:border-box;min-height:5rem;background:#1f2b33;' +
-    'color:#f5f8fa;border:1px solid #394b59;border-radius:3px;padding:.35rem .5rem;' +
+    '.cfbe-text{width:100%;box-sizing:border-box;min-height:5rem;background:var(--gttx-bg,#1f2b33);' +
+    'color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.35rem .5rem;' +
     'font-family:inherit;font-size:.85rem;resize:vertical;color-scheme:dark;}' +
     // **The grip the user drags, drawn rather than left to the browser.** Chrome paints
     // the default one in the widget colours of a light page - a white square on this
@@ -778,7 +778,7 @@
     // image outright, so the triangle has to be drawn here or there is nothing to take
     // hold of. `color-scheme:dark` above is the other half, for the scrollbar beside it
     // and for Firefox, which has no such pseudo-element.
-    '.cfbe-text::-webkit-resizer{background:linear-gradient(315deg,#7d8f9c 0 45%,' +
+    '.cfbe-text::-webkit-resizer{background:linear-gradient(315deg,var(--gttx-dim,#7d8f9c) 0 45%,' +
     'transparent 45%);}' +
     // **`flex-basis:0`, not `auto`, and that is what makes the box above resizable.** A
     // basis of `auto` is the content's own height, and this list holds every entity
@@ -788,8 +788,8 @@
     // therefore sat at its minimum however far it was dragged. With a basis of 0 there
     // is no deficit to distribute: the textarea keeps the height it was given and this
     // box grows into whatever is left.
-    '.cfbe-users{flex:1 1 0;overflow:auto;min-height:5rem;background:#1f2b33;' +
-    'border:1px solid #394b59;border-radius:3px;padding:.35rem .5rem;font-family:monospace;' +
+    '.cfbe-users{flex:1 1 0;overflow:auto;min-height:5rem;background:var(--gttx-bg,#1f2b33);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.35rem .5rem;font-family:monospace;' +
     'font-size:.8rem;line-height:1.9;}' +
     // The same modifier trick `.cfbe-listwrap` is: the shared `.cfbe-log` claims the
     // column with `flex:1 1 auto`, and in this dialog the panes above it are what the
@@ -801,9 +801,9 @@
     // this is the one place here that needs a drag of its own.
     '.cfbe-divider{flex:0 0 auto;height:.6rem;margin:0 1rem;cursor:row-resize;}' +
     '.cfbe-divider::after{content:"";display:block;height:2px;margin-top:.2rem;' +
-    'background:#394b59;border-radius:1px;}' +
-    '.cfbe-divider:hover::after{background:#7cc4ff;}' +
-    '.cfbe-readme{color:#7cc4ff;font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
+    'background:var(--gttx-border,#394b59);border-radius:1px;}' +
+    '.cfbe-divider:hover::after{background:var(--gttx-accent,#7cc4ff);}' +
+    '.cfbe-readme{font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
     // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
     // picture. Fixed to the viewport and placed from the node, because the logs these
     // open over are `overflow:auto` boxes that would clip a positioned child against
@@ -812,13 +812,13 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // The description store tag's own row, when a store exists. A link, so the tag is
     // one click away and the name beside it can be selected; the same blue every other
     // link this plugin draws uses.
@@ -826,7 +826,8 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -845,11 +846,11 @@
     // would fire mouseleave on the mark, close, hand the pointer back and reopen.
     '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
     'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
-    '.cfbe-tagicon{margin-left:.9rem;color:#7cc4ff;text-decoration:none;}' +
+    '.cfbe-tagicon{margin-left:.9rem;text-decoration:none;}' +
     '.cfbe-tagicon:hover{text-decoration:underline;}' +
     // ── The settings page ───────────────────────────────────────────────────
     //
@@ -870,7 +871,7 @@
     '.cfbe-own-group .sub-heading .cfbe-p:last-child{margin-bottom:0;}' +
     '.cfbe-desc-collapsed .cfbe-p:not(:first-child){display:none;}' +
     '.cfbe-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
     // The per-setting hover box: a summary on the row, the rest behind a ⓘ that opens
     // from the mark, the summary or the setting's own name. Stash's `title` slot cannot
@@ -885,14 +886,14 @@
     // a flicker loop for as long as it is hovered.
     '.cfbe-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
     'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.cfbe-tipped.cfbe-tip-open .cfbe-tipbox{display:block;}' +
     // The menu item, amber because it is the one thing this plugin puts into Stash's
     // own chrome and it leads to a write. Stash's `.dropdown-item` supplies the
     // padding, the hover and the layout; only the two things that are ours are set.
-    '.cfbe-menu-item{cursor:pointer;color:#ffb648;}';
+    '.cfbe-menu-item{cursor:pointer;color:var(--gttx-highlight,#ffc107);}';
 
   function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;

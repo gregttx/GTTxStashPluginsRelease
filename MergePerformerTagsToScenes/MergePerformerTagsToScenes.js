@@ -15,22 +15,23 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.3.0 or newer, told by one of its exports (`settingsPage`).
+  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.settingsPage !== 'function') {
+  if (!C || typeof C.levelRow !== 'function') {
     if (window.console && console.error) {
-      console.error('[cpt2s] ᝯㄝₓ Merge Performer Tags To Scenes cannot start: it needs ᝯㄝₓ Core 4.3.0 or newer, installed and '
+      console.error('[cpt2s] ᝯㄝₓ Merge Performer Tags To Scenes cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
   }
-  var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass,
+  var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass, settle = C.settle,
     gqlRequest = C.gqlRequest, settingElement = C.settingElement, settingRow = C.settingRow,
     stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
     coop = C.coop, domBus = C.domBus, plural = C.plural, copyToClipboard = C.copyToClipboard,
     keepLog = C.keepLog, droppedLine = C.droppedLine, linkTarget = C.linkTarget,
     tagTip = C.tagTip, tipText = C.tipText, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
-    cfTipTick = C.cfTipTick, ensureReloadUiButton = C.ensureReloadUiButton,
+    cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
+    ensureReloadUiButton = C.ensureReloadUiButton,
     staleReloadButton = C.staleReloadButton, insertOrdered = C.insertOrdered,
     insertBeforeImportantAction = C.insertBeforeImportantAction,
     fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
@@ -69,7 +70,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '5.0.5';
+  var PLUGIN_VERSION      = '5.1.12';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -134,7 +135,6 @@
     excludeSceneWithTagName: '',
     excludeTagWithIgnoreAutoTag: false,
     excludeTagWithCustomFieldName: '',
-    logMergesToConsole: false,
     // Inverted on purpose. Stash has no default value for plugin settings and renders
     // an unset BOOLEAN as unchecked, so the behaviour we want by default has to be the
     // one that "off" selects — otherwise the box would read off while acting on, and
@@ -161,7 +161,7 @@
 
   // ── Button gating diagnostics ────────────────────────────────────────────
   //
-  // Core's `[cpt2s gate]` channel, off unless `__GTTx__.StashPluginCoop.debugButtons =
+  // Core's `[cpt2s gate]` channel, off unless `__GTTx__.StashPluginCoop.logButtonVisInfo =
   // true` is typed into the browser console. `gateLog` fires every time - its callers are
   // the eligibility probes, and seeing the same answer twice says the re-check ran;
   // `gateLogOnce` is for the tick-driven states, which would otherwise emit every second.
@@ -315,18 +315,18 @@
     var fields = 'id ignore_auto_tag';
     if (cfName) fields += ' custom_fields';
     // The log line names the tag, so the name comes along for that too.
-    if (withDisplay || settings.logMergesToConsole) fields += ' name';
+    if (withDisplay || logsToConsole(PLUGIN_ID)) fields += ' name';
     if (withDisplay) fields += ' aliases image_path';
     return fields;
   }
 
-  // ── Merge logging (logMergesToConsole) ────────────────────────────────────
+  // ── Merge logging (Core's Dev Mods: LOG_MPTTS) ────────────────────────────────────
 
   // Scene fields the log line needs, spliced into whichever scene query is about to
   // run. Requested only when logging is on: on the performer path these ride along
   // with every scene of the performer, so they are pure weight otherwise.
   function sceneLogFields() {
-    return settings.logMergesToConsole ? ' title files { basename }' : '';
+    return logsToConsole(PLUGIN_ID) ? ' title files { basename }' : '';
   }
 
   // A scene's title is optional in Stash, so fall back to the file name the way its
@@ -357,7 +357,7 @@
   // nothing is the normal outcome of a scene that already has all its performer tags.
   var _loggingAnnounced = false;
   function announceLogging() {
-    if (!settings.logMergesToConsole) { _loggingAnnounced = false; return; }
+    if (!logsToConsole(PLUGIN_ID)) { _loggingAnnounced = false; return; }
     if (_loggingAnnounced) return;
     _loggingAnnounced = true;
     logInfo('merge logging enabled — one line will appear here per tag merged into a scene. ' +
@@ -370,7 +370,7 @@
   // action is 'staged' or 'saved'. Names can be missing if logging was switched on
   // between the query being built and this call, hence the fallback.
   function logMerges(tags, scene, sceneId, action) {
-    if (!settings.logMergesToConsole) return;
+    if (!logsToConsole(PLUGIN_ID)) return;
     var label = sceneLogLabel(scene, sceneId);
     tags.forEach(function (t) {
       logInfo('Tag "' + (t.name || 'unnamed') + '" (' + t.id + ') ' +
@@ -868,7 +868,6 @@
     b2ExcludeSceneOrganized:       ['excludeSceneOrganized', false],
     c1ExcludeTagWithIgnoreAutoTag: ['excludeTagWithIgnoreAutoTag', false],
     c2ExcludeTagWithCustomFieldName: ['excludeTagWithCustomFieldName', ''],
-    d1LogMergesToConsole:          ['logMergesToConsole', false],
   };
 
   var LOAD_SETTINGS_MIN_INTERVAL_MS = 2000;
@@ -931,19 +930,19 @@
   var TASK_CSS =
     '.cpt2s-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
-    '.cpt2s-modal{background:#202b33;color:#f5f8fa;border:1px solid #394b59;border-radius:4px;' +
+    '.cpt2s-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
     'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
-    '.cpt2s-head{padding:.75rem 1rem;border-bottom:1px solid #394b59;}' +
+    '.cpt2s-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
     '.cpt2s-title{font-size:1.1rem;font-weight:600;}' +
-    '.cpt2s-warn{color:#ffb648;margin-top:.35rem;}' +
-    '.cpt2s-note{color:#a7b6c2;margin-top:.35rem;}' +
-    '.cpt2s-legend{color:#7d8f9c;margin-top:.35rem;font-size:.8rem;}' +
-    '.cpt2s-progress{padding:.5rem 1rem;border-bottom:1px solid #394b59;color:#a7b6c2;' +
+    '.cpt2s-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.cpt2s-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.cpt2s-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.cpt2s-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
     'white-space:pre-wrap;}' +
     '.cpt2s-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;' +
     'font-size:.8rem;line-height:1.35;min-height:14rem;}' +
     '.cpt2s-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.cpt2s-spin{color:#a7b6c2;}' +
+    '.cpt2s-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.cpt2s-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
@@ -951,11 +950,11 @@
     // today. It is the repo's "a plugin wrote this" colour, used here for the one
     // thing on this page that is about a plugin rather than about a setting.
     '.cpt2s-super{display:inline-block;max-width:22rem;margin:0 .5rem;vertical-align:middle;' +
-    'padding:.2rem .45rem;border-left:4px solid #ffb648;background:rgba(255,182,72,.14);' +
-    'color:#ffb648;font-size:.75rem;line-height:1.3;font-weight:600;}' +
-    '.cpt2s-ERROR{color:#ff7373;} .cpt2s-WARN{color:#ffb648;} .cpt2s-MERGE{color:#84d68a;}' +
-    '.cpt2s-INFO{color:#a7b6c2;}' +
-    '.cpt2s-foot{padding:.75rem 1rem;border-top:1px solid #394b59;display:flex;gap:.5rem;' +
+    'padding:.2rem .45rem;border-left:4px solid var(--gttx-highlight,#ffc107);background:rgba(255,182,72,.14);' +
+    'color:var(--gttx-highlight,#ffc107);font-size:.75rem;line-height:1.3;font-weight:600;}' +
+    '.cpt2s-ERROR{color:#ff7373;} .cpt2s-WARN{color:var(--gttx-highlight,#ffc107);} .cpt2s-MERGE{color:#84d68a;}' +
+    '.cpt2s-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.cpt2s-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +
     '.cpt2s-foot button{margin-right:.5rem;}' +
     // **`!important`, because a hidden utility that loses a cascade is not one.** Every
@@ -974,72 +973,13 @@
     '.cpt2s-own-group .sub-heading{white-space:pre-wrap;}' +
     '.cpt2s-own-group .sub-heading .cpt2s-p{margin:0 0 .35em;}' +
     '.cpt2s-own-group .sub-heading .cpt2s-p:last-child{margin-bottom:0;}' +
-    // A per-setting description shows its first paragraph and hides the rest in a
-    // tooltip. The mark is the only thing saying there is one - a hover that opens
-    // with no invitation is a hover nobody makes.
-    //
-    // Built rather than borrowed: a native `title` is the browser's, and its font
-    // size, its position and its delay cannot be reached from CSS. It opens
-    // *below-right* of the pointer, which is exactly where the arrow sits, so the
-    // first line arrives half covered. This one opens above the row in a readable
-    // size, and - the part `title` could never do - on keyboard focus as well.
-    //
-    // These rules are shared with NormalizeParentTags and `.tests/style.test.js`
-    // compares them with the prefix stripped: keep them byte-identical to that
-    // plugin's, or change both together.
-    '.cpt2s-tipped{position:relative;}' +
-    '.cpt2s-tip{margin-left:.35rem;cursor:pointer;opacity:.65;font-style:normal;' +
-    'font-size:1.05em;}' +
-    '.cpt2s-tip:hover,.cpt2s-tip:focus{opacity:1;outline:none;}' +
-    // An entity named in the log is a link to it. The same blue the siblings' result
-    // lines use, underlined only on hover so a log full of them does not read as a
-    // page of underlines.
-    '.cpt2s-elink{color:#7cc4ff;text-decoration:none;}' +
-    '.cpt2s-elink:hover{text-decoration:underline;}' +
-    // pointer-events:none is load-bearing, not tidiness. Opened from the setting's
-    // name the box lands over the h3, so a box that took the pointer would fire
-    // mouseleave on the name, close, hand the pointer back to the name, and reopen -
-    // a flicker loop for as long as it is hovered.
-    '.cpt2s-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
-    'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
-    'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
-    'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
-    '.cpt2s-tipped.cpt2s-tip-open .cpt2s-tipbox{display:block;}' +
     // The group description sits in the group header, outside the <Collapse>, so it
     // is on screen at whatever size whether the group is expanded or not. Hiding all
     // but the first paragraph is the only thing that shortens it.
     '.cpt2s-desc-collapsed .cpt2s-p:not(:first-child){display:none;}' +
     '.cpt2s-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
-    'background:none;color:#7cc4ff;font-size:.8rem;cursor:pointer;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
     'text-decoration:underline;}' +
-    // ── Colour-coded toggles ────────────────────────────────────────────────
-    //
-    // Amber for the switches that make this plugin write on its own - the two auto
-    // modes, which merge with no dialog (only Undo History reverses them), and the one
-    // that turns the scene button from staging tags for review into saving them - and teal for the
-    // one that only talks to the console. Every other setting keeps Stash's blue:
-    // this marks the ones that are not like the rest, and marking everything would
-    // mark nothing.
-    //
-    // Keyed on the ids SettingsPluginsPanel.tsx builds from the plugin id and the
-    // setting key, the same anchor `settingElement` uses, rather than on position
-    // or heading text.
-    //
-    // Two shapes because the switch is Stash's to render: `::before` is the track
-    // of a react-bootstrap Form.Switch, which is what it renders today, and
-    // `accent-color` covers a plain checkbox if that ever changes. Whichever is not
-    // in use costs nothing.
-    '#plugin-MergePerformerTagsToScenes-a2SaveTagsImmediately,' +
-    '#plugin-MergePerformerTagsToScenes-a3AutoMergeOnSceneUpdate,' +
-    '#plugin-MergePerformerTagsToScenes-a4AutoMergeOnPerformerUpdate{accent-color:#ffc107;}' +
-    '#plugin-MergePerformerTagsToScenes-a2SaveTagsImmediately:checked~.custom-control-label::before,' +
-    '#plugin-MergePerformerTagsToScenes-a3AutoMergeOnSceneUpdate:checked~.custom-control-label::before,' +
-    '#plugin-MergePerformerTagsToScenes-a4AutoMergeOnPerformerUpdate:checked~.custom-control-label::before' +
-    '{background-color:#ffc107;border-color:#ffc107;}' +
-    '#plugin-MergePerformerTagsToScenes-d1LogMergesToConsole{accent-color:#17a2b8;}' +
-    '#plugin-MergePerformerTagsToScenes-d1LogMergesToConsole:checked~.custom-control-label::before' +
-    '{background-color:#17a2b8;border-color:#17a2b8;}' +
     // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
     // picture. Fixed to the viewport and placed from the node, because the logs these
     // open over are `overflow:auto` boxes that would clip a positioned child against
@@ -1048,13 +988,13 @@
     // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
     // box and it belongs to none of them.
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
-    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:#202b33;color:#d6dee4;' +
-    'border:1px solid #425a6b;border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
     'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
-    'margin-bottom:.4rem;border-radius:3px;background:#111a20;}' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
     // The exclusion tag's own row, when the name in it names something. A link, so the
     // tag is one click away and the name beside it can be selected; the same blue the
     // dialog's own entity links use.
@@ -1062,7 +1002,8 @@
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
-    '.gttx-cftip{margin-left:.9rem;color:#ffc107;cursor:help;}' +
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
     // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
     // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
     // so the first line arrived half covered, and nothing in CSS can move a tooltip the
@@ -1081,11 +1022,11 @@
     // would fire mouseleave on the mark, close, hand the pointer back and reopen.
     '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
     'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
-    'background:#202b33;color:#d6dee4;border:1px solid #425a6b;border-radius:3px;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
-    '.cpt2s-tagicon{margin-left:.9rem;color:#7cc4ff;text-decoration:none;}' +
+    '.cpt2s-tagicon{margin-left:.9rem;text-decoration:none;}' +
     '.cpt2s-tagicon:hover{text-decoration:underline;}';
 
   function taskInjectStyle() {
@@ -2326,6 +2267,14 @@
   // fires a sceneUpdate mutation.
 
   var _fetch = window.fetch;
+  // A scene save the auto-merge reacts to, registered on Core's settling registry - the
+  // scene-save reactions only: a performer's save reaches scenes nobody can name until the
+  // merge has looked them up, so a reader of one of them cannot be told to wait for it.
+  function settleScenes(ids) {
+    var dones = ids.map(function (id) { return settle('scene', String(id)); });
+    return function () { dones.forEach(function (d) { d(); }); };
+  }
+
   window.fetch = function (url, opts) {
     // Layer 2 of the task interception, ahead of everything else: the mutation must
     // be answered rather than forwarded, so it cannot go through _fetch first, and
@@ -2361,13 +2310,17 @@
       if (settings.autoMergeOnSceneUpdate && /\bbulkSceneUpdate\b/.test(q) && !autoMergeSuppressed()) {
         var bulkSceneIds = vars.input && vars.input.ids;
         if (bulkSceneIds && bulkSceneIds.length) {
+          // Registered now, on Core's settling registry, so a sibling reading these scenes
+          // after the save waits for the merge; released once it is over, however it ends.
+          var bulkDone = settleScenes(bulkSceneIds);
           mutationSucceeded(p).then(function (ok) {
-            if (!ok) return;
+            if (!ok) { bulkDone(); return; }
             var i = 0;
             var pass = journalPass('Tags merged into bulk-edited scenes');
             function nextScene() {
               if (i >= bulkSceneIds.length) {
                 pass.finish();
+                bulkDone();
                 refreshSceneList();
                 return;
               }
@@ -2377,21 +2330,23 @@
                 .then(nextScene);
             }
             nextScene();
-          });
+          }, bulkDone);
         }
       }
 
       if (settings.autoMergeOnSceneUpdate && /\bsceneUpdate\b/.test(q) && !autoMergeSuppressed()) {
         var sceneId = vars.input && vars.input.id;
         if (sceneId) {
+          var sceneDone = settleScenes([sceneId]);
           mutationSucceeded(p).then(function (ok) {
-            if (!ok) return;
+            if (!ok) { sceneDone(); return; }
             mergeTagsIntoScene(String(sceneId))
               .catch(function (e) { console.error('[cpt2s] auto-merge scene:', e); })
               .then(function () {
+                sceneDone();
                 if (getSceneId() === String(sceneId)) refreshSceneData(sceneId);
               });
-          });
+          }, sceneDone);
         }
       }
 
@@ -3013,7 +2968,14 @@
   // two things that read this heading. A group with no h3 gets the stale banner's slot,
   // above the description.
   function supersededSlot(group) {
-    var h3 = group.querySelector ? group.querySelector('h3') : null;
+    // The group's own heading: not one of the rows Core draws for a dialog, which head
+    // themselves with an h3 too.
+    var heads = group.querySelectorAll ? group.querySelectorAll('h3') : [], h3 = null;
+    for (var i = 0; i < heads.length && !h3; i++) {
+      var inRow = false;
+      for (var n = heads[i]; n && n !== group; n = n.parentNode) if (hasClass(n, 'gttxcore-dialog-row')) inRow = true;
+      if (!inRow) h3 = heads[i];
+    }
     if (h3) return { parent: h3, before: null };
     var sub = byClass(group, 'sub-heading');
     if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
@@ -3070,51 +3032,143 @@
     return _exclWait;
   }
 
-  function dropExclusionLink() {
-    var node = document.getElementById(EXCL_LINK_ID);
-    if (node && node.parentNode) node.parentNode.removeChild(node);
-  }
-
-  function exclusionTagTick() {
-    var key = 'b1ExcludeSceneWithTagName';
-    if (!settingRow(PLUGIN_ID, key)) return;
-    var name = (settings.excludeSceneWithTagName || '').trim();
-    if (!name) { dropExclusionLink(); return; }
-    lookupExclusionTag(name).then(function (tag) {
-      var row = settingRow(PLUGIN_ID, key);
-      if (!row || name !== _exclFor) return;      // the box moved on while we asked
-      if (!tag) { dropExclusionLink(); return; }
-      var node = document.getElementById(EXCL_LINK_ID);
-      if (!node) {
-        node = el('a', 'cpt2s-tagicon', EXCL_MARK);
-        node.id = EXCL_LINK_ID;
-        node.target = linkTarget();
-        node.rel = 'noopener noreferrer';
-      }
+  // The link to the tag `name` resolves to, or null: what the Exclusion Filters dialog draws
+  // beside the box naming it. Nothing, rather than a warning, for a name that resolves to
+  // nothing: a box being typed into is empty, then wrong, then right.
+  // `id`: the dialog's own by default; the row's summary draws a second one of its own.
+  function exclusionMark(name, id) {
+    if (!name) return null;
+    return lookupExclusionTag(name).then(function (tag) {
+      if (!tag) return null;
+      var node = el('a', 'cpt2s-tagicon', EXCL_MARK);
+      node.id = id || EXCL_LINK_ID;
+      node.target = linkTarget();
+      node.rel = 'noopener noreferrer';
       node.href = '/tags/' + tag.id;
       // The tooltip goes through `tagTip`, which draws it as a `title` and reopens it as a
       // box with the tag's picture above it wherever the tag has one.
       tagTip(node, tag.id, tagLinkTitle(tag,
         tag.name === name ? null : 'Matched on "' + name + '", one of its aliases.'));
-      // At the end of Stash's own `.value`, so the link is on the same line as the name
-      // it resolves and to the left of the Edit button. `.setting` is
-      // `display:flex;align-items:center` with the heading, the value and the
-      // sub-heading stacked in one flex child and Edit alone in the other, so a node
-      // beside `.value` starts a line of its own beneath it and one next to Edit is
-      // centred against the whole stack. React owns this subtree; the tick re-adds the
-      // link, so a re-render dropping it costs a second.
-      var host = byClass(row, 'value') || row;
-      if (node.parentNode !== host) host.appendChild(node);
+      return node;
     });
   }
+
+  // ── Two rows and two dialogs ──────────────────────────────────────────────
+  //
+  // Eight settings - four about the buttons and the auto-merges, four filters - were eight
+  // rows of the group, and the page read as a wall. They are two rows now, each opening a
+  // dialog of Core's (`settingsDialog`): stored under the same keys, so nothing already set
+  // moves, the sibling plugin still adopts the filters from them, and config.yml still edits
+  // them; each keeps its whole description on hover. The three switches that make this plugin
+  // write on its own are amber there, as they were on the page. The tag box gets its link and
+  // the field box its ⓕ beside them, where the rows carried them.
+  var BUTTON_FIELDS = [
+    { key: 'a1ShowManualMergeButtons', label: 'Show Manual Buttons',
+      tip: 'Show "Add Tags to all Scenes..." on the performer detail view (not while editing) and "Add all ' +
+        'Tags from all Performers" on the scene Edit tab.\n\nButtons only appear when related content ' +
+        'exists - the performer button also needs the performer to have at least one tag.\n\nA caption ' +
+        'ending in "..." opens a dialog listing every change first; nothing is written until you press ' +
+        'Proceed.' },
+    { key: 'a2SaveTagsImmediately', label: 'Save Immediately',
+      warn: true,
+      tip: 'Make "Add all Tags from all Performers" review in a dialog instead of staging in the ' +
+        'form.\n\nLeave this off to stage the tags in the scene\'s tag box, so you can check them and ' +
+        'press Save yourself. Turned on - or on a Stash that cannot stage - the button opens a dialog ' +
+        'listing every change first, and nothing is written until you press Proceed. Only affects the ' +
+        'scene button; the performer button always reviews in the dialog, and auto-merge always saves.' },
+    { key: 'a3AutoMergeOnSceneUpdate', label: 'Auto-Merge when the Scene is Saved',
+      warn: true,
+      tip: 'When a scene is saved, automatically merge all of its performers\' tags into that scene.' },
+    { key: 'a4AutoMergeOnPerformerUpdate', label: 'Auto-Merge when the Performer is Saved',
+      warn: true,
+      tip: 'When a performer is saved, automatically merge their tags into all of their scenes.\n\nCovers ' +
+        'every scene featuring the performer; filters and selections in the scene list are ignored.' },
+  ];
+
+  var EXCL_FIELDS = [
+    { key: 'b1ExcludeSceneWithTagName', label: 'Exclude Scenes Carrying This Tag', warn: 'semi',
+      text: true, wide: true,
+      mark: function (v) { return exclusionMark(v); },
+      tip: 'Do not merge performer tags to scenes if the scene has this tag.\n\nMatched by exact name, ' +
+        'case-sensitive; a tag one of whose aliases is that exact string counts too, with the name ' +
+        'winning where both match. A link to the tag appears beside the box once it resolves - if it ' +
+        'does not, nothing here names anything, and every merge stops rather than writing into the ' +
+        'scenes this is meant to protect.' },
+    { key: 'b2ExcludeSceneOrganized', label: 'Exclude Scenes Marked as Organized', warn: 'semi',
+      tip: 'Do not merge performer tags to scenes if the scene is marked as Organized' },
+    { key: 'c1ExcludeTagWithIgnoreAutoTag', label: 'Never Merge Tags Set to Ignore Auto Tag', warn: 'semi',
+      tip: 'Do not merge a performer tag to scenes if the tag is set to Ignore Auto Tag' },
+    { key: 'c2ExcludeTagWithCustomFieldName', label: 'Never Merge Tags Marked via This Custom Field', warn: 'semi',
+      text: true, wide: true,
+      mark: function (v) { return v ? cfTipMark(v) : null; },
+      tip: 'Do not merge a performer tag to scenes if the tag has this custom field.\n\nOnly the presence ' +
+        'of the field matters - its value is ignored, so any value at all excludes the tag. Remove the ' +
+        'field from a tag to have it merged again.' },
+  ];
+
+  // The settings under their stored keys, from the plugin's own names for them.
+  function storedSettings() {
+    var out = {};
+    for (var key in SETTING_MAP) if (hasOwn(SETTING_MAP, key)) out[key] = settings[SETTING_MAP[key][0]];
+    return out;
+  }
+  // Read fresh as a dialog opens, a change another tab saved included.
+  function readStored() {
+    return pluginConfig(true).then(function (data) {
+      var ps = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {}, out = {};
+      for (var key in SETTING_MAP) {
+        if (!hasOwn(SETTING_MAP, key)) continue;
+        out[key] = typeof SETTING_MAP[key][1] === 'boolean' ? !!ps[key] : (ps[key] || '');
+      }
+      return out;
+    });
+  }
+
+  // The switches that write on their own in their level here as in the dialog.
+  function buttonsSummary(cfg) {
+    var on = BUTTON_FIELDS.filter(function (f) { return !!cfg[f.key]; });
+    if (!on.length) return 'Every switch off.';
+    var parts = ['On: '];
+    on.forEach(function (f, i) { parts.push(i ? ', ' : '', { text: f.label, hl: f.warn }); });
+    return parts.concat('.');
+  }
+
+  // The tag with its 🔗 and the field with its ⓕ after them, as the dialog draws them; each
+  // exclusion in force in the semi level, as the dialog names them.
+  function exclusionSummary(cfg) {
+    var q = function (k) { return String(cfg[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var tag = q('b1ExcludeSceneWithTagName'), field = q('c2ExcludeTagWithCustomFieldName'), on = [];
+    if (tag) on.push(['scenes tagged ', { text: '"' + tag + '"', mark: function () { return exclusionMark(tag, EXCL_LINK_ID + '-sum'); } }]);
+    if (cfg.b2ExcludeSceneOrganized) on.push(['Organized scenes']);
+    if (cfg.c1ExcludeTagWithIgnoreAutoTag) on.push(['tags set to Ignore Auto Tag']);
+    if (field) on.push(['tags carrying the custom field ', { cf: field }]);
+    if (!on.length) return 'Nothing is excluded.';
+    var parts = ['Leaving alone: '];
+    on.forEach(function (c, i) { parts = parts.concat(i ? ['; '] : [], C.atLevel(c, 'semi')); });
+    return parts.concat('.');
+  }
+
+  function dialogSaved() { loadSettings(true); }
+
+  var buttonsDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'cpt2s', key: 'buttons', title: 'Buttons and Auto-Merge',
+    line: 'The manual buttons on the performer and scene pages, whether the scene button saves at once, ' +
+      'and the two auto-merges that write whenever Stash saves a scene or a performer. Four switches, in a dialog.',
+    fields: BUTTON_FIELDS, summary: buttonsSummary, settings: storedSettings, load: readStored, saved: dialogSaved,
+  });
+  var exclusionDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'cpt2s', key: 'exclusions', title: 'Exclusion Filters',
+    line: 'Which scenes and which tags a merge leaves alone: a tag or Organized on the scene, Ignore Auto Tag, ' +
+      'and a custom field on the tag. Four settings, in a dialog.',
+    fields: EXCL_FIELDS, summary: exclusionSummary, settings: storedSettings, load: readStored, saved: dialogSaved,
+  });
 
   function ensureReadmeLink() {
     var group = page.group();
     if (!group) return;
     page.decorate(group);
-    exclusionTagTick();
-    cfTipTick(PLUGIN_ID, 'c2ExcludeTagWithCustomFieldName',
-      String(settings.excludeTagWithCustomFieldName || '').replace(/^\s+|\s+$/g, ''));
+    buttonsDialog.tick(group);
+    exclusionDialog.tick(group);
     ensureSupersededNotice(group);
   }
 

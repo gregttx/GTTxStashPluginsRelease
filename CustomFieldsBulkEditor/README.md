@@ -34,7 +34,7 @@ whole selection — or the whole library — carries, and **one write across it*
    selected.
 
 For the whole library, go to **Settings → Tasks → Plugin Tasks** and press
-**Edit Custom Fields Across the Whole Library...** — the amber button under this plugin's name. It
+**Edit Custom Fields Across the Whole Library...** — the orange button under this plugin's name. It
 opens the same dialog on everything, with no selecting to do. Reading a large library takes a
 while — 155,000 entities is about fifteen seconds — and the counter says which type it is on and how
 far through it is while you wait.
@@ -62,7 +62,7 @@ Each of those coloured boxes is a **pill**, and clicking one does something:
 | Pill | Click |
 | --- | --- |
 | `"Beach Day" (412)` | Opens that entity's page in a **new tab** — or in this one, if ᝯㄝₓ Core's **Open Links in the Same Tab** is on. Hovering it opens a card: the entity's picture and the handful of fields it is recognised by — its studio, performers, tags, date and rating, or for a tag its aliases, parents, children and description. It is read on the first hover, never while the list is drawn. |
-| `shoot`, `2019-07` | **Copies** that text to the clipboard. The pill flashes green. |
+| `shoot`, `2019-07` | **Copies** that text to the clipboard. The pill flashes green (ᝯㄝₓ Core's Match Background Color), or red if the copy failed (its Error Message Background Color). |
 | `Added`, `Replaced`, `Deleted` *(after Apply)* | Nothing. It is a label. |
 
 **`␀` means nothing is there** — an entity carrying no custom fields at all, no field on that side
@@ -398,7 +398,7 @@ Several of them work with custom fields, and this plugin is where they look:
   a locked field.
 - **Descriptions**: `ᝯㄝₓ Scene Filename Manager`, `ᝯㄝₓ Scene Variants` and
   `ᝯㄝₓ Propagate Tags and Performers to Related Entities` file a description for the fields they use in this plugin's
-  store, never over one you wrote. The amber ⓕ Core puts beside a setting naming a custom field reads
+  store, never over one you wrote. The ⓕ Core puts beside a setting, in the Highlighted Text Color, naming a custom field reads
   its description from here.
 - **Exclusion filters** in `ᝯㄝₓ Merge Performer Tags To Scenes`, `ᝯㄝₓ Normalize Parent Tags` and
   `ᝯㄝₓ Propagate Tags and Performers to Related Entities` read a tag's custom fields; they never write them.
@@ -418,8 +418,8 @@ All of it is given back when the dialog is closed. The figures come from [MEMORY
 
 ## Troubleshooting
 
-**The menu item is not there.** Turn on the
-[debug switch](../GTTxCore/README.md#the-debug-switch) (`__GTTx__.StashPluginCoop.debugButtons = true`
+**The menu item is not there.** Turn on ᝯㄝₓ Core's
+[Log Button Visibility to the Browser Console](../GTTxCore/README.md#logging-button-visibility) (or `__GTTx__.StashPluginCoop.logButtonVisInfo = true`
 in the browser console) and open the menu again: this plugin says which of the three conditions is
 not met — not a list view, no open menu, or nothing selected — on the next tick.
 
