@@ -2,8 +2,8 @@ id: MergePerformerTagsToScenes
 name: ᝯㄝₓ Merge Performer Tags To Scenes
 metadata:
   description: "Copies each performer's tags onto their scenes.\n\nThree ways to run it: buttons on the performer and scene pages, automatically whenever a scene or performer is saved, or as one library-wide task in Settings - Tasks - Plugin Tasks. The buttons and the auto-modes are off until you enable them in Buttons and Auto-Merge, below.\n\nNothing is written behind your back: the scene button puts tags in the edit form for you to save, and every other way of running it - both buttons and the task - lists every change in a dialog first. Nothing lands until you press Proceed, and Undo takes the merge back while the dialog stays open.\n\nFilters can skip organized scenes, scenes carrying a tag you name, tags set to Ignore Auto Tag, and tags carrying a custom field you name.\n\nBACKING UP YOUR DATABASE BEFORE THE FIRST RUN IS STRONGLY RECOMMENDED. \n\nRequires Stash 0.31.0 or newer."
-version: 5.2.0
-date: "2026-10-05 19:11:14"
+version: 5.2.1
+date: "2026-10-05 23:54:35"
 requires:
 - GTTxCore
 files:

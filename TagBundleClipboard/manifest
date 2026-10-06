@@ -2,8 +2,8 @@ id: TagBundleClipboard
 name: ᝯㄝₓ Tag Bundle Clipboard
 metadata:
   description: "Copy the tags of one entity and paste them onto another.\n\nPress \"⮺ Tags\" on a Scene, Image, Gallery, Performer, Studio or Group to copy its tags as a bundle. On the Edit tab of any of those, press \"📋Tags...\", pick a bundle and tick the tags you want; they go into the tag box.\n\nThe clipboard holds the number of bundles set below, in this browser, shared by all its tabs. Tags already on the target cannot be ticked. With ᝯㄝₓ Normalize Parent Tags installed, the selection can be pruned or rolled up.\n\nNothing is written to your library: Stash's own Save commits the tags, and Undo puts the tag box back.\n\nTags and scene markers are not offered. Requires Stash 0.31.0 or newer."
-version: 3.2.0
-date: "2026-10-05 19:11:14"
+version: 3.2.1
+date: "2026-10-05 23:54:35"
 requires:
 - GTTxCore
 files:

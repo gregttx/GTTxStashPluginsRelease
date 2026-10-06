@@ -592,7 +592,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Normalize Parent Tags | 720 MB | 1090 MB | 985 MB |
+| Normalize Parent Tags | 735 MB | 1091 MB | 986 MB |
 | Auto-Mode Settings | 1 MB | — | — |
 | Show Tag Hierarchy | 15 MB | — | — |
 

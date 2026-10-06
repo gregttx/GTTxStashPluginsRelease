@@ -1,7 +1,7 @@
 name: ᝯㄝₓ Scene Filename Manager
 description: "Renaming a file loses its old name for good. This plugin keeps each scene's filenames in a custom field and can put them back.\n\nArchive Original Filenames saves each file's name into the field named below; a name already archived is never overwritten. Restore Original Filenames renames files back to their archived names, keeping extension and folder. Rename Files From Metadata builds new names from the Rename Template below (title, date, performers, tags and more), archiving the old name first.\n\nWhen files move to another scene, or scenes are merged, their archived names are offered to follow.\n\nEvery task lists the files it would touch, writes nothing until you press Proceed, and offers Undo while the dialog stays open.\n\nRequires Stash 0.31.0 or newer."
 url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/SceneFilenameManager/README.md"
-version: 2.4.0
+version: 2.4.1
 ui:
   # Loaded before this script, and installed with it. `plugins.tsx` topologically
   # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished

@@ -101,21 +101,21 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
-| SceneFilenameManager | Archive Original Filenames | 116 MB | 161 MB | 161 MB |
+| SceneFilenameManager | Archive Original Filenames | 116 MB | 165 MB | 161 MB |
 | SceneFilenameManager | Restore Original Filenames | 56 MB | 83 MB | 83 MB |
 | SceneFilenameManager | Rename Files From Metadata | 195 MB | 258 MB | 254 MB |
 | SceneVariants | Migrate Variant Stash-IDs | 59 MB | 93 MB | 92 MB |
-| SceneVariants | Flag Variants | 46 MB | 88 MB | 84 MB |
+| SceneVariants | Flag Variants | 46 MB | 90 MB | 84 MB |
 | SceneVariants | Review Variant Sets | 310 MB | — | — |
-| SceneVariants | Rename Variants | 637 MB | 670 MB | 668 MB |
-| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 552 MB | 1151 MB | 1151 MB |
+| SceneVariants | Rename Variants | 637 MB | 668 MB | 667 MB |
+| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 552 MB | 1150 MB | 1150 MB |
 | CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 311 MB | 311 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 785 MB | 1752 MB | 1540 MB |
-| NormalizeParentTags | Normalize Parent Tags | 720 MB | 1090 MB | 985 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 786 MB | 1745 MB | 1539 MB |
+| NormalizeParentTags | Normalize Parent Tags | 735 MB | 1091 MB | 986 MB |
 | NormalizeParentTags | Auto-Mode Settings | 1 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
-| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 270 MB | 294 MB | 283 MB |
-| PropagateTagsAndPerformers | Propagate All | 984 MB | 863 MB | 846 MB |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 273 MB | 295 MB | 283 MB |
+| PropagateTagsAndPerformers | Propagate All | 979 MB | 863 MB | 846 MB |
 
 A task gives all of it back when its dialog is closed.
 
@@ -125,8 +125,8 @@ A task gives all of it back when its dialog is closed.
 |---|---|
 | `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `AGENTS.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
 | `GTTxCore/` | the shared half every other plugin binds at load, and requires |
-| `.tests/` | `node .tests/run.js` (or `npm test --prefix .tests`). See .tests/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)) |
-| `.tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See .tools/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)) |
+| `.tests/` | `node .tests/run.js` (or `npm test --prefix .tests`). See .tests/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.06.1)) |
+| `.tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See .tools/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.06.1)) |
 | `RELEASES.md` | every release of every plugin, one row per commit. **Generated** |
 | `MEMORY.md` | what every task holds in memory against 100,000 scenes and 1,000,000 images. **Generated** by `node .tools/memory-watermark.js`; a release waits for it |
 | `AGENTS.md` | the rules, one table per kind — the onboarding document |
@@ -147,11 +147,11 @@ A task gives all of it back when its dialog is closed.
   cannot name the commit that adds it.
 - **READMEs and source describe the plugin, not its history.** No "since 1.2.0" in either; that
   argument belongs in the plugin's own `NOTES.md`, which does not ship.
-- **Read AGENTS.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)) before adding a button, a dialog or a shared block.** Nearly every
+- **Read AGENTS.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.06.1)) before adding a button, a dialog or a shared block.** Nearly every
   rule in it exists because something here guessed about Stash's markup and was wrong.
 - **Releasing to the public mirror goes through `node .tools/release-drop.js`**, which
   copies an allowlist - never a denylist - and scans every staged file before it writes
-  anything. See `.tools/README.md` (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)).
+  anything. See `.tools/README.md` (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.06.1)).
 - **The source repo enforces some of this after every turn**, through Claude Code Stop hooks that
   are not part of a release: a plugin's docs left behind by a change to its source, a script
   changed without its version moving, a release missing from `RELEASES.md`, a new plugin starting

@@ -27,11 +27,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
+  // The Core floor, ᝯㄝₓ Core 5.1.0 or newer, told by one of its exports (`busyCursor`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.linesDrawn !== 'function') {
+  if (!C || typeof C.busyCursor !== 'function') {
     if (window.console && console.error) {
-      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
+      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 5.1.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -62,7 +62,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '4.1.0';
+  var PLUGIN_VERSION = '4.1.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -95,7 +95,6 @@
   // The busy cursor under the last line of the listing. The counters say how far a
   // read or a write has got; this says it is still going, which is the question a
   // page of 5,000 entities leaves unanswered for seconds at a time.
-  var SPIN_FRAMES = C.runSpinFrames, SPIN_MS = C.runSpinMs;   // Core's, as its run log draws them
   // The two boxes in the descriptions dialog's right pane say what they are, since one
   // is typed into and the other is read-only and neither is obvious from its contents.
   var NAME_HEAD  = 'Name';
@@ -623,7 +622,6 @@
     '.cfbe-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
     '.cfbe-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.cfbe-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.cfbe-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
@@ -1792,19 +1790,11 @@
   // runs: every path in and out of a read or a write goes through setState.
   Run.prototype.spin = function (on) {
     if (!on) {
-      if (this.spinTimer) clearInterval(this.spinTimer);
-      this.spinTimer = null;
       if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
       this.spinEl = null;
       return;
     }
-    if (!this.spinEl) {
-      this.spinEl = el('div', 'cfbe-spin', SPIN_FRAMES[0]);
-      var self = this, i = 0;
-      this.spinTimer = setInterval(function () {
-        self.spinEl.textContent = SPIN_FRAMES[++i % SPIN_FRAMES.length];
-      }, SPIN_MS);
-    }
+    if (!this.spinEl) this.spinEl = C.busyCursor('div', 'cfbe-spin');
     this.listEl.appendChild(this.spinEl);
   };
 

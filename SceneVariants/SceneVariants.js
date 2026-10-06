@@ -35,11 +35,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
+  // The Core floor, ᝯㄝₓ Core 5.1.0 or newer, told by one of its exports (`busyCursor`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.linesDrawn !== 'function') {
+  if (!C || typeof C.busyCursor !== 'function') {
     if (window.console && console.error) {
-      console.error('[svr] ᝯㄝₓ Scene Variants cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
+      console.error('[svr] ᝯㄝₓ Scene Variants cannot start: it needs ᝯㄝₓ Core 5.1.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -73,7 +73,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '3.2.0';
+  var PLUGIN_VERSION = '3.2.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all.
@@ -2375,20 +2375,12 @@
   // must not be read back as one.
   Run.prototype.spin = function (on) {
     if (!on) {
-      if (this.spinTimer) clearInterval(this.spinTimer);
-      this.spinTimer = null;
       if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
       this.spinEl = null;
       return;
     }
-    if (this.spinTimer) return;
-    var frames = ['▙', '▛', '▜', '▟'], i = 0, self = this;
-    this.spinEl = el('div', 'svr-spin', frames[0]);
-    this.logEl.appendChild(this.spinEl);
-    this.spinTimer = setInterval(function () {
-      i = (i + 1) % frames.length;
-      if (self.spinEl) self.spinEl.textContent = frames[i];
-    }, 500);
+    if (this.spinEl) return;
+    this.spinEl = this.logEl.appendChild(C.busyCursor('div', 'svr-spin'));
   };
 
   Run.prototype.copyLog = function () {
@@ -5787,7 +5779,6 @@
     // page of underlines.
     '.svr-elink{text-decoration:none;}' +
     '.svr-elink:hover{text-decoration:underline;}' +
-    '.svr-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.svr-ERROR{color:#ff7373;} .svr-WARN{color:var(--gttx-highlight,#ffc107);} .svr-INFO{color:var(--gttx-muted,#a7b6c2);}' +
     '.svr-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;}' +

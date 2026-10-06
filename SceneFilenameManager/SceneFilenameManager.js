@@ -30,11 +30,11 @@
   // `ui: requires:` in the .yml is topologically sorted by Stash and `useScript` sets
   // `async = false`, so Core has finished running before this line - when it is present.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
+  // The Core floor, ᝯㄝₓ Core 5.1.0 or newer, told by one of its exports (`busyCursor`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.linesDrawn !== 'function') {
+  if (!C || typeof C.busyCursor !== 'function') {
     if (window.console && console.error) {
-      console.error('[sfm] ᝯㄝₓ Scene Filename Manager cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
+      console.error('[sfm] ᝯㄝₓ Scene Filename Manager cannot start: it needs ᝯㄝₓ Core 5.1.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -57,7 +57,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '2.4.0';
+  var PLUGIN_VERSION = '2.4.1';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -309,7 +309,6 @@
     '.sfm-line{white-space:pre-wrap;word-break:break-word;}' +
     '.sfm-elink{text-decoration:none;}' +
     '.sfm-elink:hover{text-decoration:underline;}' +
-    '.sfm-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.sfm-filter{padding:.35rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;gap:.75rem;' +
     'flex-wrap:wrap;align-items:center;font-size:.8rem;}' +
     '.sfm-filter-label{color:var(--gttx-muted,#a7b6c2);}' +
@@ -1718,20 +1717,12 @@
 
   Run.prototype.spin = function (on) {
     if (!on) {
-      if (this.spinTimer) clearInterval(this.spinTimer);
-      this.spinTimer = null;
       if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
       this.spinEl = null;
       return;
     }
-    if (this.spinTimer) return;
-    var frames = ['▙', '▛', '▜', '▟'], i = 0, self = this;
-    this.spinEl = el('div', 'sfm-spin', frames[0]);
-    this.logEl.appendChild(this.spinEl);
-    this.spinTimer = setInterval(function () {
-      i = (i + 1) % frames.length;
-      if (self.spinEl) self.spinEl.textContent = frames[i];
-    }, 500);
+    if (this.spinEl) return;
+    this.spinEl = this.logEl.appendChild(C.busyCursor('div', 'sfm-spin'));
   };
 
   // A flag on the job rather than a search of `changes`, which was a pass over every

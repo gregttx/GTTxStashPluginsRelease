@@ -8,6 +8,7 @@ is in `README.md` — neither of those carries version history.
 
 | Version | Date | Change |
 | --- | --- | --- |
+| 6.2.1 (`9c1e8ab`) | 2026-10-06 | GTTxCore 5.1.0: Busy Cursor in UI Customizations - nine styles, all clockwise, in the Highlighted Text Color, drawn by Core's busyCursor for every plugin and backwards in Undo History, with a sample turning both ways; the six plugins drawing their own move their floor to busyCursor, and every plugin drops its gray spinner rule |
 | 6.2.0 (`730e3bb`) | 2026-10-05 | Every plugin's minor moved for the drop - CFBE 4.1.0, ENM 3.3.0, FRETC 4.1.0, MPTTS 5.2.0, NPT 6.2.0, PTP2RE 6.4.0, SFM 2.4.0, SVR 3.2.0, TBC 3.2.0 - and GTTxCore 5.0.0; De-Spicer unchanged - no code changes |
 | 6.1.23 (`f9358a1`) | 2026-10-05 | NormalizeParentTags 6.1.23: the README's Hair Color example consistent, its aliases British as data |
 | 6.1.22 (`c98aa92`) | 2026-10-05 | American spelling in what a user reads - color, gray, license, behavior, canceled, recognize - held by a docs-suite check; gray throughout the rules and comments |

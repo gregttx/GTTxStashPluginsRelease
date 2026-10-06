@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '5.0.0';
+  var PLUGIN_VERSION = '5.1.1';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -4098,6 +4098,18 @@
   // ── Settings ──────────────────────────────────────────────────────────────
 
   var LINES_DRAWN_DEFAULT = 1000;   // Lines Drawn at Once, where nothing is stored (`linesDrawn`)
+  // **Busy Cursor**, in UI Customizations: what turns while a ᝯㄝₓ dialog works - every run log's
+  // and Undo History's. `[value, name, frames, ms a frame]`, no frames for the CSS ring. Every
+  // one turns clockwise and so has a backward, which Undo History runs (`busyCursor`).
+  var BUSY_CURSORS = [
+    ['ring', 'Ring', null, 0],
+    ['blocks', 'Blocks', '▙▛▜▟', 125],
+    ['quarters', 'Quarter Clock', '◴◷◶◵', 125],
+    ['moon', 'Half Moon', '◐◓◑◒', 125],
+    ['braille', 'Braille', '⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏', 80],
+    ['dense', 'Dense Braille', '⣾⣷⣯⣟⡿⢿⣻⣽', 80],
+  ];
+  var BUSY_DEFAULT = 'blocks';
   var DEFAULTS = {
     a1TaggerDuration: false,
     a2SelectPaste: false,
@@ -4110,6 +4122,7 @@
     a8CardFileCount: true,
     a9HighlightColour: '',
     a9bLinesDrawn: '',
+    a9cBusyCursor: '',
     d1GoodColor: '',
     d2AverageColor: '',
     d3BadColor: '',
@@ -4314,6 +4327,7 @@
     SEEDS.c1JournalKeepDays = String(JOURNAL_KEEP_DAYS);
     SEEDS.c2JournalSizeMB = JOURNAL_SIZE_MB;
     SEEDS.a9bLinesDrawn = String(LINES_DRAWN_DEFAULT);
+    SEEDS.a9cBusyCursor = BUSY_DEFAULT;
     COLORS.forEach(function (c) { SEEDS[c.key] = c.dflt; });
   }());
   // What each absent key is seeded with: its default, but the heading-counts switch on
@@ -4489,6 +4503,56 @@
     return col;
   }
 
+  // Busy Cursor's sample: the style in its box, in the color in the Highlighted Text Color box,
+  // 3 s forward, 0.2 s still, 3 s back and 0.2 s still again, so both ways show - and words
+  // saying what each way means: a run planning, Undo History undoing.
+  var BUSY_WORDS = { up: 'Planning 1204 changes…', down: 'Undoing 1204 changes…' };
+  function drawBusyDemo(box, boxes, demos) {
+    var col = el('div', 'gttxcore-demo'), line = col.appendChild(el('div', 'gttxcore-demoline'));
+    col.title = 'The busy cursor in the box, both ways round: forward in a ᝯㄝₓ run, backward in Undo History.';
+    var shown = null, node = null;
+    demos.push(function () {
+      var c = busyStyle(box.disabled ? BUSY_DEFAULT : box.value), hb = boxes.a9HighlightColour;
+      if (c !== shown) {
+        shown = c;
+        line.textContent = '';   // the old cursor's timer finds it gone and stops
+        node = line.appendChild(el('span', 'gttxcore-demobusy' + (c[2] ? '' : ' gttxcore-spinner gttxcore-spinner-both')));
+        swing(node, line.appendChild(el('span')), c);
+      }
+      node.style.color = hb && !hb.disabled ? hb.value : HIGHLIGHT_DEFAULT;
+    });
+    // One timer for the frames and the words, started with the ring's own animation.
+    function swing(n, words, c) {
+      var f = c[2] ? c[2].split('') : null, t0 = Date.now();
+      function tick() {
+        var ms = Date.now() - t0, say = BUSY_WORDS[busyPhase(ms)];
+        if (f) n.textContent = f[busySwing(ms, c[3]) % f.length];
+        if (words.textContent !== say) words.textContent = say;
+      }
+      tick();
+      var t = setInterval(function () {
+        if (n.isConnected === false || !n.parentNode) { clearInterval(t); return; }
+        tick();
+      }, c[3] || 100);
+    }
+    return col;
+  }
+  // Which way the sample's 6.4 s loop is going, `ms` into it: `up` for the 3 s forward and the
+  // pause after, `down` for the 3 s back and the pause after - a pause keeps the words before it.
+  function busyPhase(ms) {
+    return ms % 6400 < 3200 ? 'up' : 'down';
+  }
+  // How many frames on from the first the sample is, `ms` into its loop at `frame` ms a frame:
+  // counting up for 3 s, held for 0.2 s, counting back down for 3 s, held at the first for 0.2 s.
+  function busySwing(ms, frame) {
+    var p = ms % 6400, top = Math.floor(3000 / frame);
+    return p < 3000 ? Math.floor(p / frame) : p < 3200 ? top : p < 6200 ? top - Math.floor((p - 3200) / frame) : 0;
+  }
+  // A style as its dropdown shows it, right of its name: its frames side by side, or the ring still.
+  function busyMark(c) {
+    return el('span', 'gttxcore-busy gttxcore-busymark' + (c[2] ? '' : ' gttxcore-spinner gttxcore-spinner-still'), c[2]);
+  }
+
   function openFieldsDialog(spec) {
     if (spec.open) { if (spec.open.modal.scrollIntoView) spec.open.modal.scrollIntoView(); return; }
     injectStyle();
@@ -4544,15 +4608,27 @@
       var main = f.demo ? row.appendChild(el('div', 'gttxcore-devmain')) : row;
       var label = markLevel(el('label', 'gttxcore-devlabel' + (f.warn ? ' gttxcore-warnlabel' : '')), f.warn);
       label.title = f.tip;
-      // `choices` - [[value, label], ...] - is a dropdown; the rest are one input each.
+      // `choices` - [[value, label, mark?], ...] - is a dropdown; the rest are one input each. A
+      // `mark()` is a node drawn at the right of its label, in the box and in the list, where the
+      // browser draws a dropdown's options as HTML (`appearance:base-select`); elsewhere it reads
+      // as text after the label.
       var box;
       if (f.choices) {
         box = document.createElement('select');
         box.className = 'gttxcore-jbox gttxcore-choicebox';
+        if (f.choices.some(function (c) { return c[2]; })) {
+          box.className += ' gttxcore-richchoice';
+          box.appendChild(el('button')).appendChild(document.createElement('selectedcontent'));
+        }
         f.choices.forEach(function (c) {
           var o = document.createElement('option');
           o.value = c[0];
-          o.textContent = c[1];
+          if (!c[2]) o.textContent = c[1];
+          else {
+            o.appendChild(el('span', null, c[1]));
+            o.appendChild(document.createTextNode(' '));
+            o.appendChild(c[2]());
+          }
           box.appendChild(o);
         });
       } else {
@@ -4601,7 +4677,7 @@
       }
       // The description stays plain: the level is on the name, its box and its tick.
       if (!f.half) main.appendChild(valueProse(el('div', 'gttxcore-devhelp'), f.tip.split('\n\n').slice(0, 2).join(' ')));
-      if (f.demo) row.appendChild(drawDemo(f, box, demos));
+      if (f.demo) row.appendChild(typeof f.demo === 'function' ? f.demo(box, boxes, demos) : drawDemo(f, box, demos));
       body.appendChild(row);
       lineRows.push(row);
     });
@@ -5093,10 +5169,16 @@
         'borders and shades are worked out from those, so a theme that restyles Stash\'s dialogs restyles ' +
         'these too, within a second of switching. The colors below keep their own values either way, ' +
         'and links always take the theme\'s link color.' },
+    { key: 'a9cBusyCursor', label: 'Busy Cursor', dflt: BUSY_DEFAULT, demo: drawBusyDemo,
+      choices: BUSY_CURSORS.map(function (c) { return [c[0], c[1], function () { return busyMark(c); }]; }),
+      tip: 'What turns while a ᝯㄝₓ dialog works - under a run\'s log, and beside Undo History\'s progress - ' +
+        'drawn in the Highlighted Text Color. Blocks ▙▛▜▟ by default.\n\nEvery style turns clockwise, and ' +
+        'backwards in Undo History, that being the dialog that undoes; one that stands still means the ' +
+        'page has stopped. A change shows from the next run.' },
     { key: 'a9HighlightColour', label: 'Highlighted Text Color', color: true, dflt: HIGHLIGHT_DEFAULT,
       tip: 'The color of the ⓕ, 🖬 and ⸎ marks, of the text a ᝯㄝₓ plugin highlights - a switch that ' +
         'writes without a review or risks losing history, a match in another case, a Rescan that another ' +
-        'tab made stale, the ↶ in the top bar - and of warnings. Default #ffc107, a yellow.\n\nPick it in ' +
+        'tab made stale, the ↶ in the top bar - of the busy cursor and of warnings. Default #ffc107, a yellow.\n\nPick it in ' +
         'the box, or press Default to go back. Every color here applies on every page as soon as it is ' +
         'saved, and on a page opened later once the ᝯㄝₓ settings are read.',
       demo: [
@@ -5160,10 +5242,11 @@
   ];
 
   function globalsSummary(s) {
-    var on = GLOBAL_FIELDS.filter(function (f) { return !f.color && !f.number && truthy(s[f.key]); })
+    var on = GLOBAL_FIELDS.filter(function (f) { return !f.color && !f.number && !f.choices && truthy(s[f.key]); })
       .map(function (f) { return f.label; });
+    var busy = busyStyle(s.a9cBusyCursor);
     var out = [(on.length ? 'On: ' + on.join(', ') : 'Every switch: Off') + '. Lines drawn at once "' + linesDrawn(s) +
-      '". Colors: '];
+      '". Busy cursor "' + busy[1] + '"', busy[2] ? ' ' : '', busy[2] ? { text: busy[2], hl: true } : '', '. Colors: '];
     COLORS.forEach(function (c, i) { out.push(i ? ', ' : '', { swatch: colorOf(s[c.key], c.dflt) }); });
     return out.concat('.');
   }
@@ -5175,8 +5258,8 @@
 
   var GLOBALS_ROW = { key: 'globals', heading: 'UI Customizations', summary: globalsSummary,
     line: 'The tagger emphasis, right-click Paste, where links open, counts on headings, folding the plugins\' ' +
-      'settings, the ⓕ and 🖬 counters on cards, whether the dialogs follow the Stash theme, and the text and ' +
-      'background colors every ᝯㄝₓ plugin draws in. Fifteen settings, in a dialog.',
+      'settings, the ⓕ and 🖬 counters on cards, how many lines a dialog draws, the busy cursor, whether the dialogs ' +
+      'follow the Stash theme, and the text and background colors every ᝯㄝₓ plugin draws in. Seventeen settings, in a dialog.',
     button: 'UI Customizations...', open: openGlobals,
     title: 'Open the settings every ᝯㄝₓ plugin shares. Nothing is written until you press Save there.' };
   // Drawn after Undo History's row, so it lands above it.
@@ -5818,11 +5901,11 @@
     toggleClass(node, 'gttxcore-hidden', !on);
   }
 
-  // A line with a spinner before it, for as long as the work runs; the next line written
-  // to the progress replaces it.
+  // A line with the busy cursor before it, for as long as the work runs; the next line written
+  // to the progress replaces it. Undo History's turns backwards, this being the dialog that undoes.
   function historyWorking(H, text) {
     H.progressEl.textContent = '';
-    H.progressEl.appendChild(el('span', 'gttxcore-spinner'));
+    H.progressEl.appendChild(busyCursor('span', 'gttxcore-histbusy', true));
     H.progressEl.appendChild(el('span', null, text));
   }
 
@@ -6634,11 +6717,34 @@
     // one of those did nothing at all, which is how Find & Replace shipped a row that
     // stayed on screen with the checkbox that reveals it switched off.
     '.gttxcore-hidden{display:none !important;}' +
-    '.gttxcore-spin{color:var(--gttx-muted,#a7b6c2);}' +
+    '.gttxcore-busy{color:var(--gttx-highlight,#ffc107);}' +
+    '.gttxcore-histbusy:not(.gttxcore-spinner){display:inline-block;min-width:1em;margin-right:.45em;}' +
     '.gttxcore-spinner{display:inline-block;width:.9em;height:.9em;margin-right:.45em;' +
-    'vertical-align:-.1em;border:2px solid var(--gttx-muted,#a7b6c2);border-right-color:transparent;' +
+    'vertical-align:-.1em;border:2px solid currentColor;border-right-color:transparent;' +
     'border-radius:50%;animation:gttxcore-turn .8s linear infinite;}' +
     '@keyframes gttxcore-turn{to{transform:rotate(360deg);}}' +
+    '.gttxcore-spinner-back{animation-direction:reverse;}' +
+    // The sample's ring at the real one's 0.8 s a turn: 3.75 turns in 3 s, still for 0.2 s, back, still again.
+    '.gttxcore-spinner-both{animation:gttxcore-both 6.4s linear infinite;}' +
+    '@keyframes gttxcore-both{0%{transform:rotate(0deg);}46.875%,50%{transform:rotate(1350deg);}' +
+    '96.875%,100%{transform:rotate(0deg);}}' +
+    '.gttxcore-demobusy:not(.gttxcore-spinner){display:inline-block;min-width:1em;margin-right:.45em;}' +
+    // A dropdown whose options carry a mark (`choices`' third): the label left, the mark right, in
+    // the box and in the list. Each `::picker`/`::checkmark` rule alone, so a browser that knows
+    // neither drops just those and keeps its native dropdown, the mark after the label.
+    '.gttxcore-richchoice{min-width:13em;}' +
+    '.gttxcore-richchoice,.gttxcore-richchoice::picker(select){appearance:base-select;}' +
+    '.gttxcore-richchoice::picker(select){background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:2px 0;}' +
+    '.gttxcore-richchoice option::checkmark{display:none;}' +
+    '.gttxcore-richchoice option,.gttxcore-richchoice selectedcontent{display:flex;justify-content:space-between;' +
+    'align-items:center;gap:1.5em;}' +
+    '.gttxcore-richchoice option{padding:2px 8px;}' +
+    '.gttxcore-richchoice option:hover,.gttxcore-richchoice option:focus{background:var(--gttx-border,#394b59);}' +
+    '.gttxcore-richchoice button{display:flex;flex:1;}' +
+    '.gttxcore-richchoice selectedcontent{flex:1;}' +
+    '.gttxcore-busymark{letter-spacing:.15em;}' +
+    '.gttxcore-spinner-still{animation:none;width:.8em;height:.8em;margin-right:0;}' +
     '.gttxcore-own-group .gttxcore-sub-heading{white-space:pre-wrap;}' +
     '.gttxcore-own-group .gttxcore-sub-heading .gttxcore-p{margin:0 0 .35em;}' +
     '.gttxcore-own-group .gttxcore-sub-heading .gttxcore-p:last-child{' +
@@ -7463,8 +7569,34 @@
   // plugin's own CSS styles them; `own` lists the methods a plugin keeps a copy of its own.
   // `linesDrawn` is exported beside it, for the progress line that says how much is shown, and
   // the spinner's frames and period, for a dialog that keeps a log of its own.
+  // COMPAT: plugins before their busyCursor release draw their own cursor from these (since Core 5.1.0); remove when every plugin's floor is busyCursor.
   var RUN_SPIN_FRAMES = ['▙', '▛', '▜', '▟'];
   var RUN_SPIN_MS = 125;          // one four-frame cycle at 2Hz
+  // **The busy cursor**: a `tag` with `cls` and `gttxcore-busy`, in the Busy Cursor style (or
+  // `style`, a `BUSY_CURSORS` value) and the Highlighted Text Color, turning until it leaves the
+  // page - so whoever drew it only has to take it out. `back` runs it the other way. Put it on
+  // the page as it is made: a frame change finding it detached stops it.
+  function busyCursor(tag, cls, back, style) {
+    var c = busyStyle(style), node = el(tag, (cls ? cls + ' ' : '') + 'gttxcore-busy');
+    if (!c[2]) {
+      node.className += ' gttxcore-spinner' + (back ? ' gttxcore-spinner-back' : '');
+      return node;
+    }
+    var f = c[2].split(''), i = 0;
+    if (back) f.reverse();
+    node.textContent = f[0];
+    var t = setInterval(function () {
+      if (node.isConnected === false || !node.parentNode) { clearInterval(t); return; }
+      node.textContent = f[++i % f.length];
+    }, c[3]);
+    return node;
+  }
+  // The `BUSY_CURSORS` entry for `v`, the setting's where none is given; the default for any other.
+  function busyStyle(v) {
+    if (v == null) v = settings().a9cBusyCursor;
+    for (var i = 0; i < BUSY_CURSORS.length; i++) if (BUSY_CURSORS[i][0] === v) return BUSY_CURSORS[i];
+    return busyStyle(BUSY_DEFAULT);
+  }
   var RUN_FLUSH_MS = 100;
   // How many lines a dialog draws at once - every plugin's log, listing and pick list - from UI
   // Customizations' Lines Drawn at Once, the rest kept in memory. Read at the moment it is used.
@@ -7488,19 +7620,11 @@
       // as one. The dialog's state is what says whether it runs.
       spin: function (on) {
         if (!on) {
-          if (this.spinTimer) clearInterval(this.spinTimer);
-          this.spinTimer = null;
           if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
           this.spinEl = null;
           return;
         }
-        if (!this.spinEl) {
-          this.spinEl = el('div', P + '-spin', RUN_SPIN_FRAMES[0]);
-          var self = this, i = 0;
-          this.spinTimer = setInterval(function () {
-            self.spinEl.textContent = RUN_SPIN_FRAMES[++i % RUN_SPIN_FRAMES.length];
-          }, RUN_SPIN_MS);
-        }
+        if (!this.spinEl) this.spinEl = busyCursor('div', P + '-spin');
         this.logEl.appendChild(this.spinEl);
       },
       // `parts` is optional: a line passed as parts is rendered as spans, so each name can
@@ -7864,6 +7988,7 @@
     wireEscape: wireEscape, unwireEscape: unwireEscape, firstBasename: firstBasename, displayName: displayName,
     fakeOk: fakeOk, mutationSucceeded: mutationSucceeded, writePluginSettings: writePluginSettings, button: button,
     runLog: runLog, linesDrawn: function () { return linesDrawn(); }, runSpinFrames: RUN_SPIN_FRAMES, runSpinMs: RUN_SPIN_MS,
+    busyCursor: busyCursor,
     entityTypes: entityTypes, occurrences: occurrences, matchContext: matchContext,
   };
   ns.core = api;
@@ -7871,6 +7996,7 @@
   // because they answer different questions: `core` is the contract eight plugins depend
   // on, this is the inside of the two features that are only this plugin's.
   ns.gttxcore = {
+    busySwing: busySwing, busyPhase: busyPhase,
     durationBand: durationBand, durationTick: durationTick, durationClear: durationClear,
     selectPasteTick: selectPasteTick,
     glossary: function () { return (window.__GTTx__ || {}).glossary || null; }, glossaryFind: glossaryFind, glossaryMark: glossaryMark,

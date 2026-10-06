@@ -2,8 +2,8 @@ id: EntityNameMaintainer
 name: ᝯㄝₓ Entity Name Maintainer
 metadata:
   description: "Rename a performer, studio, tag or scene, and this plugin offers to update every other place in your library that mentions the old name.\n\nWhen a rename lands in the tab you are working in, it searches every text field of every entity-type, custom fields included, and lists each occurrence with the text around it. Untick what should stay, filter by type or attribute, and press Proceed. Nothing is written before that, and Undo reverses it while the dialog stays open. Each field is re-read just before it is written, so text that changed since the scan is skipped.\n\nThe scan reads the whole library. The limits below warn about a name that matches too often, then refuse it, and Images, usually the largest type, can be left out.\n\nIt stays quiet while another ᝯㄝₓ plugin runs a bulk task. Scene markers are not covered.\n\nRequires Stash 0.31.0 or newer."
-version: 3.3.0
-date: "2026-10-05 19:11:14"
+version: 3.3.1
+date: "2026-10-05 23:54:34"
 requires:
 - GTTxCore
 files:

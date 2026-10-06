@@ -34,12 +34,12 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 
 ## What you actually see
 
-Sixteen things: six are off until you turn them on, two counters on the cards are on, one says how
-many lines a dialog draws at once and seven are colors — and [Undo History](#undo-history), which is on.
+Seventeen things: six are off until you turn them on, two counters on the cards are on, one says how
+many lines a dialog draws at once, one is the busy cursor's style and seven are colors — and [Undo History](#undo-history), which is on.
 
-Those sixteen are one dialog: the first row of this plugin's settings, **UI Customizations**, says
+Those seventeen are one dialog: the first row of this plugin's settings, **UI Customizations**, says
 what they are now, and its **UI Customizations...** button opens them. **Set All to Default**, at
-the bottom right of that dialog, puts all sixteen back to their defaults in their boxes; **Save**
+the bottom right of that dialog, puts all seventeen back to their defaults in their boxes; **Save**
 writes them, and **Close** leaves the settings as they were, so opening the dialog again brings the
 stored ones back. Below that
 row are the row for [Undo History](#undo-history)'s settings, **Maximum Log Lines Kept**
@@ -175,7 +175,7 @@ theme you run it under.
 
 | Color | Default | Used for |
 |---|---|---|
-| **Highlighted Text Color** | `#ffc107`, a yellow | The ⓕ, 🖬 and ⸎ marks; a setting that writes without a review or risks losing history, and a paler shade of it for one that decides what those writes touch; a match in another case; a Rescan another tab made stale; the **↶** in the top bar; warnings in every plugin's dialogs; the tagger's duration mismatch past one second |
+| **Highlighted Text Color** | `#ffc107`, a yellow | The ⓕ, 🖬 and ⸎ marks; a setting that writes without a review or risks losing history, and a paler shade of it for one that decides what those writes touch; a match in another case; a Rescan another tab made stale; the **↶** in the top bar; the [busy cursor](#the-busy-cursor); warnings in every plugin's dialogs; the tagger's duration mismatch past one second |
 | **Good Result Text Color** | `#84d68a`, a green | Scene Variants' lowest drift-score; the added lines in Undo History and in Normalize Parent Tags' log |
 | **Average Result Text Color** | `#ffb648`, an orange | Scene Variants' medium drift-score |
 | **Bad Result Text Color** | `#ff7b72`, a red | Scene Variants' high drift-score; the tagger's duration mismatch past five seconds; a setting that writes with no dialog at all |
@@ -262,6 +262,18 @@ __GTTx__.StashPluginCoop.layoutEdit       = true;   // Layout edit mode
 draws at once - a log, a listing of results or changes, a list to pick from: 1000 by default. Every
 line is kept whatever it says: Copy log copies them all, and a listing pages through the rest. A larger
 number shows more at once for more of the browser's time and memory.
+
+### The busy cursor
+
+**Busy Cursor**, in UI Customizations, is what turns while a ᝯㄝₓ dialog works - under a run's log,
+and beside Undo History's progress - always in the Highlighted Text Color. Pick one of six: Ring,
+Blocks ▙▛▜▟ (the default), Quarter Clock ◴◷◶◵, Half Moon ◐◓◑◒, Braille ⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ or Dense
+Braille ⣾⣷⣯⣟⡿⢿⣻⣽; in Chrome and Edge the dropdown shows each one's frames at the right of its name.
+Every one turns clockwise, and backwards in Undo History, that being the dialog that undoes. The
+sample beside it turns 3 s each way with a 0.2 s pause between, in the color in the Highlighted
+Text Color box, so a pick shows before Save does - saying *Planning* the way a run turns and
+*Undoing* the way Undo History turns. A real one that stands still means the page has stopped. A
+change shows from the next run.
 
 ## Links, cards and tooltips
 

@@ -708,9 +708,9 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Migrate Variant Stash-IDs | 59 MB | 93 MB | 92 MB |
-| Flag Variants | 46 MB | 88 MB | 84 MB |
+| Flag Variants | 46 MB | 90 MB | 84 MB |
 | Review Variant Sets | 310 MB | — | — |
-| Rename Variants | 637 MB | 670 MB | 668 MB |
+| Rename Variants | 637 MB | 668 MB | 667 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 

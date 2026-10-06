@@ -36,11 +36,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
+  // The Core floor, ᝯㄝₓ Core 5.1.0 or newer, told by one of its exports (`busyCursor`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.linesDrawn !== 'function') {
+  if (!C || typeof C.busyCursor !== 'function') {
     if (window.console && console.error) {
-      console.error('[enm] ᝯㄝₓ Entity Name Maintainer cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
+      console.error('[enm] ᝯㄝₓ Entity Name Maintainer cannot start: it needs ᝯㄝₓ Core 5.1.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -74,7 +74,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '3.3.0';
+  var PLUGIN_VERSION = '3.3.1';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -101,7 +101,6 @@
   var TICK_MS      = 1000;
   // The busy cursor under the last line of the log. The counters say how far a scan or
   // a write has got; this says it is still going.
-  var SPIN_FRAMES = C.runSpinFrames, SPIN_MS = C.runSpinMs;   // Core's, as its run log draws them
   // How long Close stays armed after the first press. Long enough to read the
   // question and to reach the button, short enough that a user who has looked away does
   // not come back to one still waiting to close.
@@ -387,7 +386,6 @@
     // snaps a pixel taller: 1.35 of .8rem is 17.28px, so the lines here are a whole 18.
     '.enm-modal .enm-log{line-height:18px;}' +
     '.enm-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.enm-spin{color:var(--gttx-muted,#a7b6c2);}' +
     '.enm-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
@@ -991,19 +989,11 @@
   // message and must not be read back as one.
   Run.prototype.spin = function (on) {
     if (!on) {
-      if (this.spinTimer) clearInterval(this.spinTimer);
-      this.spinTimer = null;
       if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
       this.spinEl = null;
       return;
     }
-    if (!this.spinEl) {
-      this.spinEl = el('div', 'enm-spin', SPIN_FRAMES[0]);
-      var self = this, i = 0;
-      this.spinTimer = setInterval(function () {
-        self.spinEl.textContent = SPIN_FRAMES[++i % SPIN_FRAMES.length];
-      }, SPIN_MS);
-    }
+    if (!this.spinEl) this.spinEl = C.busyCursor('div', 'enm-spin');
     this.logEl.appendChild(this.spinEl);
   };
 

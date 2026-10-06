@@ -71,7 +71,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.2.0';
+  var PLUGIN_VERSION = '6.2.1';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1272,7 +1272,6 @@
     '.npt-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
     'line-height:1.35;min-height:14rem;}' +
     '.npt-line{white-space:pre-wrap;word-break:break-word;}' +
-    '.npt-spin{color:var(--gttx-muted,#a7b6c2);}' +
     // An entity named in the log is a link to it. The same blue the siblings' result
     // lines use, underlined only on hover so a log full of them does not read as a
     // page of underlines. It is the color a REMOVE line is already written in, so on
