@@ -28,6 +28,8 @@ it means here.
 | <a id="reaction"></a>reaction, react | A plugin's automatic response to a save you just made in Stash - auto-propagation, auto-prune. |
 | <a id="auto-mode"></a>auto-mode | A plugin's reaction to every save, switched on per entity type: Normalize Parent Tags' Auto-Prune and Auto-Roll-Up, Propagate's two directions. |
 | <a id="propagate"></a>propagate, auto-propagation | Propagate Tags and Performers copying tags or performers from one entity to related ones. |
+| <a id="vanillify"></a>vanillify | De-Spicer's goal of making the library's metadata and entity images non-explicit: the words you list rewritten, and in time the images blurred or replaced. |
+| <a id="pseudonym"></a>pseudonym | A made-up value De-Spicer puts in place of a real one. Consistent: the same original always becomes the same pseudonym, so a performer's name in a title still matches the performer. |
 | <a id="depropagate"></a>depropagate | The Depropagate assist: offers to remove tags a save left behind when it removed their source. |
 | <a id="never-propagate"></a>never-propagate | The mark on a tag that keeps the merge and propagate plugins from copying it. |
 | <a id="auto-merge"></a>auto-merge | Merge Performer Tags merging a performer's tags onto their scenes whenever a scene or performer is saved. |

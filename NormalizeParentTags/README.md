@@ -32,7 +32,7 @@ A front-end-only Stash plugin that adds three tasks to **Settings → Tasks → 
 The first lists every change *before* anything is written; nothing is saved until you press
 **Proceed**. The third never writes at all.
 
-The colors on that page say which is which. All three task buttons are **orange**, the colour
+The colors on that page say which is which. All three task buttons are **orange**, the color
 of every ᝯㄝₓ plugin's task; **Normalize Parent Tags...** is the one that rewrites your library, while
 the other two edit a setting and only read. What is set to run by itself is shown on the settings
 page, in the **Auto-mode per entity-type** row, with every type that is not Off in the Highlighted Text Color.
@@ -51,7 +51,7 @@ entity holds a tag that a more specific tag on it already implies, and **Roll-Up
 it is missing a parent its own tags imply. A scene [<abbr title="A scene marker: a moment in a scene (a time, and optionally an end), with a title, a primary tag and other tags.">marker</abbr>](../GLOSSARY.md#marker) has no page of its own and gets none.
 
 **Both are always there once the edit form is open, and each is enabled only when it would
-actually change something**: prune everything a scene has to prune and its Prune button greys out,
+actually change something**: prune everything a scene has to prune and its Prune button grays out,
 saying why on hover, rather than disappearing and letting the row close up under your pointer.
 They are independent questions, and a tag with two parents can leave one redundant ancestor to
 remove and another parent to add, so both can be live at once.
@@ -62,7 +62,7 @@ commits it**, exactly as if you had picked the tags from the dropdown yourself. 
 without saving and nothing happened. That is why the captions have no trailing "...": in these
 plugins the dots mean *this click opens a dialog first*, and a [<abbr title="Holding changes for you to review rather than writing them - in Stash's edit form until you press Save, or in a plugin's dialog until you press Apply or Proceed.">staging</abbr>](../GLOSSARY.md#staging) button is its own plan.
 
-**The buttons follow the box, not the server.** Stage a roll-up and the Roll-Up button greys out;
+**The buttons follow the box, not the server.** Stage a roll-up and the Roll-Up button grays out;
 take a redundant tag out by hand and Prune's count drops with it. A button says how many tags it would
 move in its tooltip, and the count is what is in the box right now.
 
@@ -79,8 +79,8 @@ The buttons are off by default, and they appear on the entity's edit form — fo
 
 ## Why
 
-Stash tag hierarchies imply downward. If `Blonde` has the parent `Hair Colour`, then an entity
-tagged `Blonde` is already a `Hair Colour` — storing both is redundant. Which of the two you want
+Stash tag hierarchies imply downward. If `Blonde` has the parent `Hair Color`, then an entity
+tagged `Blonde` is already a `Hair Color` — storing both is redundant. Which of the two you want
 depends on how you search and browse:
 
 - If you rely on Stash's hierarchical filters, keep only the most specific tag: **Prune**.
@@ -123,15 +123,15 @@ in the plugin settings, so it is yours and not every tab's.
 and a log of every change it *would* make:
 
 ```
-[REMOVE] Scene "My Scene" (123) - Tag "Hair Colour" (45) - due to "Platinum" (47)
-[REMOVE] Image "IMG_0042" (900) - Tag "Hair Colour" (45) - due to "Blonde" (46)
-[ADD]    Performer "Jane" (7) - Tag "Hair Colour" (45) - due to "Platinum" (47)
+[REMOVE] Scene "My Scene" (123) - Tag "Hair Color" (45) - due to "Platinum" (47)
+[REMOVE] Image "IMG_0042" (900) - Tag "Hair Color" (45) - due to "Blonde" (46)
+[ADD]    Performer "Jane" (7) - Tag "Hair Color" (45) - due to "Platinum" (47)
 [ERROR]  Scenes page 5 - findScenes failed: ...
-[INFO]   2 tags to remove: "Blonde" (46) x1, "Hair Colour" (45) x250
+[INFO]   2 tags to remove: "Blonde" (46) x1, "Hair Color" (45) x250
 ```
 
 **The number in brackets after a name is that entity's or tag's id** — `Scene "My Scene"
-(123)` is the scene with id 123, and `Tag "Hair Colour" (45)` the tag with id 45. It is never a
+(123)` is the scene with id 123, and `Tag "Hair Color" (45)` the tag with id 45. It is never a
 count, and it is never part of the name: the id deliberately sits *outside* the quotes, so a scene
 actually called `My Scene (2)` cannot be misread. It is what tells two tags with the same name
 apart.
@@ -161,10 +161,10 @@ one, otherwise by name, ignoring case and treating numbers as numbers (`Volume 2
 it opens the tag:
 
 ```
-Hair Colour
+Hair Color
 tag id 45
-Aliases: Hair Color, Haircolour, and 2 more
-Description: Every hair colour that occurs naturally, plus the dyed ones…
+Aliases: Hair Colour, Haircolour, and 2 more
+Description: Every hair color that occurs naturally, plus the dyed ones…
 ```
 
 Where the tag has a picture of its own, it is shown above that text. This is the line you approve
@@ -182,11 +182,11 @@ so that repeated runs log identically.
 
 Nothing has been written at this point. **Cancel** walks away with your library untouched — and where the review found nothing to do, the button says **Close** instead, in green, since there is nothing to cancel and nothing left to write.
 
-**Phase 2 — apply.** **Proceed** — orange, the colour every control in these plugins that writes
+**Phase 2 — apply.** **Proceed** — orange, the color every control in these plugins that writes
 wears — performs the changes and continues the log with what was actually written, plus any
 errors. The log is scrollable throughout, **Copy log** puts the whole
 thing on the clipboard, **Rescan** starts a fresh review pass without closing the dialog, and
-**Close** dismisses it — green once the pass has run clean, grey if it stopped early or hit an error.
+**Close** dismisses it — green once the pass has run clean, gray if it stopped early or hit an error.
 
 **Rescan** matters more than it looks. The plan is worked out in full before the first change is
 written, so anything that alters tags *while* phase 2 runs — another browser tab, a scan, the
@@ -202,8 +202,8 @@ question a pass that spends several seconds on one page of a large library leave
 
 **The log stays until you close the dialog.** A **Rescan** writes a `--- Rescan ---` line and
 carries on below it, so a run you applied, rescanned and applied again reads top to bottom on
-screen and not only through **Copy log**. Once changes have been written the log is the only record of what happened, so copy it
-before you close.
+screen and not only through **Copy log**. Once changes have been written, ᝯㄝₓ Core's Undo History keeps
+what was written; the log is the only record of why each line was listed, so copy it before you close.
 
 ## Undo
 
@@ -218,7 +218,7 @@ seconds carries it out. Clicking anything else, or waiting, disarms it.
 them worth knowing before you rely on it:
 
 - **It only lives as long as the dialog.** Close it, navigate away, or reload the page and the
-  record is gone. There is no way to undo a run from a later session.
+  record is gone. From a later session a run is undone through ᝯㄝₓ Core's Undo History instead.
 - **It only knows about its own writes.** It puts back exactly the tag assignments this dialog
   changed and touches nothing else. That is deliberate — it is written as an add/remove delta
   rather than by restoring an old tag list, so it cannot wipe out an unrelated edit you made in
@@ -239,14 +239,14 @@ nothing, so it is safe to open at any time — and it is the quickest way to und
 and Roll-Up would do before running either.
 
 ```
-▾ Hair Colour (45)                                    2 children
+▾ Hair Color (45)                                    2 children
   ▾ Blonde (12)                                       2 children
       Platinum (47)          ◆ 2 parents  leaf
       Ash (48)               ⛔ never removed: name filter   leaf
   ▸ Rare (6)                 ↩ shown under "Body" (4)
 ```
 
-Each row reads **tag name followed by its id in brackets** — `Hair Colour (45)` is the tag
+Each row reads **tag name followed by its id in brackets** — `Hair Color (45)` is the tag
 with id 45, the same id the plan names it by and the one in `/tags/45`. The numbers that
 *are* counts sit outside the brackets, in the badges on the right (`2 children`, `◆ 2 parents`),
 and the inspector's headings spell them out the same way — `Parents: 3`, never `Parents (3)`.
@@ -255,10 +255,10 @@ and the inspector's headings spell them out the same way — `Parents: 3`, never
 aliases and its description:
 
 ```
-Hair Colour
+Hair Color
 tag id 45
-Aliases: Hair Color, Haircolour, Hårfarge, and 4 more
-Description: Every hair colour that occurs naturally, plus the dyed ones that pass for…
+Aliases: Hair Colour, Haircolour, Hårfarge, and 4 more
+Description: Every hair color that occurs naturally, plus the dyed ones that pass for…
 ```
 
 The tag's own picture is above it, where it has one. That is usually enough to settle "is this the
@@ -294,7 +294,7 @@ Two boxes sit above the tree, and they do different things:
 Both boxes carry the **×** on the right-hand side, and it only appears once there is something to
 clear.
 
-Both match **any part of a tag's name and ignore case**, so `colour` finds `Hair Colour`. Neither is one of the exclusion filters — those stay case-sensitive, because they decide what
+Both match **any part of a tag's name and ignore case**, so `color` finds `Hair Color`. Neither is one of the exclusion filters — those stay case-sensitive, because they decide what
 actually gets written.
 
 Select any tag to see its parents, ancestors, children and descendants, plus a plain-language
@@ -331,7 +331,7 @@ and since Prune deletes tag assignments, opting in per type is deliberate.
 
 **Scene markers** work slightly differently, because a marker has a required *primary tag* on top
 of its ordinary tags. The primary tag is never added and never removed — but it does count as
-present, so a marker whose primary tag is `Blonde` will have `Hair Colour` pruned from its other
+present, so a marker whose primary tag is `Blonde` will have `Hair Color` pruned from its other
 tags.
 
 ## Auto-mode
@@ -391,7 +391,7 @@ Things worth knowing:
 - **Bulk edits count.** Editing 500 scenes from Stash's bulk edit dialog normalizes all 500. This
   is usually what you want and it is also the largest thing this mode does without asking.
 - **The console lines read like the dialog's**, `[NormalizeParentTags] Scene "My Scene" (123) -
-  Tag "Hair Colour" (45) - due to "Platinum" (47)`, so the bracketed numbers are ids there
+  Tag "Hair Color" (45) - due to "Platinum" (47)`, so the bracketed numbers are ids there
   too. The plugin says so once, before the first line it writes.
 - **It only [<abbr title="A plugin's automatic response to a save you just made in Stash - auto-propagation, auto-prune.">reacts</abbr>](../GLOSSARY.md#reaction) in the tab it is running in**, like anything else that lives in the browser. A
   change made by the server, by a scan, or in another browser is picked up the next time that
@@ -450,8 +450,8 @@ already making it on every save.
 
 Two things worth knowing about the tag-level filters:
 
-- Skipping a tag does not stop the climb. If Roll-Up is not allowed to add `Hair Colour`, it
-  still adds `Hair Colour`'s own parents. The filters describe a tag, not a wall in the hierarchy.
+- Skipping a tag does not stop the climb. If Roll-Up is not allowed to add `Hair Color`, it
+  still adds `Hair Color`'s own parents. The filters describe a tag, not a wall in the hierarchy.
 - Protecting a parent from removal never changes what happens to anything else — the child that
   made it redundant is unaffected either way.
 
@@ -592,13 +592,13 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Normalize Parent Tags | 3813 MB | 4185 MB | 4079 MB |
+| Normalize Parent Tags | 720 MB | 1090 MB | 985 MB |
 | Auto-Mode Settings | 1 MB | — | — |
 | Show Tag Hierarchy | 15 MB | — | — |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
@@ -607,7 +607,7 @@ and what Undo takes back are all whole.
 
 ### The README link in settings
 
-**Settings → Plugins → ᝯㄝₓ Normalize Parent Tags** carries a link to this file, in two forms: the chain icon Stash puts in the header row, and a labelled
+**Settings → Plugins → ᝯㄝₓ Normalize Parent Tags** carries a link to this file, in two forms: the chain icon Stash puts in the header row, and a labeled
 `NormalizeParentTags/README.md` link the plugin adds underneath the description — the icon alone is
 easy to miss. Both open the same page.
 
@@ -672,6 +672,6 @@ describes the old ones.
 5. Every type is Off until you say otherwise. Set what should happen by itself, if anything, with
    **Auto-Mode Settings...** in **Settings → Plugins → ᝯㄝₓ Normalize Parent Tags**.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.

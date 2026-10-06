@@ -21,11 +21,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[npt] ᝯㄝₓ Normalize Parent Tags cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[npt] ᝯㄝₓ Normalize Parent Tags cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -49,9 +49,9 @@
     cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
     ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
     entityTipName = C.entityTipName, splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny;
-  var writePluginSettings = C.writePluginSettings, settle = C.settle;
+  var writePluginSettings = C.writePluginSettings, settle = C.settle, settled = C.settled;
   var tagHasDetail = C.tagHasDetail, tagTooltip = C.tagTooltip, lowerId = C.lowerId, partsText = C.partsText;
-  var runLog = C.runLog, LOG_RENDER_CAP = C.runLogCap;   // log lines kept in the DOM; all stay in `lines`
+  var runLog = C.runLog, linesDrawn = C.linesDrawn;   // log lines kept in the DOM; all stay in `lines`
 
   var PLUGIN_ID   = 'NormalizeParentTags';
   var PLUGIN_NAME = 'ᝯㄝₓ Normalize Parent Tags';
@@ -71,7 +71,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.1.12';
+  var PLUGIN_VERSION = '6.2.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -99,13 +99,13 @@
   var TASKS = [TASK_RUN, TASK_MODES, TASK_TREE];
 
   // Stash renders every plugin task with the same `btn-secondary`, so nothing on the
-  // Tasks page says which of these three rewrites the library. Amber for the two that
+  // Tasks page says which of these three rewrites the library. Orange for the two that
   // lead to writes - Normalize writes the library, Auto-Mode Settings decides what is
-  // written silently on every save - and teal for the one that only reads: Show Tag
+  // written silently on every save - and blue for the one that only reads: Show Tag
   // Hierarchy opens a viewer and writes nothing, and it is the button a user should be
   // able to press without checking first.
   //
-  // Bootstrap variant classes rather than colours of our own, so the hover, focus and
+  // Bootstrap variant classes rather than colors of our own, so the hover, focus and
   // active states come from Stash's theme and stay in step with it. Its `btn-warning`
   // renders white text, unlike stock Bootstrap's dark - checked live, 2026-08-11 - so
   // nothing overrides the foreground. `btn-dark` is worth knowing about and not worth
@@ -433,13 +433,13 @@
   }
 
   // The setting in words rather than in tokens: `Performers=Off, Scene Markers=Roll
-  // Up`, with every type that is not Off in amber - the same thing its selector goes
-  // amber for. Capitalised because this is a value being read, not typed; the stored
+  // Up`, with every type that is not Off in the highlight - the same thing its selector goes
+  // highlighted for. Capitalised because this is a value being read, not typed; the stored
   // string stays what `formatAutoModes` writes, and the parser accepts either shape
   // (any case, `roll up`, the singular of a type), so what is shown here would still
   // be understood if somebody typed it back.
   //
-  // Spans rather than `textContent`, so each pair can carry its own colour.
+  // Spans rather than `textContent`, so each pair can carry its own color.
   function renderModeString(box, modes) {
     while (box.firstChild) box.removeChild(box.firstChild);
     TYPES.forEach(function (t, i) {
@@ -881,8 +881,9 @@
   // of a line about it would be the odd part.
   //
   // `partsText` is what goes into `lines`, so Copy log hands over exactly the text it
-  // always did. `prefix` is the undo's "Undo - ", which belongs to no entity.
-  function changeParts(graph, type, id, label, tid, reason, prefix) {
+  // always did. `why` is the present tag that implies `tid`, or null for no "due to".
+  // `prefix` is the undo's "Undo - ", which belongs to no entity.
+  function changeParts(graph, type, id, label, tid, why, prefix) {
     var parts = [];
     if (prefix) parts.push({ text: prefix });
     // The entity carries a card as well as a link: a plan is read to decide whether a
@@ -898,10 +899,10 @@
     // to arrange for itself.
     parts.push({ text: 'Tag ' + tagLabel(graph, tid), href: entityHref('tags', tid),
       ent: { type: 'tags', id: tid } });
-    if (reason && hasOwn(reason, tid)) {
+    if (why) {
       parts.push({ text: ' - due to ' });
-      parts.push({ text: tagLabel(graph, reason[tid]), href: entityHref('tags', reason[tid]),
-        ent: { type: 'tags', id: reason[tid] } });
+      parts.push({ text: tagLabel(graph, why), href: entityHref('tags', why),
+        ent: { type: 'tags', id: why } });
     }
     return parts;
   }
@@ -975,6 +976,10 @@
     return out;
   }
 
+  // A plan entry's `reason` is a list in step with the list it writes - `add`, or
+  // `remove` in a Prune - rather than `planTagSet`'s map keyed by tag id. V8 keeps
+  // integer-like keys as a holey array as long as the largest id, so nine tags among
+  // ids up to 2,000 cost about 4 KB an entry, and a library-wide plan holds a million.
   function planEntity(type, ent, mode, ctx) {
     var s = ctx.settings;
     if (s.b2ExcludeOrganized && type.organized && ent.organized) return null;
@@ -988,10 +993,10 @@
     if (ctx.excludeTagId && present[ctx.excludeTagId]) return null;
 
     var p = planTagSet(tagIds, present, mode, ctx);
-    if (mode === 'prune') {
-      return p.remove.length ? { add: [], remove: p.remove, reason: p.reason } : null;
-    }
-    return p.add.length ? { add: p.add, remove: [], reason: p.reason } : null;
+    var list = mode === 'prune' ? p.remove : p.add;
+    if (!list.length) return null;
+    var reason = list.map(function (tid) { return p.reason[tid]; });
+    return mode === 'prune' ? { add: [], remove: list, reason: reason } : { add: list, remove: [], reason: reason };
   }
 
   function entityQuery(type, withSort) {
@@ -1041,13 +1046,13 @@
             type: type, id: ent.id, label: label,
             add: delta.add, remove: delta.remove, reason: delta.reason,
           });
-          delta.remove.forEach(function (tid) {
+          delta.remove.forEach(function (tid, i) {
             logChange(ctx.run, 'REMOVE',
-              changeParts(ctx.graph, type, ent.id, label, tid, delta.reason));
+              changeParts(ctx.graph, type, ent.id, label, tid, delta.reason[i]));
           });
-          delta.add.forEach(function (tid) {
+          delta.add.forEach(function (tid, i) {
             logChange(ctx.run, 'ADD',
-              changeParts(ctx.graph, type, ent.id, label, tid, delta.reason));
+              changeParts(ctx.graph, type, ent.id, label, tid, delta.reason[i]));
           });
         });
         ctx.run.scanned[type.key] = seen;
@@ -1084,11 +1089,11 @@
         var label = entityLabel(type, ent);
         ctx.run.plan.push({ type: type, id: ent.id, label: label,
           add: delta.add, remove: delta.remove, reason: delta.reason });
-        delta.remove.forEach(function (tid) {
-          logChange(ctx.run, 'REMOVE', changeParts(ctx.graph, type, ent.id, label, tid, delta.reason));
+        delta.remove.forEach(function (tid, i) {
+          logChange(ctx.run, 'REMOVE', changeParts(ctx.graph, type, ent.id, label, tid, delta.reason[i]));
         });
-        delta.add.forEach(function (tid) {
-          logChange(ctx.run, 'ADD', changeParts(ctx.graph, type, ent.id, label, tid, delta.reason));
+        delta.add.forEach(function (tid, i) {
+          logChange(ctx.run, 'ADD', changeParts(ctx.graph, type, ent.id, label, tid, delta.reason[i]));
         });
       });
       ctx.run.renderProgress();
@@ -1177,12 +1182,14 @@
       run.undoable.push(batch);
       journalBatch(run, batch, batch.mode);
       batch.entries.forEach(function (entry) {
+        var written = batch.mode === 'REMOVE' ? entry.remove : entry.add;
         batch.tagIds.forEach(function (tid) {
           // Entities are batched by identical delta, but each carries its own
           // reasons - the same redundant parent is rarely redundant for the same
-          // cause twice - so the line is built per entry, not per batch.
+          // cause twice - so the line is built per entry, not per batch. The batch's
+          // ids are sorted, the entry's reasons follow its own list's order.
           logChange(run, batch.mode,
-            changeParts(graph, batch.type, entry.id, entry.label, tid, entry.reason));
+            changeParts(graph, batch.type, entry.id, entry.label, tid, entry.reason[written.indexOf(tid)]));
           var seen = run.appliedTags[batch.mode];
           seen[tid] = (hasOwn(seen, tid) ? seen[tid] : 0) + 1;
         });
@@ -1248,7 +1255,7 @@
     // the plugins share no module, not because they are meant to look different -
     // and they did drift, from #202b33 here against #30404d there, because nothing
     // compared them. `style` pins the overlap now. #202b33 is Blueprint's dark-gray2,
-    // the step Stash's page uses; every dim grey in these dialogs was chosen against
+    // the step Stash's page uses; every dim gray in these dialogs was chosen against
     // it - the log's #a7b6c2 and #7d8f9c, and the tree's #3c4f5d hover and #425a6b
     // selection - and they separate better on it than on the lighter #30404d.
     '.npt-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
@@ -1268,7 +1275,7 @@
     '.npt-spin{color:var(--gttx-muted,#a7b6c2);}' +
     // An entity named in the log is a link to it. The same blue the siblings' result
     // lines use, underlined only on hover so a log full of them does not read as a
-    // page of underlines. It is the colour a REMOVE line is already written in, so on
+    // page of underlines. It is the color a REMOVE line is already written in, so on
     // those lines the hover and the pointer are the whole affordance - which is the
     // same bargain the tag tooltips took, and better than a rule that only this
     // plugin's copy of the shared chrome would carry.
@@ -1289,7 +1296,7 @@
     '.gttx-tipbox.gttx-tip-open{display:block;}' +
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
     'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
-    // The mark beside a setting that names a custom field. Grey and `cursor:help`,
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
@@ -1358,7 +1365,7 @@
     '.npt-i-link{cursor:pointer;text-decoration:underline dotted;}' +
     '.npt-i-link:hover{color:var(--gttx-accent,#7cc4ff);}' +
     // `display:block` because it is an `<a>` now: an inline box would drop the margin
-    // under it, and the colour is inherited so the link still reads as the heading it
+    // under it, and the color is inherited so the link still reads as the heading it
     // is rather than as Stash's blue.
     '.npt-i-title{display:block;font-size:1rem;font-weight:600;margin-bottom:.4rem;' +
     'font-family:monospace;color:inherit;text-decoration:none;}' +
@@ -1383,7 +1390,7 @@
     // is the same thing in both, so the shared-CSS suite is right to insist.
     '.npt-mode{background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.15rem .35rem;font-size:.85rem;max-width:100%;}' +
-    // Amber wherever the selector is set to something that writes, the same rule the
+    // Highlighted wherever the selector is set to something that writes, the same rule the
     // buttons follow. A <select> has no Bootstrap variant to borrow.
     '.npt-mode-on{border-color:var(--gttx-highlight,#ffc107);color:var(--gttx-highlight,#ffc107);}' +
     // Set All: and its three buttons - beside the keep-this-selection box in the run
@@ -1400,8 +1407,8 @@
     // holds it - monospace, because it is a value rather than a sentence.
     '.npt-modestring{font-family:var(--font-family-sans-serif,var(--bs-font-sans-serif,sans-serif));font-size:.85rem;color:var(--gttx-muted,#a7b6c2);' +
     'margin:.25rem 0 .5rem;word-break:break-word;}' +
-    // Amber for the same reason the selectors are: a type that is not Off is one this
-    // plugin writes to by itself. Nothing else on the line is coloured - marking the
+    // Highlighted for the same reason the selectors are: a type that is not Off is one this
+    // plugin writes to by itself. Nothing else on the line is colored - marking the
     // whole of it would mark none of it.
     '.npt-modestring-on{color:var(--gttx-highlight,#ffc107);}' +
     '.npt-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
@@ -1857,7 +1864,7 @@
     this.modal.appendChild(this.logEl);
 
     var foot = el('div', 'npt-foot');
-    // Amber: the two buttons that write. See "one colour for a plugin wrote this".
+    // Orange: the two buttons that write. See "one color for a plugin wrote this".
     this.proceedBtn = button('Proceed', 'npt-proceed');
     this.cancelBtn  = button('Cancel', 'npt-cancel');
     this.stopBtn    = button('Stop', 'npt-stop npt-hidden');
@@ -1974,7 +1981,7 @@
     this.proceedBtn.disabled = !ready || !this.plan.length || this.stale || this.selectionDirty;
     // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
     // does not take the green away - it is an offer, not something waiting on the user.
-    // Errors, a stopped pass, a moved selector and a stale script stay grey: those say
+    // Errors, a stopped pass, a moved selector and a stale script stay gray: those say
     // "something is wrong", not "nothing to do".
     paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
       !this.stale && !this.selectionDirty ? 'btn-success' : 'btn-secondary');
@@ -2034,8 +2041,8 @@
         (this.undone ? ', ' + this.undone + ' reversed by Undo' : '');
     }
     if (this.errors) summary += ', ' + plural(this.errors, 'error');
-    if ((this.logged || 0) > LOG_RENDER_CAP) {
-      summary += ' - showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines';
+    if ((this.logged || 0) > linesDrawn()) {
+      summary += ' - showing the last ' + linesDrawn() + ' of ' + this.logged + ' lines';
     }
     this.progressEl.textContent = parts.length ? summary + '\n' + parts.join('   ') : summary;
   };
@@ -2386,7 +2393,7 @@
 
   Run.prototype.cancel = function () {
     this.cancelled = true;
-    this.log('INFO', 'Cancelled. Nothing was written.');
+    this.log('INFO', 'Canceled. Nothing was written.');
     this.close();
   };
 
@@ -2512,7 +2519,7 @@
     this.modal.appendChild(body);
 
     var foot = el('div', 'npt-foot');
-    // Amber: this is the button that writes. See "one colour for a plugin wrote this".
+    // Orange: this is the button that writes. See "one color for a plugin wrote this".
     this.saveBtn   = button('Save', 'npt-proceed');
     this.saveBtn.className = this.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.cancelBtn = button('Cancel', 'npt-cancel');
@@ -3535,9 +3542,18 @@
 
   // Called from the fetch wrapper once the mutation is known to have succeeded.
   // Resolves once the reaction is over - written, stood down, or nothing to do.
+  // After every other reaction to the same save - Merge Performer Tags' auto-merge first of all: it
+  // reads the scene and writes its tags back whole, so reading before it would prune tags it then
+  // puts back, and its write landing after the prune would sit out this plugin's cooldown. Waited
+  // for, the prune reads the tags as they end up and prunes what the merge brought in too.
   function autoReact(type, ids) {
     if (!ids || !ids.length) return Promise.resolve();
-    return autoNormalize(type, ids);
+    // COMPAT: a Core without `settleWho` cannot tell this plugin's registration from the others' and
+    // would have it wait on itself (since NormalizeParentTags 6.1.17); remove when the floor is Core 4.20.3.
+    if (!C.settleWho) return autoNormalize(type, ids);
+    return settled(settleKey(type), ids.map(String), 30000, PLUGIN_SHORT_NAME).then(function () {
+      return autoNormalize(type, ids);
+    });
   }
 
   // The name Core's settling registry keys an entity-type by, the one a reader waits on:
@@ -3611,9 +3627,9 @@
   //    never hears about, so its own span would still be showing the old string. The
   //    cache is invalidated by our fetch hook the moment that mutation lands, and the
   //    same hook calls this tick.
-  //  - **The button is teal like its twin in Settings - Tasks.** Amber is for a
+  //  - **The button is blue like its twin in Settings - Tasks.** Orange is for a
   //    control that rewrites the library; this one edits a setting, and what that
-  //    setting says is already in amber on the line above it.
+  //    setting says is already in the highlight on the line above it.
   //
   // The canonical rewrite that used to live here went with the text box. Stash's
   // modal is still reachable if ours never builds, and a config file can hold
@@ -3647,7 +3663,7 @@
 
     var btn = document.getElementById(FIELD_BTN_ID);
     if (!btn) {
-      btn = C.settingButton(TASK_MODES);
+      btn = C.settingButton(TASK_MODES, null, PLUGIN_ID);
       btn.id = FIELD_BTN_ID;
       btn._nptOwn = true;
       btn.addEventListener('click', function (e) {
@@ -3708,7 +3724,7 @@
   // naming a custom field get its ⓕ beside them, where the rows used to carry it.
   var EXCL_FIELDS = [
     { key: 'b1ExcludeEntityWithTagName', label: 'Exclude Entities Carrying This Tag', warn: 'semi',
-      text: true, wide: true,
+      text: true, wide: true, tag: true, mark: function (v) { return C.tagMark(v); },
       tip: 'Enter one tag name. Any entity carrying that tag is left untouched by both tasks.\n\nMatched by ' +
         'exact name, case-sensitive. The tag must be carried directly - a parent of it does not count. ' +
         'For markers, carrying it as the primary tag also excludes the marker.' },
@@ -3760,7 +3776,10 @@
     // A field with its ⓕ after it, as the dialog draws it.
     var cf = function (k) { return { cf: q(k) }; };
     var on = [];
-    if (q('b1ExcludeEntityWithTagName')) on.push(['entities tagged "' + q('b1ExcludeEntityWithTagName') + '"']);
+    if (q('b1ExcludeEntityWithTagName')) {
+      var exTag = q('b1ExcludeEntityWithTagName');
+      on.push(['entities tagged ', { text: '"' + exTag + '"', tag: true, mark: function () { return C.tagMark(exTag); } }]);
+    }
     if (s.b2ExcludeOrganized) on.push(['Organized entities']);
     if (s.c1ExcludeTagWithIgnoreAutoTag) on.push(['tags set to Ignore Auto Tag']);
     if (q('c2ExcludeAddTagNameContains')) on.push(['Roll-Up adds no tag whose name contains ' + words('c2ExcludeAddTagNameContains')]);
@@ -4318,7 +4337,7 @@
         // reaction ends at once if it turns out off); released whatever the reaction does -
         // writes, stands down for a lease, finds nothing, fails.
         var reacting = !_autoSettings || modeOf(_autoSettings, type) !== MODE_OFF;
-        var dones = reacting ? ids.map(function (id) { return settle(settleKey(type), String(id)); }) : [];
+        var dones = reacting ? ids.map(function (id) { return settle(settleKey(type), String(id), PLUGIN_SHORT_NAME); }) : [];
         var release = function () { dones.forEach(function (d) { d(); }); };
         mutationSucceeded(p).then(function (ok) {
           if (!ok) { release(); return; }

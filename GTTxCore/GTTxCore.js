@@ -21,7 +21,7 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '4.16.1';
+  var PLUGIN_VERSION = '5.0.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTxCore/README.md';
   var README_LINK_ID = 'gttxcore-readme-link';
   var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
@@ -238,9 +238,11 @@
   // true when they all released and false on the timeout, and at once when nothing
   // registered. A reaction that asks the user first holds its registration through
   // the question, which is the point: the watcher's offer comes after the answer.
-  function settle(type, id) {
+  // `who`, where given, names the reaction, so a watcher that reacts too can wait for everyone but
+  // itself (`settled`'s `owner`).
+  function settle(type, id, who) {
     var c = coop(), key = type + ':' + id;
-    var entry = {};
+    var entry = { who: who || '' };
     entry.promise = new Promise(function (res) { entry.done = res; });
     (c.settling[key] = c.settling[key] || []).push(entry);
     var released = false;
@@ -258,7 +260,8 @@
   function settled(type, ids, timeoutMs, owner) {
     var c = coop(), waits = [], keys = [];
     (ids || []).forEach(function (id) {
-      var key = type + ':' + id, list = c.settling[key] || [];
+      var key = type + ':' + id;
+      var list = (c.settling[key] || []).filter(function (e) { return !owner || !e.who || e.who !== owner; });
       list.forEach(function (e) { waits.push(e.promise); });
       if (list.length) keys.push(key);
     });
@@ -596,7 +599,7 @@
 
 
   var GLOSS_CLASS = 'gttx-gloss';
-  var GLOSS_PREFIXES = ['gttxcore', 'npt', 'cpt2s', 'ptp2re', 'cfbe', 'enm', 'fretc', 'sfm', 'svr', 'tbc'];
+  var GLOSS_PREFIXES = ['gttxcore', 'npt', 'cpt2s', 'ptp2re', 'cfbe', 'enm', 'fretc', 'sfm', 'svr', 'tbc', 'dsp'];
   var GLOSS_SKIP_TAGS = /^(A|BUTTON|INPUT|TEXTAREA|SELECT|OPTION|LABEL|H1|H2|H3|H4|H5|H6|CODE|PRE|SCRIPT|STYLE)$/;
   // The setting row's hover box and its ⓘ mark, a dialog's title and log, and a mark
   // already drawn. `-tip` is matched whole, so a row's `-tipped` summary is still read.
@@ -1089,7 +1092,7 @@
             ['Gender', entityTipGender(o.gender)], ['Born', o.birthdate],
             ['Country', entityTipCountry(o.country)],
             ['Scenes', o.scene_count], ['Rating', entityTipStars(o.rating100)],
-            ['Favourite', o.favorite ? 'yes' : null],
+            ['Favorite', o.favorite ? 'yes' : null],
             ['Aliases', tagTipNames(o.alias_list)], ['Tags', tagTipNames(o.tags)]]);
       },
     },
@@ -1102,7 +1105,7 @@
         return entityTipLines('Studio', o.name, id, [
           ['Aliases', tagTipNames(o.aliases)], ['Parent', (o.parent_studio || {}).name],
           ['Scenes', o.scene_count], ['Rating', entityTipStars(o.rating100)],
-          ['Favourite', o.favorite ? 'yes' : null], ['Tags', tagTipNames(o.tags)]]);
+          ['Favorite', o.favorite ? 'yes' : null], ['Tags', tagTipNames(o.tags)]]);
       },
     },
     groups: {
@@ -1365,22 +1368,71 @@
   }
 
   // The same mark and box for a custom field named anywhere but a settings row - a
-  // plugin's own dialog, or a summary line it draws - and only where Custom Fields Bulk
-  // Editor holds a description of it, since that is what the box is for there. Resolves
-  // to the node to place after the name, or null: no field, no Custom Fields Bulk
-  // Editor, no description, or a read that failed.
+  // plugin's own dialog, or a summary line it draws. A field named always shows its ⓕ, as a
+  // tag its icon: with the box where Custom Fields Bulk Editor holds a description of it, and
+  // plain, saying so on hover, where it holds none, is not installed, or could not be read.
+  // Resolves to the node to place after the name, or null for no field at all.
+  // The mark beside a box naming a tag: 🔗, linked to the tag and carrying its hover card, when a
+  // tag has that name or alias; a big red ? when none has. Null for an empty box.
+  // The tag icon Stash draws on its cards, as a mark in the Highlighted Text Color: after a tag's
+  // name in a summary, inside the quotes, and after a box that names one, as ⓕ follows a field's.
+  var TAG_SVG = '<svg viewBox="0 0 448 512" aria-hidden="true" focusable="false"><path d="M0 80V229.5c0 17 6.7 33.3 ' +
+    '18.7 45.3l176 176c25 25 65.5 25 90.5 0L418.7 317.3c25-25 25-65.5 0-90.5l-176-176c-12-12-28.3-18.7-45.3-18.7H48C21.5 ' +
+    '32 0 53.5 0 80zm112 32a32 32 0 1 1 0 64 32 32 0 1 1 0-64z"/></svg>';
+  function tagGlyph() {
+    injectStyle();
+    var g = el('span', 'gttx-tagglyph');
+    g.innerHTML = TAG_SVG;
+    g.title = 'The name or an alias of a tag';
+    return g;
+  }
+
+  // `withGlyph`: the tag icon before the link, for a box no field of Core's draws (`tag: true` there).
+  function tagMark(name, withGlyph) {
+    var n = String(name == null ? '' : name).replace(/^\s+|\s+$/g, '');
+    if (!n) return Promise.resolve(null);
+    return gqlRequest('query GTTxTagMark($n: String!) { byName: findTags(tag_filter: { name: { value: $n, modifier: EQUALS } }) ' +
+      '{ tags { id name } } byAlias: findTags(tag_filter: { aliases: { value: $n, modifier: EQUALS } }) { tags { id name } } }',
+    { n: n }).then(function (d) {
+      var tag = ((d.byName || {}).tags || [])[0] || ((d.byAlias || {}).tags || [])[0];
+      injectStyle();
+      if (!tag) {
+        var none = el('span', 'gttx-tagmark gttx-tagmark-none', '?');
+        none.title = 'No tag is named "' + n + '", by its name or an alias.';
+        return none;
+      }
+      var node = el('a', 'gttx-tagmark', '🔗');
+      node.href = '/tags/' + tag.id;
+      node.target = linkTarget();
+      node.rel = 'noopener noreferrer';
+      entityTip(node, 'tags', String(tag.id));
+      if (!withGlyph) return node;
+      var both = el('span', 'gttx-tagmarks');
+      both.appendChild(tagGlyph());
+      both.appendChild(node);
+      return both;
+    }, function () { return null; });
+  }
+
   function cfTipMark(field) {
+    if (!field) return Promise.resolve(null);
     var api = coop().api && coop().api.CustomFieldsBulkEditor;
-    if (!field || !api || typeof api.descriptions !== 'function') return Promise.resolve(null);
+    function plain() {
+      injectStyle();
+      var node = el('span', 'gttx-cftip gttx-cfinline', CF_TIP_MARK);
+      node.title = 'Custom field "' + field + '"' + (api ? ' - no description of it in Custom Fields Bulk Editor yet.' : '.');
+      return node;
+    }
+    if (!api || typeof api.descriptions !== 'function') return Promise.resolve(plain());
     return api.descriptions().then(function (d) {
-      if (!d || !tipText(d[field])) return null;
+      if (!d || !tipText(d[field])) return plain();
       injectStyle();
       var node = cfTipShell(el('span', 'gttx-cftipped gttx-cfinline'));
       node._gttxCfField = field;
       node._gttxCfBox.textContent = 'Custom field "' + field + '"';
       cfTipArm(node, null);
       return node;
-    }, function () { return null; });
+    }, plain);
   }
 
   function cfTipNode(node, id, row, field, named, index) {
@@ -1590,10 +1642,10 @@
   var DUR_RE = /Duration off by at least (\d+)s/;
   var DUR_CLASS = 'gttx-durwarn';
 
-  // Red past five seconds, amber above one. Both bands are the user's, and the upper one
+  // Red past five seconds, orange above one. Both bands are the user's, and the upper one
   // is where Stash's own threshold already sits: `getDurationStatus` takes the match
   // branch as soon as any fingerprint is within 5s, so in practice a printed number below
-  // 5 is rare and 5 itself is the amber band's whole population. Stated as asked rather
+  // 5 is rare and 5 itself is the orange band's whole population. Stated as asked rather
   // than narrowed to what today's Stash can produce - the bands are about the seconds,
   // not about which branch printed them.
   function durationBand(n) {
@@ -1740,7 +1792,9 @@
     { key: 'LAYOUT', flag: 'layoutEdit', label: 'Layout edit mode',
       tip: 'Outlines every control these plugins have injected into Stash’s own ' +
         'chrome and labels it with the plugin that put it there. For working out which ' +
-        'plugin owns a button in a row that holds several.' },
+        'plugin owns a button in a row that holds several.\n\nOn: as well, the System view of ' +
+        'Propagate Tags and Performers’ Paths dialog can be rearranged - drag a box or a toggle - ' +
+        'with Copy layout and Reset layout under it; the layout is kept in this browser.' },
     { key: 'STALEDEMO', flag: 'staleDemo', label: 'Stale UI demo',
       tip: 'Pretends a plugin’s script is out of date, so the red Reload UI button ' +
         'appears beside Stash’s own Reload plugins without waiting for a real ' +
@@ -1775,6 +1829,12 @@
         'names the entity, the number of tags and which bundle was used, under the [tbc] prefix, so a ' +
         'session can be read back after the dialog has been closed. It is separate from the log inside ' +
         'the dialog, which Copy log hands over as text.' },
+    { key: 'LOG_DSP', plugin: 'DeSpicer',
+      label: 'Log De-Spicer to the Browser Console',
+      tip: 'Print every message the De-Spicer dialog shows to the browser console as well.\n\nThe ' +
+        'lines are the same ones the dialog logs, under the [dsp] prefix, so a long run can be read ' +
+        'back after the dialog has been closed. It is separate from Copy log, which hands over the ' +
+        'dialog\'s log as text.' },
   ];
   DEV_MODS = [LOG_BUTTON_VIS].concat(LOG_MODS, DEV_MODS);
   // Every plugin's stored settings, as the last read of them found them: where a log switch
@@ -1866,10 +1926,10 @@
     });
   }
 
-  // **The greys, from the Stash theme**, where Follow the Stash Theme is on. Stash publishes
+  // **The grays, from the Stash theme**, where Follow the Stash Theme is on. Stash publishes
   // no theme color to read, and a theme restyles through selectors, so Core asks the page: a
   // hidden sample of Stash's own dialog, card and muted text, read with `getComputedStyle`
-  // under whatever theme is active, and the greys every plugin's CSS reads as
+  // under whatever theme is active, and the grays every plugin's CSS reads as
   // `var(--gttx-bg,#202b33)` and so on derived from it and put on the page root. Off, the
   // variables are taken away, so every site shows its own hex. Read every tick, so a theme
   // switched live follows within a second; written only when a value moves. The sample sits
@@ -1952,7 +2012,7 @@
     x: 'd09GMgABAAAAAANMAA4AAAAACAQAAAL8AAID1wAAAAAAAAAAAAAAAAAAAAAAAAAAGhQbIBw2BmAANBEICjBOATYCJAMICwYABCAFijQHIBspBxGVnHoEXyZwmyp8Vg9U1HF8vMXWtoNOCJ1WY5d+BDXNe83xEL/ftzPz7oo6EDWp1bWEeSompZBFE3lDQTUUiPxLncolHNYfg3LiAlCIpvYMMgQkn/QO8LRkagDk5O05bMCFiWLiww3A5Tg9/0E57ftL9S5dDziz428CdMQRq8U3BeiDpFS6YGsgsQCHS7NMyL4FLBSwjMe2GTb4S0MRESJHhMhzeEagFRD6Gs1GjYt9B3I10qhADQRswY02K580fHoku2T2vGQdMnvFRE5mnY9Byd1xh2yS19ZaOLpqFsdsjD1kS12WupJZAAFwsFj8IK/ApJL+v3ImrhMiIAdzjUkFiQq9KoFexSSKIpi8X6PinIB0nM4dgwSFbGp9iB4QrSvL+0sr+4tLe8uLe1dfBqun1qg1ehqu5v9Pv4u/xSMBgaxer511x4+3/XW7+oOPy893uxzU1nK+EfUSBDFLuWoKaI25k0MdmauOaU0Fcs1Tu2MdXq6L0oSnZIfQ6ylSuzVUdpE3KGZjEHUWtW2oNx130GCf9hCNNsQ/NFmXk2h2Yu0QWuzIB2i1LX+hLaarae3bbS37ZryIcCQDz0cwMoYBNZ9BQaCAkhRtZiM8RegLqSDmI4bqWte9AP3Iorbo6Rz8r7uCo9K7JgY87UnGOml7JINuN7DjH7XaEJ6lyZ0K86KuKY3D4FuAWEChIkttj3GMbDCpguc5GDSTPbsBRNeMUPj92wixfpZe0lN6kT5zzqyWlBFp6X5cBgpMaJSmw3rCDmQs4UMI7xiDXO6F5sVPcBQasl+ArPes9OCL2wMcfGXR3d7+GjN7x3cxB6wRYOyOF0NT8CUZoRHasv1aROmKaXYwLVAvZDdjlseSrE2iQxy9F3tBUmHkBJEqxBLPvzNLqKZMHKReYWCMcaoYV2kw4sGVBCzVoepXDoph77ngzIGMVH/amKVzrKSD7ncTwr5Zn4ppkZAflJJg3udTebcbr6HCvwFlyyBERVXQpUJ6evE95+b6EE4GAA==',
   };
   var BRAND_CHARS = /[\u176F\u311D\u2093]/;
-  var BRAND_PREFIXES = ['gttxcore', 'cfbe', 'enm', 'fretc', 'cpt2s', 'npt', 'ptp2re', 'sfm', 'svr', 'tbc'];
+  var BRAND_PREFIXES = ['gttxcore', 'cfbe', 'enm', 'fretc', 'cpt2s', 'npt', 'ptp2re', 'sfm', 'svr', 'tbc', 'dsp'];
   var _brandBody = null;
   function brandFont(ff) { return '"GTTx Brand", ' + (ff || 'sans-serif'); }
   // Our own dialogs and tooltips read the page's fonts behind GTTx Brand from a variable, so one
@@ -2395,6 +2455,7 @@
     if (x.carriers) row.carriers = x.carriers;
     if (x.merge) row.merge = x.merge;
     if (x.lost) row.lost = String(x.lost);
+    if (x.split) row.split = true;   // a merge put back, which a redo cannot merge again (`journalUndo`)
     // A custom field that was, or is, not there at all - distinct from one holding null.
     if (x.before === undefined && x.action !== 'create') row.beforeAbsent = true;
     if (x.after === undefined && x.action !== 'create') row.afterAbsent = true;
@@ -2445,6 +2506,11 @@
   // only what came after it is kept, or the whole is past the size limit. An imported run
   // is kept past the age limit and the backup: it was brought back on purpose, to be
   // undone, so the trim steps past it to the newer runs rather than stopping there.
+  // Passes still being written, which a trim leaves whole: a backup taken mid-pass would otherwise
+  // drop the head and the chunks so far, the later chunks then landing on their own. This tab's
+  // are in `_openPasses`; another tab's say so in their head (`open`, written with every chunk and
+  // cleared by `finish`), honored for a day past the last chunk, so a closed tab's pass still goes.
+  var _openPasses = {};
   function journalTrim() {
     var limits = journalLimits(), cutoff = Date.now() - limits.days * DAY_MS;
     return journalDb().then(function (db) {
@@ -2454,9 +2520,11 @@
         runs.forEach(function (r) { total += r.bytes; });
         for (var i = 0; i < runs.length; i++) {
           var r = runs[i], full = total > limits.bytes;
-          var old = (limits.days && r.at < cutoff) || (limits.since && r.at < limits.since);
+          // A pass that ran on past the backup is not in it: the backup is weighed against its last write.
+          var old = (limits.days && r.at < cutoff) || (limits.since && (r.end || r.at) < limits.since);
           if (!old && !full) break;
           if (r.imported && !full) continue;
+          if (_openPasses[r.id] || (r.open && Date.now() - (r.end || r.at) < DAY_MS)) continue;
           drop.push(r.id);
           total -= r.bytes;
         }
@@ -2570,7 +2638,7 @@
   }
 
   // A change another tab recorded, while a ᝯㄝₓ dialog is open here: what it lists was read
-  // before, so its Rescan - Refresh, in Find & Replace - says so, bold amber and breathing,
+  // before, so its Rescan - Refresh, in Find & Replace - says so, bold in the highlight and breathing,
   // until it is pressed. Found by the class every dialog gives it, `<prefix>-rescan`.
   var STALE_TIP = 'Another tab of this Stash changed your library after this listing was read, ' +
     'so what it shows may be out of date. Press this to read it again.';
@@ -2645,7 +2713,8 @@
     'eye_color', 'hair_color', 'height_cm', 'weight', 'measurements', 'fake_tits',
     'penis_length', 'circumcised', 'career_length', 'tattoos', 'piercings', 'favorite',
     'ignore_auto_tag', 'description', 'sort_name', 'duration', 'photographer', 'urls',
-    'alias_list', 'aliases'];
+    'alias_list', 'aliases', 'synopsis', 'career_start', 'career_end', 'o_counter', 'play_count',
+    'resume_time'];
 
   function sortedIds(list) {
     return (list || []).map(function (x) { return String(x.id); }).sort();
@@ -2834,14 +2903,21 @@
   // **A dialog's own Undo is recorded from the history, not from memory.** `reverse(run,
   // type, id)` names an entity whose writes in an earlier pass - `pass.id` - this pass
   // put back; `finish` reads that pass's entries from the store, records them reversed,
-  // and marks them undone there. So a plugin keeps nothing extra for it: keeping each
+  // and marks them undone there. `reverse(run, type, id, field)` names one field of it
+  // alone, for an Undo that put back only part of what an entity had in that pass - the
+  // rest stays done, and says so (`journal.reversesFields` tells a plugin it may). A field named
+  // once reverses that field's newest entry not yet undone, named twice its two newest, and so on:
+  // one call a write, so where a pass wrote a field twice and the Undo put back one, the other
+  // stays done. So a plugin keeps nothing extra for it: keeping each
   // forward input on the dialog's Undo list cost hundreds of megabytes on a large pass.
   // `drain()` resolves once everything handed over so far is written, for a caller that
   // feeds a large pass in slices.
   var JOURNAL_CHUNK = 2000;
   function journalPass(run) {
     var buf = [], skipped = [], head = journalHead(run), n = 0, over = false, failed = null;
-    var written = false, reversals = {};
+    var written = false, reversals = {}, marked = [];
+    _openPasses[head.id] = true;
+    head.open = true;
     var ready = loadSettings(false).then(null, function () { return null; });
     var chain = ready;
     var flush = function () {
@@ -2860,37 +2936,62 @@
         head.count += rows.length;
         if (head.bytes > limits.bytes / 2) { over = true; return null; }
         head.note = skipped.length ? 'not recorded: ' + skipped.join(', ') : '';
+        head.end = Date.now();   // the last write: what a backup taken since holds, or does not
         return journalPut(head, rows);
       }).then(null, function (e) { failed = e; });
       return chain;
     };
+    // A chunk is cut inside the loop, so one large hand-over - a dialog's Undo of a big pass - is
+    // written as chunks too, not as one transaction.
     var push = function (list) {
-      for (var i = 0; i < list.length; i++) buf.push(list[i]);
-      if (buf.length >= JOURNAL_CHUNK) flush();
+      for (var i = 0; i < list.length; i++) {
+        buf.push(list[i]);
+        if (buf.length >= JOURNAL_CHUNK) flush();
+      }
     };
     // Each earlier pass named in `reverse`, read back, its entities' entries swapped and
-    // handed over, and the originals marked undone by this run.
+    // handed over in chunks; the originals are marked undone by this run only once every chunk
+    // of it is written, so a run that is then dropped leaves none marked by it.
+    // ponytail: each earlier pass is read whole (`journalEntries`); a cursor in pages is the
+    // upgrade if one pass's entries ever outgrow memory on their own.
     var reverseAll = function () {
-      var runs = Object.keys(reversals);
+      var runs = Object.keys(reversals), toMark = [];
       reversals = {};
+      var swap = function (e) {
+        return { type: e.type, id: e.eid, name: e.name, field: e.field, folder: e.folder,
+          action: e.action === 'create' ? 'delete' : e.action,
+          before: e.afterAbsent ? undefined : e.after, after: e.beforeAbsent ? undefined : e.before,
+          undoes: e.id };
+      };
       return runs.reduce(function (p, runId) {
-        var keys = runs.length && reversalsOf[runId];
+        var keys = reversalsOf[runId];
         return p.then(function () {
           return journalEntries(runId).then(function (entries) {
-            var mine = entries.filter(function (e) { return keys[e.entity] && !e.undone; });
-            push(mine.map(function (e) {
-              return { type: e.type, id: e.eid, name: e.name, field: e.field, folder: e.folder,
-                action: e.action === 'create' ? 'delete' : e.action,
-                before: e.afterAbsent ? undefined : e.after, after: e.beforeAbsent ? undefined : e.before,
-                undoes: e.id };
-            }));
-            return flush().then(function () {
-              if (!over && !failed && mine.length) return journalMark(mine, head.id);
-              return null;
+            // Newest first, so each field's count takes its newest entries; kept in the run's order.
+            var n = function (e) { return +e.id.slice(e.id.lastIndexOf(':') + 1); };
+            var left = {}, take = {};
+            entries.slice().sort(function (a, b) { return n(b) - n(a); }).forEach(function (e) {
+              var w = keys[e.entity];
+              if (!w || e.undone) return;
+              if (w === true) { take[e.id] = true; return; }
+              var f = String(e.field), k = e.entity + '\n' + f;
+              if (!hasOwn(w, f)) return;
+              if (!hasOwn(left, k)) left[k] = w[f];
+              if (left[k]-- > 0) take[e.id] = true;
             });
+            var mine = entries.filter(function (e) { return take[e.id]; });
+            for (var i = 0; i < mine.length; i += JOURNAL_CHUNK) push(mine.slice(i, i + JOURNAL_CHUNK).map(swap));
+            if (mine.length) toMark.push(mine);
+            return flush();
           });
         });
-      }, Promise.resolve());
+      }, Promise.resolve()).then(function () {
+        if (over || failed) return null;
+        return toMark.reduce(function (p, mine) {
+          return p.then(function () { return journalMark(mine, head.id); })
+            .then(function (cleared) { marked.push({ list: mine, cleared: cleared }); });
+        }, Promise.resolve());
+      });
     };
     var reversalsOf = {};
     return {
@@ -2908,29 +3009,38 @@
         }
       },
       entries: function (more) { push(more || []); },
-      reverse: function (runId, type, id) {
+      reverse: function (runId, type, id, field) {
         if (!runId) return;
         reversals[runId] = true;
-        (reversalsOf[runId] = reversalsOf[runId] || {})[type + ':' + id] = true;
+        var of = reversalsOf[runId] = reversalsOf[runId] || {}, k = type + ':' + id;
+        // The whole entity once named whole; otherwise the fields named so far, each with how often.
+        if (field == null) of[k] = true;
+        else if (of[k] !== true) { var fs = of[k] = of[k] || {}, fk = String(field); fs[fk] = (fs[fk] || 0) + 1; }
       },
       drain: function () { return window.indexedDB ? flush() : Promise.resolve(); },
       finish: function () {
         // A browser with no IndexedDB has no history to add to, so there is nothing to say.
-        if (!window.indexedDB) { buf = []; return Promise.resolve(''); }
+        if (!window.indexedDB) { buf = []; delete _openPasses[head.id]; return Promise.resolve(''); }
         // A pass not recorded whole is not recorded at all: the chunks it did write go.
         var drop = function (why) {
-          return journalDb().then(function (db) { return journalDropRuns(db, [head.id]); })
+          delete _openPasses[head.id];
+          return marked.reduce(function (p, m) { return p.then(function () { return journalUnmark(m.list, m.cleared); }); }, Promise.resolve())
+            .then(function () { return journalDb(); }).then(function (db) { return journalDropRuns(db, [head.id]); })
             .then(null, function () {}).then(function () { return 'Not recorded in Undo History: ' + why; });
         };
         return flush().then(reverseAll).then(function () {
+          delete _openPasses[head.id];
           if (failed) return drop((failed.message || String(failed)) + '.');
           if (over) {
             return drop('this pass is more than half its size limit. Its Undo here still works while this dialog is open.');
           }
           if (!written) return '';
-          journalChanged(true);
-          journalProtect();
-          return journalTrim().then(function () {
+          delete head.open;
+          return journalPut(head, []).then(function () {
+            journalChanged(true);
+            journalProtect();
+            return journalTrim();
+          }).then(function () {
             return 'Recorded in Undo History: ' + plural(head.count, 'change') +
               (head.note ? ' (' + head.note + ')' : '') + '.';
           });
@@ -3017,12 +3127,14 @@
   // A plugin's settings saved - on Stash's settings page, or from a plugin's own dialog -
   // recorded key by key, where Record Settings Changes is on: the map as it was, read just
   // before, against the map the save sends, which is the whole of it. Not a seeded default
-  // written on first load, and not an undo's own write, which its run already records.
+  // written on first load, not a plugin's own state - an operation named `…State`, such as De-Spicer's
+  // salt and its record of the pseudonyms it wrote, which an undo would only corrupt - and not an
+  // undo's own write, which its run already records.
   function journalSettingsSave(send, input, init, op) {
     var v = {};
     try { v = JSON.parse(init.body).variables || {}; } catch (e) { v = {}; }
     var pid = v.plugin_id || v.id, next = v.input;
-    var record = pid && next && typeof next === 'object' && !/mutation\s+\w*(Seed|GTTxUndo)/.test(op);
+    var record = pid && next && typeof next === 'object' && !/mutation\s+\w*(Seed|State|GTTxUndo)/.test(op);
     // Its own query, not the shared read: the save about to go out drops that anyway.
     var prior = !record ? Promise.resolve(null) : gqlRequest('query GTTxSettingsBefore { configuration { plugins } }', null).then(function (d) {
       var all = ((d || {}).configuration || {}).plugins || {}, core = all[PLUGIN_ID] || {};
@@ -3656,6 +3768,13 @@
           });
           return;
         }
+        if (g.some(function (e) { return e.action === 'create' && e.split; })) {
+          g.forEach(function (e) {
+            items.push({ entry: e, status: 'unrecorded', reason: 'a merge put back is merged again in Stash - deleting it ' +
+              'here would leave what only it carried with neither tag' });
+          });
+          return;
+        }
         if (g.some(function (e) { return e.action === 'create'; })) {
           g.forEach(function (e) {
             items.push({ entry: e, status: 'ok', reason: e.action === 'create' ? 'deleted again' : 'goes with the delete' });
@@ -3870,7 +3989,9 @@
           undid.push(e);
           remap = remap || {};
           (remap[w.type] = remap[w.type] || {})[e.eid] = w.made;
-          entries.push({ type: w.type, id: w.made, name: w.name, action: 'create', undoes: e.id });
+          // `split`: a merge put back. Deleting it again would not put the surviving tag back on what
+          // only the merged one carried, so a redo of it is refused, to be merged again in Stash.
+          entries.push({ type: w.type, id: w.made, name: w.name, action: 'create', undoes: e.id, split: e.action === 'merge' || undefined });
           return;
         }
         w.entries.forEach(function (e) {
@@ -3891,6 +4012,9 @@
       if (!entries.length) return { written: 0, failed: failed, run: null };
       return journalRecord({ source: 'undo', label: 'Undo of ' + plural(undid.length, 'change'), remap: remap }, entries)
         .then(function (res) {
+          // An undo record too large to keep is not kept, and then nothing is marked undone by it:
+          // the changes still review as done, which is what the library holds.
+          if (!res.run) return { written: written.length, failed: failed, run: null, tooLarge: !!res.tooLarge };
           return journalMark(undid, res.run).then(function () {
             return { written: written.length, failed: failed, run: res.run };
           });
@@ -3933,7 +4057,24 @@
 
   // An undone entry is marked with the run that undid it; undoing that undo - a redo -
   // clears the mark on the entry it had undone, so it can be undone again.
+  // Marks a run made and then lost - dropped by a later step - taken off again, and the marks its
+  // redo cleared (`cleared`, what `journalMark` resolved to) put back where nothing marked them
+  // since, so the history reviews as it was before.
+  function journalUnmark(list, cleared) {
+    return journalDb().then(function (db) {
+      var tx = db.transaction('entries', 'readwrite'), store = tx.objectStore('entries');
+      list.forEach(function (e) { e = e._orig || e; delete e.undone; store.put(e); });
+      (cleared || []).forEach(function (c) {
+        var g = store.get(c.id);
+        g.onsuccess = function () { if (g.result && !g.result.undone) { g.result.undone = c.undone; store.put(g.result); } };
+      });
+      return idbDone(tx);
+    }).then(journalChanged);
+  }
+
+  // Resolves to the marks a redo cleared, `{ id, undone }` each.
   function journalMark(undid, runId) {
+    var cleared = [];
     return journalDb().then(function (db) {
       var tx = db.transaction('entries', 'readwrite'), store = tx.objectStore('entries');
       undid.forEach(function (e) {
@@ -3942,25 +4083,33 @@
         store.put(e);
         if (e.undoes) {
           var g = store.get(e.undoes);
-          g.onsuccess = function () { if (g.result) { delete g.result.undone; store.put(g.result); } };
+          g.onsuccess = function () {
+            if (!g.result) return;
+            if (g.result.undone) cleared.push({ id: g.result.id, undone: g.result.undone });
+            delete g.result.undone;
+            store.put(g.result);
+          };
         }
       });
       return idbDone(tx);
-    }).then(journalChanged);
+    }).then(journalChanged).then(function () { return cleared; });
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────
 
+  var LINES_DRAWN_DEFAULT = 1000;   // Lines Drawn at Once, where nothing is stored (`linesDrawn`)
   var DEFAULTS = {
     a1TaggerDuration: false,
     a2SelectPaste: false,
     a3SameTab: false,
     a4HeadingCounts: false,
+    a4bFoldGroups: false,
     a5LogLinesKept: '',
     a6CaseSensitive: false,
     a7CardFieldCount: true,
     a8CardFileCount: true,
     a9HighlightColour: '',
+    a9bLinesDrawn: '',
     d1GoodColor: '',
     d2AverageColor: '',
     d3BadColor: '',
@@ -4164,6 +4313,7 @@
     SEEDS.a5LogLinesKept = LOG_KEEP;
     SEEDS.c1JournalKeepDays = String(JOURNAL_KEEP_DAYS);
     SEEDS.c2JournalSizeMB = JOURNAL_SIZE_MB;
+    SEEDS.a9bLinesDrawn = String(LINES_DRAWN_DEFAULT);
     COLORS.forEach(function (c) { SEEDS[c.key] = c.dflt; });
   }());
   // What each absent key is seeded with: its default, but the heading-counts switch on
@@ -4232,12 +4382,12 @@
   // dialog-only); they are stored under their keys as before, the seed still writes their
   // defaults, and the dialog writes the whole map back like every settings write here.
   var JOURNAL_FIELDS = [
-    { key: 'c1JournalKeepDays', label: 'Keep For (Days)', text: true, dflt: JOURNAL_KEEP_DAYS,
+    { key: 'c1JournalKeepDays', label: 'Keep For (1 to 999 Days, or Forever)', text: true, dflt: JOURNAL_KEEP_DAYS,
       tip: 'How long Undo History keeps what was changed, in days: 1 to 999, or Forever. Default ' +
         '90.\n\nOlder runs are dropped, oldest first, the next time anything is recorded. A run ' +
         'you imported back from a file is kept past this, since you brought it back to undo it. ' +
         'Whichever limit is reached first - this one or the size - drops the oldest.' },
-    { key: 'c2JournalSizeMB', label: 'Size Limit (MB)', number: true, dflt: JOURNAL_SIZE_MB,
+    { key: 'c2JournalSizeMB', label: 'Size Limit (16 to 4096 MB)', number: true, dflt: JOURNAL_SIZE_MB,
       tip: 'The most space Undo History may use in this browser, in MB: 16 to 4096. Default ' +
         '256.\n\n256 MB holds roughly half a million to a million changes - a couple of ' +
         'library-wide runs and years of edits by hand. Past it the oldest runs are dropped. A ' +
@@ -4277,7 +4427,7 @@
     { key: 'c5JournalImageRuns', label: 'Record Library-Wide Image Writes',
       tip: 'Record the image changes a ᝯㄝₓ plugin writes across the whole library. Off by ' +
         'default.\n\nOne such pass over a million images is up to a million changes and could ' +
-        'push everything else out of the size limit. Off, those image changes are left out of ' +
+        'push everything else out of the size limit. Off: those image changes are left out of ' +
         'the history - the dialog\'s own Undo still covers them while it is open - and images ' +
         'you edit yourself are always recorded.' },
     { key: 'c6JournalProtect', label: 'Protect Its Storage',
@@ -4318,7 +4468,7 @@
   // resolves to, the way a row of Stash's page would have said it.
   // A color at work: lines as the plugins draw them, in the color the box holds, so a pick
   // shows before Save does - the default while the settings are still being read. A sample
-  // is its parts: plain words, `{ dim }` in the grey the plugins give asides, and `{ hl }`
+  // is its parts: plain words, `{ dim }` in the gray the plugins give asides, and `{ hl }`
   // in the color, as text or, for a `bg` field, as the background behind it.
   function drawDemo(f, box, demos) {
     var col = el('div', 'gttxcore-demo');
@@ -4352,19 +4502,69 @@
     modal.appendChild(head);
     var body = el('div', 'gttxcore-body');
     var boxes = {}, demos = [];
+    // A heading (`fieldHeading`) parts the fields after it from those before, its switches with an
+    // All On and All Off of their own where it has `allToggles`; every other loop reads `fields`.
+    var fields = spec.fields.filter(function (f) { return !f.heading; }), sections = [], section = null;
+    // The last line of a section has no rule under it: the next heading, or the footer, draws one.
+    // Two rows where it is a line of two halves.
+    var lineRows = [];
+    function endSection() {
+      var n = 0;
+      for (var i = lineRows.length - 1; i >= 0 && hasClass(lineRows[i], 'gttxcore-half'); i--) n++;
+      lineRows.slice(n && n % 2 === 0 ? -2 : -1).forEach(function (r) { r.className += ' gttxcore-devrow-end'; });
+      lineRows = [];
+    }
     spec.fields.forEach(function (f) {
-      var row = el('div', 'gttxcore-devrow' + (f.demo ? ' gttxcore-demorow' : ''));
+      if (f.heading) {
+        endSection();
+        var hrow = body.appendChild(el('div', 'gttxcore-fieldhead'));
+        var hname = hrow.appendChild(el('span', 'gttxcore-fieldheadname', f.heading));
+        hname.title = f.tip || '';
+        section = { f: f, ticks: [] };
+        sections.push(section);
+        if (f.allToggles) {
+          hrow.appendChild(el('div', 'gttxcore-footgap'));
+          var sec = section;
+          [['on', 'All On', true], ['off', 'All Off', false]].forEach(function (p) {
+            var b = sec[p[0]] = hrow.appendChild(button(p[1], 'gttxcore-section' + p[0]));
+            b.disabled = true;
+            b.addEventListener('click', function () {
+              if (b.disabled) return;
+              sec.ticks.forEach(function (k) { boxes[k].checked = p[2]; });
+              refreshSave();
+            });
+          });
+        }
+        if (f.tip) body.appendChild(valueProse(el('div', 'gttxcore-devhelp gttxcore-fieldheadhelp'), f.tip.split('\n\n')[0]));
+        return;
+      }
+      // `half`: a switch of a set that reads alike, two to a line, its description on hover alone.
+      var row = el('div', 'gttxcore-devrow' + (f.demo ? ' gttxcore-demorow' : '') + (f.half ? ' gttxcore-half' : ''));
       // A field with samples: its line and help on the left, the samples beside them.
       var main = f.demo ? row.appendChild(el('div', 'gttxcore-devmain')) : row;
       var label = markLevel(el('label', 'gttxcore-devlabel' + (f.warn ? ' gttxcore-warnlabel' : '')), f.warn);
       label.title = f.tip;
-      var box = document.createElement('input');
-      box.type = f.color ? 'color' : f.text || f.number ? 'text' : 'checkbox';
-      box.className = f.color ? 'gttxcore-colorbox'
-        : f.text || f.number ? 'gttxcore-jbox' + (f.wide ? ' gttxcore-wide' : '') : 'gttxcore-devbox';
+      // `choices` - [[value, label], ...] - is a dropdown; the rest are one input each.
+      var box;
+      if (f.choices) {
+        box = document.createElement('select');
+        box.className = 'gttxcore-jbox gttxcore-choicebox';
+        f.choices.forEach(function (c) {
+          var o = document.createElement('option');
+          o.value = c[0];
+          o.textContent = c[1];
+          box.appendChild(o);
+        });
+      } else {
+        box = document.createElement('input');
+        box.type = f.color ? 'color' : f.text || f.number ? 'text' : 'checkbox';
+        box.className = f.color ? 'gttxcore-colorbox'
+          : f.text || f.number ? 'gttxcore-jbox' + (f.wide ? ' gttxcore-wide' : '') : 'gttxcore-devbox';
+      }
       box.disabled = true;
-      box.addEventListener(box.type === 'checkbox' ? 'change' : 'input', function () { refreshSave(); });
+      box.addEventListener(box.type === 'checkbox' || f.choices ? 'change' : 'input', function () { refreshSave(); });
       boxes[f.key] = box;
+      if (section && box.type === 'checkbox') section.ticks.push(f.key);
       var name = markGlyphs(el('span', 'gttxcore-devname'), f.label, spec.plainNames);
       if (box.type === 'checkbox') { label.appendChild(box); label.appendChild(name); }
       else if (!f.color) { label.appendChild(name); label.appendChild(box); }
@@ -4385,6 +4585,7 @@
         reset.addEventListener('click', function () { if (!box.disabled) { box.value = f.dflt; refreshSave(); } });
       }
       line.appendChild(label);
+      if (f.tag) line.appendChild(tagGlyph());   // a box naming a tag, as ⓕ follows a field's
       if (f.mark) {
         var slot = line.appendChild(el('span', 'gttxcore-fieldmark'));
         var asked = 0, wait = null;
@@ -4399,11 +4600,12 @@
         box.addEventListener('input', function () { clearTimeout(wait); wait = setTimeout(box._mark, 400); });
       }
       // The description stays plain: the level is on the name, its box and its tick.
-      main.appendChild(markGlyphs(el('div', 'gttxcore-devhelp'),
-        f.tip.split('\n\n').slice(0, 2).join(' ')));
+      if (!f.half) main.appendChild(valueProse(el('div', 'gttxcore-devhelp'), f.tip.split('\n\n').slice(0, 2).join(' ')));
       if (f.demo) row.appendChild(drawDemo(f, box, demos));
       body.appendChild(row);
+      lineRows.push(row);
     });
+    endSection();
     modal.appendChild(body);
     var foot = el('div', 'gttxcore-foot');
     var saveBtn = button('Save', 'gttxcore-save');
@@ -4421,11 +4623,27 @@
       resetBtn.disabled = true;
       resetBtn.title = 'Still reading the current settings.';
     }
+    // Every switch of the dialog on or off at once, at the right end - written only by Save. The
+    // dialog says in each button's tooltip what the two ends mean (`allToggles: { onTip, offTip }`).
+    var allOn = null, allOff = null;
+    if (spec.allToggles) {
+      foot.appendChild(el('div', 'gttxcore-footgap'));
+      allOn = foot.appendChild(button('All On', 'gttxcore-allon'));
+      allOff = foot.appendChild(button('All Off', 'gttxcore-alloff'));
+      [[allOn, true], [allOff, false]].forEach(function (p) {
+        p[0].disabled = true;
+        p[0].addEventListener('click', function () {
+          if (p[0].disabled) return;
+          fields.forEach(function (f) { var b = boxes[f.key]; if (b.type === 'checkbox') b.checked = p[1]; });
+          refreshSave();
+        });
+      });
+    }
     modal.appendChild(foot);
     var run = { modal: modal, backdrop: backdrop, closeBtn: closeBtn, stored: null };
     var values = function () {
       var out = {};
-      spec.fields.forEach(function (f) {
+      fields.forEach(function (f) {
         var b = boxes[f.key];
         out[f.key] = b.type === 'checkbox' ? !!b.checked
           : f.number && /^\s*\d+\s*$/.test(b.value) ? Number(b.value) : String(b.value).trim();
@@ -4435,10 +4653,25 @@
     function refreshSave() {
       demos.forEach(function (d) { d(); });
       var v = values(), s = run.stored, moved = false;
-      if (s) spec.fields.forEach(function (f) { if (String(v[f.key]) !== String(s[f.key])) moved = true; });
+      if (s) fields.forEach(function (f) { if (String(v[f.key]) !== String(s[f.key])) moved = true; });
       saveBtn.disabled = !s || !moved;
       saveBtn.title = !s ? 'Still reading the current settings.' : !moved ? 'Nothing has changed since this opened.'
         : spec.saveTip;
+      // Each held back where pressing it would change nothing.
+      sections.forEach(function (sec) {
+        if (!sec.on) return;
+        sec.on.disabled = !s || sec.ticks.every(function (k) { return boxes[k].checked; });
+        sec.off.disabled = !s || sec.ticks.every(function (k) { return !boxes[k].checked; });
+        sec.on.title = (sec.on.disabled && s ? 'Every switch under ' + sec.f.heading + ' is on already. ' : '') + sec.f.allToggles.onTip;
+        sec.off.title = (sec.off.disabled && s ? 'Every switch under ' + sec.f.heading + ' is off already. ' : '') + sec.f.allToggles.offTip;
+      });
+      if (allOn) {
+        var ticks = fields.filter(function (f) { return boxes[f.key].type === 'checkbox'; });
+        allOn.disabled = !s || ticks.every(function (f) { return boxes[f.key].checked; });
+        allOff.disabled = !s || ticks.every(function (f) { return !boxes[f.key].checked; });
+        allOn.title = (allOn.disabled && s ? 'Every switch here is on already. ' : '') + spec.allToggles.onTip;
+        allOff.title = (allOff.disabled && s ? 'Every switch here is off already. ' : '') + spec.allToggles.offTip;
+      }
     }
     refreshSave();
     function shut() {
@@ -4462,7 +4695,7 @@
     saveBtn.addEventListener('click', function () { if (!saveBtn.disabled) store(); });
     if (resetBtn) resetBtn.addEventListener('click', function () {
       if (resetBtn.disabled) return;
-      spec.fields.forEach(function (f) {
+      fields.forEach(function (f) {
         var b = boxes[f.key];
         if (b.type === 'checkbox') b.checked = !!SEEDS[f.key];
         else b.value = f.dflt == null ? '' : String(f.dflt);
@@ -4476,7 +4709,7 @@
       if (spec.open !== run) return;
       if (spec.read) s = spec.read(s);
       run.stored = {};
-      spec.fields.forEach(function (f) {
+      fields.forEach(function (f) {
         var b = boxes[f.key], v = s[f.key];
         if (f.color) v = colorOf(v, f.dflt);
         if (b.type === 'checkbox') b.checked = truthy(v);
@@ -4575,6 +4808,25 @@
   // (`.gttx-glyph`, as the custom-field mark `.gttx-cftip` and the card counters are), so they
   // look the same whatever font is around them. Appended to `node`, which is returned.
   var CARD_MARKS = /(ⓕ|🖬|⸎)/;
+  // A description's prose, a switch's value drawn in the value font, as a summary draws a quoted
+  // one: "On:" or "Off:" opening a sentence (or "On by default"), and a capital On or Off inside one
+  // ("set to Off", "Off, Prune or Roll-Up"). A sentence opening "On the Edit tab" is prose. Appended
+  // to `node`, which is returned.
+  var SWITCH_VALUE = /(^|[.!?]\s+|\n\s*)(On|Off)(?=:| by default\b)|([a-z,;:(] )(On|Off)\b(?![-'])/g;
+  function valueProse(node, text, plain) {
+    var t = String(text == null ? '' : text), last = 0, m;
+    SWITCH_VALUE.lastIndex = 0;
+    while ((m = SWITCH_VALUE.exec(t)) !== null) {
+      var lead = m[1] != null ? m[1] : m[3], word = m[2] || m[4];
+      var at = m.index + lead.length;
+      if (at > last) markGlyphs(node, t.slice(last, at), plain);
+      node.appendChild(el('span', 'gttx-switchval', word));
+      last = at + word.length;
+    }
+    if (last < t.length) markGlyphs(node, t.slice(last), plain);
+    return node;
+  }
+
   function markGlyphs(node, text, plain) {
     String(text).split(CARD_MARKS).forEach(function (part, i) {
       if (!part) return;
@@ -4593,9 +4845,10 @@
       if (!part) return;
       if (i % 2) {
         node.appendChild(el('span', 'gttx-prose', '"'));
-        markGlyphs(node.appendChild(el('span', 'gttx-lit')), part.slice(1, -1));
+        // A value's own characters, plain: a ⸎ in a tag's name is part of the name, not a mark.
+        markGlyphs(node.appendChild(el('span', 'gttx-lit')), part.slice(1, -1), true);
         node.appendChild(el('span', 'gttx-prose', '"'));
-      } else markGlyphs(node.appendChild(el('span', 'gttx-prose')), part);
+      } else valueProse(node.appendChild(el('span', 'gttx-prose')), part);   // "On: …", "Every switch: Off"
     });
     return node;
   }
@@ -4604,8 +4857,8 @@
   // `hl` colors it as the dialog colors a switch that writes on its own, and `mark()` gives
   // the node to put after it (a node, a promise of one, or null): a tag's 🔗 with the tooltip
   // it carries in the dialog; or `{ cf }`, a custom field's name, quoted with its ⓕ inside the
-  // quotes, the mark being part of the name; or `{ swatch }`, a `#rrggbb` color after a square
-  // of it. `summaryKey` is what says it changed.
+  // quotes, the mark being part of the name; or `{ swatch }`, a `#rrggbb` color, quoted, after a
+  // square of it. `summaryKey` is what says it changed.
   function summaryKey(sum) {
     if (typeof sum === 'string') return sum;
     return (sum || []).map(function (p) {
@@ -4624,7 +4877,7 @@
       if (typeof p === 'string') return { text: p };
       if (p.cf != null) return { text: String(p.cf), cf: true, hl: levelOf(p.hl), mark: function () { return cfTipMark(p.cf); } };
       if (p.swatch != null) return { text: String(p.swatch), swatch: true };
-      return { text: p.text, hl: levelOf(p.hl), mark: p.mark || null };
+      return { text: p.text, hl: levelOf(p.hl), mark: p.mark || null, tag: !!p.tag };
     });
     var had = node._pieces;
     var same = !!had && had.length === want.length && had.every(function (h, i) {
@@ -4640,25 +4893,35 @@
       var span = piece.span;
       while (span.firstChild) span.removeChild(span.firstChild);
       piece.text = p.text;
+      piece.tag = !!p.tag;
       if (p.cf) {
         span.appendChild(el('span', 'gttx-prose', '"'));
-        markGlyphs(span.appendChild(el('span', 'gttx-lit')), p.text);
+        markGlyphs(span.appendChild(el('span', 'gttx-lit')), p.text, true);
         piece.slot = span.appendChild(el('span', 'gttxcore-cfslot'));
         span.appendChild(el('span', 'gttx-prose', '"'));
+      } else if (p.tag) {
+        // A tag's name, its icon inside the quotes as a field's ⓕ is, and its link close after them.
+        span.appendChild(el('span', 'gttx-prose', '"'));
+        markGlyphs(span.appendChild(el('span', 'gttx-lit')), String(p.text).replace(/^"|"$/g, ''), true);
+        span.appendChild(tagGlyph());
+        span.appendChild(el('span', 'gttx-prose', '"'));
+        if (p.mark) piece.slot = span.appendChild(el('span', 'gttxcore-summark gttxcore-tagslot'));
       } else {
+        // A color's code is its value, quoted like any other; the square before the quotes.
         if (p.swatch) span.appendChild(el('span', 'gttxcore-swatch')).style.backgroundColor = p.text;
-        summaryText(span, p.text);
+        summaryText(span, p.swatch ? '"' + p.text + '"' : p.text);
         if (p.mark) piece.slot = span.appendChild(el('span', 'gttxcore-summark'));
       }
       if (p.mark) fillMark(piece, p);
     };
     if (same) {
-      want.forEach(function (p, i) { if (had[i].text !== p.text) fill(had[i], p); });
+      // A tag named or cleared is that piece's own words changing, not the summary's shape.
+      want.forEach(function (p, i) { if (had[i].text !== p.text || had[i].tag !== !!p.tag) fill(had[i], p); });
       return;
     }
     while (node.firstChild) node.removeChild(node.firstChild);
     node._pieces = want.map(function (p) {
-      var piece = { hl: p.hl || '', cf: !!p.cf, swatch: !!p.swatch, mark: !!p.mark,
+      var piece = { hl: p.hl || '', cf: !!p.cf, swatch: !!p.swatch, mark: !!p.mark, tag: !!p.tag,
         span: node.appendChild(el('span', p.hl === 'hl' ? 'gttxcore-hl-mark' : p.hl ? 'gttx-lv-' + p.hl : null)) };
       fill(piece, p);
       return piece;
@@ -4702,7 +4965,14 @@
     var last = rows.length ? rows[rows.length - 1] : null;
     if (r.at === 'end' && last && last.parentNode !== group) last.parentNode.insertBefore(row, last.nextSibling);
     else if (first && first.parentNode) first.parentNode.insertBefore(row, first);
-    else group.appendChild(row);
+    else (childByClass(group, 'collapsible-section') || group).appendChild(row);
+  }
+  // A plugin with no setting of its own still has Stash's `.collapsible-section`, empty: its rows go
+  // in it, so they fold with the group (`fold`) rather than stand below it.
+  function childByClass(node, c) {
+    var kids = (node && node.childNodes) || [];
+    for (var i = 0; i < kids.length; i++) if (hasClass(kids[i], c)) return kids[i];
+    return null;
   }
 
   // ── A plugin's settings as one row of its group, and a dialog ─────────────
@@ -4716,15 +4986,24 @@
   //   id, shortName, prefix   the plugin's id, short name, and CSS prefix (the row's id)
   //   key, title, line        the row: a key for its id, the heading, the line under it
   //   fields                  `{ key, label, tip, text | number, wide, dflt }` - a switch without
-  //                           `text` or `number`; `tip` is the setting's whole description
+  //                           `text` or `number`; `tip` is the setting's whole description - and
+  //                           any `fieldHeading(...)`, parting one row's dialog into sections;
+  //                           `half` draws a switch two to a line, its description on hover
   //   summary(s)              what the settings say now, from the plugin's settings `s`
   //   settings()              the plugin's settings as last read (the row's summary)
   //   load()                  a promise of them read fresh (the dialog, as it opens)
   //   saved(patch)            called once a save lands, to re-read them
   // Returns `{ tick(group), open() }`; a plugin calls `tick` from its own settings tick, and
   // rows land in the group in the order they are ticked, after its own settings.
+  // A section of a settings dialog: its heading, a line under it from `tip`'s first paragraph (the
+  // whole of it on hover), and an All On and All Off for its switches where `allToggles` -
+  // `{ onTip, offTip }` - says what the two ends mean.
+  function fieldHeading(title, tip, allToggles) { return { heading: title, tip: tip || '', allToggles: allToggles || null }; }
   function settingsDialog(o) {
+    // A setting's name draws ⓕ, 🖬 and ⸎ plain, as UI Customizations' do: the highlight is for what
+    // a setting holds or does, not for the words naming it.
     var spec = { title: o.title, fields: o.fields, open: null, shortName: o.shortName, load: o.load,
+      allToggles: o.allToggles, plainNames: true,
       ready: o.ready || 'Hover a line for all it does. Nothing is written until you press Save.',
       saveTip: 'Store these settings. They apply from the next thing they decide.',
       save: function (patch) {
@@ -4734,7 +5013,8 @@
       level: parentLevel(o.fields.map(function (f) { return f.warn; })),
       summary: o.summary, settings: o.settings, button: o.title + '...',
       title: 'Open the ' + o.title + ' settings. Nothing is written until you press Save there.',
-      open: function () { openFieldsDialog(spec); } };
+      // A dialog of the plugin's own in place of the fields one (`open`), for what no field holds.
+      open: function () { if (o.open) o.open(); else openFieldsDialog(spec); } };
     return {
       open: row.open,
       tick: function (group) { if (group) dialogRowTick(group, row); },
@@ -4757,8 +5037,8 @@
   // (the log cap is a `.yml` NUMBER: not a look). Stored under their keys
   // as before (`version.test.js`' `DIALOG_ONLY`), seeded and read as before.
   var GLOBAL_FIELDS = [
-    { key: 'a1TaggerDuration', label: 'Emphasise a Tagger Duration Mismatch',
-      tip: 'Emphasise the Scene Tagger\'s duration mismatch. Off by default.\n\nStash\'s tagger prints ' +
+    { key: 'a1TaggerDuration', label: 'Emphasize a Tagger Duration Mismatch',
+      tip: 'Emphasize the Scene Tagger\'s duration mismatch. Off by default.\n\nStash\'s tagger prints ' +
         '"Duration off by at least Ns" among the other fields on a search result, in the same weight and ' +
         'color as everything beside it - and it is the one line there that decides whether a match is the ' +
         'right file. With this on, that sentence is drawn larger, capitalised and in the Bad Result Text ' +
@@ -4776,7 +5056,7 @@
     { key: 'a3SameTab', label: 'Open Links in the Same Tab',
       tip: 'Open every link the ᝯㄝₓ plugins draw in the tab you are already in. Off by default, which ' +
         'is a new tab.\n\nTheir dialogs, listings and hover cards name entities as links, and every one ' +
-        'of them opens a new tab, which keeps the dialog you are reading open behind it. On, they all ' +
+        'of them opens a new tab, which keeps the dialog you are reading open behind it. On: they all ' +
         'open in the current tab, the way Stash\'s own links do - every ᝯㄝₓ plugin at once, from the ' +
         'next link drawn.' },
     { key: 'a4HeadingCounts', label: 'Show Counts on Headings',
@@ -4785,6 +5065,13 @@
         'performer, studio, group or tag, the heading reads Tags (12), Performers (3) or Custom Fields (5) ' +
         'instead of the bare word, counted off what the page shows. It changes only the heading\'s text, ' +
         'and nothing is read from your library for it.' },
+    { key: 'a4bFoldGroups', label: 'Fold Every ᝯㄝₓ Plugin\'s Settings',
+      tip: 'Give every ᝯㄝₓ plugin\'s group on Settings → Plugins a chevron that folds its settings away, ' +
+        'folded to start. Off by default.\n\nOn: every group with settings to hide folds, on any Stash - its ' +
+        'heading clicks it open and shut, as Stash\'s own folding groups do; a plugin with no settings gets ' +
+        'none. Off: a group folds only where Stash folds the plugin groups around it - a Stash that folds ' +
+        'only plugins with a setting of their own in the .yml - so it does not stand open among them. From ' +
+        'the next time the page is drawn.' },
     { key: 'a7CardFieldCount', label: 'Show ⓕ Custom Field Count on Cards',
       tip: 'Put ⓕ and the number of custom fields an entity holds last in the row of counters under its ' +
         'card. On by default.\n\nOn scene, image, gallery, performer, studio, group and tag cards, where ' +
@@ -4794,9 +5081,14 @@
       tip: 'Put 🖬 and the number of files last in the row of counters under a scene\'s card, where the ' +
         'scene has more than one file. On by default.\n\nIts tooltip names them, the first being the one ' +
         'Stash plays and names the scene by. Nothing is read from your library for it.' },
+    { key: 'a9bLinesDrawn', label: 'Lines Drawn at Once (100 to 10000)', number: true, dflt: LINES_DRAWN_DEFAULT,
+      tip: 'How many lines a ᝯㄝₓ dialog draws at once - a log, a listing of results or changes, a list to pick ' +
+        'from: 1000 by default, 100 to 10000.\n\nEvery line is kept whatever this says - Copy log copies them all, ' +
+        'and a listing pages through the rest - so a larger number shows more at once for more of the browser\'s ' +
+        'time and memory, and a library with tens of thousands of lines draws fastest at the default.' },
     { key: 'd7FollowTheme', label: 'Follow the Stash Theme',
-      tip: 'Draw the ᝯㄝₓ dialogs, tooltips and panes in the greys of the Stash theme you run. Off by ' +
-        'default, which keeps their own dark greys.\n\nThe greys are read off a hidden sample of Stash\'s ' +
+      tip: 'Draw the ᝯㄝₓ dialogs, tooltips and panes in the grays of the Stash theme you run. Off by ' +
+        'default, which keeps their own dark grays.\n\nThe grays are read off a hidden sample of Stash\'s ' +
         'own dialog under the active theme - its background, its text and its muted text - and the ' +
         'borders and shades are worked out from those, so a theme that restyles Stash\'s dialogs restyles ' +
         'these too, within a second of switching. The colors below keep their own values either way, ' +
@@ -4832,7 +5124,7 @@
       ] },
     { key: 'd3BadColor', label: 'Bad Result Text Color', color: true, dflt: '#ff7b72',
       tip: 'The color of a bad result: Scene Variants\' high drift-score, and the Scene Tagger\'s duration ' +
-        'mismatch past five seconds when Emphasise a Tagger Duration Mismatch is on. Default #ff7b72, a red.',
+        'mismatch past five seconds when Emphasize a Tagger Duration Mismatch is on. Default #ff7b72, a red.',
       demo: [
         [{ hl: 'Duration off by at least 42s', cls: 'gttx-durwarn gttx-durwarn-red' }],
         ['⸎ The Long Goodbye ', { dim: '· 5 files' }, ' ', { hl: '187', cls: 'gttxcore-demobold' }],
@@ -4868,9 +5160,10 @@
   ];
 
   function globalsSummary(s) {
-    var on = GLOBAL_FIELDS.filter(function (f) { return !f.color && truthy(s[f.key]); })
+    var on = GLOBAL_FIELDS.filter(function (f) { return !f.color && !f.number && truthy(s[f.key]); })
       .map(function (f) { return f.label; });
-    var out = [(on.length ? 'On: ' + on.join(', ') : 'Every switch off') + '. Colors: '];
+    var out = [(on.length ? 'On: ' + on.join(', ') : 'Every switch: Off') + '. Lines drawn at once "' + linesDrawn(s) +
+      '". Colors: '];
     COLORS.forEach(function (c, i) { out.push(i ? ', ' : '', { swatch: colorOf(s[c.key], c.dflt) }); });
     return out.concat('.');
   }
@@ -4881,9 +5174,9 @@
   function openGlobals() { openFieldsDialog(GLOBALS_DIALOG); }
 
   var GLOBALS_ROW = { key: 'globals', heading: 'UI Customizations', summary: globalsSummary,
-    line: 'The tagger emphasis, right-click Paste, where links open, counts on headings, the ⓕ and 🖬 ' +
-      'counters on cards, whether the dialogs follow the Stash theme, and the text and background colors ' +
-      'every ᝯㄝₓ plugin draws in. Fourteen settings, in a dialog.',
+    line: 'The tagger emphasis, right-click Paste, where links open, counts on headings, folding the plugins\' ' +
+      'settings, the ⓕ and 🖬 counters on cards, whether the dialogs follow the Stash theme, and the text and ' +
+      'background colors every ᝯㄝₓ plugin draws in. Fifteen settings, in a dialog.',
     button: 'UI Customizations...', open: openGlobals,
     title: 'Open the settings every ᝯㄝₓ plugin shares. Nothing is written until you press Save there.' };
   // Drawn after Undo History's row, so it lands above it.
@@ -4897,8 +5190,10 @@
 
   // The button of a row on Settings → Plugins, drawn as Stash draws its own Edit there: a
   // bare react-bootstrap `<Button>`, so `btn-primary` at the normal size.
-  function settingButton(label, className) {
+  // `owner`, the plugin's id: what layout edit mode labels the button with (`_coopOwner`).
+  function settingButton(label, className, owner) {
     var b = el('button', 'btn btn-primary ' + (className || ''), label);
+    if (owner) b._coopOwner = owner;
     b.type = 'button';
     return b;
   }
@@ -4978,15 +5273,22 @@
       });
     });
     if (!runs.length && !entries.length) return Promise.resolve({ runs: 0, entries: 0, skipped: skipped });
+    // Only what the history does not hold already: a run or entry here keeps its own state - an
+    // undo since the export, the trims it is subject to - rather than the file's older copy.
+    var added = { runs: 0, entries: 0 };
     return journalDb().then(function (db) {
       var tx = db.transaction(['runs', 'entries'], 'readwrite');
       var rs = tx.objectStore('runs'), es = tx.objectStore('entries');
-      runs.forEach(function (r) { rs.put(r); });
-      entries.forEach(function (e) { es.put(e); });
+      var addNew = function (store, o, k) {
+        var g = store.get(o.id);
+        g.onsuccess = function () { if (!g.result) { store.put(o); added[k]++; } };
+      };
+      runs.forEach(function (r) { addNew(rs, r, 'runs'); });
+      entries.forEach(function (e) { addNew(es, e, 'entries'); });
       return idbDone(tx);
     }).then(function () {
       journalChanged();
-      return { runs: runs.length, entries: entries.length, skipped: skipped };
+      return { runs: added.runs, entries: added.entries, skipped: skipped };
     });
   }
 
@@ -5094,9 +5396,14 @@
   (function () { for (var k in REMAP_REL) if (hasOwn(REMAP_REL, k)) HISTORY_REL_TYPES[k] = REMAP_REL[k]; }());
   var _histNames = {};
 
+  // A request that fails names nothing - the link keeps its id - and is not cached, so the next
+  // draw or Find asks again.
   function historyNames(type, ids) {
-    var cache = _histNames[type] = _histNames[type] || {};
-    var want = ids.filter(function (id) { return !hasOwn(cache, id); });
+    var cache = _histNames[type] = _histNames[type] || {}, seen = {};
+    var want = ids.filter(function (id) {
+      if (hasOwn(cache, id) || hasOwn(seen, id)) return false;
+      return (seen[id] = true);
+    });
     var t = JOURNAL_TYPES[type];
     for (var i = 0; t && i < want.length; i += 50) {
       (function (chunk) {
@@ -5110,7 +5417,10 @@
             out[id] = o ? (o[t.name] || 'untitled') : null;
           });
           return out;
-        }, function () { return {}; });
+        }, function () {
+          chunk.forEach(function (id) { delete cache[id]; });
+          return {};
+        });
         chunk.forEach(function (id) {
           cache[id] = asked.then(function (out) { return out[id]; });
         });
@@ -5127,7 +5437,8 @@
     entityTip(a, type, id);
     if (names[id]) {
       names[id].then(function (name) {
-        a.textContent = name == null ? '(' + id + ', deleted)' : name + ' (' + id + ')';
+        if (name === undefined) return;   // not read: the id alone
+        a.textContent = name === null ? '(' + id + ', deleted)' : name + ' (' + id + ')';
       });
     }
     return a;
@@ -5184,12 +5495,9 @@
       if (e.action === 'merge' && e.lost) span.appendChild(el('span', null, ' (' + LOST_REASON[e.lost] + ')'));
       return span;
     }
-    var type = hasOwn(HISTORY_REL_TYPES, e.field) && e.action !== 'create' && e.action !== 'delete' &&
-      e.action !== 'gap' ? HISTORY_REL_TYPES[e.field] : null;
+    var type = historyRelType(e);
     if (!type) { span.textContent = historyChange(e); return span; }
-    var idOf = function (v) { return v && typeof v === 'object' ? String(v.group_id) : String(v); };
-    var list = function (v) { return v == null ? [] : Object.prototype.toString.call(v) === '[object Array]' ? v.map(idOf) : [idOf(v)]; };
-    var before = list(e.before), after = list(e.after);
+    var before = historyRelIds(e.before), after = historyRelIds(e.after);
     var names = historyNames(type, before.concat(after));
     var text = function (t) { span.appendChild(el('span', null, t)); };
     text(e.field + ': ');
@@ -5212,6 +5520,47 @@
     text(' → ');
     if (after.length) span.appendChild(historyRelLink(type, after[0], names)); else text('(none)');
     return span;
+  }
+
+  // A change to a relation names other entities by id; the line draws their names.
+  function historyRelType(e) {
+    return hasOwn(HISTORY_REL_TYPES, e.field) && e.action !== 'create' && e.action !== 'delete' &&
+      e.action !== 'gap' ? HISTORY_REL_TYPES[e.field] : null;
+  }
+  function historyRelIds(v) {
+    var idOf = function (x) { return x && typeof x === 'object' ? String(x.group_id) : String(x); };
+    return v == null ? [] : Object.prototype.toString.call(v) === '[object Array]' ? v.map(idOf) : [idOf(v)];
+  }
+
+  // The entries a Find keeps, in order: its text in the entity's own name, the field or a value
+  // (`historyMatches`) - and, for a change to a relation, in the names of the entities it adds or
+  // removes, read as the lines draw them, so a performer's name finds the scenes she was added to
+  // and not only the lines about her. The ids are gathered across the entries first, one
+  // `historyNames` call a type, so a run's new ids go fifty to a query.
+  // ponytail: a Find over a long history asks the names of every relation it reaches that matched
+  // nothing else; a server-side name index if that is ever slow.
+  function historyFilter(H, es) {
+    var keep = es.map(function (e) { return historyMatches(H, e); });
+    var kept = function () { return es.filter(function (e, i) { return keep[i]; }); };
+    if (!H.find) return Promise.resolve(kept());
+    var rel = [], ids = {}, hit = {};
+    es.forEach(function (e, i) {
+      var t = !keep[i] && (!H.type || e.type === H.type) && historyRelType(e);
+      if (!t) return;
+      var list = historyRelIds(e.before).concat(historyRelIds(e.after)), seen = ids[t] = ids[t] || {};
+      rel.push({ i: i, t: t, ids: list });
+      for (var k = 0; k < list.length; k++) seen[list[k]] = true;
+    });
+    if (!rel.length) return Promise.resolve(kept());
+    return Promise.all(Object.keys(ids).map(function (t) {
+      var want = Object.keys(ids[t]), names = historyNames(t, want), of = hit[t] = {};
+      return Promise.all(want.map(function (id) { return names[id]; })).then(function (ns) {
+        want.forEach(function (id, k) { of[id] = ns[k] != null && String(ns[k]).toLowerCase().indexOf(H.find) !== -1; });
+      });
+    })).then(function () {
+      rel.forEach(function (r) { if (r.ids.some(function (id) { return hit[r.t][id]; })) keep[r.i] = true; });
+      return kept();
+    });
   }
 
   function historyMatches(H, e) {
@@ -5256,7 +5605,8 @@
     var find = el('input', 'gttxcore-hfind');
     find.type = 'search';
     find.placeholder = 'Find a name, a field or a value';
-    find.title = 'Show only the runs with a change whose entity name, field or value holds this text.';
+    find.title = 'Show only the runs with a change whose entity name, field or value holds this text - ' +
+      'or the name of a tag, performer or other entity the change added or removed.';
     var typeSel = el('select', 'gttxcore-hselect');
     [['', 'Every type']].concat(Object.keys(JOURNAL_TYPES).map(function (k) {
       return [k, JOURNAL_TYPES[k].labels];
@@ -5668,9 +6018,9 @@
           if (!deep) { kept.push(r); continue; }
           if (H.find && !H.type && (String(r.label).toLowerCase().indexOf(H.find) !== -1 ||
               String(r.plugin || '').toLowerCase().indexOf(H.find) !== -1)) { kept.push(r); continue; }
-          return historyEntriesOf(H, r.id).then(function (run) {
+          return historyEntriesOf(H, r.id).then(function (es) { return historyFilter(H, es); }).then(function (run) {
             return function (es) {
-              if (es.some(function (e) { return historyMatches(H, e); })) kept.push(run);
+              if (es.length) kept.push(run);
               return more();
             };
           }(r));
@@ -5758,9 +6108,10 @@
         var inner = el('div', 'gttxcore-hentries', 'Reading…');
         block.appendChild(inner);
         historyEntriesOf(H, r.id).then(function (es) {
+          return H.find || H.type ? historyFilter(H, es) : es;
+        }).then(function (es) {
           inner.textContent = '';
           es.forEach(function (e) {
-            if ((H.find || H.type) && !historyMatches(H, e)) return;
             var line = el('div', 'gttxcore-hentry' + (e.undone ? ' gttxcore-hundone' : ''));
             var eb = el('input', 'gttxcore-hbox gttxcore-hentrybox');
             eb.type = 'checkbox';
@@ -5874,7 +6225,9 @@
       H.progressEl.textContent = 'Undone: ' + plural(res.written, 'entity', 'entities') + ' written' +
         (res.failed ? ', ' + plural(res.failed, 'failure') : '') + '. ' + (pop
         ? plural(res.popped, 'change') + ' taken out of the history; what was skipped or failed is still there.'
-        : 'The undo is in the history, where it can be undone in turn.');
+        : res.run ? 'The undo is in the history, where it can be undone in turn.'
+          : res.tooLarge ? 'The undo itself is not in the history: it is more than half its size limit, so it cannot be undone in turn.'
+            : '');
     }, function (e) {
       H.failed = 1;
       H.wrote = true;   // it may have written before it failed
@@ -6331,13 +6684,47 @@
     '.gttxcore-devhelp{font-size:.82rem;color:var(--gttx-muted,#a7b6c2);margin-top:.25rem;' +
     'margin-left:1.6rem;}' +
     // Undo History Settings: a text box beside its caption; the one setting that can lose
-    // history amber, caption and help, as a warning is everywhere here.
+    // history highlighted, caption and help, as a warning is everywhere here.
     '.gttxcore-jbox.gttxcore-wide{width:min(24rem,60vw);}' +
     '.gttxcore-devline{display:flex;align-items:center;flex-wrap:wrap;}' +
     '.gttxcore-fieldmark{margin-left:.4rem;}' +
+    // A plugin's own link (`svr-tagicon` and the like) keeps the slot's spacing, not its margin too.
+    '.gttxcore-fieldmark>a{margin-left:0!important;}' +
+    // A switch's value opening a sentence of a description - "On:", "Off:" - in the value font.
+    // A touch larger than the prose around it, so a switch's two answers stand out at a glance.
+    '.gttx-switchval{font-family:"Courier New",Courier,monospace;font-size:1.15em;font-weight:600;}' +
+    // A dropdown field is a box like the others, sized to what it says.
+    '.gttxcore-jbox.gttxcore-choicebox{width:auto;max-width:min(24rem,60vw);}' +
+    // All On and All Off at the right end of a settings dialog's footer.
+    '.gttxcore-footgap{flex:1 1 auto;}' +
+    // A section's heading in a settings dialog: a rule above it, its All On and All Off at the right.
+    '.gttxcore-fieldhead{display:flex;align-items:center;gap:.4rem;margin:.9rem 0 0;padding-top:.5rem;' +
+    'border-top:1px solid var(--gttx-border,#394b59);font-weight:600;}' +
+    '.gttxcore-fieldhead:first-child{margin-top:0;padding-top:0;border-top:0;}' +
+    '.gttxcore-fieldheadhelp{margin-bottom:.2rem;}' +
+    '.gttxcore-devrow-end{border-bottom:0;}' +
+    '.gttxcore-half{display:inline-block;width:50%;vertical-align:top;box-sizing:border-box;padding-right:.5rem;}' +
+    // A tag's mark beside its box: linked plain, or the Highlighted Text Color where no tag is named so.
+    '.gttx-tagmark{text-decoration:none;cursor:pointer;}' +
+    // No tag by that name or alias: a big red question mark, set in Courier New, the Bad Result color.
+    '.gttx-tagmark-none{color:var(--gttx-bad,#ff7b72);cursor:help;font-family:"Courier New",Courier,monospace;' +
+    'font-weight:700;font-size:1.35em;line-height:1;vertical-align:-.05em;}' +
     // A dialog's or a summary's ⓕ and 🔗 at the size the settings rows and the cards draw them.
     '.gttxcore-fieldmark,.gttxcore-summark{font-size:1.25em;line-height:1;}' +
     '.gttxcore-summark{margin-left:.3rem;}' +
+    // A tag's 🔗 close after its closing quote: none of the margin a plugin gives its link beside a box.
+    '.gttxcore-summark.gttxcore-tagslot{margin-left:.05rem;}' +
+    '.gttxcore-summark.gttxcore-tagslot>*{margin-left:0!important;}' +
+    // The tag icon: Stash's card icon, in the Highlighted Text Color, in proportion to the tag name it
+    // goes with - in em, so the same proportion wherever it is drawn: a summary, a dialog's line (a
+    // box takes the line's font from Stash's Bootstrap) and Stash's own value of a native setting.
+    '.gttx-tagglyph{display:inline-block;width:1.2em;height:1.344em;margin:0 .05em 0 .15em;vertical-align:-.27em;' +
+    'color:var(--gttx-highlight,#ffc107);}' +
+    '.gttx-tagglyph svg{display:block;width:100%;height:100%;fill:currentColor;}' +
+    // A settings group Core folds (`fold`), drawn as Stash draws the groups it folds itself.
+    '.setting-group.gttx-folded>.collapsible-section{display:none!important;}' +
+    '.setting-group.gttx-foldable>.setting{cursor:pointer;}' +
+    '.setting-group:not(.gttx-folded) .gttx-fold-btn svg{transform:rotate(180deg);}' +
     // A mark that resolved to nothing leaves no gap before the words after it.
     '.gttxcore-summark:empty{display:none;}' +
     // A color in a summary: a square of it before its code, outlined in black so a color close to
@@ -6420,7 +6807,7 @@
     '.gttxcore-hSKIP{color:var(--gttx-highlight,#ffc107);} .gttxcore-hERROR{color:#ff7373;} .gttxcore-hUNDO{color:#84d68a;}' +
     '.gttxcore-hmore{margin-top:.5rem;}' +
     '.gttxcore-navbtn{font-size:1.15rem;line-height:1;}' +
-    // Amber ink, the color of a control that writes: an Undo does. By id, because Stash's
+    // In the Highlighted Text Color, as a mark of something that writes: an Undo does. By id, because Stash's
     // own `button.minimal:hover:not(:disabled)` outranks any class selector, and every state
     // is named since Stash sets the color on each. Its hover background stays Stash's.
     '#gttxcore-undo-nav,#gttxcore-undo-nav:hover,#gttxcore-undo-nav:focus,' +
@@ -6457,7 +6844,7 @@
   function devSummary(state) {
     var on = DEV_MODS.filter(function (m) { return state[m.key]; })
       .map(function (m) { return m.label.replace(/ to the Browser Console$/, ''); });
-    return on.length ? 'On: ' + on.join(', ') + '.' : 'Every switch off.';
+    return on.length ? 'On: ' + on.join(', ') + '.' : 'Every switch: Off.';
   }
 
   function devFieldTick() {
@@ -6590,7 +6977,7 @@
 
   // The counters, drawn like Stash's own: a minimal button in a wrapper div, the mark where
   // their icon is. `own` draws the rule and the group too, for a card Stash drew none on.
-  // Amber, as Scene Variants' ⸎ beside them is.
+  // The highlight, as Scene Variants' ⸎ beside them is.
   var CARD_HIGHLIGHT = { color: 'var(--gttx-highlight,#ffc107)' };
   // A circled letter sits inside the cap height, so at the button's own size ⓕ read smaller
   // than the icons beside it and than the same ⓕ on the settings page. Scaled up to match that
@@ -6763,7 +7150,7 @@
       sub.textContent = '';
       text.split(/\n{2,}/).forEach(function (para) {
         var t = tipText(para);
-        if (t) sub.appendChild(el('div', cls('p'), t));
+        if (t) sub.appendChild(valueProse(el('div', cls('p')), t, true));
       });
     }
 
@@ -6806,20 +7193,27 @@
       if (kids.length && hasClass(kids[0], cls('sum'))) return;         // already ours
       var text = sub.textContent || '';
       var cut = text.indexOf('\n\n');
-      if (cut === -1) return;                                           // nothing to hide
+      if (cut === -1) {
+        // One paragraph: nothing to hide, but a switch's value in it is drawn as one.
+        SWITCH_VALUE.lastIndex = 0;
+        if (!SWITCH_VALUE.test(text) || (kids.length && hasClass(kids[0], cls('one')))) return;
+        sub.textContent = '';
+        sub.appendChild(valueProse(el('span', cls('one')), tipText(text), true));
+        return;
+      }
       var summary = tipText(text.slice(0, cut));
       var detail = text.slice(cut + 2).split(/\n{2,}/).map(tipText).filter(function (p) { return !!p; }).join('\n\n');
       if (!summary || !detail) return;
       sub.textContent = '';
       toggleClass(sub, cls('tipped'), true);
-      var sum = el('span', cls('sum'), summary);
+      var sum = valueProse(el('span', cls('sum')), summary, true);
       sub.appendChild(sum);
       // tabIndex, so the box can be reached and read without a mouse. A sibling of the
       // mark rather than a child, which would inherit an inline span's clipping.
       var mark = el('span', cls('tip'), 'ⓘ');
       mark.tabIndex = 0;
       sub.appendChild(mark);
-      sub.appendChild(el('span', cls('tipbox'), detail));
+      sub.appendChild(valueProse(el('span', cls('tipbox')), detail, true));
       tipTrigger(mark, row);
       tipTrigger(sum, row);
       tipTrigger(row.querySelector ? row.querySelector('h3') : null, row);
@@ -6877,13 +7271,67 @@
       if (!hasClass(g, cls('own-group'))) toggleClass(g, cls('own-group'), true);
       split(g);
       collapse(g);          // after the split: it counts the paragraphs
+      fold(g);
       keys.forEach(tip);
       stale(g);             // before the README link, which outlives it
       readme(g);
     }
 
+    // A Stash that folds plugin groups folds only those with a setting or hook of their own in the
+    // `.yml`; a plugin whose every setting is in a dialog got no chevron and stood open among
+    // folded siblings. One with no settings at all has nothing to fold and gets none. Fold Every
+    // ᝯㄝₓ Plugin's Settings (`a4bFoldGroups`) folds every group with settings, on any Stash. Such a group is given Stash's own chevron and click, folded to start as
+    // theirs are - and only where some other group on the page folds, so a Stash that folds none
+    // is left alone. The fold is a class on the group: React leaves a class it did not set.
+    function fold(g) {
+      var head = childByClass(g, 'setting'), section = childByClass(g, 'collapsible-section');
+      if (!head || !section || document.getElementById(cls('fold'))) return;
+      if (!childByClass(section, 'setting')) return;     // nothing to fold: a plugin with no settings at all
+      if (hasClass(g, 'collapsible')) return;
+      // Fired here, as `linkTarget` fires it: a page with no other reason to read Core's settings would
+      // read the switch off forever. The fold comes on the tick after the read.
+      if (!_settings && !_settingsInFlight) {
+        try { loadSettings(false); } catch (e) { /* a settings read is never fatal */ }
+      }
+      // Its sibling plugin groups only: Settings → Tasks folds groups of its own (Scan, Generate) and
+      // can be in the document too, which on 0.31 gave one plugin a chevron among unfolded groups.
+      var groups = (g.parentNode && g.parentNode.childNodes) || [], folds = truthy(settings().a4bFoldGroups);
+      for (var i = 0; i < groups.length && !folds; i++) folds = groups[i] !== g && hasClass(groups[i], 'collapsible');
+      if (!folds) return;
+      injectStyle();
+      var btn = el('button', 'btn btn-minimal setting-group-collapse-button gttx-fold-btn');
+      btn.id = cls('fold');
+      btn.type = 'button';
+      btn.innerHTML = CHEVRON_SVG;
+      var set = function (folded) {
+        toggleClass(g, 'gttx-folded', folded);
+        btn.title = folded ? 'Show this plugin\'s settings' : 'Hide this plugin\'s settings';
+      };
+      btn.addEventListener('click', function (ev) {
+        if (ev && ev.stopPropagation) ev.stopPropagation();
+        set(!hasClass(g, 'gttx-folded'));
+      });
+      // The heading's click as Stash's: anywhere on it but a button or a link.
+      head.addEventListener('click', function (ev) {
+        for (var t = ev && ev.target; t && t !== head; t = t.parentNode) {
+          var n = String(t.nodeName || '').toLowerCase();
+          if (n === 'button' || n === 'a') return;
+        }
+        set(!hasClass(g, 'gttx-folded'));
+      });
+      toggleClass(g, 'gttx-foldable', true);
+      var right = head.childNodes && head.childNodes.length > 1 ? head.childNodes[head.childNodes.length - 1] : head;
+      right.appendChild(btn);
+      set(true);
+    }
+
     return { group: group, decorate: decorate, tip: tip, installedFromHeading: installedFromHeading };
   }
+
+  // Font Awesome's chevron-down, which Stash's own fold button draws; turned up while open.
+  var CHEVRON_SVG = '<svg class="svg-inline--fa fa-fw" viewBox="0 0 512 512" aria-hidden="true" focusable="false" ' +
+    'style="height:1em;"><path fill="currentColor" d="M233.4 406.6c12.5 12.5 32.8 12.5 45.3 0l192-192c12.5-12.5 ' +
+    '12.5-32.8 0-45.3s-32.8-12.5-45.3 0L256 338.7 86.6 169.4c-12.5-12.5-32.8-12.5-45.3 0s-12.5 32.8 0 45.3l192 192z"/></svg>';
 
   // The bulk-edit lease: a plugin writing across the library holds one, and the others'
   // reactions to its writes stand down until it is released or lapses.
@@ -6893,7 +7341,12 @@
     var held = { owner: owner, label: label, until: Date.now() + ms };
     c.leases.push(held);
     return {
-      renew: function () { held.until = Date.now() + ms; },
+      // Put back where a lapse swept it: a pass that stalled past the TTL - a slow server, a laptop
+      // asleep - would otherwise run unleased to its end, and every sibling react to its writes.
+      renew: function () {
+        held.until = Date.now() + ms;
+        if (c.leases.indexOf(held) === -1) c.leases.push(held);
+      },
       release: function () { var i = c.leases.indexOf(held); if (i !== -1) c.leases.splice(i, 1); },
     };
   }
@@ -6958,8 +7411,8 @@
     btn.className = c.replace(/\s+/g, ' ').trim() + ' ' + variant;
   }
 
-  // Every task button of the plugin's own, painted `variantFor(caption)` - amber for a task
-  // that writes, teal for one that only reads.
+  // Every task button of the plugin's own, painted `variantFor(caption)` - orange for a task
+  // that writes, blue for one that only reads.
   function paintTaskButtons(pluginName, tasks, variantFor) {
     var nodes = document.querySelectorAll ? document.querySelectorAll('button') : [];
     for (var i = 0; i < nodes.length; i++) {
@@ -7008,12 +7461,22 @@
   // instance's `logEl`, `lines`, `pending`, `undoBtn` and `modal`, and `flush` ends in the
   // instance's own `renderProgress`. `prefix` names the classes each line carries, so the
   // plugin's own CSS styles them; `own` lists the methods a plugin keeps a copy of its own.
-  // `runLogCap` is exported beside it, for the progress line that says how much is shown, and
+  // `linesDrawn` is exported beside it, for the progress line that says how much is shown, and
   // the spinner's frames and period, for a dialog that keeps a log of its own.
   var RUN_SPIN_FRAMES = ['▙', '▛', '▜', '▟'];
   var RUN_SPIN_MS = 125;          // one four-frame cycle at 2Hz
   var RUN_FLUSH_MS = 100;
-  var RUN_LOG_CAP = 1000;         // log lines kept in the DOM; all of them stay in `lines`
+  // How many lines a dialog draws at once - every plugin's log, listing and pick list - from UI
+  // Customizations' Lines Drawn at Once, the rest kept in memory. Read at the moment it is used.
+  // Read on first use, as `linkTarget` is: the first call answers the default while the read is in flight.
+  function linesDrawn(s) {
+    if (!s && !_settings && !_settingsInFlight) {
+      try { loadSettings(false); } catch (e) { /* a settings read is never fatal */ }
+    }
+    var n = parseInt(String((s || settings()).a9bLinesDrawn), 10);
+    if (!(n > 0)) return LINES_DRAWN_DEFAULT;
+    return Math.max(100, Math.min(10000, n));
+  }
 
   function runLog(proto, prefix, own) {
     var P = prefix;
@@ -7097,7 +7560,7 @@
           }
           this.logEl.appendChild(node);
         }, this);
-        while (this.logEl.childNodes && this.logEl.childNodes.length > RUN_LOG_CAP) {
+        while (this.logEl.childNodes && this.logEl.childNodes.length > linesDrawn()) {
           this.logEl.removeChild(this.logEl.firstChild);
         }
         if (this.spinEl) this.logEl.appendChild(this.spinEl);
@@ -7375,7 +7838,7 @@
     hasOwn: hasOwn, hasClass: hasClass, el: el, stripEllipsis: stripEllipsis,
     pickControl: pickControl,
     byClass: byClass, gqlRequest: gqlRequest, pluginConfig: pluginConfig, settingElement: settingElement,
-    settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, waitingOn: waitingOn,
+    settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, settleWho: true, waitingOn: waitingOn,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
     keepLog: keepLog, droppedLine: droppedLine, logKeep: logKeep,
     splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
@@ -7396,11 +7859,11 @@
     ensureRowSpacing: ensureRowSpacing, applyButtonSpacing: applyButtonSpacing, insertOrdered: insertOrdered,
     insertBeforeImportantAction: insertBeforeImportantAction, findEditContainer: findEditContainer,
     showDefaults: showDefaults,
-    settingsPage: settingsPage, settingsDialog: settingsDialog, drawSummary: drawSummary, settingButton: settingButton, levelOf: levelOf, parentLevel: parentLevel, atLevel: atLevel, markLevel: markLevel, levelRow: levelRow, LEVEL_COLOR: LEVEL_COLOR, afterDescription: afterDescription, logsToConsole: logsToConsole, lease: lease, foreignLease: foreignLease, installedVersion: installedVersion,
+    settingsPage: settingsPage, settingsDialog: settingsDialog, fieldHeading: fieldHeading, tagMark: tagMark, tagGlyph: tagGlyph, valueProse: valueProse, drawSummary: drawSummary, settingButton: settingButton, levelOf: levelOf, parentLevel: parentLevel, atLevel: atLevel, markLevel: markLevel, levelRow: levelRow, LEVEL_COLOR: LEVEL_COLOR, afterDescription: afterDescription, logsToConsole: logsToConsole, lease: lease, foreignLease: foreignLease, installedVersion: installedVersion,
     gate: gate, ownTaskName: ownTaskName, paintButton: paintButton, paintTaskButtons: paintTaskButtons,
     wireEscape: wireEscape, unwireEscape: unwireEscape, firstBasename: firstBasename, displayName: displayName,
     fakeOk: fakeOk, mutationSucceeded: mutationSucceeded, writePluginSettings: writePluginSettings, button: button,
-    runLog: runLog, runLogCap: RUN_LOG_CAP, runSpinFrames: RUN_SPIN_FRAMES, runSpinMs: RUN_SPIN_MS,
+    runLog: runLog, linesDrawn: function () { return linesDrawn(); }, runSpinFrames: RUN_SPIN_FRAMES, runSpinMs: RUN_SPIN_MS,
     entityTypes: entityTypes, occurrences: occurrences, matchContext: matchContext,
   };
   ns.core = api;
@@ -7435,7 +7898,7 @@
     record: journalRecord, runs: journalRuns, entries: journalEntries,
     stats: journalStats, clear: journalClear,
     plan: journalPlan, undo: journalUndo, remove: journalRemove, open: openHistory, fromInputs: journalFromInputs,
-    pass: journalPass,
+    pass: journalPass, reversesFields: true,
     exportAll: journalExport, importTexts: journalImport,
   };
   installJournalCapture();

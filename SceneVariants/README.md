@@ -131,7 +131,7 @@ scene carries and it does not. The last section names the attributes that disagr
 studio, performers, groups, rating, studio code, director, details, URLs, Organized — and **only
 their names**: which fields differ is what sends you to the two pages; what each of them says is a
 question for those pages. A list attribute in a different order is not a difference: the same three
-performers on both scenes agree, however each page has them sorted. A title that differs but does not count toward drift is listed as **Title (ignored)**, the "(ignored)" in grey, and left out of the badge: a partial wearing the title the naming rule expects, a scene the rule skips, or one whose base-title is pinned in the base-title field. A variant that differs in
+performers on both scenes agree, however each page has them sorted. A title that differs but does not count toward drift is listed as **Title (ignored)**, the "(ignored)" in gray, and left out of the badge: a partial wearing the title the naming rule expects, a scene the rule skips, or one whose base-title is pinned in the base-title field. A variant that differs in
 nothing says so. The tag that decided a row's label is on the row's tooltip, which is how an alias
 or a child tag says which one it matched.
 
@@ -245,6 +245,9 @@ covers Proceed, and closing the dialog leaves the undecided candidates for the n
 The Variants tab and the save dialog both start from a scene you are already looking at. The
 **Review Variant Sets...** task in Settings → Tasks starts from the library instead: it finds every
 multi-variant set and gives each a **drift-score** for how far its members have drifted apart, worst first.
+It draws as many sets as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default, plus the open set, and counts the
+rest on a line below them; **Next Set** goes on through every one of them, and **Copy log** lists
+them all.
 
 ```
  Drift-score weights: title [1] cover [5] other attribute [5] tag [1] performer [1] group [1]   ☐ Exclude Organized   ☐ Remember
@@ -311,7 +314,7 @@ The number is colored by how far apart the set is — **green** at one or nothin
 orange and red are ᝯㄝₓ Core's Good, Average and Bad Result Text Colors, which you can change in its
 UI Customizations; the yellow is fixed. The bands are
 read off your own weights rather than fixed in points, so repricing a difference reprices the
-colours with it.
+colors with it.
 
 The listing and the log below it share the dialog, and the bar between them is the divider — grab
 it anywhere along its width and pull to resize the listing, which opens at half the room it shares
@@ -427,17 +430,17 @@ they share is the Accent Color every changed value wears - a light blue unless i
 `Title: Ella meets Adira - Promo 1 → 2` puts the `1` in red and the `2` in green — and where two
 values share no word at all, the whole of one goes red and the whole of the other green.
 
-**Hovering gives the same diff with nothing left out**, in a tooltip that carries the same colours,
+**Hovering gives the same diff with nothing left out**, in a tooltip that carries the same colors,
 with the unchanged text in white. A word replaced by another is separated from it by a white arrow,
 so `sunlit → candlelit` cannot read as one invented word. Values short enough to show whole, and
 two values with no word in common to anchor on, keep the plain `"old" -> "new"`.
 
-**The change is coloured, not the line** — green for what a variant gains, red for what it loses,
+**The change is colored, not the line** — green for what a variant gains, red for what it loses,
 blue for a value replaced, and everything around them (the label, the scene's name, the counts)
 white. So `Add 2 tags: **Blonde, Outdoor**` is green only in the names, and
 `Date: **"2023-12-31" -> "2024-01-05"**` is blue only in the values. A line that both removes and
-adds — a replaced URL, a swapped group — carries both colours in the halves that earned them. The
-same three colours read the card on the Variants tab: extra tags green, missing tags red, differing
+adds — a replaced URL, a swapped group — carries both colors in the halves that earned them. The
+same three colors read the card on the Variants tab: extra tags green, missing tags red, differing
 attributes blue. Each dialog's head says so.
 
 The rules, each visible in the plan:
@@ -466,7 +469,7 @@ The rules, each visible in the plan:
   card, which is exactly what a pick is decided from.
 - **Unselect All** and **Select All**, at the right end of the footer, untick or tick every line
   still open, and every pick under its `▸` arrow with it. A box that cannot be changed — its line
-  already written, or a write running — is dimmed well past the usual disabled grey.
+  already written, or a write running — is dimmed well past the usual disabled gray.
 - **The full-duration, partial-duration and flag tags are never pushed at all**, descendants included:
   they are what makes a variant a variant, and the flag is the flag task's to keep.
 - **The cover is pushed too, where it differs — with *Compare Cover Images* turned on.** A variant
@@ -586,7 +589,7 @@ its default, and the dialog shows it:
 | Variant Stash-ID Custom Field | `ᱜ╦╦🞮_Variant_Stash_ID` | The custom field the [migration task](#migrating-a-partial-duration-scenes-stash-id) writes into. Its **ⓕ** carries a tooltip with the field's description, how many scenes carry it and the first ten. |
 | Variant Flag Tag | `ᱜ╦╦🞮⸎✱MultiVariants✅∙` | The tag the [Flag Variants task](#flagging-the-scenes-that-have-variants) keeps on every scene that has at least one other variant; the task's Proceed creates it if it does not exist yet — or renames it, where the plugin's own tag is found under an earlier default name or by its alias `GTTx Multiple Variants`. |
 
-**Scene Page Behaviour...** - five switches. The two that act on their own, **Offer to Propagate
+**Scene Page Behavior...** - five switches. The two that act on their own, **Offer to Propagate
 Edits to Variants** and **Always Open the Full-Duration Variant**, are in the Highlighted Text Color,
 the two that decide what the propagate dialog offers in a paler shade of it; the row's heading and
 button follow, as they do for **Variants Title...**, whose renaming switch is in the color and whose
@@ -704,14 +707,14 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Migrate Variant Stash-IDs | 59 MB | 92 MB | 91 MB |
-| Flag Variants | 46 MB | 85 MB | 83 MB |
-| Review Variant Sets | 1951 MB | — | — |
-| Rename Variants | 637 MB | 667 MB | 667 MB |
+| Migrate Variant Stash-IDs | 59 MB | 93 MB | 92 MB |
+| Flag Variants | 46 MB | 88 MB | 84 MB |
+| Review Variant Sets | 310 MB | — | — |
+| Rename Variants | 637 MB | 670 MB | 668 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
@@ -760,6 +763,6 @@ then **Settings → Plugins → Reload plugins**. There is no build step and not
 Stash 0.31.0 or newer there is no tab at all and one line in the browser console saying why —
 there is no hand-built imitation of a tab to fall back to.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.

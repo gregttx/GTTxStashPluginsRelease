@@ -30,11 +30,11 @@
   // `ui: requires:` in the .yml is topologically sorted by Stash and `useScript` sets
   // `async = false`, so Core has finished running before this line - when it is present.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[sfm] ᝯㄝₓ Scene Filename Manager cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[sfm] ᝯㄝₓ Scene Filename Manager cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -48,6 +48,8 @@
     staleReloadButton = C.staleReloadButton, paintButton = C.paintButton, foreignLease = C.foreignLease,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape;
 
+  // How many lines a dialog draws at once: Core's Lines Drawn at Once, read where it is used.
+  var linesDrawn = C.linesDrawn;
   var PLUGIN_ID = 'SceneFilenameManager';
   // Byte-identical to the `.yml`: Core's `settingsPage` and `ownTaskName` find this
   // plugin's settings group and task buttons by it.
@@ -55,7 +57,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '2.1.10';
+  var PLUGIN_VERSION = '2.4.0';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -70,11 +72,10 @@
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/SceneFilenameManager/README.md';
   var STYLE_ID = 'sfm-style';
 
-  // Amber: both tasks write.
+  // Orange: both tasks write.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
 
   var READ_PAGE = 500;          // scenes per page of the scan
-  var LOG_RENDER_CAP = 1000;    // log lines kept in the DOM; `logText` keeps them all
   var SETTINGS_TTL_MS = 10000;
   var LEASE_TTL_MS = 60000;
 
@@ -322,7 +323,7 @@
     'flex-wrap:wrap;align-items:center;}' +
     '.sfm-foot button{margin-right:.5rem;}' +
     '.sfm-hidden{display:none !important;}' +
-    // The template editor: the box is transparent over a coloured copy of its text, so
+    // The template editor: the box is transparent over a colored copy of its text, so
     // the two share every metric - and no bold, which some fonts draw wider.
     '.sfm-edit-body{flex:1 1 auto;overflow:auto;padding:.75rem 1rem;}' +
     '.sfm-tpl-wrap{position:relative;}' +
@@ -417,7 +418,8 @@
       'already archived is never ' +
       'overwritten - delete the field on a scene to archive it again under its current names. ' +
       'A scene holding the older bare name gets a line too: Proceed rewrites it by file id, ' +
-      'the name unchanged.',
+      'the name unchanged. A line adding to a value already there ends on what the field ' +
+      'then holds.',
     verb: 'to archive',
     prepare: function (run) { return lockedFor(run); },
     plan: function (scene, field, run) {
@@ -448,12 +450,19 @@
       }
       return { scene: scene, value: archiveValue(map), prev: names.raw, added: added, bare: bare };
     },
-    tail: function (job, field) {
+    tail: function (job, field, undone) {
       if (!job.added.length) {
         return ': "' + job.bare.name + '" [' + job.bare.id + '] rewritten by file id in "' + field + '"';
       }
-      return ': ' + job.added.map(function (a) { return '"' + a.name + '" [' + a.id + ']'; })
-        .join(', ') + (job.prev != null ? ' added to "' : ' into "') + field + '"';
+      var named = function (a) { return '"' + a.name + '" [' + a.id + ']'; };
+      if (job.prev == null) return ': ' + job.added.map(named).join(', ') + ' into "' + field + '"';
+      // An Undo line names what was taken back; the field then holds what it held before.
+      if (undone) return ': ' + job.added.map(named).join(', ') + ' added to "' + field + '"';
+      // Added to a value already there: the line ends on what the field holds once written,
+      // every name by file id, so the merge reads in the log as it lands.
+      var now = JSON.parse(job.value);
+      return ': ' + job.added.map(named).join(', ') + ' added to "' + field + '", which then holds ' +
+        Object.keys(now).map(function (id) { return named({ id: id, name: now[id] }); }).join(', ');
     },
     op: 'SFMArchive',
     // Undo takes the field off again, which a lock in Custom Fields Bulk Editor forbids.
@@ -1278,7 +1287,8 @@
       legend: 'A file moved to this scene had its name archived on the scene it came from. ' +
         'The line names the scene the file is in now, with its id in brackets, then the ' +
         'archived names Proceed adds to its field, so Restore Original Filenames can still ' +
-        'put them back; a reassign also takes the name off the scene the file left.',
+        'put them back, and what the field then holds; a reassign also takes the name off the ' +
+        'scene the file left.',
       verb: 'to carry over',
       op: 'SFMCarry',
       undoRemovesField: true,
@@ -1289,24 +1299,35 @@
         (move.sourcesAfter || []).forEach(function (sc) { run.planScene(sc); });
         return Promise.resolve();
       },
+      // The destination is planned first (`read`), and says which moved files' names it will hold -
+      // or holds already - and through which job: the scene a file left gives up only those, and only
+      // once that job is written (`needs`, in `go`). A destination whose field cannot take them keeps
+      // the names where they are, rather than in neither place.
       plan: function (scene, field, run) {
         if (String(scene.id) !== move.dest) return leftBehind(move, scene, field, run);
         var c = carried(move, scene, field), now = namesOf(run, scene, field);
-        if (!now || !c.added.length) return null;
+        run.carry = { held: {}, job: null };
+        if (!now) return null;
+        var holds = function (map) {
+          [].concat(move.fileId || []).map(String).forEach(function (id) { if (hasOwn(map, id)) run.carry.held[id] = true; });
+        };
+        if (!c.added.length) { holds(now.map); return null; }
         var value = archiveValue(c.map);
-        if (value === now.raw) return null;
+        if (value === now.raw) { holds(now.map); return null; }
         if (now.raw != null && run.locked && !keepsAll(now, c.map)) {
           run.msg('WARN', sceneName(scene) + ' [' + scene.id + '] is not given the archived ' +
             plural(c.added.length, 'name') + ' of the files moved to it: "' + field + '" is ' +
             'locked in ᝯㄝₓ Custom Fields Bulk Editor, so it cannot be changed.');
+          holds(now.map);
           return null;
         }
-        return { scene: scene, value: value, prev: now.raw, added: c.added };
+        holds(c.map);
+        return (run.carry.job = { scene: scene, value: value, prev: now.raw, added: c.added });
       },
-      tail: function (job, field) {
+      tail: function (job, field, undone) {
         return job.left ? ': ' + job.left.map(function (a) { return '"' + a.name + '" [' + a.id + ']'; }).join(', ') +
           ' taken off "' + field + '", ' + (job.left.length === 1 ? 'its file' : 'their files') + ' now in scene ' + move.dest
-          : ARCHIVE_TASK.tail(job, field);
+          : ARCHIVE_TASK.tail(job, field, undone);
       },
       write: function (job, field) {
         if (!job.remove) return ARCHIVE_TASK.write(job, field);
@@ -1324,8 +1345,10 @@
   function leftBehind(move, scene, field, run) {
     var now = namesOf(run, scene, field);
     if (!now || now.raw == null) return null;
+    var carry = run.carry || { held: {} };
     var gone = [].concat(move.fileId || []).map(String).filter(function (id) {
-      return hasOwn(now.map, id) && !filesOf(scene).some(function (f) { return String(f.id) === id; });
+      return hasOwn(now.map, id) && !filesOf(scene).some(function (f) { return String(f.id) === id; }) &&
+        hasOwn(carry.held, id);
     });
     if (!gone.length) return null;
     if (run.locked) {
@@ -1337,8 +1360,8 @@
     Object.keys(now.map).forEach(function (k) { if (gone.indexOf(k) === -1) map[k] = now.map[k]; });
     var left = gone.map(function (id) { return { id: id, name: now.map[id] }; });
     return Object.keys(map).length
-      ? { scene: scene, value: archiveValue(map), prev: now.raw, added: [], left: left }
-      : { scene: scene, remove: true, prev: now.raw, added: [], left: left };
+      ? { scene: scene, value: archiveValue(map), prev: now.raw, added: [], left: left, needs: carry.job }
+      : { scene: scene, remove: true, prev: now.raw, added: [], left: left, needs: carry.job };
   }
 
   // Reads what the move is about to take away, lets the save through, then reads where
@@ -1539,7 +1562,7 @@
     if (this.spinEl) this.logEl.insertBefore(line, this.spinEl);
     else this.logEl.appendChild(line);
     // `firstChild` is always a line: the spinner sits last.
-    if (++this.shown > LOG_RENDER_CAP && this.logEl.firstChild) {
+    if (++this.shown > linesDrawn() && this.logEl.firstChild) {
       this.logEl.removeChild(this.logEl.firstChild);
       this.shown--;
     }
@@ -1646,13 +1669,13 @@
     return !f.find || text.toLowerCase().indexOf(f.find) !== -1;
   };
 
-  // The last `LOG_RENDER_CAP` kept lines the filter lets through, oldest first.
+  // The last `linesDrawn()` kept lines the filter lets through, oldest first.
   Run.prototype.redraw = function () {
     var keep = [], matched = 0;
     for (var i = this.logText.length - 1; i >= 0; i--) {
       if (!this.passes(this.logText[i], this.logMeta[i])) continue;
       matched++;
-      if (keep.length < LOG_RENDER_CAP) keep.push(i);
+      if (keep.length < linesDrawn()) keep.push(i);
     }
     while (this.logEl.firstChild && this.logEl.firstChild !== this.spinEl) {
       this.logEl.removeChild(this.logEl.firstChild);
@@ -1686,9 +1709,9 @@
     if (this.failed) parts.push(plural(this.failed, 'failure'));
     if (this.filtering()) {
       parts.push(plural(this.matched, 'line') + ' match the filter' +
-        (this.matched > LOG_RENDER_CAP ? ', showing the last ' + LOG_RENDER_CAP : ''));
-    } else if ((this.logged || 0) > LOG_RENDER_CAP) {
-      parts.push('showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines');
+        (this.matched > linesDrawn() ? ', showing the last ' + linesDrawn() : ''));
+    } else if ((this.logged || 0) > linesDrawn()) {
+      parts.push('showing the last ' + linesDrawn() + ' of ' + this.logged + ' lines');
     }
     this.progressEl.textContent = parts.join('. ') + '.';
   };
@@ -1741,7 +1764,7 @@
     this.rescanBtn.disabled = busy;
     this.closeBtn.disabled = writing;
     // Green once nothing is left to write; an error, a stopped pass or a stale script
-    // keeps it grey. An offered Undo does not take the green away.
+    // keeps it gray. An offered Undo does not take the green away.
     var clean = !busy && !left && !this.scanFailed && !this.failed && !this.stopped &&
       !this.stale;
     paintButton(this.closeBtn, clean ? 'btn-success' : 'btn-secondary');
@@ -1880,23 +1903,37 @@
         return !j.failed && (!step || step.done);
       });
       if (self.stopped) return null;
-      return self.runJobs(jobs, task.op, PLUGIN_SHORT_NAME + ': ' + task.title,
-        function (job) { return task.write(job, field); },
-        function (job, err) {
-          if (err) {
-            job.failed = true;
-            self.failed++;
-            self.sceneLine('ERROR', job, ': ' + err);
-          } else {
-            job.written = true;
-            self.changes.push(job);
-            self.written++;
-            self.sceneLine(doneKind(task), job, task.tail(job, field));
-            pass.entries([journalEntry(job, field, false)]);
-            job.run = runId;
-            self.recorded(runId, job);
-          }
+      // A job that `needs` another goes in a second round, and only where that one was written.
+      var later = jobs.filter(function (j) { return j.needs; });
+      jobs = jobs.filter(function (j) { return !j.needs; });
+      var round = function (list) {
+        return self.runJobs(list, task.op, PLUGIN_SHORT_NAME + ': ' + task.title,
+          function (job) { return task.write(job, field); }, settleJob);
+      };
+      return round(jobs).then(function () {
+        if (self.stopped || !later.length) return null;
+        var ready = later.filter(function (j) {
+          if (j.needs.written) return true;
+          self.sceneLine('WARN', j, ': left as it is - the scene its files moved to was not given their archived names.');
+          return false;
         });
+        return ready.length ? round(ready) : null;
+      });
+      function settleJob(job, err) {
+        if (err) {
+          job.failed = true;
+          self.failed++;
+          self.sceneLine('ERROR', job, ': ' + err);
+        } else {
+          job.written = true;
+          self.changes.push(job);
+          self.written++;
+          self.sceneLine(doneKind(task), job, task.tail(job, field));
+          pass.entries([journalEntry(job, field, false)]);
+          job.run = runId;
+          self.recorded(runId, job);
+        }
+      }
     }).then(function () {
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.pending().length, self.task.unit || 'scene') +
         ' left unwritten.');
@@ -1972,6 +2009,7 @@
     var self = this, task = this.task, field = this.field;
     var jobs = this.changes.slice().reverse();
     var pass = journalPass(task.title + ', undone'), undone = {};
+    var byField = coop().journal.reversesFields === true;
     this.setState('undoing');
     this.runJobs(jobs, task.op + 'Undo', PLUGIN_SHORT_NAME + ': ' + task.title + ' (undo)',
       function (job) { return task.undo(job, field); },
@@ -1986,15 +2024,20 @@
         self.changes.splice(self.changes.lastIndexOf(job), 1);
         job.written = false;
         self.written--;
-        self.sceneLine('UNDO', job, task.tail(job, field));
+        self.sceneLine('UNDO', job, task.tail(job, field, true));
         if (!job.run) { pass.entries([journalEntry(job, field, true)]); return; }
+        // Core reverses the run's entry for what this job wrote - its file's name, or the
+        // field's value - and marks it undone there; what the job did not write stays done,
+        // as the archive a rename wrote first does.
+        if (byField) { pass.reverse(job.run, 'scenes', job.scene.id, journalEntry(job, field, false).field); return; }
         var k = job.run + ':' + job.scene.id;
         (undone[k] = undone[k] || []).push(job);
       }).then(function () {
-      // Where this Undo put back everything a scene has in a run, Core reverses that run's
-      // entries from the history and marks them undone there. Where it did not - the
-      // archive a rename wrote first stays, or a Stop split the scene - the reversal is
-      // recorded here, and that scene of that run stays so.
+      // COMPAT: a Core whose `reverse` takes no field (`journal.reversesFields`), before 4.24.0
+      // (since SceneFilenameManager 2.3.0); remove when this plugin's Core floor is 4.24.0 or
+      // newer, with `entriesIn` and `recorded`. There, where this Undo put back everything a
+      // scene has in a run, Core reverses the whole scene; where it did not, the reversal is
+      // recorded here and that scene of that run stays done.
       Object.keys(undone).forEach(function (k) {
         var list = undone[k];
         if (self.entriesIn[k] === list.length) {
@@ -2073,7 +2116,7 @@
   // ── The template editor ───────────────────────────────────────────────────
   //
   // Stash's Edit on the Rename Template row opens this instead of its one-line box: the
-  // template coloured as the parser reads it, every token a click away, and the name it
+  // template colored as the parser reads it, every token a click away, and the name it
   // gives for test values - kept per token in this browser - with what a filename could
   // not hold. Save writes the setting; nothing else is written.
   var TEMPLATE_KEY = 'b1RenameTemplate';
@@ -2144,8 +2187,8 @@
     } catch (e) { /* not kept, and nothing lost */ }
   }
 
-  // Every character's colour class. Lenient where `parseTemplate` throws, so a half-typed
-  // template is still coloured: braces pair by nesting, and a group's token is what sits
+  // Every character's color class. Lenient where `parseTemplate` throws, so a half-typed
+  // template is still colored: braces pair by nesting, and a group's token is what sits
   // between its first two `|`, or the whole of a `{token}`.
   function templateColours(s, tagOk) {
     var cls = [], stack = [], i;
@@ -2218,14 +2261,14 @@
       bool: true,
       tip: 'Off: the performers kept are listed by their number of scenes, most first. On: the same ' +
         'performers, alphabetically. Which performers are kept is the same either way.' },
-    { key: 'b4MaxNameBytes', label: 'Maximum Filename Length',
+    { key: 'b4MaxNameBytes', label: 'Maximum Filename Length (60 to 255)',
       dflt: NAME_BYTES_DEFAULT,
       tip: 'The longest name Rename Files From Metadata gives a file, extension included, in bytes: an ' +
         'accented letter takes 2 and an emoji 4. A longer name is cut before its index, never through ' +
         'it. Default 200, from 60 to 255.\n\nMost filesystems allow 255 - ext4, Btrfs, ZFS, NTFS, exFAT, ' +
         'APFS. An encrypted folder allows far less: a Synology encrypted shared folder or any eCryptfs ' +
         'folder takes about 143, so use 140 there.' },
-    { key: 'b5MaxPathLength', label: 'Maximum Full Path Length',
+    { key: 'b5MaxPathLength', label: 'Maximum Full Path Length (Auto, 0, or 100 and up)',
       dflt: PATH_AUTO,
       tip: 'The longest full path Rename Files From Metadata lets a file have - its folder\'s path, a ' +
         'separator and its name - in characters, the way Windows counts them. Auto (the default), a ' +
@@ -2646,7 +2689,7 @@
     C.afterDescription(row, line);
     var btn = document.getElementById(TEMPLATE_BTN_ID);
     if (!btn) {
-      btn = C.settingButton('Rename Template...', 'sfm-template-btn');
+      btn = C.settingButton('Rename Template...', 'sfm-template-btn', PLUGIN_ID);
       btn.id = TEMPLATE_BTN_ID;
       btn._coopOwner = PLUGIN_ID;
       btn.title = 'Open the template editor: the template, the name it gives for test values, and the ' +
@@ -2659,6 +2702,21 @@
     if (edit && edit.style && edit.style.display !== 'none') edit.style.display = 'none';
     C.levelRow(row, true, btn);           // the template names the files a rename writes
   }
+
+  // ── What a sibling may ask ────────────────────────────────────────────────
+  //
+  // The archive is how a file gets its name back, so a sibling that renames files asks it
+  // rather than parsing the field itself: which field the archive is kept in, as the
+  // settings say now, and a scene's archived names by file id - `{}` where it has none, null
+  // where the value is not names by file id (a value the user edited; never read as names).
+  coop().api[PLUGIN_ID] = {
+    version: PLUGIN_VERSION,
+    archiveField: function () { return settingsReady().then(function (s) { return fieldName(s); }); },
+    archivedNames: function (scene, field) {
+      var names = archivedNames(scene, field);
+      return names.broken ? null : names.map;
+    },
+  };
 
   // ── The field's description, filed with Custom Fields Bulk Editor ─────────
   //

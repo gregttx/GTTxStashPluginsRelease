@@ -8,7 +8,7 @@
   if (!ns || typeof ns !== 'object') ns = window.__GTTx__ = {};
   ns.glossary = {
     format: 1,
-    names: ["Core","Custom Fields Bulk Editor","Entity Name Maintainer","Find & Replace","Find & Replace Entities by Text Content","Merge Performer Tags","Merge Performer Tags To Scenes","Normalize Parent Tags","Propagate","Propagate Tags and Performers to Related Entities","Scene Filename Manager","Scene Variants","Tag Bundle Clipboard"],
+    names: ["Core","Custom Fields Bulk Editor","De-Spicer","Entity Name Maintainer","Find & Replace","Find & Replace Entities by Text Content","Merge Performer Tags","Merge Performer Tags To Scenes","Normalize Parent Tags","Propagate","Propagate Tags and Performers to Related Entities","Scene Filename Manager","Scene Variants","Tag Bundle Clipboard"],
     terms: [
       {"id":"entity","tip":"entity: One item in a Stash library - a scene, image, gallery, performer, studio, group, tag or scene marker.","re":["(^|[^\\w-])()(entity(?:e?s)?)()(?![\\w-])","(^|[^\\w-])()(entities(?:e?s)?)()(?![\\w-])"],"not":[]},
       {"id":"entity-type","tip":"entity-type: Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.","re":["(^|[^\\w-])()(entity-type(?:e?s)?)()(?![\\w-])"],"not":[]},
@@ -23,6 +23,8 @@
       {"id":"reaction","tip":"reaction: A plugin's automatic response to a save you just made in Stash - auto-propagation, auto-prune.","re":["(^|[^\\w-])()(reaction(?:e?s)?)()(?![\\w-])","(^|[^\\w-])()(react(?:e?s)?)()(?![\\w-])"],"not":[]},
       {"id":"auto-mode","tip":"auto-mode: A plugin's reaction to every save, switched on per entity type: Normalize Parent Tags' Auto-Prune and Auto-Roll-Up, Propagate's two directions.","re":["(^|[^\\w-])()(auto-mode(?:e?s)?)()(?![\\w-])"],"not":[]},
       {"id":"propagate","tip":"propagate: Propagate Tags and Performers copying tags or performers from one entity to related ones.","re":["(^|[^\\w-])()(propagate(?:e?s)?)()(?![\\w-])","(^|[^\\w-])()(auto-propagation(?:e?s)?)()(?![\\w-])"],"not":[]},
+      {"id":"vanillify","tip":"vanillify: De-Spicer's goal of making the library's metadata and entity images non-explicit: the words you list rewritten, and in time the images blurred or replaced.","re":["(^|[^\\w-])()(vanillify(?:e?s)?)()(?![\\w-])"],"not":[]},
+      {"id":"pseudonym","tip":"pseudonym: A made-up value De-Spicer puts in place of a real one. Consistent: the same original always becomes the same pseudonym, so a performer's name in a title still matches the performer.","re":["(^|[^\\w-])()(pseudonym(?:e?s)?)()(?![\\w-])"],"not":[]},
       {"id":"depropagate","tip":"depropagate: The Depropagate assist: offers to remove tags a save left behind when it removed their source.","re":["(^|[^\\w-])()(depropagate(?:e?s)?)()(?![\\w-])"],"not":[]},
       {"id":"never-propagate","tip":"never-propagate: The mark on a tag that keeps the merge and propagate plugins from copying it.","re":["(^|[^\\w-])()(never-propagate(?:e?s)?)()(?![\\w-])"],"not":[]},
       {"id":"auto-merge","tip":"auto-merge: Merge Performer Tags merging a performer's tags onto their scenes whenever a scene or performer is saved.","re":["(^|[^\\w-])()(auto-merge(?:e?s)?)()(?![\\w-])"],"not":[]},

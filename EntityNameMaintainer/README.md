@@ -61,7 +61,7 @@ afterwards.
   the filters show; a line a filter
   hides keeps its tick. Each is disabled when pressing it would change nothing.
 - **Click the entity** — opens it in a new tab, or in this one if ᝯㄝₓ Core is set that way. **Hover it** for a card: the entity's picture
-  and the fields it is recognised by, or for a tag its aliases, parents, children and
+  and the fields it is recognized by, or for a tag its aliases, parents, children and
   description. It is read on the first hover, so a listing nobody hovers costs nothing.
 - **Filters** — one row of toggles for the [<abbr title="Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.">entity-types</abbr>](../GLOSSARY.md#entity-type) found and one for the attribute
   names found, orange while on. Turning one off hides its lines *and* leaves them alone. It
@@ -90,12 +90,12 @@ afterwards.
   alone and the log says so. Whether the revert worked is decided by reading the entity back,
   not by what the server said about the write. The Escape key never reaches this button.
 - **Copy log** — the counters, the whole listing and every message, as plain text.
-- **Close**, or the Escape key. While the listing holds occurrences *nothing has been done
-  with yet*, the first press asks **Are you sure? (5)** and counts down from five; a
+- **Close**, or the Escape key, live while the scan runs too - closing ends it. While the listing
+  holds occurrences *nothing has been done with yet*, the first press asks **Are you sure? (5)** and counts down from five; a
   second press within those five seconds closes. The scan runs off a rename that has already happened, so
   a listing thrown away cannot be asked for again — press **Copy log** first if you want to
   keep it. It closes on the first press once there is nothing left to lose: nothing was
-  found, or **Proceed** has run. It is **green** in exactly those states, and grey
+  found, or **Proceed** has run. It is **green** in exactly those states, and gray
   otherwise: green means the press will close rather than ask. An **Undo** puts the
   question back, since it puts the listing back to one nobody has used. Pressing **Proceed** while it is counting down puts the
   button straight back to **Close** — the write is the answer to the question.
@@ -139,7 +139,7 @@ page already carries its type's count.
   line that reports the skip says so, rather than reading as something missed. With that
   plugin absent or disabled it says the descriptions are searchable when it is enabled.
 - **Undo only reverses what this dialog wrote**, while it stays open, and cannot account for
-  changes made elsewhere in the meantime. Every replacement, its Undo and a cancelled rename are
+  changes made elsewhere in the meantime. Every replacement, its Undo and a canceled rename are
   also kept in ᝯㄝₓ Core's [Undo History](../GTTxCore/README.md#undo-history), where they can be undone later. Backing up your database before proceeding is
   strongly recommended.
 
@@ -174,7 +174,10 @@ names like anything else you write, and they are not in the library at all — t
 keeps them as JSON inside one tag. This plugin does not read or write that JSON: it asks the
 other plugin for the descriptions as text and hands back the ones you agreed to change. They
 appear in the listing under their own filter, named by the field they describe, and Undo
-puts them back the same way. With that plugin absent, older, or disabled, nothing is listed
+puts them back the same way. A custom field whose *name* the replacement changes takes its
+description along: it is copied to the new name, and the old name keeps its own for whatever
+still uses it - an entity you left unticked, or an Undo; that plugin's **Prune orphans** clears it
+once nothing does. With that plugin absent, older, or disabled, nothing is listed
 and nothing else changes.
 
 It stands down while a sibling plugin holds a [bulk-edit
@@ -208,7 +211,7 @@ can end it early.
 
 ## What a run costs in memory
 
-The dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+The dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes.
 
@@ -261,7 +264,7 @@ stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-sc
 Copy the `EntityNameMaintainer` folder into your Stash plugins directory
 (`<stash-config-dir>/plugins/`) and press **Reload plugins** in Settings → Plugins.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.
 

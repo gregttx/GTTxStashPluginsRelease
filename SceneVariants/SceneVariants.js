@@ -35,11 +35,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[svr] ᝯㄝₓ Scene Variants cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[svr] ᝯㄝₓ Scene Variants cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -55,6 +55,8 @@
     coreSettingRow = C.settingRow, foreignLease = C.foreignLease, paintButton = C.paintButton,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, writePluginSettings = C.writePluginSettings;
 
+  // How many lines a dialog draws at once: Core's Lines Drawn at Once, read where it is used.
+  var linesDrawn = C.linesDrawn;
   var PLUGIN_ID   = 'SceneVariants';
   var PLUGIN_NAME = 'ᝯㄝₓ Scene Variants';
   // The name a head wears. `PLUGIN_NAME` is the manifest's and has to stay
@@ -71,7 +73,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '3.1.13';
+  var PLUGIN_VERSION = '3.2.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all.
@@ -100,7 +102,6 @@
   var LEASE_TTL_MS = 120000;
   var READ_PAGE  = 500;          // scenes per scan query
   var WRITE_CHUNK = 10;          // scenes written in parallel
-  var LOG_RENDER_CAP = 1000;     // log lines kept in the DOM; all of them stay in memory
 
   // Stash's own button variant for a control that writes, and the one every plugin here
   // paints its task button with.
@@ -956,7 +957,7 @@
   }
 
   // The hover content itself, as sections rather than one string: each has a header the
-  // box renders bold and amber, because three runs of comma-separated names in one grey
+  // box renders bold and highlighted, because three runs of comma-separated names in one gray
   // paragraph were the reported readability problem. "Same tags and attributes as this
   // scene." rather than an empty box: a row with nothing to report is an answer - the two
   // are duplicates of each other in everything this plugin can see - and a box that
@@ -970,7 +971,7 @@
   // the review's title count says the same. A side carrying the base-title field
   // (`baseField`) is left out the way the review leaves it out. A title that differs
   // but is not counted - pinned, following the rule, or on a scene the rule skips -
-  // is listed as "Title (ignored)" rather than dropped, "(ignored)" in grey, so the box still says it differs.
+  // is listed as "Title (ignored)" rather than dropped, "(ignored)" in gray, so the box still says it differs.
   function deltaOf(self, other, expected, baseField) {
     if (!self || String(self.id) === String(other.id)) return null;
     var d = tagDelta(self, other), out = [];
@@ -1315,17 +1316,17 @@
     // scenes - would be the worse of the two exits and the one nearer the pointer.
     this.stopBtn = button('Stop', 'svr-stop svr-hidden');
     // The two candidate actions, hidden until a scan lists a [GROUP?] line. Both write,
-    // so both are amber; no "..." because the listing they act on is already on screen.
+    // so both are orange; no "..." because the listing they act on is already on screen.
     this.groupBtn = button('Create Variant Group', 'svr-group svr-hidden', PLUGIN_BTN_VARIANT);
     this.untagBtn = button('Remove Tag', 'svr-untag svr-hidden', PLUGIN_BTN_VARIANT);
-    // Amber and dotted: it lists a plan rather than writing one, and the listing is
+    // Orange and dotted: it lists a plan rather than writing one, and the listing is
     // what Proceed then acts on.
     this.syncSetBtn = button('Synchronize Set from Selected...', 'svr-syncset svr-hidden', PLUGIN_BTN_VARIANT);
     this.closeBtn = button('Close', 'svr-close');
     // Reads nothing and writes nothing: it opens the set below the open one.
     this.nextSetBtn = button('Next Set', 'svr-nextset svr-hidden', 'btn-primary');
     this.copyBtn = button('Copy log', 'svr-copy');
-    // Grey: it reads the library again and writes nothing. Hidden while anything is
+    // Gray: it reads the library again and writes nothing. Hidden while anything is
     // in flight, like Stop's mirror image - a second scan started over a running one
     // would have two passes writing into one listing.
     this.rescanBtn = button('Rescan', 'svr-rescan svr-hidden');
@@ -1349,7 +1350,7 @@
     this.candLabel = el('span', 'svr-foot-label svr-hidden', 'Selected [Group?]: ');
     this.candSep = el('span', 'svr-foot-sep svr-hidden', '-');
     // At the row's right end, shown with the candidate pair: the [GROUP?] boxes are the
-    // only ones this listing has, and the two set them all at once. Grey: they write
+    // only ones this listing has, and the two set them all at once. Gray: they write
     // nothing, and the pair reads the boxes only when pressed.
     this.selAllBtn = button('Select All', 'svr-selall svr-hidden');
     this.unselAllBtn = button('Unselect All', 'svr-unselall svr-hidden');
@@ -1480,7 +1481,7 @@
     // Green when nothing is left to write: every listed job written or none listed, no
     // candidate pair or set still offered. Undo does not take the green away - it is an
     // offer, not something waiting on the user. A failed scan and a stale script stay
-    // grey: those say "something is wrong", not "nothing to do".
+    // gray: those say "something is wrong", not "nothing to do".
     var left = this.sets.length;
     this.jobs.forEach(function (j) { if (self.changes.indexOf(j) === -1) left++; });
     this.candidates.forEach(function (c) { if (self.changes.indexOf(c.job) === -1) left++; });
@@ -1648,6 +1649,11 @@
   // re-sorted copy appended below the old one would be two answers to one question.
   // The log keeps a line saying the weights moved, so Copy log still explains the
   // order on screen.
+  //
+  // Only the first `linesDrawn()` sets of that order are drawn, with a line counting the
+  // rest, and the open set besides wherever it sorts - Next Set walks the whole order, so
+  // it reaches every set: drawing all of a large library's froze the dialog and held
+  // gigabytes. A set's hover table is built when it is hovered, not when it is drawn.
   Run.prototype.renderSets = function (first) {
     var self = this;
     var w = this.weights;
@@ -1686,7 +1692,20 @@
     }
     this.setsEl.textContent = '';
     this.setOrder = order;
-    order.forEach(function (set) {
+    // A set left out of this render keeps no line of the last one to rescore.
+    this.sets.forEach(function (set) { set.scoreEl = set.headEl = null; set.radios = {}; });
+    var cap = linesDrawn();
+    var drawn = order.slice(0, cap);
+    if (opened && drawn.indexOf(opened) === -1) drawn.push(opened);
+    if (first) {
+      order.forEach(function (set) {
+        self.logText.push('[SET]     ' + set.score + '  ' +
+          set.scenes.map(function (sc) {
+            return (sc.title || ('Scene ' + sc.id)) + ' [' + sc.id + ']';
+          }).join(', ') + '  (' + deltaText(set.delta) + ')');
+      });
+    }
+    drawn.forEach(function (set) {
       var head = el('div', 'svr-line svr-set');
       var isOpen = set === opened;
       var toggle = el('span', 'svr-expand', isOpen ? '▾' : '▸');
@@ -1723,8 +1742,9 @@
         (set.scenes.length > 1 ? ' + ' + (set.scenes.length - 1) + ' more' : '') +
         '  (' + deltaText(set.delta) + ')');
       // The names are in the table's own column headers, so the hover answers "how is
-      // this set split" rather than repeating the line it hangs off.
-      diffTip(headText, [{ node: setTable(set, self.skip, self.coverBy) }]);
+      // this set split" rather than repeating the line it hangs off. Built on each hover,
+      // from the set as it is then - a write's re-read changes it under the line.
+      diffTip(headText, function () { return [{ node: setTable(set, self.skip, self.coverBy) }]; });
       set.headEl = headText;
       head.appendChild(headText);
       self.setsEl.appendChild(head);
@@ -1753,13 +1773,15 @@
         sub.appendChild(row);
       });
       self.setsEl.appendChild(sub);
-      if (first) {
-        self.logText.push('[SET]     ' + set.score + '  ' +
-          set.scenes.map(function (sc) {
-            return (sc.title || ('Scene ' + sc.id)) + ' [' + sc.id + ']';
-          }).join(', ') + '  (' + deltaText(set.delta) + ')');
-      }
     });
+    // The open set is drawn even past the cap, so what is not shown is counted off `drawn`.
+    if (order.length > drawn.length) {
+      var more = el('div', 'svr-note', '+' + plural(order.length - drawn.length, 'more set') +
+        ', not shown - the lowest-scoring. Next Set reaches each of them; Copy log lists them all.');
+      more.title = 'ᝯㄝₓ Core\u2019s Lines Drawn at Once, in its UI Customizations, sets how many ' +
+        'sets are drawn.';
+      this.setsEl.appendChild(more);
+    }
     if (first) this.capLog();
   };
 
@@ -1868,11 +1890,13 @@
   // of whoever is working on it. The order is the order the listing was drawn in, and
   // it changes when the user asks for that - a weight, or a rescan.
   Run.prototype.rescoreSet = function (set) {
-    if (!set || !set.scoreEl) return;
+    if (!set) return;
     set.delta = setDelta(set.scenes, this.skip, this.coverBy,
       this.matchers ? expectedMap(set.scenes, this.matchers, this.naming) : null,
       this.naming && this.naming.baseField);
     set.score = scoreOf(set.delta, this.weights);
+    // A set past the Lines Drawn cap has no line, but its score still sorts it.
+    if (!set.scoreEl) return;
     set.scoreEl.textContent = ' ' + set.score + ' ';
     set.scoreEl.className = 'svr-score ' + scoreClass(set.score, this.weights);
     if (set.headEl) {
@@ -1880,9 +1904,6 @@
         (set.scenes[0].title || ('Scene ' + set.scenes[0].id)) +
         (set.scenes.length > 1 ? ' + ' + (set.scenes.length - 1) + ' more' : '') +
         '  (' + deltaText(set.delta) + ')';
-      // The table is built from the scenes as they were when the line was drawn, and
-      // this is the one place they change under it - a set re-read after a write.
-      diffTip(set.headEl, [{ node: setTable(set, this.skip, this.coverBy) }]);
     }
   };
 
@@ -2083,7 +2104,7 @@
     line.appendChild(el('span', null, head));
     line.appendChild(entityLink('scenes', job.id, name));
     // A tail is either a plain string or `[[text, className], ...]` - the parts a
-    // line wants coloured, in the one vocabulary the head's legend explains: what a
+    // line wants colored, in the one vocabulary the head's legend explains: what a
     // variant loses is red, what it gains green, a value replaced blue, and every
     // label, name and count around them the modal's own white. Its text is what the
     // log keeps, for a line with a picker too - that one used to hand the parts array
@@ -2164,7 +2185,7 @@
         picked.map(function (it) { return it.name; }).sort().join(', ') : '');
     }
 
-    // The names in it carry the line's own colour: an item picker only ever appears on
+    // The names in it carry the line's own color: an item picker only ever appears on
     // an add line or a remove line, so which one is the job's verb.
     function tailPaint() {
       var t = tailText(), at = t.indexOf(': ');
@@ -2284,7 +2305,7 @@
   // link and a card are not text.
   Run.prototype.jobLine = function (job) {
     var p = this.task.jobParts(job);
-    // `tailParts` is the rendered tail where one piece wants a colour of its own;
+    // `tailParts` is the rendered tail where one piece wants a color of its own;
     // `tail` stays the whole thing as text, so `logText` and Copy log never depend on
     // how the line was drawn.
     var tailParts = p.tailParts || [{ text: p.tail }];
@@ -2305,7 +2326,7 @@
   // and the count in the header are unaffected - the cap is about the DOM, not the log.
   // Coalescing the scroll fixed the layout thrash; it never touched the node count.
   Run.prototype.capLog = function () {
-    while (this.logEl.childNodes && this.logEl.childNodes.length > LOG_RENDER_CAP) {
+    while (this.logEl.childNodes && this.logEl.childNodes.length > linesDrawn()) {
       this.logEl.removeChild(this.logEl.firstChild);
     }
   };
@@ -2343,8 +2364,8 @@
     }
     if (this.written) parts.push(plural(this.written, this.task.planUnit || 'scene') + ' written');
     if (this.failed) parts.push(plural(this.failed, 'failure'));
-    if ((this.logged || 0) > LOG_RENDER_CAP) {
-      parts.push('showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines');
+    if ((this.logged || 0) > linesDrawn()) {
+      parts.push('showing the last ' + linesDrawn() + ' of ' + this.logged + ' lines');
     }
     return parts.join('. ') + '.';
   };
@@ -3086,7 +3107,7 @@
         return { head: '[UNFLAG]  ', cls: 'svr-op-unflag',
           tail: '  no other scene shares its ids' };
       }
-      // The count in its own colour - blue for exactly one partner, amber for a real
+      // The count in its own color - blue for exactly one partner, the highlight for a real
       // choice - so a listing of hundreds scans by number. `tail` carries the same
       // words as text for the log.
       var word = '  shares its ids with ';
@@ -3280,7 +3301,7 @@
     return ops;
   }
 
-  // The line's view of a diff: coloured, with the unchanged runs elided to context.
+  // The line's view of a diff: colored, with the unchanged runs elided to context.
   function valueDiffParts(ops) {
     var parts = [];
     ops.forEach(function (o, i) {
@@ -3306,7 +3327,7 @@
     return parts;
   }
 
-  // The tooltip's view of the same diff: **the whole text, with the changes coloured
+  // The tooltip's view of the same diff: **the whole text, with the changes colored
   // in it** - nothing elided, and no second copy of the paragraph to compare by eye.
   //
   // Unchanged text is white here and light blue in the line, which is not an
@@ -3324,8 +3345,8 @@
 
   // ── The box a diff opens ──────────────────────────────────────────────────
   //
-  // A native `title` cannot colour anything, which is why the full diff shipped in it
-  // as `[-went-]` and `{+arrived+}` - a notation standing in for the colours the line
+  // A native `title` cannot color anything, which is why the full diff shipped in it
+  // as `[-went-]` and `{+arrived+}` - a notation standing in for the colors the line
   // already had. This is the thing itself: one box for the page, `position:fixed` so a
   // scrolling log cannot clip it, above the backdrop so it is not painted over, and
   // `pointer-events:none` for the reason every box here has it - one that took the
@@ -3387,11 +3408,14 @@
     if (box) box.className = 'svr-difftip';
   }
 
+  // `parts` may be a function returning them, called on each open: content that costs
+  // something to build is then built only for a line someone hovers.
   function diffTip(node, parts) {
     if (!node || !node.addEventListener) return;
-    node.addEventListener('mouseenter', function () { diffTipOpen(node, parts); });
+    function open() { diffTipOpen(node, typeof parts === 'function' ? parts() : parts); }
+    node.addEventListener('mouseenter', open);
     node.addEventListener('mouseleave', diffTipClose);
-    node.addEventListener('focus', function () { diffTipOpen(node, parts); });
+    node.addEventListener('focus', open);
     node.addEventListener('blur', diffTipClose);
   }
 
@@ -3684,7 +3708,7 @@
         value: cov.src, had: cov.had[String(target.id)],
       }, 'svr-op-set', '[SYNC]    ',
       [['  Cover: ', null], ['replace with this scene\u2019s', 'svr-mod']], !!run.auto,
-      // Both covers, side by side, in the colours the rest of the vocabulary uses:
+      // Both covers, side by side, in the colors the rest of the vocabulary uses:
       // the one that goes and the one that arrives.
       [{ img: cov.had[String(target.id)], label: 'this variant now', cls: 'svr-cover-old' },
         { img: cov.src, label: 'would become', cls: 'svr-cover-new' }]);
@@ -4842,13 +4866,13 @@
         'the expected shape is kept. Empty means no index at all: every partial wears the ' +
         'postfix alone.' },
     { key: 'e2bIndexLonePartial', bool: true, label: 'Index a Set\'s Only Partial', warn: 'semi',
-      tip: 'On, a set with a single partial-duration scene gets the first index too: ' +
-        '\'Song - Promo 1\'. Off, it wears the postfix alone: \'Song - Promo\'.\n\nNothing ' +
+      tip: 'On: a set with a single partial-duration scene gets the first index too: ' +
+        '\'Song - Promo 1\'. Off: it wears the postfix alone: \'Song - Promo\'.\n\nNothing ' +
         'changes without a first index.' },
     { key: 'e2cRenumberByDuration', bool: true, label: 'Renumber by Duration', warn: 'semi',
-      tip: 'On, every partial of a set is expected to carry the index its duration gives ' +
+      tip: 'On: every partial of a set is expected to carry the index its duration gives ' +
         'it, longest first, so a set numbered the other way round is title drift and each ' +
-        'dialog offers the swap.\n\nOff, a partial already carrying an index in the expected ' +
+        'dialog offers the swap.\n\nOff: a partial already carrying an index in the expected ' +
         'shape keeps it wherever it falls, and only unnumbered partials take the next free ' +
         'one. The box in the Rename Variants dialog starts from this and overrides it for ' +
         'that dialog only. A scene marked in the no-rename field or wearing the no-rename ' +
@@ -4877,7 +4901,7 @@
         '.\n\nFor the partial that falls outside the rule. The scene is still counted as ' +
         'a member of its set - its title is simply never the one the set would give it, ' +
         'and never counted as drift.' },
-    { key: 'e5NoRenameTag', label: 'Exclude Scenes Carrying This Tag From Renaming', warn: 'semi',
+    { key: 'e5NoRenameTag', label: 'Exclude Scenes Carrying This Tag From Renaming', warn: 'semi', tag: true,
       tip: 'The name of a tag: a scene carrying it, or any tag filed under it, is left ' +
         'alone by every title rule, the same way the no-rename field leaves one alone.\n\n' +
         'Matched by name or alias, without regard to case, like the tags on the settings ' +
@@ -4932,6 +4956,21 @@
         };
         box.addEventListener('change', remark);
         self.remarks.push(remark);
+      }
+      if (f.tag) {
+        // A tag's 🔗 after the box, or a red ? where no tag has the name (Core's `tagMark`).
+        var slot = el('span', 'svr-tagmark-slot');
+        row.appendChild(slot);
+        var retag = function () {
+          var asked = (slot._asked = (slot._asked || 0) + 1);
+          C.tagMark(box.value, true).then(function (node) {
+            if (asked !== slot._asked) return;
+            while (slot.firstChild) slot.removeChild(slot.firstChild);
+            if (node) slot.appendChild(node);
+          });
+        };
+        box.addEventListener('change', retag);
+        self.remarks.push(retag);
       }
       row.appendChild(el('span', 'svr-field-note', tipText(f.tip.split('\n\n')[0])));
       self.boxes[f.key] = box;
@@ -5043,7 +5082,9 @@
       (nm.first ? ', indexes from "' + nm.first + '"' + (nm.loneIndex ? ', a lone partial indexed too' : '') +
         (nm.renumber ? ', renumbered by duration' : ', indexes kept') : ', no index') +
       '; base-title in ', { cf: nm.baseField }, ', no-rename in ', { cf: nm.skipField },
-      nm.skipTag ? ' or tagged "' + nm.skipTag + '"' : ''].filter(function (p) { return p !== ''; }), 'semi');
+      nm.skipTag ? ' or tagged ' : '',
+      nm.skipTag ? { text: '"' + nm.skipTag + '"', tag: true, mark: function () { return tagLinkMark('e5NoRenameTag', nm.skipTag, '-sum'); } } : '']
+      .filter(function (p) { return p !== ''; }), 'semi');
     return rules.concat(s.c5PropagateTitleOnSave
       ? ['; ', { text: 'a title change after a save is offered to the variants.', hl: true }]
       : ['; a title change after a save is not offered to the variants.']);
@@ -5073,12 +5114,11 @@
       if (had._sum && had._sum._summary !== titleSummary(settings())) drawTitleSummary(had._sum, settings());
       return;
     }
-    var host = null;
-    for (var key in DEFAULTS) {
-      if (!hasOwn(DEFAULTS, key)) continue;
-      var r = settingRow(key);
-      if (r && r.parentNode) host = r.parentNode;
-    }
+    // Stash's `.collapsible-section`, where its rows and Core's dialog rows are, empty or not: with
+    // every setting in a dialog no row of Stash's own is left to stand beside, and the group is
+    // the fallback only where a Stash has no such section.
+    var host = null, kids = group.childNodes || [];
+    for (var i = 0; i < kids.length && !host; i++) if (hasClass(kids[i], 'collapsible-section')) host = kids[i];
     var row = el('div', 'setting svr-title-row');
     row.id = TITLE_ROW_ID;
     var left = el('div');
@@ -5090,7 +5130,7 @@
     drawTitleSummary(row._sum, settings());
     row.appendChild(left);
     var right = el('div');
-    var btn = C.settingButton(TITLE_TASK_NAME, 'svr-title-btn');
+    var btn = C.settingButton(TITLE_TASK_NAME, 'svr-title-btn', PLUGIN_ID);
     btn.title = 'Open the title rules. Nothing is written until you press Save there.';
     btn.addEventListener('click', function (e) {
       if (e && e.preventDefault) e.preventDefault();
@@ -5383,7 +5423,7 @@
     return out;
   }
 
-  // The table itself. Built once per render of a set line and handed to the shared box,
+  // The table itself. Built each time a set line is hovered and handed to the shared box,
   // which is what lets it be a table at all - a native `title` is text.
   function setTable(set, skip, coverBy) {
     var rows = setTableRows(set, skip, coverBy);
@@ -5516,7 +5556,7 @@
     return Math.ceil(sum / Math.max(1, (delta.n || 2) - 1));
   }
 
-  // What a score's colour says: nothing to do, a little, a lot, or look at this one.
+  // What a score's color says: nothing to do, a little, a lot, or look at this one.
   //
   // The bands are read off the weights rather than fixed, because the weights are the
   // user's to change and a threshold in absolute points would mean something different
@@ -5704,8 +5744,8 @@
   //
   // Ours only if the caption is one of these *and* the enclosing SettingGroup is headed
   // with our name (Core's `ownTaskName`) - another plugin may declare a task called the
-  // same thing. Painted amber on every tick (`paintTaskButtons`), because they write -
-  // the tab and its links are the reading half of this plugin and take no colour from
+  // same thing. Painted orange on every tick (`paintTaskButtons`), because they write -
+  // the tab and its links are the reading half of this plugin and take no color from
   // this rule.
   var TASK_BY_NAME = {};
   TASK_BY_NAME[TASK_NAME] = MIGRATE_TASK;
@@ -5724,7 +5764,7 @@
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
     // `.tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
-    // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
+    // step Stash's own page uses; every dim gray in these dialogs was chosen against it.
     '.svr-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
     '.svr-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
@@ -5767,27 +5807,27 @@
     // ── This dialog's own ───────────────────────────────────────────────────
     //
     // A planned scene is not a message, so it does not wear one of the three message
-    // colours; it wears the row colour the tab already gives that value, which is what
+    // colors; it wears the row color the tab already gives that value, which is what
     // makes a listing of two hundred lines scannable by role.
     '.svr-job{margin-left:.5rem;}' +
-    // The flag task's two line kinds, in the greens and ambers the migration lines
-    // already borrow from the tab's roles: green where the tag goes on, amber where it
+    // The flag task's two line kinds, in the greens and highlights the migration lines
+    // already borrow from the tab's roles: green where the tag goes on, highlighted where it
     // comes off.
     '.svr-op-flag{color:#84d68a;}' +
     '.svr-op-unflag{color:var(--gttx-highlight,#ffc107);}' +
     // A [GROUP?] candidate is a question rather than a plan, so it wears the log's own
-    // link blue - neither the green of a write going on nor the amber of one coming off.
+    // link blue - neither the green of a write going on nor the highlight of one coming off.
     '.svr-op-cand{color:var(--gttx-accent,#7cc4ff);}' +
     '.svr-cand-box{width:13px;height:13px;margin:3px 8px 2px 0;vertical-align:top;}' +
-    // The synchronize listing colours the *change*, not the line. One vocabulary
+    // The synchronize listing colors the *change*, not the line. One vocabulary
     // across every dialog here, explained in each head's legend: what a variant loses
     // is red, what it gains green, a value replaced blue, and everything around them -
     // the label, the scene's name, the counts - stays the modal's own white, so a
     // glance down the listing reads the kinds rather than the sentences.
     //
-    // The line classes stay for what they are, a name for the kind of line; colouring
-    // the whole of one was what made a listing of adds and removes uniform amber.
-    // The box a diffed value opens: the modal's own panel colour, above the backdrop,
+    // The line classes stay for what they are, a name for the kind of line; coloring
+    // the whole of one was what made a listing of adds and removes uniformly highlighted.
+    // The box a diffed value opens: the modal's own panel color, above the backdrop,
     // and fixed so a scrolling log cannot clip it. `pre-wrap` because the value it
     // holds is a paragraph and the whole point is to show all of it.
     '.svr-difftip{display:none;position:fixed;left:0;top:0;z-index:1700;' +
@@ -5831,7 +5871,7 @@
     // The pane's one button, spaced off the summary above and the rows below.
     '.svr-sync-btn{margin:.25rem 0 .75rem;}' +
     // The All boxes' own strip, between the counters and the log: one label per
-    // attribute, wrapping on a narrow window. The log's INFO grey - it is a control
+    // attribute, wrapping on a narrow window. The log's INFO gray - it is a control
     // strip, not a message.
     '.svr-allbar{padding:.4rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;' +
     'gap:1rem;flex-wrap:wrap;color:var(--gttx-muted,#a7b6c2);font-size:.85rem;}' +
@@ -5865,7 +5905,7 @@
     // shrinks in proportion to size, so with equal factors a log growing through a pass
     // took an ever larger share of the listing's height. The log's factor makes it give
     // up everything above its own minimum first. `color-scheme:dark` keeps the box's own scrollbar
-    // in the dialog's colours - CustomFieldsBulkEditor's lesson.
+    // in the dialog's colors - CustomFieldsBulkEditor's lesson.
     '.svr-sets{flex:0 1 auto;overflow:auto;height:22vh;min-height:114px;' +
     'max-height:46vh;color-scheme:dark;padding:0 1rem;font-family:ui-monospace,' +
     'SFMono-Regular,Menlo,Consolas,monospace;font-size:.8rem;line-height:19px;}' +
@@ -5875,9 +5915,9 @@
     // The log after the bar - the shared `.log` rule stays as every sibling has it.
     '.svr-splitbar+.svr-log{flex-shrink:100000;}' +
     '.svr-set{white-space:pre-wrap;}' +
-    // The score, banded: green at one or nothing to do, then yellow, amber and
+    // The score, banded: green at one or nothing to do, then yellow, orange and
     // red as a set drifts further apart. The weights decide where the bands fall, so
-    // a user who reprices a difference reprices the colours with it.
+    // a user who reprices a difference reprices the colors with it.
     '.svr-score{font-weight:600;}' +
     '.svr-score-none{color:var(--gttx-good,#84d68a);}' +
     '.svr-score-low{color:#ffe066;}' +
@@ -5910,28 +5950,28 @@
     '.svr-all-label{color:var(--gttx-dim,#7d8f9c);}' +
     '.svr-item-box{width:13px;height:13px;margin:3px 6px 2px 0;vertical-align:top;}' +
     // A box that is settled by a write, or locked while one runs, is dimmed well past the
-    // browser's own disabled grey, which on this dark modal reads almost as live.
+    // browser's own disabled gray, which on this dark modal reads almost as live.
     '.svr-modal input:disabled{opacity:.3;}' +
     // The partner count inside a [FLAG] line: blue where there is exactly one other
-    // scene, amber where there is a real choice. The blue is the log's own link blue,
+    // scene, the highlight where there is a real choice. The blue is the log's own link blue,
     // so nothing new is introduced.
     '.svr-num-one{color:var(--gttx-accent,#7cc4ff);font-weight:600;}' +
     '.svr-num-many{color:var(--gttx-highlight,#ffc107);font-weight:600;}' +
     // ── The tab itself ──────────────────────────────────────────────────────
     //
-    // Amber, so the one tab in the strip that Stash did not put there says so. This is the
-    // repo's "a plugin wrote this" colour reaching a surface it had not covered: the rule
-    // is written for *buttons*, where amber means the control writes and teal means it
+    // Highlighted, so the one tab in the strip that Stash did not put there says so. This is the
+    // repo's "a plugin wrote this" color reaching a surface it had not covered: the rule
+    // is written for *buttons*, where orange means the control writes and blue means it
     // only reads, and this plugin only reads. The distinction the split exists to draw
     // has no second member here - there is no other plugin tab to be told apart from this
     // one - while the distinction it is standing in for, Stash's tabs against ours, has
     // nothing else to carry it. See AGENTS.md for why that is the reading rather than a
     // contradiction of the rule.
     //
-    // A colour, not a Bootstrap variant, because a `Nav.Link` has none to borrow - the
+    // A color, not a Bootstrap variant, because a `Nav.Link` has none to borrow - the
     // same position the settings toggles are in. Scoped under `.nav-tabs` (Stash's own
     // class, only ever read here) so it outranks `.nav-tabs .nav-link`, which is where
-    // Bootstrap sets the colour this replaces; equal specificity, and this sheet is
+    // Bootstrap sets the color this replaces; equal specificity, and this sheet is
     // appended after Stash's, so source order settles it without an `!important`. Hover,
     // focus and the active tab are named because Bootstrap sets each of them separately.
     '.nav-tabs .svr-tab-link,.nav-tabs .svr-tab-link:hover,' +
@@ -5945,12 +5985,12 @@
     // and a footer would be a stylesheet for markup that never exists here. It is not a card
     // either - the pane sits inside Stash's own tab content, beside Details and File
     // Info, so it takes no background and no border of its own and lets the page's
-    // showing through. The greys are the dialogs' greys all the same - #a7b6c2 and
+    // showing through. The grays are the dialogs' grays all the same - #a7b6c2 and
     // #7d8f9c, the two dim steps - because a sixth palette would read as a sixth author.
     // `.svr-tabpane`, not `.svr-pane`: TagBundleClipboard already has a `.pane` and it
     // is a different thing - a scrolling column inside a two-column dialog. A class two
     // plugins share has to mean the same thing in both, and a *tab* pane is not that.
-    // A scene card's variant count, amber - mark and number - and the mark spaced like
+    // A scene card's variant count, highlighted - mark and number - and the mark spaced like
     // Stash's own icons beside theirs. The selector outranks Stash's `.btn.minimal`.
     '.card-popovers .svr-vcount .btn.minimal{color:var(--gttx-highlight,#ffc107);}' +
     // As ᝯㄝₓ Core draws ⓕ and 🖬 beside it - monospace, then Core's GTTx Symbols where the
@@ -5975,7 +6015,7 @@
     '.svr-variant:hover{background:var(--gttx-raised,#3c4f5d);}' +
     // The delta box the row opens on hover, in place of a native title, which cannot be
     // styled. z-index 1700, the shared tipbox's own lesson: level with the backdrops is a
-    // stacking race decided by document order. The colours are the dialogs' - #202b33
+    // stacking race decided by document order. The colors are the dialogs' - #202b33
     // panel, headers in the Highlighted Text Color every warning here wears.
     '.svr-delta{display:none;position:absolute;left:.5rem;top:100%;z-index:1700;' +
     'background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
@@ -5983,10 +6023,10 @@
     'pointer-events:none;box-shadow:0 4px 16px rgba(0,0,0,.5);}' +
     '.svr-variant:hover .svr-delta{display:block;}' +
     '.svr-delta-hdr{color:var(--gttx-highlight,#ffc107);font-weight:600;}' +
-    // The hover delta's three sections, in the listing's own colours: what this
+    // The hover delta's three sections, in the listing's own colors: what this
     // variant carries and the viewed scene does not is a gain, what it lacks is a
     // loss, and an attribute they disagree on is a modification. The headers stay
-    // amber - they label a section rather than name a change.
+    // highlighted - they label a section rather than name a change.
     '.svr-delta-extra{color:#84d68a;}' +
     '.svr-delta-missing{color:#ff7b72;}' +
     '.svr-delta-attrs{color:var(--gttx-accent,#7cc4ff);}' +
@@ -6018,24 +6058,24 @@
     // reads as one of them being an afterthought.
     '.svr-role,.svr-meta{font-size:.85rem;white-space:nowrap;}' +
     '.svr-meta{color:var(--gttx-muted,#a7b6c2);}' +
-    // The delta badges: an icon and a count per kind, absent at zero. The metadata grey,
-    // because the icon is the distinguisher and three colours here would out-shout the
+    // The delta badges: an icon and a count per kind, absent at zero. The metadata gray,
+    // because the icon is the distinguisher and three colors here would out-shout the
     // role column. The group is one inline-flex item in the wrapping facts row, so the
     // badges break onto the next line together rather than between each other.
     '.svr-dbadges{display:inline-flex;gap:.5rem;white-space:nowrap;}' +
     '.svr-dbadge{font-size:.85rem;color:var(--gttx-muted,#a7b6c2);}' +
     // The cover badge is the one that arrives a moment after the row, so it is also
-    // the one that has to be noticed once it does - amber rather than the metadata
-    // grey the counts wear.
+    // the one that has to be noticed once it does - highlighted rather than the metadata
+    // gray the counts wear.
     '.svr-dbadge-cover{color:var(--gttx-highlight,#ffc107);}' +
     // Green for the full-duration one, because it is the answer the tab exists to give;
-    // amber for a partial; red for the scene wearing both tags, which is a contradiction.
+    // highlighted for a partial; red for the scene wearing both tags, which is a contradiction.
     // An untagged scene has no label at all, which is the only quiet state left.
     //
-    // The partial was grey to begin with, on the reasoning that it is context rather than
+    // The partial was gray to begin with, on the reasoning that it is context rather than
     // an answer. Live use said otherwise, and the reasoning was wrong in a way worth
     // keeping written down: a reader is not looking up one row, they are scanning a short
-    // list to see *which is which*, and a value rendered as the same grey as the metadata
+    // list to see *which is which*, and a value rendered as the same gray as the metadata
     // beside it does not answer that at a glance. Both values are the answer; only the
     // absence of one is context.
     '.svr-role-fl{color:#84d68a;}' +
@@ -6079,7 +6119,7 @@
     // Each tag name's own row, when the name in it names something. A link, so the tag
     // is one click away and the name beside it can be selected; the same blue every
     // other link this plugin draws uses.
-    // The mark beside a setting that names a custom field. Grey and `cursor:help`,
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
@@ -6118,7 +6158,7 @@
     (document.head || document.body || document.documentElement).appendChild(style);
   }
 
-  // Grey unless `variant` names another of Bootstrap's: amber for one that writes.
+  // Gray unless `variant` names another of Bootstrap's: orange for one that writes.
   function button(label, className, variant) {
     var b = el('button', 'btn ' + (variant || 'btn-secondary') + ' btn-sm' + (className ? ' ' + className : ''), label);
     b.type = 'button';
@@ -6413,8 +6453,8 @@
     // On the row rather than on any one thing in it, so anywhere in the row answers it -
     // and the value span keeps its own title, which is a narrower answer about that span.
     // A styled box shown by the row's own :hover rather than a native `title`, because a
-    // `title` cannot make the section headers bold and amber or space the sections, and
-    // that formatting is the whole point - three runs of names in one grey paragraph was
+    // `title` cannot make the section headers bold and highlighted or space the sections, and
+    // that formatting is the whole point - three runs of names in one gray paragraph was
     // the readability complaint. `pointer-events:none` in its rule, for the reason every
     // box here has it: one that took the pointer would close and reopen under it.
     if (row.delta) {
@@ -6607,7 +6647,7 @@
       }
       // The one control in the pane, and the reading half's only door into a write:
       // it opens the synchronize dialog, which re-reads and lists everything before
-      // anything moves. Amber because pressing through leads to writes, dots because
+      // anything moves. Orange because pressing through leads to writes, dots because
       // the click itself only asks. The caption counts - "Synchronize Variant..." under
       // a summary that says "1 other variant" - while the tooltip and the dialog's title
       // stay generic: they describe what the task does, not this scene's set.
@@ -6747,8 +6787,11 @@
           var p = fullDurationOf(scene, both[0]);
           setPick(p);
           // Not while a queue plays: the full-duration scene is not in it.
+          // Reached from any full-duration variant of its set, not only the one ranked first: that
+          // one too is where the user chose to come from.
+          var fromFull = (both[0].rows || []).some(function (r) { return r.cls.role === 'fl' && String(r.scene.id) === cameFrom; });
           if (!p || !arrived || !both[1].f1AlwaysOpenFullDuration || !history ||
-              String(p.scene.id) === cameFrom ||
+              String(p.scene.id) === cameFrom || fromFull ||
               (props.queueScenes && props.queueScenes.length)) return;
           var partial = both[0].self || scene;
           history.replace('/scenes/' + p.scene.id);
@@ -7120,7 +7163,7 @@
   // tag names get their links and the field its ⓕ beside their boxes, where the rows carried
   // them; an empty field or flag tag box shows the default it means.
   var TAG_FIELDS = [
-    { key: 'a1FullLengthTag', label: 'Full-duration Tag',
+    { key: 'a1FullLengthTag', label: 'Full-duration Tag', tag: true,
       text: true, wide: true,
       mark: function (v) { return tagLinkMark('a1FullLengthTag', v); },
       tip: 'The tag you put on a scene that is the whole work.\n\nTyped rather than picked, and compared ' +
@@ -7132,7 +7175,7 @@
         'unclassified.\n\nThis is the discriminator for the one dimension the plugin knows about. It ' +
         'reads the tag and never writes it: a scene missing the tag is listed unclassified rather than ' +
         'corrected.' },
-    { key: 'a2PartialLengthTag', label: 'Partial-duration Tag',
+    { key: 'a2PartialLengthTag', label: 'Partial-duration Tag', tag: true,
       text: true, wide: true,
       mark: function (v) { return tagLinkMark('a2PartialLengthTag', v); },
       tip: 'The tag you put on a scene that is a cut out of a longer one.\n\nSame rules as the ' +
@@ -7157,7 +7200,7 @@
         'only if that name collides with a field you already use. Renaming it here does not move ' +
         'anything already written: the tab will stop finding scenes migrated under the old name, and the ' +
         'task will write the new one beside it.' },
-    { key: 'a4VariantFlagTag', label: 'Variant Flag Tag',
+    { key: 'a4VariantFlagTag', label: 'Variant Flag Tag', tag: true,
       text: true, wide: true, dflt: FLAG_DEFAULT,
       mark: function (v) { return tagLinkMark('a4VariantFlagTag', v || FLAG_DEFAULT); },
       tip: 'The tag the Flag Variants task keeps on every scene that has at least one other variant in your ' +
@@ -7177,7 +7220,7 @@
   var BEHAVIOUR_FIELDS = [
     { key: 'c0ShowCardCount', label: 'Display Variant Count ⸎ on Scene Cards',
       tip: 'Show ⸎ and the number of other variants on every scene card that has any, last among the ' +
-        'card\'s counters.\n\nOn by default. Hover the count for the other variants\' titles. Off, the ' +
+        'card\'s counters.\n\nOn by default. Hover the count for the other variants\' titles. Off: the ' +
         'cards are as Stash draws them, and nothing is asked for them.' },
     { key: 'c1PropagateOnSave', label: 'Offer to Propagate Edits to Variants', warn: true,
       tip: 'When you save a scene that has variants, open a dialog offering to push the changed attributes ' +
@@ -7194,7 +7237,7 @@
     { key: 'c3SkipRedundantTags', label: 'Skip Tags the Hierarchy Makes Redundant', warn: 'semi',
       tip: 'Do not push a tag that another tag on the same scene already implies.\n\nOn by default - the ' +
         'switch is set the first time the plugin loads. A scene tagged both Blonde and its parent Hair ' +
-        'Colour carries one tag that says nothing the other does not; copying that onto every variant ' +
+        'Color carries one tag that says nothing the other does not; copying that onto every variant ' +
         'spreads the redundancy, so it is left out of the listing and a line says how many were ' +
         'dropped.\n\nWhat counts as redundant is not decided here: ᝯㄝₓ Normalize Parent Tags is asked, ' +
         'so its own hierarchy and its own tag exclusions are what answer - a tag you have told that ' +
@@ -7230,7 +7273,7 @@
     // A box left empty keeps its piece, with a mark that draws nothing: the same pieces in the
     // same shape either way, so setting one redraws only its own words.
     var tag = function (key, name) {
-      return { text: name ? '"' + name + '"' : 'not set', mark: function () { return name ? tagLinkMark(key, name, '-sum') : null; } };
+      return { text: name ? '"' + name + '"' : 'not set', tag: !!name, mark: function () { return name ? tagLinkMark(key, name, '-sum') : null; } };
     };
     var field = fieldName(cfg), flag = flagTagName(cfg);
     return ['Full-duration ', tag('a1FullLengthTag', q('a1FullLengthTag')),
@@ -7261,7 +7304,7 @@
     fields: TAG_FIELDS, summary: tagsSummary, settings: settings, load: dialogLoad, saved: dialogSaved,
   });
   var behaviourDialog = settingsDialog({
-    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'svr', key: 'behaviour', title: 'Scene Page Behaviour',
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'svr', key: 'behaviour', title: 'Scene Page Behavior',
     line: 'The ⸎ count on scene cards, the offer to propagate a save to the variants and what it leaves out, ' +
       'comparing covers, and opening the full-duration variant in a partial\'s place. Five switches, in a dialog.',
     fields: BEHAVIOUR_FIELDS, summary: behaviourSummary, settings: settings, load: dialogLoad, saved: dialogSaved,

@@ -15,11 +15,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[cpt2s] ᝯㄝₓ Merge Performer Tags To Scenes cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[cpt2s] ᝯㄝₓ Merge Performer Tags To Scenes cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -37,7 +37,7 @@
     fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, paintButton = C.paintButton;
   var tagHasDetail = C.tagHasDetail, tagTooltip = C.tagTooltip, lowerId = C.lowerId, partsText = C.partsText;
-  var runLog = C.runLog, TASK_LOG_CAP = C.runLogCap;   // log lines kept in the DOM; all stay in `lines`
+  var runLog = C.runLog, linesDrawn = C.linesDrawn;   // log lines kept in the DOM; all stay in `lines`
   // Every plugin's settings through Core's one shared read.
   var pluginConfig = C.pluginConfig;
 
@@ -70,7 +70,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '5.1.12';
+  var PLUGIN_VERSION      = '5.2.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -100,13 +100,13 @@
   var SCENE_BTN_LABEL     = 'Add all Tags from all Performers';
 
   // Every button this plugin puts on a page, and the task button Stash renders for
-  // it, in amber. Stash's own row actions are `btn-secondary`, so a button of ours
+  // it, in orange. Stash's own row actions are `btn-secondary`, so a button of ours
   // sitting among them was indistinguishable from one of its own - and these are not
   // the same kind of thing: Stash's write what is in the form in front of you, ours
-  // reach out and rewrite other entities. Amber says "this one is mine and it writes"
+  // reach out and rewrite other entities. Orange says "this one is mine and it writes"
   // without claiming the primary role `btn-primary` would.
   //
-  // A Bootstrap variant class rather than a colour of our own, so the hover, focus
+  // A Bootstrap variant class rather than a color of our own, so the hover, focus
   // and active states come from Stash's theme and stay in step with it. Its
   // `btn-warning` renders white text, unlike stock Bootstrap's dark - checked live,
   // 2026-08-11 - so nothing here overrides the foreground. `btn-dark` is worth
@@ -114,7 +114,7 @@
   // `btn-secondary`, so it would read as no change at all.
   //
   // Pinned to the same string in PropagateTagsAndPerformers: the two plugins' buttons
-  // share a row, and one amber beside one grey would read as a difference in kind
+  // share a row, and one orange beside one gray would read as a difference in kind
   // rather than in plugin.
   var PLUGIN_BTN_VARIANT  = 'btn-warning';
 
@@ -946,8 +946,8 @@
     '.cpt2s-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}' +
-    // Amber, not the stale banner's red: nothing is broken and nothing needs doing
-    // today. It is the repo's "a plugin wrote this" colour, used here for the one
+    // The highlight, not the stale banner's red: nothing is broken and nothing needs doing
+    // today. It is the repo's "a plugin wrote this" color, used here for the one
     // thing on this page that is about a plugin rather than about a setting.
     '.cpt2s-super{display:inline-block;max-width:22rem;margin:0 .5rem;vertical-align:middle;' +
     'padding:.2rem .45rem;border-left:4px solid var(--gttx-highlight,#ffc107);background:rgba(255,182,72,.14);' +
@@ -998,7 +998,7 @@
     // The exclusion tag's own row, when the name in it names something. A link, so the
     // tag is one click away and the name beside it can be selected; the same blue the
     // dialog's own entity links use.
-    // The mark beside a setting that names a custom field. Grey and `cursor:help`,
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
@@ -1285,7 +1285,7 @@
     this.modal.appendChild(this.logEl);
 
     var foot = el('div', 'cpt2s-foot');
-    // Amber: the two buttons that write. See "one colour for a plugin wrote this".
+    // Orange: the two buttons that write. See "one color for a plugin wrote this".
     this.proceedBtn = taskButton('Proceed', 'cpt2s-proceed');
     this.cancelBtn  = taskButton('Cancel', 'cpt2s-cancel');
     this.stopBtn    = taskButton('Stop', 'cpt2s-stop cpt2s-hidden');
@@ -1358,7 +1358,7 @@
     this.proceedBtn.disabled = !ready || !this.plan.length || this.stale;
     // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
     // does not take the green away - it is an offer, not something waiting on the user.
-    // Errors, a stopped pass and a stale script stay grey: those say "something is
+    // Errors, a stopped pass and a stale script stay gray: those say "something is
     // wrong", not "nothing to do".
     paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
       !this.stale ? 'btn-success' : 'btn-secondary');
@@ -1434,8 +1434,8 @@
         (this.stopped ? ' (stopped early; what was written stays written)' : '');
     }
     if (this.errors) summary += ', ' + plural(this.errors, 'error');
-    if ((this.logged || 0) > TASK_LOG_CAP) {
-      summary += ' - showing the last ' + TASK_LOG_CAP + ' of ' + this.logged + ' lines';
+    if ((this.logged || 0) > linesDrawn()) {
+      summary += ' - showing the last ' + linesDrawn() + ' of ' + this.logged + ' lines';
     }
     this.progressEl.textContent = summary;
   };
@@ -1546,7 +1546,7 @@
     // config but nothing is running), or the installed copy predates the lease
     // protocol. Say both rather than assert the alarming one.
     this.note(SIBLING_NAME + ' has ' + mode + ' enabled in its settings but has not registered ' +
-      'as honouring bulk-edit leases - either it is disabled in Stash, or the installed copy is ' +
+      'as honoring bulk-edit leases - either it is disabled in Stash, or the installed copy is ' +
       'older than the protocol. If it is running, ' + effect + '. Turn it off for the duration, ' +
       'or check the result afterwards.');
   };
@@ -2184,7 +2184,7 @@
 
   TaskRun.prototype.cancel = function () {
     this.cancelled = true;
-    this.log('INFO', 'Cancelled. Nothing was written.');
+    this.log('INFO', 'Canceled. Nothing was written.');
     this.close();
   };
 
@@ -3060,7 +3060,7 @@
   // dialog of Core's (`settingsDialog`): stored under the same keys, so nothing already set
   // moves, the sibling plugin still adopts the filters from them, and config.yml still edits
   // them; each keeps its whole description on hover. The three switches that make this plugin
-  // write on its own are amber there, as they were on the page. The tag box gets its link and
+  // write on its own are highlighted there, as they were on the page. The tag box gets its link and
   // the field box its ⓕ beside them, where the rows carried them.
   var BUTTON_FIELDS = [
     { key: 'a1ShowManualMergeButtons', label: 'Show Manual Buttons',
@@ -3086,7 +3086,7 @@
   ];
 
   var EXCL_FIELDS = [
-    { key: 'b1ExcludeSceneWithTagName', label: 'Exclude Scenes Carrying This Tag', warn: 'semi',
+    { key: 'b1ExcludeSceneWithTagName', label: 'Exclude Scenes Carrying This Tag', tag: true, warn: 'semi',
       text: true, wide: true,
       mark: function (v) { return exclusionMark(v); },
       tip: 'Do not merge performer tags to scenes if the scene has this tag.\n\nMatched by exact name, ' +
@@ -3138,7 +3138,7 @@
   function exclusionSummary(cfg) {
     var q = function (k) { return String(cfg[k] || '').replace(/^\s+|\s+$/g, ''); };
     var tag = q('b1ExcludeSceneWithTagName'), field = q('c2ExcludeTagWithCustomFieldName'), on = [];
-    if (tag) on.push(['scenes tagged ', { text: '"' + tag + '"', mark: function () { return exclusionMark(tag, EXCL_LINK_ID + '-sum'); } }]);
+    if (tag) on.push(['scenes tagged ', { text: '"' + tag + '"', tag: true, mark: function () { return exclusionMark(tag, EXCL_LINK_ID + '-sum'); } }]);
     if (cfg.b2ExcludeSceneOrganized) on.push(['Organized scenes']);
     if (cfg.c1ExcludeTagWithIgnoreAutoTag) on.push(['tags set to Ignore Auto Tag']);
     if (field) on.push(['tags carrying the custom field ', { cf: field }]);
@@ -3176,7 +3176,7 @@
   //
   // Settings - Tasks - Plugin Tasks renders every task of every plugin with the same
   // `btn-secondary`, so nothing on that page says which buttons rewrite the library.
-  // Core's `paintTaskButtons` repaints ours amber every tick - React hands the button
+  // Core's `paintTaskButtons` repaints ours orange every tick - React hands the button
   // back with Stash's own classes on a re-render - deciding what is ours with the same
   // `ownTaskName` the click interception keys on.
 

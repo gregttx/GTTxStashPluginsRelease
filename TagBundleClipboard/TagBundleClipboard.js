@@ -26,11 +26,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[tbc] ᝯㄝₓ Tag Bundle Clipboard cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[tbc] ᝯㄝₓ Tag Bundle Clipboard cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -41,10 +41,12 @@
     copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTip = C.tagTip,
     staleReloadButton = C.staleReloadButton, ensureRowSpacing = C.ensureRowSpacing,
     insertBeforeImportantAction = C.insertBeforeImportantAction,
-    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape;
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, showDefaults = C.showDefaults;
   // Every plugin's settings through Core's one shared read.
   var pluginConfig = C.pluginConfig, logsToConsole = C.logsToConsole;
 
+  // How many lines a dialog draws at once: Core's Lines Drawn at Once, read where it is used.
+  var linesDrawn = C.linesDrawn;
   var PLUGIN_ID   = 'TagBundleClipboard';
   var PLUGIN_NAME = 'ᝯㄝₓ Tag Bundle Clipboard';
   // The name the dialog wears. `PLUGIN_NAME` is the manifest's, and it has to stay
@@ -65,7 +67,7 @@
   // The major digit is deliberately still zero, and stays there until the plugin has
   // been used in a live Stash: it is the claim that the thing works, and no test in
   // this repo can check a guess about Stash's markup.
-  var PLUGIN_VERSION = '3.1.8';
+  var PLUGIN_VERSION = '3.2.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -86,22 +88,21 @@
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/TagBundleClipboard/README.md';
   var STYLE_ID = 'tbc-style';
 
-  // The repo-wide colour convention: amber for a control that writes, teal for one
+  // The repo-wide color convention: orange for a control that writes, blue for one
   // that only reads. This plugin has one of each, which is unusual here and is the
   // rule read literally rather than a decoration:
   //
-  //   ⮺ Tags   reads the entity and puts a bundle in this browser. Teal.
+  //   ⮺ Tags   reads the entity and puts a bundle in this browser. Blue.
   //   📋 Tags   puts tags into the edit form, which is what the sibling plugins'
-  //               amber staging buttons do. Amber.
+  //               orange staging buttons do. Orange.
   //
-  // A Bootstrap variant class rather than a colour of our own, so the hover, focus and
+  // A Bootstrap variant class rather than a color of our own, so the hover, focus and
   // active states come from Stash's theme and stay in step with it. Its `btn-warning`
   // renders white text, unlike stock Bootstrap's dark - checked live, 2026-08-11 - so
   // nothing here overrides the foreground.
   var PASTE_BTN_VARIANT = 'btn-warning';
   var COPY_BTN_VARIANT  = 'btn-primary';   // Stash's blue: copying writes nothing
 
-  var LOG_RENDER_CAP = 1000;   // log lines kept in the DOM; all of them stay in memory
   var FLASH_MS       = 1500;   // how long a button shows its result before reverting
   var SETTINGS_TTL_MS = 10000; // settings are re-read at most this often
 
@@ -180,8 +181,11 @@
   // A key is the storage key: renaming one silently resets it for every install and
   // strands the old value in the config.
   var DEFAULTS = {
-    a1MaxBundles: '',
+    a1MaxBundles: String(DEFAULT_BUNDLES),
   };
+  // Shown in its box on Stash's settings page from its first paint (Core's `showDefaults`),
+  // so the box says the 5 in force rather than standing empty.
+  showDefaults(PLUGIN_ID, function () { return { a1MaxBundles: DEFAULTS.a1MaxBundles }; });
 
   // Stash has no default for a plugin setting - `PluginSettingConfig` carries a
   // display name, a description and a type, and nothing else - so an untouched box
@@ -189,12 +193,9 @@
   // number outside the range is a typo, and refusing it would leave the clipboard
   // behaving as if the setting were unset with nothing saying why.
   //
-  // **The setting is declared STRING, not NUMBER, and that is what makes "empty" a
-  // state the user can see.** A NUMBER setting renders `0` in the box when nothing is
-  // stored - neither the 5 it behaves as nor the blank the description promises - and
-  // there is no value this plugin could store to mean "unset" that the box would show
-  // as empty. STRING is what every other free-text setting in this repo already uses,
-  // and this function was parsing a string either way.
+  // **The setting is declared STRING, not NUMBER.** A NUMBER setting renders `0` in the
+  // box when nothing is stored - not the 5 it behaves as - and Core's `showDefaults`
+  // fills a string box with the default. An emptied box still means 5.
   //
   // **A number that parsed is an answer, even a silly one.** The description promises
   // that a value outside 1 to 50 is *clamped rather than refused*, and 0 is outside it -
@@ -368,7 +369,7 @@
   // The whole table rather than `findTags(ids:)` for the bundle's own tags, because
   // both of those need tags the bundle does not contain - a parent two levels up, a
   // child the entity happens to carry - and asking for those one round trip at a time
-  // would put a chain of queries between a checkbox and its own colour. `per_page: -1`
+  // would put a chain of queries between a checkbox and its own color. `per_page: -1`
   // is the repo's convention for tags specifically: thousands at most, and the same
   // call NormalizeParentTags makes for the same reason.
   //
@@ -535,7 +536,7 @@
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
     // `.tests/style.test.js` pins the overlap now, across all four. #202b33 is
-    // Blueprint's dark-gray2, the step Stash's own page uses; every dim grey in these
+    // Blueprint's dark-gray2, the step Stash's own page uses; every dim gray in these
     // dialogs was chosen against it - the log's #a7b6c2 and #7d8f9c - and they separate
     // better on it than on the lighter #30404d.
     '.tbc-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
@@ -627,18 +628,18 @@
     '.tbc-tagrow-fixed{cursor:default;color:var(--gttx-dim,#7d8f9c);}' +
     '.tbc-tagrow-fixed:hover{background:none;}' +
     '.tbc-have-mark{font-size:.8rem;color:var(--gttx-dim,#7d8f9c);}' +
-    // ── One colour per reason a box is in the state it is in ────────────────
+    // ── One color per reason a box is in the state it is in ────────────────
     //
     // Five states, and the two axes are independent: *ticked* says whether the tag
-    // will end up on the entity, and *colour* says who decided. Stash's blue is the
+    // will end up on the entity, and *color* says who decided. Stash's blue is the
     // only one that means "you decided, and it is on"; everything else is the plugin
     // or the entity answering for it.
     //
     //   add     blue,  ticked, live    - you picked it
     //   off     red,   clear,  live    - you unpicked it
-    //   rolled  amber, ticked, fixed   - Roll-Up implies it, so it goes on regardless
-    //   pruned  grey,  clear,  fixed   - Prune found it redundant
-    //   have    grey,  ticked, fixed   - the entity already carries it
+    //   rolled  orange, ticked, fixed   - Roll-Up implies it, so it goes on regardless
+    //   pruned  gray,  clear,  fixed   - Prune found it redundant
+    //   have    gray,  ticked, fixed   - the entity already carries it
     //
     // `accent-color` is the whole mechanism: one property, the browser's own
     // checkbox, no rebuilt control. It is muted on a disabled box, which is the
@@ -652,10 +653,10 @@
     // one press covers, the same place CustomFieldsBulkEditor puts its "Apply to".
     '.tbc-mode{background:var(--gttx-card,#30404d);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
     'border-radius:3px;padding:.15rem .35rem;font-size:.85rem;max-width:100%;}' +
-    // Amber while it is set to something, the same amber the rolled-up rows wear
+    // Highlighted while it is set to something, the same highlight the rolled-up rows wear
     // and the same rule the repo's buttons follow: this is the control that makes
     // the press add or drop a tag the bundle did not name. A <select> has no
-    // Bootstrap variant to borrow, so the colour has to be written.
+    // Bootstrap variant to borrow, so the color has to be written.
     '.tbc-mode-on{border-color:var(--gttx-highlight,#ffc107);color:var(--gttx-highlight,#ffc107);}' +
     // Stash's own .sub-heading is white-space: normal, so this plugin's description
     // would collapse into one paragraph. Scoped to the group we marked, never to
@@ -793,7 +794,7 @@
   var _pasted = { type: null, id: null, ids: null };
 
   // What the form is holding right now, which is what a paste is diffed against and
-  // what the picker greys out. **The form, never the server**: it reflects a tag the
+  // what the picker grays out. **The form, never the server**: it reflects a tag the
   // user has just added or removed by hand without saving, which is precisely the state
   // someone pasting into an open editor is in.
   //
@@ -1031,9 +1032,9 @@
     head.appendChild(el('div', 'tbc-legend', 'A bundle is named for the entity it was ' +
       'copied from, with its database id in brackets. A box you can tick is blue when ' +
       'it is on and red when you have turned it off; a box you cannot tick says who ' +
-      'decided instead - grey and ticked for a tag this ' +
+      'decided instead - gray and ticked for a tag this ' +
       (ENTITIES[this.type] ? ENTITIES[this.type].label : 'entity') +
-      ' already carries, grey and clear for one Prune found redundant, orange and ' +
+      ' already carries, gray and clear for one Prune found redundant, orange and ' +
       'ticked for one Roll-Up brings in. Hover a tag for its aliases, parents, ' +
       'children and description.'));
     this.modal.appendChild(head);
@@ -1059,8 +1060,8 @@
     // Add leads, matching the four plugins' harmonised footer order. The caption is
     // **Add**, not the siblings' Proceed, for the reason CustomFieldsBulkEditor says
     // Apply: there is no plan above to proceed with - the press is the whole action.
-    // Amber, not the footer's grey: it is the press that changes the form behind the
-    // dialog, and it is the same colour as the button that opened it.
+    // Orange, not the footer's gray: it is the press that changes the form behind the
+    // dialog, and it is the same color as the button that opened it.
     this.addBtn = button('Add');
     this.addBtn.className = 'btn ' + PASTE_BTN_VARIANT + ' btn-sm';
     this.addBtn.addEventListener('click', function () { self.add(); });
@@ -1096,7 +1097,7 @@
     foot.appendChild(this.copyBtn);
     foot.appendChild(this.undoBtn);
     foot.appendChild(this.closeBtn);
-    // At the row's right end, as in the siblings' pick lists. Grey: they only move the
+    // At the row's right end, as in the siblings' pick lists. Gray: they only move the
     // ticks, and Add is still the press that changes the form.
     this.unselAllBtn = button('Unselect All');
     this.unselAllBtn.className += ' tbc-selall';
@@ -1158,7 +1159,7 @@
     var line = '[' + kind + '] ' + message;
     this.lines.push(line);
     this.logEl.appendChild(el('div', 'tbc-line tbc-' + kind, line));
-    while (this.logEl.childNodes.length > LOG_RENDER_CAP) {
+    while (this.logEl.childNodes.length > linesDrawn()) {
       this.logEl.removeChild(this.logEl.childNodes[0]);
     }
     this.logEl.scrollTop = this.logEl.scrollHeight;
@@ -1518,7 +1519,7 @@
     this.undoBtn.disabled = !this._undo.length;
     // Green when nothing is left to add: an empty clipboard, no bundle picked, every
     // tag already there, or an Add that has landed. Undo does not take the green away -
-    // it is an offer, not something waiting on the user. A missing tag box stays grey:
+    // it is an offer, not something waiting on the user. A missing tag box stays gray:
     // that says "something is wrong", not "nothing to do".
     this.closeBtn.className = 'btn ' + (n || c.noForm ? 'btn-secondary' : 'btn-success') + ' btn-sm';
   };
@@ -1921,27 +1922,37 @@
   // A save that names the entity on screen - Stash's own form, or a sibling's bulk write
   // through the same `fetch` - is what can change whether it carries a tag: once it has
   // landed, the answer is asked again on the next tick.
+  // One wrapper for the life of the page, under `__GTTx__`, handing each request to the newest
+  // evaluation's handler: Stash's Reload plugins evaluates this script again, and a wrapper a run
+  // stacked each time parsed every request once more and kept the old closure's state alive.
   function watchSaves() {
+    var ns = window.__GTTx__ || (window.__GTTx__ = {});
+    ns.tbcSaveSeen = onSave;
+    if (ns.tbcSaveWrap) return;
+    ns.tbcSaveWrap = true;
     var inner = window.fetch;
     window.fetch = function (url, opts) {
       var p = inner.apply(this, arguments);
-      try {
-        var req = opts && typeof opts.body === 'string' ? JSON.parse(opts.body) : null;
-        var input = req && /^\s*mutation\b/.test(req.query || '') && req.variables && req.variables.input;
-        var ids = input ? input.ids || (input.id != null ? [input.id] : []) : [];
-        // Every entity it names that has been asked about, whatever page it was saved from.
-        var named = ids.map(String);
-        if (named.length) {
-          p.then(function () {
-            Object.keys(_copyState).forEach(function (k) {
-              if (named.indexOf(k.slice(k.indexOf(':') + 1)) !== -1) _copyState[k].stale = true;
-            });
-            tick();
-          }, function () {});
-        }
-      } catch (e) { /* a body that is not JSON is not a save */ }
+      if (typeof ns.tbcSaveSeen === 'function') ns.tbcSaveSeen(p, opts);
       return p;
     };
+  }
+  function onSave(p, opts) {
+    try {
+      var req = opts && typeof opts.body === 'string' ? JSON.parse(opts.body) : null;
+      var input = req && /^\s*mutation\b/.test(req.query || '') && req.variables && req.variables.input;
+      var ids = input ? input.ids || (input.id != null ? [input.id] : []) : [];
+      // Every entity it names that has been asked about, whatever page it was saved from.
+      var named = ids.map(String);
+      if (named.length) {
+        p.then(function () {
+          Object.keys(_copyState).forEach(function (k) {
+            if (named.indexOf(k.slice(k.indexOf(':') + 1)) !== -1) _copyState[k].stale = true;
+          });
+          tick();
+        }, function () {});
+      }
+    } catch (e) { /* a body that is not JSON is not a save */ }
   }
 
   // The shared bus rather than an observer of our own - see `domBus`. This is called at

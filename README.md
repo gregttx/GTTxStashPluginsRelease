@@ -19,7 +19,7 @@ Requires **Stash 0.31.0 or newer**.
 
 | Plugin | What it does |
 |---|---|
-| [ᝯㄝₓ Core](GTTxCore/README.md) | **Required by all of the others.** The shared half: the hover cards, the tooltips, the Reload UI button, the button-placement rules. Plus the features that belong to no single plugin — above all **Undo History**, which records what every plugin writes and what you save in Stash's own pages so it can be undone later; and opening links in the same tab, counts on headings, the log size, emphasising the Scene [<abbr title="Stash's Scene Tagger, which matches scenes against a stash-box.">Tagger</abbr>](GLOSSARY.md#tagger)'s duration mismatch, a right-click **Paste** in the Tags, Performers and Groups boxes, and the developer switches. |
+| [ᝯㄝₓ Core](GTTxCore/README.md) | **Required by all of the others.** The shared half: the hover cards, the tooltips, the Reload UI button, the button-placement rules. Plus the features that belong to no single plugin — above all **Undo History**, which records what every plugin writes and what you save in Stash's own pages so it can be undone later; and opening links in the same tab, counts on headings, the log size, emphasizing the Scene [<abbr title="Stash's Scene Tagger, which matches scenes against a stash-box.">Tagger</abbr>](GLOSSARY.md#tagger)'s duration mismatch, a right-click **Paste** in the Tags, Performers and Groups boxes, and the developer switches. |
 | [ᝯㄝₓ Custom Fields Bulk Editor](CustomFieldsBulkEditor/README.md) | View and bulk edit custom fields across a whole selection, or across the whole library — the seven [<abbr title="Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.">entity-types</abbr>](GLOSSARY.md#entity-type) that carry them. Stash's API supports this; its UI does not expose it. |
 | [ᝯㄝₓ Entity Name Maintainer](EntityNameMaintainer/README.md) | Rename a performer, studio, tag or scene, and it finds every *other* place in the library that mentioned the old name and offers to bring them along. |
 | [ᝯㄝₓ Find & Replace Entities by Text Content](FindEntitiesByTextContent/README.md) | One box: which [<abbr title="One item in a Stash library - a scene, image, gallery, performer, studio, group, tag or scene marker.">entities</abbr>](GLOSSARY.md#entity) mention this text? Searches every text field of every type, then optionally replaces it. |
@@ -43,7 +43,7 @@ plugin finds its sibling at load, and says in its log when one it would have ask
 |---|---|---|---|
 | Every plugin that writes | **all the others** | a shared **bulk-edit lease** while it writes, so the [<abbr title="A plugin's reaction to every save, switched on per entity type: Normalize Parent Tags' Auto-Prune and Auto-Roll-Up, Propagate's two directions.">auto-modes</abbr>](GLOSSARY.md#auto-mode) stand down instead of reacting to every entity of a library-wide run | the auto-modes [<abbr title="A plugin's automatic response to a save you just made in Stash - auto-propagation, auto-prune.">react</abbr>](GLOSSARY.md#reaction) to another plugin's bulk run, each possibly undoing part of the other |
 | **Entity Name Maintainer**, **Find & Replace**, **Scene Filename Manager**, **Scene Variants** | **Custom Fields Bulk Editor** | which custom fields are **locked**: a [<abbr title="A custom field locked in Custom Fields Bulk Editor: added to, never changed or removed.">locked</abbr>](GLOSSARY.md#lock) field's name, value and presence are left alone, and no Undo removes one | nothing is locked, and each says so in its log. With that plugin present but unable to answer, no custom field is written at all |
-| **Entity Name Maintainer** | **Custom Fields Bulk Editor** | the **field descriptions** it keeps, so a rename can carry into the prose you wrote about a field | descriptions are not listed and nothing else changes |
+| **Entity Name Maintainer** | **Custom Fields Bulk Editor** | the **field descriptions** it keeps, so a rename - or a run's rules - can carry into the prose you wrote about a field | descriptions are not listed and nothing else changes |
 | **Scene Filename Manager**, **Scene Variants**, **Propagate** | **Custom Fields Bulk Editor** | a **description filed** for the custom field they create, shown wherever that plugin shows a field | the field carries no description |
 | **Scene Filename Manager** | **Scene Variants** | the **[<abbr title="The title a variant set's partials are named after.">base-title</abbr>](GLOSSARY.md#base-title)** and **partial [<abbr title="What follows the base-title in a partial's title, before its index: &quot; - Promo &quot;.">postfix</abbr>](GLOSSARY.md#postfix)** of a variant set for the `basetitle` and `variantpostfix` tokens, and a scene's **stash-id** for `stashid` | `basetitle` is the scene's title, `variantpostfix` and `stashid` are empty, and the log says so |
 | **Scene Variants**, **Propagate**, **Tag Bundle Clipboard** | **Normalize Parent Tags** | whether a tag is **redundant** under the hierarchy, so none of them copies a parent a more specific tag already implies | every tag is copied, and the sibling would prune it again afterwards |
@@ -83,8 +83,9 @@ plugin scripts by their declared dependencies but does not object when one is mi
 - **A caption ending in `...` asks before it acts.** One without it either writes nothing or stages
   something into the form in front of you, where Stash's own Save is the next step.
 - **Orange means a control of ours writes; Stash's blue means it only reads.** Stash's own action
-  buttons are grey, so orange is also how you tell one of these plugins' controls from Stash's.
-  Every task button of ours is orange, and a settings row's button is Stash's blue. The ⓕ, 🖬 and ⸎
+  buttons are gray, so orange is also how you tell one of these plugins' controls from Stash's.
+  Every task button of ours is orange, and a settings row's button is Stash's blue - orange where a
+  setting in the row writes on its own or narrows what the writes touch. The ⓕ, 🖬 and ⸎
   marks, warnings and a switch that risks something wear the **Highlighted Text Color**, which
   you pick in ᝯㄝₓ Core's UI Customizations (a yellow by default), beside the other colors.
 - **An id in brackets is Stash's own database id** — the number in the URL — never a stash-id.
@@ -100,21 +101,21 @@ Measured against 100,000 scenes and 1,000,000 images, with every task set to cov
 
 | Plugin | Task | While it reads and plans | While it writes | Held for Undo |
 |---|---|--:|--:|--:|
-| SceneFilenameManager | Archive Original Filenames | 114 MB | 161 MB | 157 MB |
-| SceneFilenameManager | Restore Original Filenames | 56 MB | 82 MB | 82 MB |
-| SceneFilenameManager | Rename Files From Metadata | 195 MB | 260 MB | 254 MB |
-| SceneVariants | Migrate Variant Stash-IDs | 59 MB | 92 MB | 91 MB |
-| SceneVariants | Flag Variants | 46 MB | 85 MB | 83 MB |
-| SceneVariants | Review Variant Sets | 1951 MB | — | — |
-| SceneVariants | Rename Variants | 637 MB | 667 MB | 667 MB |
-| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 552 MB | 1150 MB | 1150 MB |
-| CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 312 MB | 312 MB |
-| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 785 MB | 1752 MB | 1541 MB |
-| NormalizeParentTags | Normalize Parent Tags | 3813 MB | 4185 MB | 4079 MB |
+| SceneFilenameManager | Archive Original Filenames | 116 MB | 161 MB | 161 MB |
+| SceneFilenameManager | Restore Original Filenames | 56 MB | 83 MB | 83 MB |
+| SceneFilenameManager | Rename Files From Metadata | 195 MB | 258 MB | 254 MB |
+| SceneVariants | Migrate Variant Stash-IDs | 59 MB | 93 MB | 92 MB |
+| SceneVariants | Flag Variants | 46 MB | 88 MB | 84 MB |
+| SceneVariants | Review Variant Sets | 310 MB | — | — |
+| SceneVariants | Rename Variants | 637 MB | 670 MB | 668 MB |
+| CustomFieldsBulkEditor | Edit Custom Fields Across the Whole Library | 552 MB | 1151 MB | 1151 MB |
+| CustomFieldsBulkEditor | Manage Custom Field Descriptions and Locks | 214 MB | 311 MB | 311 MB |
+| FindEntitiesByTextContent | Find & Replace Entities by Text Content | 785 MB | 1752 MB | 1540 MB |
+| NormalizeParentTags | Normalize Parent Tags | 720 MB | 1090 MB | 985 MB |
 | NormalizeParentTags | Auto-Mode Settings | 1 MB | — | — |
 | NormalizeParentTags | Show Tag Hierarchy | 15 MB | — | — |
-| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 271 MB | 292 MB | 283 MB |
-| PropagateTagsAndPerformers | Propagate All | 1782 MB | 1824 MB | 1807 MB |
+| MergePerformerTagsToScenes | Merge Performer Tags into All Their Scenes | 270 MB | 294 MB | 283 MB |
+| PropagateTagsAndPerformers | Propagate All | 984 MB | 863 MB | 846 MB |
 
 A task gives all of it back when its dialog is closed.
 
@@ -124,8 +125,8 @@ A task gives all of it back when its dialog is closed.
 |---|---|
 | `<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `AGENTS.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
 | `GTTxCore/` | the shared half every other plugin binds at load, and requires |
-| `.tests/` | `node .tests/run.js` (or `npm test --prefix .tests`). See [.tests/README.md](.tests/README.md) |
-| `.tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See [.tools/README.md](.tools/README.md) |
+| `.tests/` | `node .tests/run.js` (or `npm test --prefix .tests`). See .tests/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)) |
+| `.tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See .tools/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)) |
 | `RELEASES.md` | every release of every plugin, one row per commit. **Generated** |
 | `MEMORY.md` | what every task holds in memory against 100,000 scenes and 1,000,000 images. **Generated** by `node .tools/memory-watermark.js`; a release waits for it |
 | `AGENTS.md` | the rules, one table per kind — the onboarding document |
@@ -139,24 +140,27 @@ A task gives all of it back when its dialog is closed.
 - **A new plugin starts at `version: 0.0.1`.** The major digit says the thing has been run in a real
   Stash, not that the code is finished.
 - **Bump the version in three places in one edit**: the `.yml`, the `manifest` (including its
-  `date:`, read off the clock), and `PLUGIN_VERSION` in the `.js`.
+  `date:`, read off the clock), and `PLUGIN_VERSION` in the `.js` -
+  `python3 .tools/bump.py <Plugin> [<version>]` does all three.
 - **`RELEASES.md` is generated, never written.** A release *is* a commit that moved a `version:`, so
   run `node .tools/gen-releases.js` in the commit *after* the one that shipped it — a release row
   cannot name the commit that adds it.
 - **READMEs and source describe the plugin, not its history.** No "since 1.2.0" in either; that
   argument belongs in the plugin's own `NOTES.md`, which does not ship.
-- **Read [AGENTS.md](AGENTS.md) before adding a button, a dialog or a shared block.** Nearly every
+- **Read AGENTS.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)) before adding a button, a dialog or a shared block.** Nearly every
   rule in it exists because something here guessed about Stash's markup and was wrong.
 - **Releasing to the public mirror goes through `node .tools/release-drop.js`**, which
   copies an allowlist - never a denylist - and scans every staged file before it writes
-  anything. See [`.tools/README.md`](.tools/README.md).
+  anything. See `.tools/README.md` (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.05.1)).
 - **The source repo enforces some of this after every turn**, through Claude Code Stop hooks that
   are not part of a release: a plugin's docs left behind by a change to its source, a script
   changed without its version moving, a release missing from `RELEASES.md`, a new plugin starting
   above `0.0.1`. A git pre-commit hook in `.githooks/` refuses a commit
-  that stages a plugin's script without moving its version, before the commit exists; wire it with
+  that stages a plugin's script without moving its version, before the commit exists, and warns
+  when a change to a setting leaves the settings inventory out, and a pre-push hook refuses a
+  push carrying a file over GitHub's 100 MB limit; wire both with
   `git config core.hooksPath .githooks`.
 
-## Licence
+## License
 
 [MIT](LICENSE).

@@ -47,7 +47,7 @@ for `beach` — says **case differs** in the Highlighted Text Color, and the log
 those too, so tick **Case-sensitive** and search again to leave them out.
 
 The entity's name is a link to it, and **hovering it opens a card**: its picture and the
-handful of fields it is recognised by — for a tag, its aliases, parents, children and
+handful of fields it is recognized by — for a tag, its aliases, parents, children and
 description. It is read on the first hover rather than while the list is drawn, so a search
 that finds thousands of entities costs nothing for the ones you never point at.
 
@@ -94,12 +94,12 @@ searched fields on is left out of the breakdown — the log says it was skipped.
 - **Search** becomes **Pause** while it runs and **Resume** after, so a long search can be
   stopped and picked up rather than started again. Resume carries on from the page it
   stopped at; nothing is read twice.
-- When the list on screen is full — 1000 results — it **pauses itself** and the button reads
+- When the list on screen is full — as many results as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default — it **pauses itself** and the button reads
   **Continue**, which clears the screen and carries on. With **Replace** ticked the pause line
   says so too: a press still covers every result found so far, the cleared ones included.
 - **Copy log** hands over the counters, the messages and every result the attribute filters
   leave, as plain text — including the ones the screen no longer shows. A filter is a choice
-  about what you are looking at, so it is honoured; the buffer is not a choice, so it is not.
+  about what you are looking at, so it is honored; the buffer is not a choice, so it is not.
 - **Refresh** throws away what this search has found and starts it again from the
   beginning, with whatever the box now says. It only appears while the other button has
   become Pause, Resume or Continue — those are the states where **Search** carries the
@@ -107,7 +107,7 @@ searched fields on is left out of the breakdown — the log says it was skipped.
   already says Search, Refresh would do the same thing, so it is not offered.
 - **Cancel**, or the Escape key, closes it. Once a search has run out it reads **Close**
   instead — the same button, saying which of the two pressing it now means — and that Close is
-  green when the list holds nothing to replace, grey while Replace still has something to do.
+  green when the list holds nothing to replace, gray while Replace still has something to do.
 
 The **×** at the right-hand end of the box empties it. It is there only while there is
 something to empty.
@@ -254,11 +254,11 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Find & Replace Entities by Text Content | 785 MB | 1752 MB | 1541 MB |
+| Find & Replace Entities by Text Content | 785 MB | 1752 MB | 1540 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
@@ -267,7 +267,7 @@ and what Undo takes back are all whole.
 
 **The task button does nothing.** The click is handled in the browser — there is no
 server-side job behind it. If Stash instead shows an "added job to queue" toast, the page is
-running a script that does not recognise the button; reload the page.
+running a script that does not recognize the button; reload the page.
 
 **A type is skipped with a warning.** Your Stash has none of the text fields this plugin
 looks for on that type. That is the introspection check doing its job rather than a failure;
@@ -284,6 +284,6 @@ stale-script banner and the Reload UI button](../GTTxCore/README.md#the-stale-sc
 Copy the `FindEntitiesByTextContent` folder into your Stash plugins directory
 (`<stash-config-dir>/plugins/`) and press **Reload plugins** in Settings → Plugins.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.

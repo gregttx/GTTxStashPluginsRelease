@@ -50,7 +50,7 @@ one is where to start looking. Numbers in brackets are ids.
 added, and the entity it came *from* — so any of them opens in a new tab (ᝯㄝₓ Core's own setting
 switches that to this one), and any of them can be
 selected. A Marker is the exception and stays plain text: Stash gives it no page of its own. **The
-name also hovers to a card**: a picture and the handful of fields the thing is recognised by —
+name also hovers to a card**: a picture and the handful of fields the thing is recognized by —
 a tag's aliases, parents, children and description; a performer's gender, birthdate, country and
 scene count; a scene's studio, performers and tags. The entity a change lands on and the entity it
 came from carry one too. The card is what tells two
@@ -107,14 +107,14 @@ of Stash's own secondary buttons, so it looks like the rest of your theme, and i
 your configuration has it doing: **orange** for a box being written into, **blue** for one being read
 out of, **black** for neither. A box that is both — Scene and Gallery, once a few paths are on — is
 orange, since being written into is the half you are deciding about. It follows a toggle the moment
-you press it. The picture is sized to what is on it and centred in the dialog. Each toggle sits on its
+you press it. The picture is sized to what is on it and centered in the dialog. Each toggle sits on its
 own arrow and is the same control the list shows, so a path set in one view is set in the other and
 is what Save writes. **List view** switches back, and the dialog opens on whichever of the two you last left it in.
 
 **Rearranging it.** The diagram ships with a layout, and you can move it. Open the browser console
 (F12) and run `__GTTx__.StashPluginCoop.layoutEdit = true`, then reopen the dialog: boxes and
 toggles become draggable, and an arrow follows the toggle you drag, since the curve is drawn through
-it. While editing, the picture sits against the left edge rather than centred - a canvas that grows as
+it. While editing, the picture sits against the left edge rather than centered - a canvas that grows as
 you drag a box towards its edge would otherwise slide everything else under your pointer. Positions
 snap to a small grid and are kept in that browser as you go, so the arrangement is
 there next time whether or not the flag still is. **Copy layout** puts the two tables on your
@@ -209,7 +209,7 @@ where you find out that a path you wanted is off — so stopping it leaves the p
 screen, withdraws **Proceed** (half a plan is not a plan), and hands back **Path Settings...** and
 **Rescan**. Cancel is still there for walking away entirely — and where a review found nothing
 to change, the button says **Close** instead, in green, since there is nothing to cancel and nothing
-left to write. The green comes back after a pass has run clean; it stays grey after a stop or an error.
+left to write. The green comes back after a pass has run clean; it stays gray after a stop or an error.
 
 ## Order matters, and it is fixed
 
@@ -246,23 +246,36 @@ Escape write nothing. The dialog draws the first thousand lines and says how man
 those start as the drawn lines do, and **Select All**, **Unselect All** and **OK** cover them too. It
 opens over whatever is on screen, so Escape closes it first. On, a reaction writes the moment Stash
 saves, with no dialog and no review. Either way every write is recorded in ᝯㄝₓ Core's
-[Undo History](../GTTxCore/README.md#undo-history), where it can be undone later. The switch is greyed out while neither mode is on. When another plugin is waiting for
-your answer before it reads the scene — Scene Variants does, for its own propagate offer — the
-dialog says so, with the time it has left; if that runs out while the dialog is open, a warning
+[Undo History](../GTTxCore/README.md#undo-history), where it can be undone later. The switch is grayed out while neither mode is on. When another plugin is waiting for
+your answer before it reads an entity the dialog may write — Scene Variants does, before it reads
+a scene for its own propagate offer — the dialog says so, naming the entity, with the time it has left; if that runs out while the dialog is open, a warning
 replaces it, because what you add here will then not be in that plugin's offer.
 
-**Suggest Tag Auto-removal — Depropagate assist**, off by default, is the reverse offer. When a
-save removes a performer, studio or group from a scene, and the path from that entity into
-scenes is on, the scene is read once *before* the save goes out — the save waits for that one
-small read — and once after it lands. The tags the removed entity brought that the scene still
-carries, and that no other related entity of the scene carries, are listed in the same dialog,
-**unticked**. Tick the ones to remove and press OK, which stays unavailable until something is ticked; nothing else is touched, and
-the removal is recorded in Undo History. A tag a marker of the scene still carries, as its primary
-tag or one of its tags, is not offered while the marker path is on. A save made while another
-plugin holds its bulk-edit [<abbr title="The flag a plugin holds while it writes, so the others do not react to its writes.">lease</abbr>](../GLOSSARY.md#lease) — Scene Variants synchronizing its [<abbr title="Scene Variants: scenes that are the same content - a full version and its trailers or cuts.">variants</abbr>](../GLOSSARY.md#variant), say — is not asked
-about. Only a scene's own
-save is watched: a marker deleted, an image taken out of a gallery or a scene taken out of a
-group is a save of something else, and is not offered.
+**Suggest Tag Auto-removal — Depropagate assist**, off by default, is the reverse offer. It answers
+a save that takes away something tags came from, along a path that is on:
+
+- **an entity's own save** dropping one of its sources: a performer, the studio or a group taken
+  off a scene; a gallery taken off an image; the studio or a sub-group taken off a group, a
+  sub-group removed on the group's Sub-groups tab included;
+- **a source's save** leaving its target: a scene taken out of a group, an image out of a gallery
+  (on the image, or removed on the gallery's Images tab), a group out of the group that contains
+  it, a marker deleted or moved to another scene.
+
+The saved entity is read once *before* the save goes out — the save waits for that one small read
+— and each entity that lost a source once after it lands. The tags the removed source brought that
+the entity still carries, and that nothing still related to it carries, are listed in the same
+dialog, **unticked**; one save can list several entities - a scene leaving a group loses the
+group's tags, and the group the scene's. Tick the ones to remove and press OK, which stays
+unavailable until something is ticked; nothing else is touched, and the removal is recorded in
+Undo History. A tag a marker of the scene still carries, as its primary tag or one of its tags, is
+not offered while the marker path is on; a gallery's tag is still carried while any image left in
+it carries it. On a path in **Common** mode a tag came from the leaving source only if every
+source carried it, so it is offered only once no source is left on that path, and only a tag every
+remaining source carries counts as still carried there. With both halves of a reversible pair on
+(see above), a tag on both ends of the removed link flowed down: the image or scene is offered it,
+and the gallery or group, whose own tag it is, is not. A save made while another plugin holds its
+bulk-edit [<abbr title="The flag a plugin holds while it writes, so the others do not react to its writes.">lease</abbr>](../GLOSSARY.md#lease) — Scene Variants synchronizing its [<abbr title="Scene Variants: scenes that are the same content - a full version and its trailers or cuts.">variants</abbr>](../GLOSSARY.md#variant), say — is not asked about, and neither is a bulk edit. A source's own
+tags changing (a performer losing a tag) is not a removal of the source, and is not offered.
 
 **Auto-Propagate when the Target is Saved** reacts to a save of one of the four entities anything is
 written to. Save a scene and every enabled path that copies *into* scenes runs on that one scene.
@@ -295,7 +308,7 @@ copies into each of those exactly as the target-side mode would, cooldown and al
   it. Nothing else is reacted to on creation: every other source is created bare and only gains a
   relationship through a later save, which is already watched.
 
-Both auto-modes share the rest of their behaviour:
+Both auto-modes share the rest of their behavior:
 
 - **They stand down while another plugin holds the
   [bulk-edit lease](../GTTxCore/README.md#the-bulk-edit-lease)**, and each takes a short lease of
@@ -310,7 +323,7 @@ Every button has a switch of its own in the **Manual Buttons Settings** dialog, 
 button on the Manual Buttons row under **Settings → Plugins**; with its switch on, each enabled
 path adds a small button to the Edit tab of its target — a scene with the performer-tags and studio-tags paths both enabled shows two buttons, not
 one that tries to name both, and a path with no button setting simply has no button. Each button
-is labelled consistently: `"Add [all|common] [Tags|Perfs] from all <plural>"` —
+is labeled consistently: `"Add [all|common] [Tags|Perfs] from all <plural>"` —
 for example **"Add all Tags from all Performers"** on a scene, or **"Add common Tags from all
 Scenes"** on a group if you have set that path to *Common tags only*.
 
@@ -321,12 +334,12 @@ the last thing in the row rather than being displaced by ours. On a page with tw
 the row gets a small gap between its two lines when it wraps; the gap is on the row rather than on
 the buttons, since a margin on a button in a flex row grows Stash's own buttons taller with it.
 
-Every button this plugin draws is **orange**, where Stash's own row actions are grey.
-Orange is this repo's colour for "a plugin put this here, and pressing it writes to entities other
-than the one in front of you" — the same colour `MergePerformerTagsToScenes` uses for its two
+Every button this plugin draws is **orange**, where Stash's own row actions are gray.
+Orange is this repo's color for "a plugin put this here, and pressing it writes to entities other
+than the one in front of you" — the same color `MergePerformerTagsToScenes` uses for its two
 buttons, so a row holding both reads as one kind of thing rather than two. It is deliberately not
 the blue of a primary action: Save is still the primary action on those pages. Inside the review
-dialog the same colour marks **Proceed** and **Undo**, the two buttons in that footer that change
+dialog the same color marks **Proceed** and **Undo**, the two buttons in that footer that change
 anything.
 
 ### When a button appears
@@ -469,7 +482,7 @@ description shows one line on the page; hover it, or the setting's name, for the
 
 **Manual Buttons** — one row, listing the [manual buttons](#manual-buttons-and-staging) that are
 on, a line per page — *Scene Edit tab: all buttons* where every button on a page is on, and a
-caption in grey where its path is off — and holding the button that opens the **Manual Buttons
+caption in gray where its path is off — and holding the button that opens the **Manual Buttons
 Settings** dialog. All twenty-four are in that dialog, a switch each, in two columns side by
 side: **On target entity Edit tabs**, the buttons that pull tags or performers into the entity in
 front of you, and **On source entity pages**, the buttons that push them out. Each column is a box
@@ -487,9 +500,9 @@ that had **Show Manual Buttons** on starts with every button on.
 [auto-modes](#the-automatic-modes) are on and holding the button that opens the **Auto-Propagation and Depropagate Assist**
 dialog, a switch for each: **Auto-Propagate when the Target is Saved** and **Auto
 Propagate when the Source is Saved**, and two options: **Silent Auto-propagation**, off by default
-and greyed out while neither mode is on, without which a reaction asks before it writes; and
-**Suggest Tag Auto-removal — Depropagate assist**, off by default, which offers the tags a removed
-performer, studio or group brought to a scene for removal. The source-side mode fans out: saving one
+and grayed out while neither mode is on, without which a reaction asks before it writes; and
+**Suggest Tag Auto-removal — Depropagate assist**, off by default, which offers for removal the tags
+a source brought when a save takes it away. The source-side mode fans out: saving one
 performer can rewrite every scene they appear in. The setting is one line of text (`target, source,
 silent, depropagate`) and can be typed by hand; a word nobody names is off. Upgrading from a
 release that had either old switch on starts with that mode on, and asking.
@@ -557,17 +570,17 @@ tag it resolved to and how many tags the subtree holds.
 **Skip tags Normalize Parent Tags would prune again** is the eighth filter, and the only one whose
 rule belongs to another plugin — which is why it is a checkbox under the paths in the **Path
 Settings** dialog, beside what it is about. The dialog says on the line beneath the box whether that
-plugin is answering right now, and greys the box out when it is not. Ticking it and pressing **Save**
+plugin is answering right now, and grays the box out when it is not. Ticking it and pressing **Save**
 stores it for every tab and both auto-modes.
 `ᝯㄝₓ Normalize Parent Tags`' automatic **Prune** removes a tag from
 an entity when a more specific tag on the same entity already implies it. So a scene already tagged
-*Platinum* that gains *Hair Colour* from its studio loses it again on the very save this plugin
+*Platinum* that gains *Hair Color* from its studio loses it again on the very save this plugin
 makes — work done, logged, and undone, every run. Tick this and such a tag is never copied at all:
 the plan reports how many were skipped, and a button whose only additions would have been those
 hides.
 
 It **asks** that plugin rather than guessing, so three things follow. Its own tag exclusions are
-honoured — a tag it is set never to remove is one this plugin still copies. It applies per entity
+honored — a tag it is set never to remove is one this plugin still copies. It applies per entity
 type, because that is how Prune is configured over there. And **[<abbr title="Normalize Parent Tags adding the parents implied by an entity's tags.">Roll-Up</abbr>](../GLOSSARY.md#roll-up) is never skipped**: that
 mode *adds* ancestors, so a tag copied here is one it would have added anyway.
 
@@ -642,11 +655,11 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1782 MB | 1824 MB | 1807 MB |
+| Propagate All | 984 MB | 863 MB | 846 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
@@ -696,10 +709,10 @@ instead, say so in their tooltip, and warn once in the browser console.
 ("Add Tags to all Scenes" on the performer page, "Add all Tags from all Performers" on the scene
 page — today the only path the two plugins share), this plugin does not add a second one next to
 it, on the source side as well as the target side. Nothing else changes:
-click MPTTS's button and you get its behaviour; enable more paths here and you still get buttons
-for all of them, this one path aside. It recognises that plugin's buttons by their captions, "Add Tags
+click MPTTS's button and you get its behavior; enable more paths here and you still get buttons
+for all of them, this one path aside. It recognizes that plugin's buttons by their captions, "Add Tags
 to all Scenes" and "Add all Tags from all Performers"; a copy whose buttons say something else is
-not recognised, and both plugins' buttons show.
+not recognized, and both plugins' buttons show.
 
 ### Checking which version is actually running
 
@@ -737,6 +750,6 @@ plugins/PropagateTagsAndPerformers/README.md
 
 Then **Settings → Plugins → Reload plugins**, and reload the page in your browser.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.

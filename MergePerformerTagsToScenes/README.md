@@ -88,7 +88,7 @@ There is also a **library-wide task**, in **Settings → Tasks → Plugin Tasks*
   included, with the `x18` beside each one left outside the link, since that count is this
   run's arithmetic rather than part of the tag's name. They open in a new tab — or in this one, if
   ᝯㄝₓ Core's **Open Links in the Same Tab** is on — and
-  hovering one opens a card: the entity's picture and the fields it is recognised by — a scene's
+  hovering one opens a card: the entity's picture and the fields it is recognized by — a scene's
   studio, performers and tags, a performer's gender, country and scene count. That one is read
   when you point at it, so a plan nobody hovers costs nothing. **Copy log** hands over the plain
   text either way — a link and a card are not text.
@@ -118,9 +118,9 @@ Whichever way tags get merged, every merge can optionally be logged to your brow
 
 The two buttons appear in different places, because each one sits where the content it acts on is visible.
 
-Both are **orange**, where Stash's own row actions are grey. Orange is this repo's
-colour for "a plugin put this here, and pressing it writes to entities other than the one in front
-of you" — the same colour `PropagateTagsAndPerformers` uses, so a row holding buttons from both
+Both are **orange**, where Stash's own row actions are gray. Orange is this repo's
+color for "a plugin put this here, and pressing it writes to entities other than the one in front
+of you" — the same color `PropagateTagsAndPerformers` uses, so a row holding buttons from both
 reads as one kind of thing rather than two. It is deliberately not the blue of a primary action:
 Save is still the primary action on those pages. The plugin's task button in
 **Settings → Tasks → Plugin Tasks** is orange too, and so are **Proceed** and **Undo** in the review
@@ -159,8 +159,9 @@ it. Three limits to know before relying on it:
 - **It cannot see what happened in the meantime.** If auto-merge, another tab or a second run
   re-added one of the same tags, Undo still removes it.
 
-Everything else in the plugin — the two buttons and both auto-merge modes — only ever adds tags,
-and has no Undo button of its own; ᝯㄝₓ Core's Undo History takes those back. Backing up your
+Everything else in the plugin — the scene button and both auto-merge modes — only ever adds tags,
+and has no Undo button of its own; ᝯㄝₓ Core's Undo History takes those back. The performer button
+opens the same review dialog as the task, Undo included. Backing up your
 database before the first library-wide run is strongly recommended.
 
 ### Review before saving in Scene Edit tab manual merge
@@ -183,7 +184,7 @@ Four optional exclusion filters let you protect certain scenes or tags from bein
 in one dialog, opened from the **Exclusion Filters** row of the plugin's settings, which says which
 of them do something now; each has its whole description when you hover it there:
 
-- **Exclude Scenes Carrying This Tag** — enter a tag name; any scene carrying that tag is skipped. The tag is looked up by exact name, and a tag one of whose aliases is that exact string counts too, with the name winning where both match; the result is re-checked periodically, so creating, deleting or recreating the tag is picked up without a page reload. Once it resolves, a **🔗** appears beside its box in the dialog, linking to the tag it found — so a typo shows up as a missing link rather than as a merge that refuses to run. Hover it for what that tag is: its picture, its aliases, its [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parents</abbr>](../GLOSSARY.md#parent), its children and its description. **If no tag by that name exists, nothing is merged at all** — a typo would otherwise leave every scene you meant to protect unprotected, and merging cannot be undone once it has happened. Create the tag, or clear the setting; the browser console says which. The exclusion tag itself is never merged into a scene, even if one of the performers carries it.
+- **Exclude Scenes Carrying This Tag** — enter a tag name; any scene carrying that tag is skipped. The tag is looked up by exact name, and a tag one of whose aliases is that exact string counts too, with the name winning where both match; the result is re-checked periodically, so creating, deleting or recreating the tag is picked up without a page reload. Once it resolves, a **🔗** appears beside its box in the dialog, linking to the tag it found — so a typo shows up as a missing link rather than as a merge that refuses to run. Hover it for what that tag is: its picture, its aliases, its [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parents</abbr>](../GLOSSARY.md#parent), its children and its description. **If no tag by that name exists, nothing is merged at all** — a typo would otherwise leave every scene you meant to protect unprotected, and a merge that was not meant is taken back only through Undo History. Create the tag, or clear the setting; the browser console says which. The exclusion tag itself is never merged into a scene, even if one of the performers carries it.
 - **Exclude Scenes Marked as Organized** — scenes with the "organized" flag set are skipped entirely.
 - **Never Merge Tags Set to Ignore Auto Tag** — performer tags that have "Ignore Auto Tag" enabled in their tag settings are not merged into scenes.
 - **Never Merge Tags Marked via This Custom Field** — enter a custom field name; performer tags carrying that custom field are not merged into scenes. **Only the presence of the field matters** — the value is never looked at, so any value at all (including a blank one) excludes the tag. To have a tag merged again, remove the field from it rather than trying to set it to something falsy. Where `ᝯㄝₓ Custom Fields Bulk Editor` describes the field, a **ⓕ** appears beside its box: hover it for what the field is — that description, how many entities carry it, and the first ten of them by name and type. The carriers are not read until you hover, because finding them means seven filtered queries ([the custom-field mark](../GTTxCore/README.md#links-cards-and-tooltips)).
@@ -324,7 +325,7 @@ row.
 the row matches. The gap is measured against the button you can actually *see*: Stash wraps some of
 its buttons in an extra element that carries no spacing of its own, and leaves an empty slot where
 others would go. A wrapped second row of buttons is spaced by whichever mechanism that row's layout
-actually honours, which is not the same one for both kinds of row Stash uses here.
+actually honors, which is not the same one for both kinds of row Stash uses here.
 
 ## Notes and limitations
 
@@ -350,11 +351,11 @@ actually honours, which is not the same one for both kinds of row Stash uses her
 
 This plugin is pure client-side JavaScript (`ui.javascript` in the manifest, no backend task). It calls Stash's `/graphql` endpoint directly from the browser using your existing logged-in session — no server-side plugin task or Python runtime required.
 
-Three details that explain behaviour you might otherwise read as a bug:
+Three details that explain behavior you might otherwise read as a bug:
 
 - The performer button, and auto-merge on performer update, process a performer's scenes **one at
   a time** rather than all at once, to avoid hammering the server. A performer with many scenes
-  takes a noticeable moment. If one scene fails the rest still run, and the failures are summarised
+  takes a noticeable moment. If one scene fails the rest still run, and the failures are summarized
   at the end (details go to the browser console).
 - Staging works by observing Stash's tag control through the UI plugin API. The plugin picks the
   most recently rendered control whose contents match what it expects the scene's tag box to hold —
@@ -371,11 +372,11 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Merge Performer Tags into All Their Scenes | 271 MB | 292 MB | 283 MB |
+| Merge Performer Tags into All Their Scenes | 270 MB | 294 MB | 283 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
@@ -392,7 +393,7 @@ whether it is shown or hidden and why, prefixed `[cpt2s gate]`, on the next tick
 
 ### The README link in settings
 
-**Settings → Plugins → ᝯㄝₓ Merge Performer Tags To Scenes** carries a link to this file, in two forms: the chain icon Stash puts in the header row, and a labelled `MergePerformerTagsToScenes/README.md` link the plugin adds underneath the description, since the icon alone is easy to miss. Both open the same page.
+**Settings → Plugins → ᝯㄝₓ Merge Performer Tags To Scenes** carries a link to this file, in two forms: the chain icon Stash puts in the header row, and a labeled `MergePerformerTagsToScenes/README.md` link the plugin adds underneath the description, since the icon alone is easy to miss. Both open the same page.
 
 ### Checking which version is actually running
 
@@ -427,6 +428,6 @@ If that is not the version you just installed, the page is running an old copy: 
 3. In Stash, go to **Settings → Plugins** and click **Reload plugins** (or restart Stash).
 4. If using multiple browser instances, refresh your browser (F5) so the new plugin JavaScript is loaded in all of them.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.

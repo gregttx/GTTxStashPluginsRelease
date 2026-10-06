@@ -27,11 +27,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -47,6 +47,8 @@
   // Every plugin's settings through Core's one shared read.
   var pluginConfig = C.pluginConfig;
 
+  // How many lines a dialog draws at once: Core's Lines Drawn at Once, read where it is used.
+  var linesDrawn = C.linesDrawn;
   var PLUGIN_ID   = 'CustomFieldsBulkEditor';
   var PLUGIN_NAME = 'ᝯㄝₓ Custom Fields Bulk Editor';
   // The name the dialog head wears. The same string here, because this name already
@@ -60,7 +62,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '4.0.15';
+  var PLUGIN_VERSION = '4.1.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -79,9 +81,9 @@
   var STYLE_ID   = 'cfbe-style';
 
   // The one control this plugin draws into Stash's own UI, and the button that
-  // writes, in amber. Stash's own menu items and row actions are neutral, and these
+  // writes, in orange. Stash's own menu items and row actions are neutral, and these
   // are not the same kind of thing: this one reaches out and rewrites every entity in
-  // a selection. See "one colour for a plugin wrote this" in the repo-root AGENTS.md.
+  // a selection. See "one color for a plugin wrote this" in the repo-root AGENTS.md.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
 
   var CHUNK_SIZE   = 100;   // entity ids per read alias batch and per bulk mutation
@@ -90,7 +92,6 @@
   var TICK_MS      = 1000;
   var OBSERVE_MS   = 100;   // a burst of DOM mutations coalesced into one tick
   var ROW_WALK_MAX = 8;     // ancestors climbed from a checkbox looking for its row
-  var LIST_RENDER_CAP = 1000;  // listing rows put in the DOM; all of them stay in memory
   // The busy cursor under the last line of the listing. The counters say how far a
   // read or a write has got; this says it is still going, which is the question a
   // page of 5,000 entities leaves unanswered for seconds at a time.
@@ -606,7 +607,7 @@
     // the plugins share no module, not because they are meant to look different -
     // and two of them did drift, from #202b33 to #30404d, because nothing compared
     // them. `.tests/style.test.js` pins the overlap now. #202b33 is Blueprint's
-    // dark-gray2, the step Stash's own page uses; every dim grey in these dialogs was
+    // dark-gray2, the step Stash's own page uses; every dim gray in these dialogs was
     // chosen against it.
     '.cfbe-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
@@ -659,7 +660,7 @@
     // The list was a <textarea> once, which is what made it selectable and
     // copyable with nothing to press and kept a selection of several thousand
     // entities down to one node. Pills need real elements, so the node count is back
-    // and `LIST_RENDER_CAP` is what keeps it bounded - the same trade the siblings
+    // and `linesDrawn()` is what keeps it bounded - the same trade the siblings
     // make with `LOG_RENDER_CAP`.
     '.cfbe-list{width:100%;height:100%;min-height:0;box-sizing:border-box;overflow:auto;' +
     'background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
@@ -686,11 +687,11 @@
     // One rule for both, so the legend's ␀ cannot drift from the list's. The mark is
     // the one character in a monospace line that a monospace face renders as a box of
     // its own; the legend is not monospace, but it quotes the list, so the two have to
-    // agree. Font only - the legend keeps its own colour and size.
+    // agree. Font only - the legend keeps its own color and size.
     '.cfbe-none,.cfbe-nonemark{font-family:sans-serif;}' +
     '.cfbe-none{color:var(--gttx-muted,#a7b6c2);}' +
     // The type mark after a value, and the same mark beside the value box saying what
-    // that box will store. Small, grey and sans-serif like the ␀ it sits next to: it
+    // that box will store. Small, gray and sans-serif like the ␀ it sits next to: it
     // is a fact *about* the value rather than part of it, and a listing full of them
     // still has to read as a list of values.
     '.cfbe-vtype{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;font-family:sans-serif;}' +
@@ -724,14 +725,14 @@
     '%3Cpath fill=%27%23a7b6c2%27 d=%27M4 3l3 4H1z%27/%3E' +
     '%3Cpath fill=%27%23a7b6c2%27 d=%27M4 13l-3-4h6z%27/%3E%3C/svg%3E");}' +
     // The value box is disabled while the mode is the whole query, and these inputs
-    // set their own background and colour, so the browser's own disabled look does not
+    // set their own background and color, so the browser's own disabled look does not
     // show through.
     '.cfbe-input:disabled{opacity:.5;}' +
     // The mode currently chosen cannot be applied over the scope as it stands. The log's
     // own ERROR red, on the select - which is what is visible while the list is shut -
     // and on the one option it is about, which is what is visible while it is open.
     //
-    // **An option inherits the select's colour**, so reddening the select reddens every
+    // **An option inherits the select's color**, so reddening the select reddens every
     // option in the list with it. The middle rule puts them back; the marked one is two
     // classes deep and outranks it. Without that pair, "mark Rename" marks all four.
     '.cfbe-bad{color:#ff7373;}' +
@@ -752,7 +753,7 @@
     '.cfbe-name:hover{background:var(--gttx-raised,#3c4f5d);}' +
     '.cfbe-name-on{background:var(--gttx-raised,#425a6b);}' +
     '.cfbe-name-orphan{color:var(--gttx-highlight,#ffc107);}' +
-    // Not the orphan amber: a store-tag field is accounted for, not a loose end.
+    // Not the orphan highlight: a store-tag field is accounted for, not a loose end.
     '.cfbe-name-store{color:#48aff0;}' +
     // After the two above, so a locked orphan or store-tag field still reads as locked.
     '.cfbe-name-locked{color:#ff7373;}' +
@@ -767,13 +768,13 @@
     'font-family:monospace;font-size:.8rem;}' +
     '.cfbe-readonly-row button{display:none;}' +
     '.cfbe-rename,.cfbe-lock{padding:.05rem .4rem;line-height:1.2;flex:0 0 auto;}' +
-    // Grey, not amber: the glyph drowned on the orange. Large enough to read as a switch.
+    // Gray, not orange: the glyph drowned on the orange. Large enough to read as a switch.
     '.cfbe-lock{font-size:1.25rem;padding:0 .35rem;}' +
     '.cfbe-text{width:100%;box-sizing:border-box;min-height:5rem;background:var(--gttx-bg,#1f2b33);' +
     'color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.35rem .5rem;' +
     'font-family:inherit;font-size:.85rem;resize:vertical;color-scheme:dark;}' +
     // **The grip the user drags, drawn rather than left to the browser.** Chrome paints
-    // the default one in the widget colours of a light page - a white square on this
+    // the default one in the widget colors of a light page - a white square on this
     // dark box - and a `::-webkit-resizer` with a background of its own replaces that
     // image outright, so the triangle has to be drawn here or there is nothing to take
     // hold of. `color-scheme:dark` above is the other half, for the scrollbar beside it
@@ -822,7 +823,7 @@
     // The description store tag's own row, when a store exists. A link, so the tag is
     // one click away and the name beside it can be selected; the same blue every other
     // link this plugin draws uses.
-    // The mark beside a setting that names a custom field. Grey and `cursor:help`,
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
@@ -851,6 +852,8 @@
     'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
     '.cfbe-tagicon{margin-left:.9rem;text-decoration:none;}' +
+    // After the tag icon the link goes close: the icon already stands apart from the name.
+    '.gttx-tagglyph+.cfbe-tagicon{margin-left:.3rem;}' +
     '.cfbe-tagicon:hover{text-decoration:underline;}' +
     // ── The settings page ───────────────────────────────────────────────────
     //
@@ -890,7 +893,7 @@
     'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.cfbe-tipped.cfbe-tip-open .cfbe-tipbox{display:block;}' +
-    // The menu item, amber because it is the one thing this plugin puts into Stash's
+    // The menu item, orange because it is the one thing this plugin puts into Stash's
     // own chrome and it leads to a write. Stash's `.dropdown-item` supplies the
     // padding, the hover and the layout; only the two things that are ours are set.
     '.cfbe-menu-item{cursor:pointer;color:var(--gttx-highlight,#ffc107);}';
@@ -954,7 +957,7 @@
   }
 
   // Marks a control as holding something that cannot be applied. A class rather than an
-  // inline colour, so the one rule below is the only place the red is written - and it is
+  // inline color, so the one rule below is the only place the red is written - and it is
   // the same red every ERROR line in these dialogs already uses.
   function paintBad(node, bad) {
     if (!node) return;
@@ -1599,7 +1602,7 @@
 
     var foot = el('div', 'cfbe-foot');
     this.cancelBtn = button('Cancel', 'cfbe-cancel');
-    // Amber: this is the button that writes. See "one colour for a plugin wrote this".
+    // Orange: this is the button that writes. See "one color for a plugin wrote this".
     this.applyBtn = button('Apply', 'cfbe-apply');
     this.applyBtn.className = this.applyBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.undoBtn = button('Undo', 'cfbe-undo cfbe-hidden');
@@ -1756,7 +1759,7 @@
     this.closeBtn.disabled = busy;
     // Green once the pass has run: the listing describes a library this dialog has
     // already changed, and nothing is waiting on the user. Undo does not take the green
-    // away - it is an offer. Failures and a stale script stay grey: those say
+    // away - it is an offer. Failures and a stale script stay gray: those say
     // "something is wrong", not "nothing to do". The Close that `swapCancelForClose`
     // shows over a disabled Apply is not painted: an empty name box is waiting for
     // input, which is the opposite of nothing to do.
@@ -1844,7 +1847,7 @@
     var rename = this.modeSel.value === 'rename';
     var locked = this.lockedHit();
     // `!this.covered`: the scope is the listing, and a listing filtered down to no
-    // entity leaves Apply nothing to write - an amber button that writes nothing.
+    // entity leaves Apply nothing to write - an orange button that writes nothing.
     this.applyBtn.disabled = this.state !== 'listing' ||
       !String(this.nameInput.value || '').trim() || this.stale ||
       (rename && !this.renameName) || !this.covered || locked.length > 0;
@@ -1955,10 +1958,12 @@
     }).then(function () {
       return self.load();
     }).then(function () {
+      if (self.closed) return;
       self.setState('listing');
       self.renderList();
       self.summarise();
     }, function (e) {
+      if (self.closed) return;
       self.msg('ERROR', 'Reading custom fields failed: ' + (e && e.message ? e.message : String(e)));
       self.setState('listing');
       self.renderList();
@@ -2061,7 +2066,7 @@
     var self = this;
     if (!this.spec) {
       return this.specs.reduce(function (p, spec) {
-        return p.then(function () { return self.loadAll(spec); });
+        return p.then(function () { return self.closed ? null : self.loadAll(spec); });
       }, Promise.resolve());
     }
     var chunks = [];
@@ -2069,7 +2074,7 @@
       chunks.push(this.ids.slice(i, i + CHUNK_SIZE));
     }
     return chunks.reduce(function (p, chunk) {
-      return p.then(function () { return self.loadChunk(chunk); });
+      return p.then(function () { return self.closed ? null : self.loadChunk(chunk); });
     }, Promise.resolve());
   };
 
@@ -2136,6 +2141,7 @@
       return gqlRequest('query CFBE_ReadAll { ' + query + '(filter: { per_page: ' +
         READ_PAGE + ', page: ' + n + ' }) { count ' + spec.key + ' { id ' + spec.fields +
         ' custom_fields } } }', null).then(function (data) {
+        if (self.closed) return;
         var res = (data && data[query]) || {};
         var list = res[spec.key] || [];
         list.forEach(function (ent) {
@@ -2444,12 +2450,12 @@
     // DOM: the uncapped text this line exists for was never once exercised by a suite,
     // while the checks about Copy log all passed off the fallback.
     block._cfbeText = items.map(function (item) { return text.call(self, item); });
-    items.slice(0, LIST_RENDER_CAP).forEach(function (item) {
+    items.slice(0, linesDrawn()).forEach(function (item) {
       block.appendChild(build.call(self, item));
     });
-    if (items.length > LIST_RENDER_CAP) {
+    if (items.length > linesDrawn()) {
       block.appendChild(el('div', 'cfbe-entry cfbe-INFO',
-        '... and ' + plural(items.length - LIST_RENDER_CAP, 'more line') + ' not shown. ' +
+        '... and ' + plural(items.length - linesDrawn(), 'more line') + ' not shown. ' +
         'Filter to narrow the list; every one of them is still in scope.'));
     }
   };
@@ -2596,7 +2602,7 @@
     var lost = !this.renameName;
     // **Red marks a selection that cannot be applied, not an option that is unavailable.**
     // An unavailable option nobody has chosen is simply disabled, which the browser
-    // already greys - a second colour on it would be the list shouting about a mode the
+    // already grays - a second color on it would be the list shouting about a mode the
     // user is not in. So both marks carry the same condition, and picking another
     // operation takes them both off.
     if (this.modeSel._opts && this.modeSel._opts.rename) {
@@ -2747,7 +2753,7 @@
   // What each operation does, in the tooltip rather than in a legend: the four differ
   // in what they refuse, which is the part a caption cannot carry. "Add" not
   // overwriting is the one that has surprised people (§6), and Rename's condition is
-  // the one that explains why it is sometimes greyed out.
+  // the one that explains why it is sometimes grayed out.
   var MODE_TIPS = {
     add: 'Set the field only where it is missing. An entity that already carries it is ' +
       'left alone, whatever its value - "Add" never overwrites.',
@@ -3260,7 +3266,7 @@
       return this.lineText(c, s.action, s.before, s.after);
     });
     // Counted over every change, never over the rendered rows: the listing stops at
-    // LIST_RENDER_CAP and the summary is the thing that has to be right about a write
+    // linesDrawn() and the summary is the thing that has to be right about a write
     // bigger than the screen.
     var acts = tallyText(tally(this.changes, function (c) { return changeSides(c, reversed).action; }));
     if (planned) {
@@ -3290,6 +3296,7 @@
   };
 
   Run.prototype.close = function () {
+    this.closed = true;   // also what ends a read still running (`load`)
     unwireEscape(this);
     this.spin(false);
     if (this.backdrop && this.backdrop.parentNode) {
@@ -3385,8 +3392,8 @@
     var detail = el('div', 'cfbe-detail');
     this.detailEl = el('div', 'cfbe-detail-head');
     // The lock in front of the name is the switch: a press writes the Locked Custom
-    // Fields setting at once, rather than the library through Apply. Grey rather than
-    // amber, by choice: the glyph is the whole caption, and it drowned on the orange.
+    // Fields setting at once, rather than the library through Apply. Gray rather than
+    // orange, by choice: the glyph is the whole caption, and it drowned on the orange.
     this.lockBtn = button(UNLOCK_MARK, 'cfbe-lock cfbe-hidden');
     this.lockBtn.addEventListener('click', function () { self.toggleLock(); });
     this.detailEl.appendChild(this.lockBtn);
@@ -3537,7 +3544,8 @@
         (e && e.message ? e.message : String(e)) + ' Nothing will be written.');
     }).then(function () {
       return self.load();
-    }).then(function () { self.ready(); }, function (e) {
+    }).then(function () { if (!self.closed) self.ready(); }, function (e) {
+      if (self.closed) return;
       self.msg('ERROR', 'Reading the library failed: ' + (e && e.message ? e.message : String(e)));
       self.ready();
     });
@@ -3781,7 +3789,7 @@
       appendValue(row, valueText(_storeTagFields[valueKey]), _storeTagFields[valueKey]);
       this.usersEl.appendChild(row);
     }
-    users.slice(0, LIST_RENDER_CAP).forEach(function (e) {
+    users.slice(0, linesDrawn()).forEach(function (e) {
       var row = el('div', 'cfbe-entry');
       row.appendChild(textNode(e.spec.label + ' '));
       row.appendChild(entityPill(e.spec, e.id, e.display));
@@ -3789,9 +3797,9 @@
       appendValue(row, valueText(e.fields[valueKey]), e.fields[valueKey]);
       self.usersEl.appendChild(row);
     });
-    if (users.length > LIST_RENDER_CAP) {
+    if (users.length > linesDrawn()) {
       this.usersEl.appendChild(el('div', 'cfbe-entry cfbe-INFO',
-        '... and ' + plural(users.length - LIST_RENDER_CAP, 'more', 'more') + ' not shown.'));
+        '... and ' + plural(users.length - linesDrawn(), 'more', 'more') + ' not shown.'));
     }
     this.renderNames();
   };
@@ -3952,7 +3960,7 @@
     if (orig === to) {
       // Renamed back to what it is called in the library: there is nothing left to write.
       this.migration = null;
-      this.msg('INFO', 'The staged rename of "' + orig + '" is cancelled - the name is ' +
+      this.msg('INFO', 'The staged rename of "' + orig + '" is canceled - the name is ' +
         'back to what the library has.');
     } else {
       this.migration = { from: orig, to: to, entities: this.fields[from] || [], armed: true };
@@ -4531,9 +4539,17 @@
     lookupStoreTag().then(function (tag) {
       var row = settingRow(PLUGIN_ID, key);
       var node = document.getElementById(STORE_LINK_ID);
+      var glyph = document.getElementById(STORE_LINK_ID + '-glyph');
       if (!row || !tag) {
         if (node && node.parentNode) node.parentNode.removeChild(node);
+        if (glyph && glyph.parentNode) glyph.parentNode.removeChild(glyph);
         return;
+      }
+      // The tag icon before the 🔗, as every box naming a tag draws it (Core's `tagGlyph`); a Core
+      // without it leaves the link alone.
+      if (!glyph && typeof C.tagGlyph === 'function') {
+        glyph = C.tagGlyph();
+        glyph.id = STORE_LINK_ID + '-glyph';
       }
       if (!node) {
         node = el('a', 'cfbe-tagicon', STORE_LINK_MARK);
@@ -4556,6 +4572,7 @@
       // link, so a re-render dropping it costs a second.
       var host = byClass(row, 'value') || row;
       if (node.parentNode !== host) host.appendChild(node);
+      if (glyph && glyph.nextSibling !== node) host.insertBefore(glyph, node);
     });
   }
 
@@ -4727,8 +4744,8 @@
         var input = within('custom-fields-value', 'input');
         var remove = row.querySelector('.custom-fields-remove');
         if (input && (on || input._cfbeLocked)) {
-          // Bootstrap paints a read-only box light grey, a white box on Stash's dark form:
-          // it keeps the colour it had, with a cursor saying it cannot be typed in.
+          // Bootstrap paints a read-only box light gray, a white box on Stash's dark form:
+          // it keeps the color it had, with a cursor saying it cannot be typed in.
           if (on && !input._cfbeLocked && window.getComputedStyle) input._cfbeBg = window.getComputedStyle(input).backgroundColor;
           input.style.backgroundColor = on ? input._cfbeBg || '' : '';
           input.style.cursor = on ? 'not-allowed' : '';
@@ -4865,10 +4882,10 @@
 
   // Stash renders a field's name in two places, and neither is the bare name as text:
   //
-  //   detail panel  `<span class="detail-item-title" title="Colour">Colour:</span>`
+  //   detail panel  `<span class="detail-item-title" title="Color">Color:</span>`
   //                 - `DetailItem` appends the colon when `fullWidth` is set, which
   //                   `CustomFields` sets for every field.
-  //   edit panel    `<label title="Colour">Colour</label>`, inside the collapsed
+  //   edit panel    `<label title="Color">Color</label>`, inside the collapsed
   //                 "Custom Fields" section. Only a *new* row is an input, and a field
   //                 with no name yet has no description to show.
   //
@@ -5039,7 +5056,16 @@
   //    there is no user and no dialog. This one runs from a caller's own Proceed, where
   //    a silent deferral would report a write that has not happened. A store that
   //    cannot be written rejects, with the reason in the message.
+  // One at a time: each call reads the store, patches it and writes the whole of it back, so two at
+  // once would each write over the other - two descriptions reported written, one in the library.
+  // Siblings send them in parallel batches (Entity Name Maintainer, De-Spicer).
+  var _descQueue = Promise.resolve();
   function apiUpdateDescriptions(patch) {
+    var run = _descQueue.then(function () { return updateDescriptionsNow(patch); });
+    _descQueue = run.then(null, function () {});
+    return run;
+  }
+  function updateDescriptionsNow(patch) {
     if (!patch || typeof patch !== 'object') {
       return Promise.reject(new Error('updateDescriptions needs an object of name -> description.'));
     }

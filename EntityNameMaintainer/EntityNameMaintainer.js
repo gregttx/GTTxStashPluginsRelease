@@ -36,11 +36,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[enm] ᝯㄝₓ Entity Name Maintainer cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[enm] ᝯㄝₓ Entity Name Maintainer cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -74,7 +74,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about which mutation its edit form actually posts.
-  var PLUGIN_VERSION = '3.1.8';
+  var PLUGIN_VERSION = '3.3.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -92,8 +92,8 @@
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/EntityNameMaintainer/README.md';
   var STYLE_ID       = 'enm-style';
 
-  // Amber for the buttons that write, and for the filter toggles while they are on.
-  // See "one colour for a plugin wrote this" in the repo-root AGENTS.md.
+  // Orange for the buttons that write, and for the filter toggles while they are on.
+  // See "one color for a plugin wrote this" in the repo-root AGENTS.md.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
 
   var READ_PAGE    = 500;    // entities per page of the scan
@@ -369,7 +369,7 @@
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
     // `.tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
-    // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
+    // step Stash's own page uses; every dim gray in these dialogs was chosen against it.
     '.enm-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
     '.enm-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
@@ -408,7 +408,7 @@
     'white-space:nowrap;cursor:pointer;margin:0;}' +
     // A checkbox carries browser margins that put it off the row's centre line.
     '.enm-check input{margin:0;}' +
-    // Amber: the one thing on a hit line that asks for a second look before ticking.
+    // The highlight: the one thing on a hit line that asks for a second look before ticking.
     '.enm-casediff{color:var(--gttx-highlight,#ffc107);white-space:nowrap;}' +
     // `.enm-textbox` rather than `.enm-input`: `CustomFieldsBulkEditor` already defines
     // `.cfbe-input`, and a class name two plugins share has to mean the same thing in
@@ -458,7 +458,7 @@
     '.enm-attr{color:var(--gttx-muted,#a7b6c2);}' +
     // The context string breaks mid-word if it has to.
     '.enm-ctx{overflow-wrap:anywhere;word-break:break-word;}' +
-    // The occurrence itself, inside its surroundings. Green rather than amber: it marks
+    // The occurrence itself, inside its surroundings. Green rather than the highlight: it marks
     // what is there now, not what is about to change.
     '.enm-mark{background:var(--gttx-match-bg,#3f6b46);border-radius:2px;padding:0 .1rem;}' +
     '.enm-was{color:var(--gttx-dim,#7d8f9c);}' +
@@ -805,7 +805,7 @@
     cs.appendChild(this.caseBox);
     cs.appendChild(el('span', null, 'Case-sensitive'));
     cs.title = 'Match the old name exactly as written, capitals included, and scan again. ' +
-      'Off, "jane doe" is listed for "Jane Doe" too, marked case differs and unticked. ' +
+      'Off: "jane doe" is listed for "Jane Doe" too, marked case differs and unticked. ' +
       'It starts as ᝯㄝₓ Core\'s Case-Sensitive Matching setting says; changing it here ' +
       'lasts for this dialog and leaves the setting as it is.';
     names.appendChild(cs);
@@ -829,8 +829,8 @@
     // is no longer looking at.
     this.goBtn = button('Proceed', 'enm-go');
     this.goBtn.className = this.goBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    // Amber, where every sibling's Cancel is grey: theirs abandon a plan, and this one
-    // writes - it puts the entity's own name back. The colour rule is about which
+    // Orange, where every sibling's Cancel is gray: theirs abandon a plan, and this one
+    // writes - it puts the entity's own name back. The color rule is about which
     // controls change the library, not about which word is on them.
     this.cancelBtn = button('Cancel', 'enm-cancel');
     this.cancelBtn.className = this.cancelBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
@@ -849,7 +849,7 @@
         'shown and what will be replaced; it never changes a tick.';
     });
 
-    // Grey: they write nothing, and set only the lines the filters show.
+    // Gray: they write nothing, and set only the lines the filters show.
     this.unselAllBtn = button('Unselect All', 'enm-unselall');
     this.unselAllBtn.title = 'Untick every line shown in the listing.';
     this.selAllBtn = button('Select All', 'enm-selall');
@@ -913,7 +913,8 @@
     // through here, which is the same reason the cursor hangs off it.
     if (busy) this.disarmClose();
     this.cancelBtn.disabled = busy;
-    this.closeBtn.disabled = busy;
+    // A scan can always be left: closing ends it (`closed`). A write cannot be walked away from halfway.
+    this.closeBtn.disabled = busy && state !== 'scanning';
     this.copyBtn.disabled = false;
     this.newInput.disabled = state !== 'listing';
     this.syncFilterButtons();
@@ -972,9 +973,9 @@
   };
 
   // The repo's green Close - nothing left to write, Undo or not - with this dialog's
-  // own predicate under it: grey while a listing is still unacted on, which is the
+  // own predicate under it: gray while a listing is still unacted on, which is the
   // state the confirm exists for, so an armed Close is never green, without that
-  // needing to be a condition of its own. Not the repo's amber/teal pair: neither says
+  // needing to be a condition of its own. Not the repo's orange/blue pair: neither says
   // "finished", and Close writes nothing either way.
   //
   // Painted from `setState` alone, like the cursor and the disabled flags beside it:
@@ -1125,6 +1126,7 @@
     }).then(function () {
       return self.scanDescriptions();
     }).then(function () {
+      if (self.closed) return;
       self.noteFolds();
       self.setState('listing');
       self.buildFilters();
@@ -1139,6 +1141,7 @@
       }
       self.show(self.backdrop, true);
     }, function (e) {
+      if (self.closed) return;
       self.msg('ERROR', 'The scan failed: ' + (e && e.message ? e.message : String(e)));
       self.setState('listing');
       self.buildFilters();
@@ -1159,7 +1162,7 @@
     this.types = types.slice();
 
     function nextType(i) {
-      if (i >= types.length || self.stopped) return Promise.resolve();
+      if (i >= types.length || self.stopped || self.closed) return Promise.resolve();
       var spec = ENTITIES[types[i]];
       var fields = shapes[types[i]] || [];
       if (!fields.length) {
@@ -1175,9 +1178,10 @@
       self.loadingWhat = spec.plural;
 
       function page(p) {
-        if (self.stopped) return Promise.resolve();
+        if (self.stopped || self.closed) return Promise.resolve();
         return gqlRequest(query, { f: { page: p, per_page: READ_PAGE, sort: 'id', direction: 'ASC' } })
           .then(function (data) {
+            if (self.closed) return;
             var block = data[spec.find] || {};
             var rows = block[spec.list] || [];
             self.scannedPer[spec.key] = (self.scannedPer[spec.key] || 0) + rows.length;
@@ -1222,7 +1226,7 @@
   // the worse trade.
   Run.prototype.scanDescriptions = function () {
     var self = this;
-    if (this.stopped) return Promise.resolve();
+    if (this.stopped || this.closed) return Promise.resolve();
     var api = cfbeApi();
     if (!api) return Promise.resolve();
     this.loadingWhat = 'custom field descriptions';
@@ -1607,6 +1611,13 @@
     this.apply();
   };
 
+  // A hit's field in a plan: custom-field key hits and value hits both live in
+  // `custom_fields`, and each kind keeps its own slots, so both are written in one update.
+  function planField(h) {
+    return h.kind === 'cfname' || h.kind === 'cfvalue' ? h.field + '#' + h.kind : h.field;
+  }
+  function slotOf(h) { return planField(h) + '\u0000' + (h.slot == null ? '' : String(h.slot)); }
+
   // One update per entity, carrying every field that entity has a ticked hit in - so an
   // entity with three changed fields is one write, and the previous values of exactly
   // those three fields are what Undo puts back.
@@ -1620,7 +1631,7 @@
       var e = byEntity[key] || (byEntity[key] = {
         typeKey: h.typeKey, entId: h.entId, entName: h.entName, fields: {}, hits: [],
       });
-      var f = e.fields[h.field] || (e.fields[h.field] = { kind: h.kind, slots: {} });
+      var f = e.fields[planField(h)] || (e.fields[planField(h)] = { kind: h.kind, slots: {} });
       var slot = h.slot == null ? '' : String(h.slot);
       (f.slots[slot] || (f.slots[slot] = { positions: [] })).positions.push(h.pos);
       e.hits.push(h);
@@ -1641,10 +1652,14 @@
     this.msg('INFO', 'Replacing "' + this.oldName + '" with "' + p.to + '" in ' +
       plural(this.enabledHits().length, 'place') + ' across ' +
       plural(p.entities.length, 'entity', 'entities') + '.');
-    var lease = C.lease(PLUGIN_ID, 'Entity name replacement');
+    // On the run, renewed before every batch (`writeAll`): a lease lapses after five minutes, and a
+    // large replacement on a slow server runs longer, its siblings then reacting to its writes.
+    var lease = this.lease = C.lease(PLUGIN_ID, 'Entity name replacement');
+    this.movedKeys = {};
     // Read again at the press: a lock added since the scan still holds.
     fieldLocks().then(function (locks) { self.locks = locks; })
       .then(function () { return self.writeAll(p, function (ent) { return self.buildUpdate(p, ent); }); })
+      .then(function () { return self.copyDescriptions(); })
       .then(function () {
         lease.release();
         self.setState('listing');
@@ -1658,6 +1673,36 @@
         self.renderHits();
         self.msg('ERROR', 'The replacement stopped: ' + (e && e.message ? e.message : String(e)));
       });
+  };
+
+  // A custom field this replacement renamed takes its description along - copied, not moved:
+  // ᝯㄝₓ Custom Fields Bulk Editor files it under the new name too (`describeField`, which never
+  // overwrites one already there), and the old name keeps its own. An entity still holding the
+  // old key, a rename left half-done, or an Undo, all find the old description where it was;
+  // one nothing uses any more is what that plugin's Prune orphans clears. Never fails the run.
+  Run.prototype.copyDescriptions = function () {
+    var self = this, moved = this.movedKeys || {}, olds = Object.keys(moved);
+    var api = cfbeApi();
+    if (!olds.length || !api || typeof api.describeField !== 'function') return Promise.resolve();
+    return api.descriptions().then(function (live) {
+      return olds.reduce(function (chain, old) {
+        var text = live[old];
+        if (typeof text !== 'string' || !text) return chain;
+        return chain.then(function () { return api.describeField(moved[old], text); }).then(function (res) {
+          if (res === 'added') {
+            self.msg('INFO', 'The description of custom field "' + old + '" is copied to "' + moved[old] +
+              '"; the old one stays for whatever still uses that name.');
+          } else if (res === 'queued') {
+            // Queued in the page: its store is not writable now, or the write failed.
+            self.msg('INFO', 'The description of custom field "' + old + '" will be filed under "' +
+              moved[old] + '" when ' + CFBE_NAME + ' can write its store; the old one stays.');
+          }
+        });
+      }, Promise.resolve());
+    }).then(null, function (e) {
+      self.msg('WARN', 'The descriptions of the renamed custom fields could not be copied: ' +
+        (e && e.message ? e.message : String(e)));
+    });
   };
 
   // Re-reads the entity before writing it, rather than editing the copy the scan
@@ -1676,11 +1721,14 @@
       if (!live) throw new Error(spec.label + ' ' + ent.entId + ' no longer exists.');
       var input = { id: ent.entId };
       var before = { id: ent.entId };
-      var partial = {}, remove = [], oldPartial = {}, oldRemove = [];
-      var touched = 0;
+      var partial = {}, remove = [], oldPartial = {}, oldRemove = [], keys = {};
+      var touched = 0, written = {}, cfKinds = {};
+      // Only the hits of a slot that is written are done; any other stays to be offered again.
+      function wrote(name, slot) { written[name + '\u0000' + slot] = true; }
 
       Object.keys(ent.fields).forEach(function (name) {
         var f = ent.fields[name];
+        if (f.kind === 'cfname' || f.kind === 'cfvalue') { cfKinds[f.kind] = name; return; }
         if (f.kind === 'string') {
           var cur = live[name];
           var pos = f.slots[''].positions;
@@ -1692,6 +1740,7 @@
           before[name] = cur;
           input[name] = replaceAt(cur, pos, p.len, p.to);
           touched += pos.length;
+          wrote(name, '');
           return;
         }
         if (f.kind === 'list') {
@@ -1705,7 +1754,6 @@
               return;
             }
             arr[i] = replaceAt(s, f.slots[idx].positions, p.len, p.to);
-            touched += f.slots[idx].positions.length;
           });
           if (!ok) {
             self.msg('WARN', spec.label + ' ' + ent.entId + ': ' + name + ' has changed ' +
@@ -1714,47 +1762,75 @@
           }
           before[name] = (live[name] || []).slice();
           input[name] = arr;
+          Object.keys(f.slots).forEach(function (idx) {
+            touched += f.slots[idx].positions.length;
+            wrote(name, idx);
+          });
           return;
         }
-        // The custom-field map. Structural throughout: a key is moved by writing the new
-        // one and removing the old, and a value by writing the key again - so nothing
-        // here edits JSON as text and a map cannot come out malformed.
-        var cf = live.custom_fields || {};
-        Object.keys(f.slots).forEach(function (key) {
-          var positions = f.slots[key].positions;
-          if (f.kind === 'cfname') {
-            if (!hasOwn(cf, key) || !self.stillThere(key, positions, p.len)) return;
-            var moved = replaceAt(key, positions, p.len, p.to);
-            if (moved === key) return;
-            if (self.fieldLocked(key) || self.fieldLocked(moved)) {
-              self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
-                '" is locked, or would become the locked "' + moved + '". Left alone.');
-              return;
-            }
-            if (hasOwn(cf, moved)) {
-              self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
-                '" would become "' + moved + '", which it already has. Left alone.');
-              return;
-            }
-            partial[moved] = cf[key];
-            remove.push(key);
-            oldPartial[key] = cf[key];
-            oldRemove.push(moved);
-            touched += positions.length;
-            return;
-          }
+      });
+      // The custom-field map. Structural throughout: a key is moved by writing the new
+      // one and removing the old, and a value by writing the key again - so nothing
+      // here edits JSON as text and a map cannot come out malformed. Values first, so a
+      // key both renamed and edited moves with its new value.
+      var cf = live.custom_fields || {}, vals = {};
+      var cfStale = function (key) {
+        self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key + '" has changed ' +
+          'since the scan and is left alone.');
+      };
+      var vf = cfKinds.cfvalue && ent.fields[cfKinds.cfvalue];
+      if (vf) {
+        Object.keys(vf.slots).forEach(function (key) {
+          var positions = vf.slots[key].positions;
           var val = cf[key];
           if (self.fieldLocked(key)) {
             self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
               '" is locked. Its value is left alone.');
             return;
           }
-          if (typeof val !== 'string' || !self.stillThere(val, positions, p.len)) return;
-          partial[key] = replaceAt(val, positions, p.len, p.to);
+          if (typeof val !== 'string' || !self.stillThere(val, positions, p.len)) { cfStale(key); return; }
+          vals[key] = replaceAt(val, positions, p.len, p.to);
           oldPartial[key] = val;
           touched += positions.length;
+          wrote(cfKinds.cfvalue, key);
         });
-      });
+      }
+      var nf = cfKinds.cfname && ent.fields[cfKinds.cfname];
+      if (nf) {
+        Object.keys(nf.slots).forEach(function (key) {
+          var positions = nf.slots[key].positions;
+          if (!hasOwn(cf, key) || !self.stillThere(key, positions, p.len)) { cfStale(key); return; }
+          var moved = replaceAt(key, positions, p.len, p.to);
+          if (moved === key) return;
+          if (self.fieldLocked(key) || self.fieldLocked(moved)) {
+            self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
+              '" is locked, or would become the locked "' + moved + '". Left alone.');
+            return;
+          }
+          if (hasOwn(cf, moved)) {
+            self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
+              '" would become "' + moved + '", which it already has. Left alone.');
+            return;
+          }
+          // Two keys renamed to one in this write - "Foo_x" and "foo_x" to "Bar_x" when the
+          // case is ignored: the second would overwrite the first's value.
+          if (hasOwn(partial, moved)) {
+            self.msg('WARN', spec.label + ' ' + ent.entId + ': custom field "' + key +
+              '" would become "' + moved + '", which another field is renamed to in the same ' +
+              'write. Left alone.');
+            return;
+          }
+          partial[moved] = hasOwn(vals, key) ? vals[key] : cf[key];
+          delete vals[key];
+          keys[key] = moved;
+          remove.push(key);
+          oldPartial[key] = cf[key];
+          oldRemove.push(moved);
+          touched += positions.length;
+          wrote(cfKinds.cfname, key);
+        });
+      }
+      Object.keys(vals).forEach(function (key) { partial[key] = vals[key]; });
 
       if (Object.keys(partial).length || remove.length) {
         input.custom_fields = { partial: partial };
@@ -1763,7 +1839,8 @@
         if (oldRemove.length) before.custom_fields.remove = oldRemove;
       }
       if (!touched) return null;
-      return { spec: spec, input: input, before: before, count: touched, hits: ent.hits };
+      return { spec: spec, input: input, before: before, count: touched, keys: keys,
+        hits: ent.hits.filter(function (h) { return hasOwn(written, slotOf(h)); }) };
     });
   };
 
@@ -1866,6 +1943,7 @@
         pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         return Promise.resolve();
       }
+      if (self.lease) self.lease.renew();
       var slice = list.slice(i, i + WRITE_CHUNK);
       return Promise.all(slice.map(function (ent) {
         var what = self.entityLabel(ent.typeKey, ent.entId, ent.entName);
@@ -1873,6 +1951,7 @@
           if (!job) return null;
           return sendJob(job, job.input, 'ENM_Write').then(function () {
             self.written += job.count;
+            for (var k in job.keys || {}) if (hasOwn(job.keys, k)) self.movedKeys[k] = job.keys[k];
             // The undo entry carries the writer as well as the values, so replaying it
             // does not have to work out again who owns the thing being put back.
             self.changes.push({ spec: job.spec, input: job.before, write: job.write,
@@ -1914,6 +1993,7 @@
         pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
         return Promise.resolve();
       }
+      lease.renew();
       var job = jobs[i];
       return sendJob(job, job.input, 'ENM_Undo')
         .then(function () {
@@ -1964,7 +2044,7 @@
       // So the write's own error is carried along and only used if the read agrees.
       return sendJob({ spec: self.spec }, input, 'ENM_Cancel')
         .then(function () {
-          var pass = journalPass('Rename cancelled', true);
+          var pass = journalPass('Rename canceled', true);
           var back = { id: self.id };
           back[self.spec.nameField] = self.newName;
           journalJob(pass, { spec: self.spec }, self.oldName, input, back);
@@ -2005,9 +2085,11 @@
   // `closeBtn` and never `cancelBtn`, which is where this differs from Core's default pick:
   // the siblings' Cancel abandons a plan, and this one writes. A key press must not reach a
   // control that changes the library.
+  // Not while the dialog is hidden: a handed-over rename scans unseen, and an Escape meant for
+  // Stash's own edit dialog must not end it.
   function escapeButton(run) {
     var b = run.closeBtn;
-    return b && !b.disabled && !hasClass(b, 'enm-hidden') ? b : null;
+    return b && !b.disabled && !hasClass(b, 'enm-hidden') && !hasClass(run.backdrop, 'enm-hidden') ? b : null;
   }
 
   // ── Closing throws away a listing that cannot be got back ─────────────────
@@ -2026,6 +2108,14 @@
   // renamed entity's save is read as it was, so its own edits still are not listed.
   Run.prototype.rescan = function () {
     if (this.state !== 'listing' || this.changes.length) return;
+    // The renamed entity read live from here on, not as the save left it: a mention typed on it by
+    // hand since, or taken off, is what a rescan is for. Its own name and its batch stay excluded.
+    var pend = this.origin.pending;
+    if (pend && (pend.input || pend.stale)) {
+      var kept = {};
+      for (var k in pend) if (hasOwn(pend, k) && k !== 'input' && k !== 'stale') kept[k] = pend[k];
+      this.origin.pending = kept;
+    }
     this.hits = [];
     this.typeOn = {};
     this.attrOn = {};
@@ -2076,6 +2166,7 @@
   };
 
   Run.prototype.close = function () {
+    this.closed = true;   // also what ends a scan still running
     unwireEscape(this);
     if (this._armTimer) clearInterval(this._armTimer);
     this._armTimer = null;

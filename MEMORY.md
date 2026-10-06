@@ -8,35 +8,41 @@ MB of JavaScript heap above what the page held before the task opened, read afte
 
 | Plugin | Task | scan | plan | write | undo | closed | scan time | write time |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| SceneFilenameManager 2.1.10 | Archive Original Filenames | 114.1 | 114.1 | 160.7 | 157.4 | 0.8 | 2.5 s | 3.0 s |
-| SceneFilenameManager 2.1.10 | Restore Original Filenames | 56.2 | 56.2 | 82.4 | 82.4 | 1.1 | 1.6 s | 1.4 s |
-| SceneFilenameManager 2.1.10 | Rename Files From Metadata | 194.8 | 194.8 | 259.9 | 253.7 | 1.4 | 11.2 s | 6.4 s |
-| SceneVariants 3.1.13 | Migrate Variant Stash-IDs | 58.6 | 58.8 | 91.9 | 91.1 | 1.4 | 2.6 s | 6.4 s |
-| SceneVariants 3.1.13 | Flag Variants | 46.2 | 46.3 | 85.4 | 82.6 | 1.5 | 3.6 s | 8.3 s |
-| SceneVariants 3.1.13 | Review Variant Sets | 1951.2 | 1951.2 | - | - | 1.5 | 67.5 s | - |
-| SceneVariants 3.1.13 | Rename Variants | 636.6 | 629.6 | 667.4 | 666.7 | 1.7 | 50.9 s | 5.5 s |
-| CustomFieldsBulkEditor 4.0.15 | Edit Custom Fields Across the Whole Library | 551.8 | 551.7 | 1150.2 | 1150.2 | 1.2 | 26.4 s | 51.4 s |
-| CustomFieldsBulkEditor 4.0.15 | Manage Custom Field Descriptions and Locks | 213.8 | 213.9 | 311.6 | 311.6 | 0.8 | 5.1 s | 12.3 s |
-| FindEntitiesByTextContent 4.0.13 | Find & Replace Entities by Text Content | 785.1 | 785.0 | 1751.6 | 1540.6 | 1.1 | 59.7 s | 328.6 s |
-| NormalizeParentTags 6.1.12 | Normalize Parent Tags | 3813.0 | 3812.8 | 4184.8 | 4079.1 | -0.2 | 420.7 s | 696.0 s |
-| NormalizeParentTags 6.1.12 | Auto-Mode Settings | 0.7 | 0.8 | - | - | 0.7 | 0.2 s | - |
-| NormalizeParentTags 6.1.12 | Show Tag Hierarchy | 15.2 | 15.2 | - | - | 0.5 | 0.4 s | - |
-| MergePerformerTagsToScenes 5.1.12 | Merge Performer Tags into All Their Scenes | 270.5 | 268.7 | 292.2 | 283.3 | 0.8 | 23.4 s | 23.4 s |
-| PropagateTagsAndPerformers 6.1.13 | Propagate All | 1782.0 | 1782.0 | 1824.4 | 1807.3 | 1.0 | 163.7 s | 128.8 s |
+| SceneFilenameManager 2.4.0 | Archive Original Filenames | 116.2 | 116.2 | 161.4 | 161.3 | 0.6 | 2.8 s | 3.5 s |
+| SceneFilenameManager 2.4.0 | Restore Original Filenames | 56.3 | 56.3 | 82.5 | 82.5 | 1.1 | 1.7 s | 1.6 s |
+| SceneFilenameManager 2.4.0 | Rename Files From Metadata | 194.8 | 194.8 | 257.6 | 253.8 | 1.3 | 13.3 s | 5.7 s |
+| SceneVariants 3.2.0 | Migrate Variant Stash-IDs | 58.5 | 58.5 | 93.4 | 92.3 | 1.4 | 3.0 s | 7.7 s |
+| SceneVariants 3.2.0 | Flag Variants | 46.1 | 46.1 | 88.4 | 84.1 | 1.3 | 3.9 s | 9.2 s |
+| SceneVariants 3.2.0 | Review Variant Sets | 309.5 | 302.5 | - | - | 1.4 | 51.1 s | - |
+| SceneVariants 3.2.0 | Rename Variants | 637.0 | 630.0 | 670.3 | 667.7 | 1.7 | 51.9 s | 5.3 s |
+| CustomFieldsBulkEditor 4.1.0 | Edit Custom Fields Across the Whole Library | 551.7 | 551.7 | 1150.6 | 1150.6 | 1.2 | 25.8 s | 51.2 s |
+| CustomFieldsBulkEditor 4.1.0 | Manage Custom Field Descriptions and Locks | 213.8 | 213.8 | 310.5 | 310.5 | 0.8 | 5.4 s | 11.9 s |
+| FindEntitiesByTextContent 4.1.0 | Find & Replace Entities by Text Content | 785.0 | 785.0 | 1751.5 | 1540.1 | 1.1 | 65.7 s | 360.4 s |
+| NormalizeParentTags 6.2.0 | Normalize Parent Tags | 720.0 | 720.0 | 1089.8 | 985.1 | -0.2 | 372.0 s | 540.7 s |
+| NormalizeParentTags 6.2.0 | Auto-Mode Settings | 0.8 | 0.7 | - | - | 0.7 | 0.2 s | - |
+| NormalizeParentTags 6.2.0 | Show Tag Hierarchy | 15.2 | 15.2 | - | - | 0.6 | 0.4 s | - |
+| MergePerformerTagsToScenes 5.2.0 | Merge Performer Tags into All Their Scenes | 270.0 | 268.6 | 294.4 | 282.8 | 0.9 | 23.4 s | 22.8 s |
+| PropagateTagsAndPerformers 6.4.0 | Propagate All | 984.2 | 820.8 | 863.2 | 845.5 | 1.0 | 157.8 s | 127.0 s |
 
 ## Against the baseline
 
 No marker moved by more than 15% or 8 MB, and `closed` by no more than 1 MB, or 2 MB with a soak that did not grow. **Pass.**
+
+`closed` grew by more than 1 MB, and a soak of 5 runs at a scale of 0.01 showed it does not grow from run to run - a fixed cost or a compaction, not a leak:
+
+| Task | Baseline | Now | Change |
+|---|--:|--:|---|
+| CustomFieldsBulkEditor / Edit Custom Fields Across the Whole Library | 0 | 1.2 | +1.2 MB, soak 1.03, 1.15, 1.21, 1.22, 1.27 MB |
 
 ## What each task planned and wrote
 
 - **SceneFilenameManager / Archive Original Filenames** - Every scene; half have no archived name. Scanned 100000 of 100000 scenes. 100000 scenes to archive. showing the last 1000 of 110001 lines. Then: Scanned 100000 of 100000 scenes. 100000 scenes to archive. 100000 written. showing the last 1000 of 210001 lines. (1204 requests)
 - **SceneFilenameManager / Restore Original Filenames** - Every scene whose archived name differs from its file's. Scanned 100000 of 100000 scenes. 50000 files to rename. showing the last 1000 of 60001 lines. Then: Scanned 100000 of 100000 scenes. 50000 files to rename. 50000 written. showing the last 1000 of 110001 lines. (704 requests)
 - **SceneFilenameManager / Rename Files From Metadata** - The default template, which has an index, so every file of every scene. Scanned 100000 of 100000 scenes. 110000 files to rename. showing the last 1000 of 120005 lines. Then: Scanned 100000 of 100000 scenes. 110000 files to rename. 110000 written. showing the last 1000 of 230005 lines. (2106 requests)
-- **SceneVariants / Migrate Variant Stash-IDs** - Every scene carries a duration tag; four in five have a stash-id, shared in threes. Scanned 100000 of 100000 tagged scenes. 80000 scenes to migrate. showing the last 1000 of 80002 lines. Then: Scanned 100000 of 100000 tagged scenes. 80000 scenes to migrate. 80000 scenes written. showing the last 1000 of 160003 lines. (80207 requests)
-- **SceneVariants / Flag Variants** - Variant triples across the library, none flagged yet. Scanned 100000 scenes. 99999 scenes to flag or unflag. showing the last 1000 of 100002 lines. Then: Scanned 100000 scenes. 99999 scenes to flag or unflag. 99999 scenes written. showing the last 1000 of 200003 lines. (100208 requests)
-- **SceneVariants / Review Variant Sets** - Every variant set listed; no library-wide write exists. Scanned 100000 scenes. 33333 variant sets found. 0 changes listed. (408 requests)
-- **SceneVariants / Rename Variants** - Renumber by duration on, every proposal selected. Scanned 100000 scenes. 33333 variant sets found. 57692 renames proposed. showing the last 1000 of 62182 lines. Then: Scanned 100000 scenes. 33333 variant sets found. 57692 renames proposed. 57692 renames written. showing the last 1000 of 119875 lines. (58100 requests)
+- **SceneVariants / Migrate Variant Stash-IDs** - Every scene carries a duration tag; four in five have a stash-id, shared in threes. Scanned 100000 of 100000 tagged scenes. 80000 scenes to migrate. showing the last 1000 of 80002 lines. Then: Scanned 100000 of 100000 tagged scenes. 80000 scenes to migrate. 80000 scenes written. showing the last 1000 of 160003 lines. (80208 requests)
+- **SceneVariants / Flag Variants** - Variant triples across the library, none flagged yet. Scanned 100000 scenes. 99999 scenes to flag or unflag. showing the last 1000 of 100002 lines. Then: Scanned 100000 scenes. 99999 scenes to flag or unflag. 99999 scenes written. showing the last 1000 of 200003 lines. (100209 requests)
+- **SceneVariants / Review Variant Sets** - Every variant set listed; no library-wide write exists. Scanned 100000 scenes. 33333 variant sets found. 0 changes listed. (409 requests)
+- **SceneVariants / Rename Variants** - Renumber by duration on, every proposal selected. Scanned 100000 scenes. 33333 variant sets found. 57692 renames proposed. showing the last 1000 of 62182 lines. Then: Scanned 100000 scenes. 33333 variant sets found. 57692 renames proposed. 57692 renames written. showing the last 1000 of 119875 lines. (58101 requests)
 - **CustomFieldsBulkEditor / Edit Custom Fields Across the Whole Library** - Overwrite one field with a new value on every entity of all seven types. 1128300 entities read, 205000 with custom fields, 275000 fields in total, 1198300 lines listed. Apply covers 1128300 entities. Then: Applied. 1128300 entity changes written (13799 requests)
 - **CustomFieldsBulkEditor / Manage Custom Field Descriptions and Locks** - One field, held by every scene and performer and one image in ten, renamed. 4 custom fields, 1 described, 1 unsaved change Then: 4 custom fields, 1 described, no unsaved changes - last Apply written (14438 requests)
 - **FindEntitiesByTextContent / Find & Replace Entities by Text Content** - All seven types, searching "e" - in nearly every text - and replacing every match. Scanned 1128300 of 1128300 entities · 881274 matches · 836 on screen · finished Scenes 100000/100000 · Images 1000000/1000000 · Galleries 20000/20000 · Performe (901169 requests)
@@ -44,10 +50,10 @@ No marker moved by more than 15% or 8 MB, and `closed` by no more than 1 MB, or 
 - **NormalizeParentTags / Auto-Mode Settings** - The dialog opened; it reads nothing. no counters (2 requests)
 - **NormalizeParentTags / Show Tag Hierarchy** - Every tag expanded, with its counts loaded. 2000 tags, 20 roots. 2000 rows shown - click a tag for what Prune and Roll-Up would do with it. (4 requests)
 - **MergePerformerTagsToScenes / Merge Performer Tags into All Their Scenes** - Every performer's tags onto every scene of theirs. Review complete. 100000 scenes to update, 1192070 tag assignments to add. Nothing has been written. - showing the last 1000 of 300004 lines Then: Finished. 100000 scenes updated, 1192070 tag assignments added - showing the last 1000 of 400008 lines (100516 requests)
-- **PropagateTagsAndPerformers / Propagate All** - Every path, one direction of each reversible pair, union rather than common. Review complete. 221000 entity changes planned, 2724690 log lines - showing the last 1000 of 2724690 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 2000 Then: Finished. 221000 entity changes applied - showing the last 1000 of 5449369 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 20000 Scenes 1: 100000 / 10000 (145195 requests)
+- **PropagateTagsAndPerformers / Propagate All** - Every path, one direction of each reversible pair, union rather than common. Review complete. 221000 entity changes planned, 2724690 log lines - showing the last 1000 of 2724690 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 2000 Then: Finished. 221000 entity changes applied - showing the last 1000 of 5449369 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 20000 Scenes 1: 100000 / 10000 (145194 requests)
 
 ## What the synthetic server could not answer
 
-Answered with null, or matching everything; where a task depends on one, its numbers understate what a real Stash would cost: `field studio.organized`.
+Answered with null, or matching everything; where a task depends on one, its numbers understate what a real Stash would cost: `query findSavedFilters`, `field studio.organized`.
 
-<sub>Fingerprint 8f46cadc7fe8be07 (the plugins, the harness and this tool). Generated by `node .tools/memory-watermark.js`.</sub>
+<sub>Fingerprint a40ce4aa16823c6e (the plugins, the harness and this tool). Generated by `node .tools/memory-watermark.js`.</sub>

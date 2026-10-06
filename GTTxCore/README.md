@@ -34,12 +34,12 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 
 ## What you actually see
 
-Fourteen things: five are off until you turn them on, two counters on the cards are on and seven are
-colors — and [Undo History](#undo-history), which is on.
+Sixteen things: six are off until you turn them on, two counters on the cards are on, one says how
+many lines a dialog draws at once and seven are colors — and [Undo History](#undo-history), which is on.
 
-Those fourteen are one dialog: the first row of this plugin's settings, **UI Customizations**, says
+Those sixteen are one dialog: the first row of this plugin's settings, **UI Customizations**, says
 what they are now, and its **UI Customizations...** button opens them. **Set All to Default**, at
-the bottom right of that dialog, puts all fourteen back to their defaults in their boxes; **Save**
+the bottom right of that dialog, puts all sixteen back to their defaults in their boxes; **Save**
 writes them, and **Close** leaves the settings as they were, so opening the dialog again brings the
 stored ones back. Below that
 row are the row for [Undo History](#undo-history)'s settings, **Maximum Log Lines Kept**
@@ -52,7 +52,7 @@ Stash's [<abbr title="Stash's Scene Tagger, which matches scenes against a stash
 in the same weight and color as everything beside it — and it is the one line on that card that
 decides whether a match is the right file.
 
-Turn on **Emphasise a Tagger Duration Mismatch** and that sentence is drawn:
+Turn on **Emphasize a Tagger Duration Mismatch** and that sentence is drawn:
 
 | Gap | How it looks |
 |---|---|
@@ -98,6 +98,15 @@ Stash's own links do. It reaches every ᝯㄝₓ plugin at once — this is the 
 kept — and takes effect on the next link drawn rather than on the next page load.
 
 It is off by default, which is a new tab.
+
+### Folding the plugins' settings
+
+Turn on **Fold Every ᝯㄝₓ Plugin's Settings** and every ᝯㄝₓ plugin's group on **Settings → Plugins**
+that has settings folds them under a chevron, folded to start; a click on the heading opens and
+shuts it, as Stash's own folding groups do. A plugin with no settings has nothing to fold and gets
+no chevron. Off, a group folds only where Stash folds the plugin groups around it - a Stash that
+folds only plugins with a setting of their own in the `.yml`, which would otherwise leave one whose
+settings are all in dialogs standing open among them.
 
 ### The counts on the Tags, Performers and Custom Fields headings
 
@@ -156,7 +165,7 @@ shows the defaults. The defaults are written in the first time the Plugins tab o
 is opened. The row's summary lists each color in force after a square of it, outlined in black.
 
 **Follow the Stash Theme**, a switch above them, draws the ᝯㄝₓ dialogs, tooltips and panes in the
-greys of the theme you run instead of their own dark ones. The greys are read off a hidden sample of
+grays of the theme you run instead of their own dark ones. The grays are read off a hidden sample of
 Stash's own dialog - its background, text and muted text - and the borders and shades are worked out
 from those, within a second of switching themes. It is off by default; the seven colors keep their
 values either way.
@@ -209,7 +218,7 @@ font. On Windows nothing changes.
 
 ### How many log lines a dialog keeps
 
-Every ᝯㄝₓ dialog shows the last 1,000 lines of its log — a node per line is a page that stops
+Every ᝯㄝₓ dialog shows the last lines of its log - as many as [Lines Drawn at Once](#how-many-lines-a-dialog-draws-at-once) says, 1,000 by default — a node per line is a page that stops
 responding — and keeps the rest so **Copy log** can hand over the whole run. That buffer is what a
 library-wide run grows: ᝯㄝₓ Normalize Parent Tags over 100,000 scenes and 1,000,000 images writes
 9.8 million lines, several gigabytes of them, beside a plan that is already the largest thing in
@@ -234,7 +243,7 @@ on; the last two switches are not meant to be. In the order the dialog lists the
 | Switch | What it does |
 |---|---|
 | **Log Button Visibility to the Browser Console** | [Why a control shows or hides](#logging-button-visibility): every control a ᝯㄝₓ plugin draws into Stash's pages says on the console whether it is shown or hidden and why. |
-| **Log … to the Browser Console** | One switch each for Propagate Tags and Performers, Scene Variants, Merge Performer Tags, Entity Name Maintainer and Tag Bundle Clipboard: that plugin prints what it does to the browser's console (F12 - Console), under its own prefix. Until Dev Mods is first saved, a plugin whose own logging setting was on keeps logging. |
+| **Log … to the Browser Console** | One switch each for Propagate Tags and Performers, Scene Variants, Merge Performer Tags, Entity Name Maintainer, Tag Bundle Clipboard and De-Spicer: that plugin prints what it does to the browser's console (F12 - Console), under its own prefix. Until Dev Mods is first saved, a plugin whose own logging setting was on keeps logging. |
 | **Layout edit mode** | Outlines every control these plugins have injected into Stash's [<abbr title="Stash's own interface around the page content - top bar, tab strips, toolbars - where these plugins add their controls.">chrome</abbr>](../GLOSSARY.md#chrome) in dashed magenta, a color nothing else draws in, and labels it with the plugin that put it there — for working out who owns a button in a row that holds several. |
 | **Stale UI demo** | Makes the red **Reload UI** button appear beside Stash's own **Reload plugins** without waiting for a real version mismatch. |
 
@@ -245,6 +254,14 @@ console still works and uses the same flags:
 __GTTx__.StashPluginCoop.logButtonVisInfo = true;   // Log Button Visibility to the Browser Console
 __GTTx__.StashPluginCoop.layoutEdit       = true;   // Layout edit mode
 ```
+
+
+### How many lines a dialog draws at once
+
+**Lines Drawn at Once (100 to 10000)**, in UI Customizations, is how many lines every ᝯㄝₓ dialog
+draws at once - a log, a listing of results or changes, a list to pick from: 1000 by default. Every
+line is kept whatever it says: Copy log copies them all, and a listing pages through the rest. A larger
+number shows more at once for more of the browser's time and memory.
 
 ## Links, cards and tooltips
 
@@ -279,7 +296,7 @@ glossary.
 In every ᝯㄝₓ plugin's dialog, click one checkbox, then **Shift-click** another: every box between
 the two takes the state the second one just took, ticked or unticked. A range stays within one kind
 of box - lines with lines, runs with runs - so a switch in the footer never joins it, and a box that
-is greyed out, or in a section that is folded away, is left as it is. Stash's own dialogs are not
+is grayed out, or in a section that is folded away, is left as it is. Stash's own dialogs are not
 touched.
 
 ## The bulk-edit lease
@@ -349,7 +366,9 @@ beside Settings.
   entities are named with their id — `+Blonde (105)` — each a link with its hover card, and so is
   the tag a merge went into: `merged into Tag "Blonde" [105]`. The list
   says what the change did; the review and the undo's result say what the undo does, so the same
-  change reads `−Blonde (105)` there. Filter by text, type, who, and a range of days.
+  change reads `−Blonde (105)` there. Filter by text, type, who, and a range of days; the text
+  is found in a name, a field or a value, the names of the related entities a change added or
+  removed included - `Blonde` finds the scenes that tag was put on.
 - **Undo Selected...** — tick runs or single changes, then press it. A run's box ticks every change in
   it; unticking one change leaves the rest ticked, ticking all of them ticks the run, and a run with
   only some ticked shows as partly ticked. Every ticked change is checked
@@ -375,7 +394,8 @@ beside Settings.
 - **Settings changes are recorded** (Record Settings Changes, on by default): a plugin's settings
   saved in this browser — on Stash's settings page or in a ᝯㄝₓ plugin's own dialog — each setting
   that changed a change of its own, undone by putting its value back. The defaults a plugin writes
-  in when it first loads are not recorded.
+  in when it first loads are not recorded, nor a plugin's own state - De-Spicer's [<abbr title="A made-up value De-Spicer puts in place of a real one. Consistent: the same original always becomes the same pseudonym, so a performer's name in a title still matches the performer.">pseudonym</abbr>](../GLOSSARY.md#pseudonym) secret and
+  its record of the pseudonyms it wrote, which an undo would only corrupt.
 - **Another tab's change marks an open dialog's Rescan.** When another tab of this Stash records a
   change while a ᝯㄝₓ dialog is open here, that dialog's **Rescan** (**Refresh** in Find & Replace)
   turns bold in the GTTx highlight color and breathes, white and green, until you press it; its tooltip says why. Closing the dialog after an undo refreshes the
@@ -420,7 +440,7 @@ what they are now, and its **Undo History Settings...** button opens them.
 | Record Library-Wide Image Writes | off | a pass over a million images would crowd everything else out |
 | Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
 | Record Deletes and Merges | on | keeps what a delete or a tag merge takes away, so it can be put back; a delete of something large reads a lot first |
-| Record Settings Changes | on | every plugin's settings saved in this browser, each setting a change of its own; not the defaults a plugin seeds |
+| Record Settings Changes | on | every plugin's settings saved in this browser, each setting a change of its own; not the defaults a plugin seeds, nor a plugin's own state (De-Spicer's pseudonym secret and record) |
 | Undo Takes It Out of the History | off | **in the GTTx highlight color: it risks history loss.** Where the review's **Take it out of the history** box starts; the box, beside Proceed, still decides for each undo |
 
 The history lives in this browser's own storage, per browser and per device, and goes if you clear
@@ -434,6 +454,6 @@ Apart from an undo you proceed with in Undo History, nothing here writes to your
 only other thing this plugin stores is its own settings. Every other ᝯㄝₓ plugin still asks before
 it writes, exactly as it did.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.

@@ -24,11 +24,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[ptp2re] ᝯㄝₓ Propagate Tags and Performers to Related Entities cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[ptp2re] ᝯㄝₓ Propagate Tags and Performers to Related Entities cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -51,7 +51,7 @@
     ownTaskName = C.ownTaskName, fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
     findEditContainer = C.findEditContainer;
   var partsText = C.partsText;
-  var runLog = C.runLog, LOG_RENDER_CAP = C.runLogCap;   // log lines kept in the DOM; all stay in `lines`
+  var runLog = C.runLog, linesDrawn = C.linesDrawn;   // log lines kept in the DOM; all stay in `lines`
 
   var PLUGIN_ID   = 'PropagateTagsAndPerformers';
   var PLUGIN_NAME = 'ᝯㄝₓ Propagate Tags and Performers to Related Entities';
@@ -80,7 +80,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.1.13';
+  var PLUGIN_VERSION = '6.4.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -93,13 +93,13 @@
   var STYLE_ID       = 'ptp2re-style';
 
   // Every button this plugin puts on a page, and every task button Stash renders for
-  // it, in amber. Stash's own row actions are `btn-secondary`, so a button of ours
+  // it, in orange. Stash's own row actions are `btn-secondary`, so a button of ours
   // sitting among them was indistinguishable from one of its own - and these are not
   // the same kind of thing: Stash's write what is in the form in front of you, ours
-  // reach out and rewrite other entities. Amber says "this one is mine and it writes"
+  // reach out and rewrite other entities. Orange says "this one is mine and it writes"
   // without claiming the primary role `btn-primary` would.
   //
-  // A Bootstrap variant class rather than a colour of our own, so the hover, focus
+  // A Bootstrap variant class rather than a color of our own, so the hover, focus
   // and active states come from Stash's theme and stay in step with it. Its
   // `btn-warning` renders white text, unlike stock Bootstrap's dark - checked live,
   // 2026-08-11 - so nothing here overrides the foreground. `btn-dark` is worth
@@ -129,7 +129,6 @@
 
   var PAGE_SIZE      = 500;    // targets per page while walking the library
   var CHUNK_SIZE     = 100;    // target ids per bulk mutation
-  var PICK_RENDER_CAP = 1000;  // pick dialog lines drawn; the rest are set by the bulk buttons
   var PROGRESS_TIP =
     'Each segment is one pass: the entity-type it walks, then the pipeline stage it ' +
     'runs in, then how many of that pass\u2019s entities have been read out of how ' +
@@ -523,7 +522,7 @@
 
   // Where a chip sits inside its box. Both are anchors, not just labels: an arrow
   // carrying performers leaves the Performers chip, so which of the two a path moves
-  // is legible from where its arrow starts before any colour is read.
+  // is legible from where its arrow starts before any color is read.
   function diaChip(node, kind) {
     var perf = kind === 'performers' && node.perf;
     return {
@@ -1003,14 +1002,16 @@
       'performer can rewrite every scene they appear in.', true],
     // The two options below qualify the two modes above. `silent` is the one that
     // makes a reaction write with no plan in front of it, which is why it is off
-    // until asked for and greyed out while there is no reaction for it to silence.
+    // until asked for and grayed out while there is no reaction for it to silence.
     ['silent', 'Silent Auto-propagation',
-      'On, a reaction writes the moment Stash saves. Off, a dialog lists what the ' +
+      'On: a reaction writes the moment Stash saves. Off: a dialog lists what the ' +
       'save would add - every line ticked - and nothing is written until you press OK.', 'strong'],
     ['depropagate', 'Suggest Tag Auto-removal - Depropagate assist',
-      'When a performer, studio or group is removed from a scene on an active path, ' +
-      'offer to remove the tags it brought that no other related entity of that scene ' +
-      'carries. Listed unticked; only what you tick is removed, and only on OK.', 'semi'],
+      'When a save takes away something tags came from along an active path - a scene\'s ' +
+      'performer, studio or group, an image\'s gallery, a group\'s studio or sub-group, or a ' +
+      'scene, image, group or marker leaving what it belonged to - offer to remove the tags it ' +
+      'brought that nothing still related carries. Listed unticked; only what you tick is ' +
+      'removed, and only on OK.', 'semi'],
   ];
 
   function parseAuto(raw) {
@@ -1027,8 +1028,8 @@
 
   // The setting in words rather than in tokens, for the settings row: `Tags:
   // Performers → Scenes (Common tags only)`, one entry per enabled path and every one
-  // of them amber - a path that is on is one this plugin writes along. Nothing is
-  // listed for a path that is off; thirteen greyed-out entries would bury the two
+  // of them highlighted - a path that is on is one this plugin writes along. Nothing is
+  // listed for a path that is off; thirteen grayed-out entries would bury the two
   // that are not.
   //
   // **Three columns, filled top to bottom, in `PATH_COLUMNS` order** - the same
@@ -1542,7 +1543,7 @@
     // module, not because they are meant to look different - and two of them did
     // drift, from #202b33 to #30404d, because nothing compared them. `style` pins
     // the overlap now, across all three. #202b33 is Blueprint's dark-gray2, the step
-    // Stash's own page uses; every dim grey in these dialogs was chosen against it -
+    // Stash's own page uses; every dim gray in these dialogs was chosen against it -
     // the log's #a7b6c2 and #7d8f9c - and they separate better on it than on the
     // lighter #30404d.
     '.ptp2re-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
@@ -1634,14 +1635,14 @@
     // so a theme whose font is wider than this grows the button instead of clipping it.
     '.ptp2re-toggle-wide{min-width:9.5rem;}' +
     // A path nothing switched on that other enabled paths already carry end to end:
-    // the resting background, and the amber as letters. `!important` because it is
-    // overriding `btn-secondary`'s own colour, which is what the button still is.
+    // the resting background, and the highlight as letters. `!important` because it is
+    // overriding `btn-secondary`'s own color, which is what the button still is.
     '.ptp2re-toggle-auto{color:var(--gttx-highlight,#ffc107) !important;}' +
     '.ptp2re-pathsbody{padding:.5rem 1rem;overflow:auto;}' +
     // The one exclusion filter with no row on Stash's settings page, because the
     // dialog is where it belongs: it is the only filter whose rule another plugin
     // owns, and the only one whose answer changes with what that plugin is set to
-    // right now. Amber on the box for the reason the row it replaced was amber -
+    // right now. Highlighted on the box for the reason the row it replaced was highlighted -
     // marking a control as ours, not as one that writes.
     '.ptp2re-opt{display:flex;align-items:flex-start;gap:.45rem;margin:.75rem 0 .25rem;' +
     'color:var(--gttx-fg2,#d6dee4);font-size:.9rem;cursor:pointer;}' +
@@ -1675,13 +1676,13 @@
     '.ptp2re-dia-canvas{position:relative;margin:0 auto;}' +
     '.ptp2re-dia-canvas.ptp2re-dia-editing{margin:0;}' +
     // A box is styled as one of Stash's own secondary buttons, by wearing the same
-    // two classes rather than by naming colours here: the theme is the user's, and
+    // two classes rather than by naming colors here: the theme is the user's, and
     // `btn-secondary` is what every neutral control in these dialogs already is. Only
     // what a button does that a box must not is overridden.
     '.ptp2re-dia-box{position:absolute;box-sizing:border-box;padding:0;' +
     'text-align:left;cursor:default;pointer-events:none;}' +
-    // What the box is doing: amber written into, teal read out of, black neither. The
-    // repo's two colours - the one that means "this plugin writes" and the one that
+    // What the box is doing: orange written into, blue read out of, black neither. The
+    // repo's two colors - the one that means "this plugin writes" and the one that
     // means it only reads - used for exactly what they mean elsewhere. `!important`
     // because all three override `btn-secondary`'s own border, which is what the box
     // still is.
@@ -1690,7 +1691,7 @@
     '.ptp2re-dia-idle{border-color:#000 !important;}' +
     '.ptp2re-dia-name{padding:.25rem .55rem;font-weight:600;font-size:.9rem;}' +
     // The two chips are the arrows' anchors as well as the box's contents, so they
-    // carry the arrow colours: what a line moves is readable at both ends of it.
+    // carry the arrow colors: what a line moves is readable at both ends of it.
     '.ptp2re-dia-chip{position:absolute;box-sizing:border-box;pointer-events:none;' +
     'border:1px solid;' +
     'border-radius:10px;background:var(--gttx-bg,#202b33);font-size:.75rem;line-height:18px;' +
@@ -1727,8 +1728,8 @@
     '.ptp2re-pathstring{font-family:var(--font-family-sans-serif,var(--bs-font-sans-serif,sans-serif));font-size:.85rem;color:var(--gttx-muted,#a7b6c2);margin:.25rem 0 .5rem;}' +
     '.ptp2re-pathstring-list{display:grid;grid-auto-flow:column;' +
     'grid-auto-columns:max-content;justify-content:start;gap:.1rem 1.5rem;}' +
-    // Amber for the same reason the selectors are: a path that is on is one this
-    // plugin writes along. The mode in brackets stays grey - it qualifies the line
+    // Highlighted for the same reason the selectors are: a path that is on is one this
+    // plugin writes along. The mode in brackets stays gray - it qualifies the line
     // rather than being a second thing that is on.
 
     // The buttons row: a column per side, each a line per page, wrapping rather than
@@ -1828,7 +1829,7 @@
     // the tag is one click away and the name beside it can be selected; the same blue
     // the dialog's own entity links use, which is the only other place this plugin
     // links out of.
-    // The mark beside a setting that names a custom field. Grey and `cursor:help`,
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
     // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
     // unprefixed class in this repo besides the Reload UI button's id, and for the
     // same reason - five plugins draw the identical mark.
@@ -1906,7 +1907,7 @@
 
   // The three settings dialogs (Path Settings, Manual Buttons Settings, Auto-Propagation):
   // the head's warning and legend, a note that reads the setting, an empty body, and a
-  // footer of Save - amber, the button that writes, held until something moved - and
+  // footer of Save - orange, the button that writes, held until something moved - and
   // Cancel. Returns the footer, for the dialog's own buttons.
   function settingsShell(dlg, warn, legend) {
     var head = dialogShell(dlg, 'ptp2re-narrow', dlg.taskName);
@@ -2080,10 +2081,10 @@
   }
 
   // The shared card is keyed by the plural Stash puts in a URL; every table in this
-  // plugin is singular, and every one of the seven is that singular plus an `s`. Said
-  // once here rather than at each call site - and answering null for a Marker, which
-  // has no page and no by-id query to ask about it either.
-  function tipType(type) { return ROUTES[type] ? type + 's' : null; }
+  // plugin is singular, so the plural is read off the route (`galleries`, not a singular
+  // plus an `s`). Said once here rather than at each call site - and answering null for a
+  // Marker, which has no page and no by-id query to ask about it either.
+  function tipType(type) { return ROUTES[type] ? ROUTES[type].slice(1, -1) : null; }
 
   // The entity a copy came *from*, for the log line. Same shape as a target's label so
   // the two read as one sentence, and same fallback chain, since four of the seven
@@ -2737,7 +2738,7 @@
     this.modal.appendChild(this.logEl);
 
     var foot = el('div', 'ptp2re-foot');
-    // Amber: the two buttons that write. See "one colour for a plugin wrote this".
+    // Orange: the two buttons that write. See "one color for a plugin wrote this".
     this.proceedBtn = button('Proceed', 'ptp2re-proceed');
     this.cancelBtn  = button('Cancel', 'ptp2re-cancel');
     this.stopBtn    = button('Stop', 'ptp2re-stop ptp2re-hidden');
@@ -2819,7 +2820,7 @@
     // from each setting, and behind a write it describes something the batches are not
     // doing. Disabled rather than hidden, which is the correction: it was hidden
     // mid-write and left live through the scan, which is the longer phase and the one
-    // a user sits through. A greyed button beside Stop says why; a vanished one says
+    // a user sits through. A grayed button beside Stop says why; a vanished one says
     // nothing, and this is the button whose whole reason for being here is that the
     // dialog is where you find out a path you wanted is off.
     this.pathsBtn.disabled = scanning || applying || undoing;
@@ -2834,7 +2835,7 @@
     // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
     // does not take the green away - it is an offer, not something waiting on the user.
     // Errors, a stopped pass, a plan the paths have moved under and a stale script stay
-    // grey: those say "something is wrong", not "nothing to do".
+    // gray: those say "something is wrong", not "nothing to do".
     paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
       !this.stale && !this.planStale ? 'btn-success' : 'btn-secondary');
     this.spin(scanning || applying || undoing);
@@ -2900,7 +2901,7 @@
       }
       this.logEl.appendChild(node);
     }, this);
-    while (this.logEl.childNodes && this.logEl.childNodes.length > LOG_RENDER_CAP) {
+    while (this.logEl.childNodes && this.logEl.childNodes.length > linesDrawn()) {
       this.logEl.removeChild(this.logEl.firstChild);
     }
     if (this.spinEl) this.logEl.appendChild(this.spinEl);
@@ -2943,8 +2944,8 @@
         (this.undone ? ', ' + this.undone + ' reversed by Undo' : '');
     }
     if (this.errors) summary += ', ' + plural(this.errors, 'error');
-    if ((this.logged || 0) > LOG_RENDER_CAP) {
-      summary += ' - showing the last ' + LOG_RENDER_CAP + ' of ' + this.logged + ' lines';
+    if ((this.logged || 0) > linesDrawn()) {
+      summary += ' - showing the last ' + linesDrawn() + ' of ' + this.logged + ' lines';
     }
     this.progressEl.textContent = parts.length ? summary + '\n' + parts.join('   ') : summary;
   };
@@ -3051,13 +3052,17 @@
   // silently loses data, and it is the one thing here that must not be rearranged.
   function planKey(target, kind, id) { return target + ':' + kind + ':' + id; }
 
+  // `from` is a list in step with `add` - `from[i]` names where `add[i]` came from -
+  // never a map keyed by id: V8 holds integer-like keys as an array as long as the
+  // largest id, several KB an entry, and a library-wide plan holds a quarter of a
+  // million entries. `fromOf` reads it; whatever cuts `add` down cuts `from` with it.
   Run.prototype.planEntry = function (target, kind, ent) {
     var key = planKey(target, kind, ent.id);
     var entry = this.planIndex[key];
     if (!entry) {
       entry = this.planIndex[key] = {
         target: target, kind: kind, id: String(ent.id),
-        label: entityLabel(target, ent), add: [], has: {}, from: {},
+        label: entityLabel(target, ent), add: [], from: [],
       };
       this.plan.push(entry);
     }
@@ -3071,6 +3076,8 @@
   //
   // It reads the plan rather than a second structure, so there is one answer to "what
   // will this entity end up with" and no way for the two to disagree.
+  function fromOf(entry, id) { return entry.from[entry.add.indexOf(id)]; }
+
   Run.prototype.plannedFor = function (target, kind, id) {
     var entry = this.planIndex[planKey(target, kind, id)];
     return entry ? entry.add : null;
@@ -3308,10 +3315,13 @@
     // The sweep first, and the targets only once it has finished: a target read before
     // its sources were gathered would be planned from an empty set and never revisited.
     if (!pass.sweep) return page(1);
+    // What the sweep gathered is read by this pass's targets alone, and a library's worth
+    // of it would otherwise stay held through the review and the writes.
+    function release() { pass.gathered = null; }
     return this.sweepPass(pass).then(function () {
       if (self.cancelled) return null;
       return page(1);
-    });
+    }).then(release, function (e) { release(); throw e; });
   };
 
   // What a set of sources contributes to one target, along one path. Held apart from
@@ -3346,20 +3356,24 @@
       var planned = this.plannedFor(path.sourceType, path.kind, String(src.id));
       if (planned) ids = ids.concat(planned);
     }
-    var seen = {};
+    var seen = {}, origin = null;
     ids.forEach(function (id) {
       if (seen[id]) return;             // one source counts once, however it lists it
       seen[id] = true;
       if (!hasOwn(agg.counts, id)) {
         agg.counts[id] = 0;
         agg.order.push(id);
-        agg.first[id] = {
-          label: sourceLabel(self.tagMap, src, path),
-          href: entityHref(path.sourceType, src.id),
-          // The source end of a line names an entity as much as the target end does,
-          // and "which studio is that" is the same question at both ends.
-          ent: { type: tipType(path.sourceType), id: String(src.id) },
-        };
+        // One per source, shared by every id it is the first to carry.
+        if (!origin) {
+          origin = {
+            label: sourceLabel(self.tagMap, src, path),
+            href: entityHref(path.sourceType, src.id),
+            // The source end of a line names an entity as much as the target end does,
+            // and "which studio is that" is the same question at both ends.
+            ent: { type: tipType(path.sourceType), id: String(src.id) },
+          };
+        }
+        agg.first[id] = origin;
       }
       agg.counts[id]++;
     });
@@ -3449,7 +3463,7 @@
           var why = self.filters.tagBlocked(id);
           if (why) return;
         }
-        // Ahead of `recordAddable`, unlike `entry.has` below: an addition the sibling
+        // Ahead of `recordAddable`, unlike the dedup below: an addition the sibling
         // would take straight back off is not one this path would make, so a button
         // whose only additions are these hides rather than offering a click that
         // writes something and loses it on the same save.
@@ -3459,7 +3473,7 @@
         }
         // Eligibility, for the manual-button probe: this id survived the target's own
         // list and the tag filter, so *this path alone* would add it. Deliberately
-        // ahead of the `entry.has` dedup below - that answers "did anyone already ask
+        // ahead of the dedup below - that answers "did anyone already ask
         // for this id in this plan", which is the right question for the plan and the
         // wrong one for a button. Two paths that would each add the same tag are two
         // buttons that would each do something, and only the first would be counted
@@ -3468,12 +3482,11 @@
         // The entry is created lazily, so a target with nothing to add never enters
         // the plan and never appears in the count Proceed is enabled on.
         if (!entry) entry = self.planEntry(pass.target, path.kind, ent);
-        if (entry.has[id]) return;      // another path already asked for it
-        entry.has[id] = true;
+        if (entry.add.indexOf(id) !== -1) return;   // another path already asked for it
         entry.add.push(id);
         // Held on the entry, not recomputed: phase 2 and Undo log the same attribution
         // for the same addition, and by then the sources are long out of scope.
-        entry.from[id] = fromLabel(first[id], counts[id]);
+        entry.from.push(fromLabel(first[id], counts[id]));
         var parts = self.changeParts(entry, path.kind, id);
         self.log(path.kind === 'performers' ? 'PERF' : 'TAG', partsText(parts), parts);
       });
@@ -3568,7 +3581,7 @@
     // config but nothing is running), or the installed copy predates the lease
     // protocol. Say both rather than assert the alarming one.
     this.note(NPT_NAME + ' has ' + mode + ' enabled in its settings but has not registered as ' +
-      'honouring bulk-edit leases - either it is disabled in Stash, or the installed copy is ' +
+      'honoring bulk-edit leases - either it is disabled in Stash, or the installed copy is ' +
       'older than the protocol. If it is running, ' + effect + '. Turn it off for the duration, ' +
       'or check the result afterwards.');
   };
@@ -3739,7 +3752,7 @@
     // tab, or plain text where the type has none. A plan is read to decide whether an
     // addition is right, and "which studio is that" is the same question about the
     // source as about the entity being written.
-    var from = entry.from[id];
+    var from = fromOf(entry, id);
     if (from) {
       parts.push({ text: ' - from ' });
       parts.push({ text: from.label, href: from.href, ent: from.ent });
@@ -4000,7 +4013,7 @@
 
   Run.prototype.cancel = function () {
     this.cancelled = true;
-    this.log('INFO', 'Cancelled. Nothing was written.');
+    this.log('INFO', 'Canceled. Nothing was written.');
     this.close();
   };
 
@@ -4224,10 +4237,10 @@
   // not one: a user cannot set it, only script can, and its third state means "unknown"
   // rather than a third choice.
   //
-  // Bootstrap variants rather than colours of our own, so hover, focus and active come
-  // from Stash's theme - and the amber is the repo's "this plugin writes" colour, which
-  // is what a path being on means. Off is `btn-secondary`, both on-states are amber;
-  // which of the two an amber button is in is what its caption says.
+  // Bootstrap variants rather than colors of our own, so hover, focus and active come
+  // from Stash's theme - and the orange is the repo's "this plugin writes" color, which
+  // is what a path being on means. Off is `btn-secondary`, both on-states are orange;
+  // which of the two an orange button is in is what its caption says.
   //
   // In three columns filled top to bottom. The first two hold the eleven two-state
   // paths in pipeline order - which the head states is semantics here, not
@@ -4270,7 +4283,7 @@
         // The third appearance a button here has, and the only one no click produces:
         // a path that is off while other enabled paths already carry its tags end to
         // end. It reads On because that is what the library does, and it wears the
-        // amber as *letters on the resting background* rather than as a filled button,
+        // highlight as *letters on the resting background* rather than as a filled button,
         // because nothing was switched on - turning it on would add a direct copy,
         // which is a different thing from what is already happening.
         function paint() {
@@ -4306,16 +4319,16 @@
     return wrap;
   };
 
-  // What each box is doing under the current configuration, in its outline: amber
-  // where something is being written into it, teal where something is being read out
+  // What each box is doing under the current configuration, in its outline: orange
+  // where something is being written into it, blue where something is being read out
   // of it, black where neither. Painted from `repaint` rather than at build, so it
   // follows a toggle the moment it is pressed - which is what makes the diagram answer
   // "what is this configuration actually doing" at a glance, the one question a column
   // of thirteen names cannot answer at all.
   //
-  // **Amber wins where a box does both**, which Scene and Gallery both do the moment
+  // **Orange wins where a box does both**, which Scene and Gallery both do the moment
   // more than a couple of paths are on. Being written into is the consequential half -
-  // it is the repo's colour for "this plugin writes", and it is what a user is deciding
+  // it is the repo's color for "this plugin writes", and it is what a user is deciding
   // about when they look at this dialog.
   //
   // The giving side is keyed on the path id's own source segment, the same string the
@@ -4422,7 +4435,7 @@
       (editing ? ' ptp2re-dia-editing' : ''));
 
     // One arrowhead per kind. A single marker filled with `context-stroke` would take
-    // the line's own colour, and it is newer than the oldest browser someone might be
+    // the line's own color, and it is newer than the oldest browser someone might be
     // running Stash in - two markers cost four lines and cannot be too new.
     var svg = this.svg = svgEl('svg', {});
     var defs = svgEl('defs');
@@ -4714,7 +4727,7 @@
       'this plugin makes - work done, logged, and undone, every run. Ticked, such a tag is ' +
       'never copied in the first place: the plan says how many were skipped, and the ' +
       'buttons that would only have added those hide. It asks that plugin rather than ' +
-      'guessing, so its own tag exclusions are honoured and a type it is not pruning ' +
+      'guessing, so its own tag exclusions are honored and a type it is not pruning ' +
       'automatically is left alone. Roll-Up is never skipped - that mode adds ancestors, ' +
       'so a tag copied here is one it would have added anyway.';
     // Said on the page rather than left to the tooltip, because it is the difference
@@ -4788,7 +4801,7 @@
     this.body.appendChild(this.skipRow());
 
     // Blue: it changes nothing but which of the two views is on screen. See "one
-    // colour for a plugin wrote this".
+    // color for a plugin wrote this".
     this.viewBtn = button('System view', 'ptp2re-view');
     this.viewBtn.className = this.viewBtn.className.replace('btn-secondary', READONLY_BTN_VARIANT);
     this.viewBtn.addEventListener('click', function () { self.showView(!self.visual); });
@@ -5045,12 +5058,12 @@
     label.appendChild(el('span', null, 'Save Immediately'));
     C.markLevel(label, true);             // skips the staging: writes on a click
     label.title = 'Make the Edit-tab buttons review in a dialog instead of staging in the form. ' +
-      'Off, a click stages the tags or performers in the open edit form, so you can check ' +
+      'Off: a click stages the tags or performers in the open edit form, so you can check ' +
       'them and press Save yourself. On - or on a Stash that cannot stage - a click opens a ' +
       'dialog listing every change first, and nothing is written until you press Proceed. ' +
       'Only the Edit-tab buttons: a button on a source\'s own page always reviews, and the ' +
       'auto-modes ask in a dialog of their own unless Silent Auto-propagation is on.';
-    var note = el('div', 'ptp2re-optnote', 'Off, an Edit-tab button stages what it would ' +
+    var note = el('div', 'ptp2re-optnote', 'Off: an Edit-tab button stages what it would ' +
       'add in the form for Stash\'s own Save; on, it opens the review dialog. A button on ' +
       'the source\'s own page always opens the dialog.');
     this.immediateBox = box;
@@ -5190,7 +5203,7 @@
     return wrap;
   };
 
-  // Silent is greyed out, not hidden, while neither mode is on: it qualifies a
+  // Silent is grayed out, not hidden, while neither mode is on: it qualifies a
   // reaction, and with no reaction there is nothing for it to say.
   AutoDialog.prototype.enable = function (on) {
     var idle = !this.on.target && !this.on.source;
@@ -5275,7 +5288,7 @@
     this.warn = warn;
     this.lines = lines;       // [{ key, parts }]
     this.ticked = ticked;     // every box starts this way
-    this.held = held || null; // { type, ids } this dialog holds on Core's settling registry
+    this.held = held || null; // [{ type, ids }] this dialog holds on Core's settling registry
     this.boxes = [];
   }
 
@@ -5315,7 +5328,7 @@
     this.lines.forEach(function (line, i) {
       // Past the cap a line has a box nobody sees, so Select All, Unselect All and OK
       // still cover it.
-      if (i >= PICK_RENDER_CAP) { self.boxes.push({ key: line.key, el: { checked: self.ticked } }); return; }
+      if (i >= linesDrawn()) { self.boxes.push({ key: line.key, el: { checked: self.ticked } }); return; }
       var row = el('label', 'ptp2re-pick-row');
       var box = el('input', null);
       box.type = 'checkbox';
@@ -5328,8 +5341,8 @@
       list.appendChild(row);
       self.boxes.push({ key: line.key, el: box });
     });
-    if (this.lines.length > PICK_RENDER_CAP) {
-      list.appendChild(el('div', 'ptp2re-note', '+' + (this.lines.length - PICK_RENDER_CAP) +
+    if (this.lines.length > linesDrawn()) {
+      list.appendChild(el('div', 'ptp2re-note', '+' + (this.lines.length - linesDrawn()) +
         ' more, not shown - ' + (this.ticked ? 'ticked' : 'unticked') +
         ', and set by Select All and Unselect All with the rest.'));
     }
@@ -5337,7 +5350,7 @@
     this.modal.appendChild(body);
 
     var foot = el('div', 'ptp2re-foot');
-    // Amber: OK is the button that writes.
+    // Orange: OK is the button that writes.
     this.okBtn = button('OK', 'ptp2re-proceed');
     this.okBtn.className = this.okBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.closeBtn = button('Cancel', 'ptp2re-cancel');
@@ -5351,6 +5364,10 @@
     foot.appendChild(this.okBtn);
     foot.appendChild(this.closeBtn);
     var bulk = el('div', 'ptp2re-paths-bulk');
+    // Select All is orange here, against the gray pair every other dialog draws: ticking
+    // every line is what this offer recommends, yet the lines start unticked, since the
+    // plugin will not make that choice for the user as a preset. The orange says which
+    // press is advised; the empty boxes keep it a press.
     this.bulkBtns = [[false, 'Unselect All'], [true, 'Select All']].map(function (t) {
       var b = el('button', 'btn btn-sm ' + (t[0] ? PLUGIN_BTN_VARIANT : 'btn-secondary'), t[1]);
       b.type = 'button';
@@ -5370,28 +5387,34 @@
     if (this.modal.scrollIntoView) this.modal.scrollIntoView();
   };
 
-  // A sibling waiting on the save this dialog holds (SceneVariants, before it reads the
-  // scene for its own propagate offer) is named with the time it has left; once it has
-  // stopped waiting, the answer here can no longer reach it, and the line says so.
+  // A sibling waiting on an entity this dialog holds (SceneVariants, before it reads the
+  // scene for its own propagate offer) is named with the time it has left, and the entity
+  // by its type; once it has stopped waiting, the answer here can no longer reach it, and
+  // the line says so.
   PickDialog.prototype.tickWait = function () {
-    var w = waitingOn(this.held.type, this.held.ids);
-    if (w) this.waiter = w;
+    var w = null, type = null;
+    this.held.forEach(function (h) {
+      var x = waitingOn(h.type, h.ids);
+      if (x && (!w || x.until < w.until)) { w = x; type = h.type; }
+    });
+    if (w) { this.waiter = w; this.waitType = type; }
     if (!this.waiter) return;
     var left = w ? Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) : 0;
     var who = this.waiter.owner || 'A sibling plugin';
+    var what = 'the ' + SOURCES[this.waitType].label.toLowerCase();
     if (left > 0) {
       this.waitEl.className = 'ptp2re-pick-wait ptp2re-note';
       this.waitEl.textContent = '[INFO] ' + who + ' is waiting for this answer before it reads ' +
-        'the scene for its own propagate offer: ' +
+        what + ' for its own propagate offer: ' +
         (left >= 60 ? Math.floor(left / 60) + ' min ' + (left % 60) + ' s' : left + ' s') + ' left.';
     } else {
       this.waitEl.className = 'ptp2re-pick-wait ptp2re-warn';
-      this.waitEl.textContent = '[WARN] ' + who + ' stopped waiting and read the scene as it is ' +
+      this.waitEl.textContent = '[WARN] ' + who + ' stopped waiting and read ' + what + ' as it is ' +
         'now: the changes made here will not be in its propagate offer.';
     }
   };
 
-  // Amber means the button writes: with nothing ticked OK would write nothing, so it
+  // Orange means the button writes: with nothing ticked OK would write nothing, so it
   // is unavailable, with the reason, and Cancel is the way out.
   PickDialog.prototype.syncOk = function () {
     var any = this.boxes.some(function (b) { return b.el.checked; });
@@ -5852,7 +5875,7 @@
                   (batch.kind === 'performers'
                     ? performerLabel(self.performerNames, id)
                     : tagLabel(self.tagMap, id)) +
-                  ' - from ' + (entry.from[id] ? fromText(entry.from[id]) : 'a related entity'));
+                  ' - from ' + (fromOf(entry, id) ? fromText(fromOf(entry, id)) : 'a related entity'));
               });
             });
           }, function (e) {
@@ -5942,7 +5965,7 @@
     }).then(function (run) {
       // The plan is shown before it is written unless Silent is on. Outside
       // `guarded()`: the user's own saves while the dialog waits must still be seen.
-      return s.auto.silent ? run : reviewAutoRun(run, { type: target, ids: fresh });
+      return s.auto.silent ? run : reviewAutoRun(run, [{ type: target, ids: fresh }]);
     }).then(function (run) {
       return run ? guarded(function () { return run.apply(label); }) : 0;
     }).then(function (n) {
@@ -5972,7 +5995,14 @@
       if (!keys) return null;
       run.plan.forEach(function (entry) {
         var prefix = planKey(entry.target, entry.kind, entry.id) + ':';
-        entry.add = entry.add.filter(function (id) { return keys.indexOf(prefix + id) !== -1; });
+        var add = [], from = [];
+        entry.add.forEach(function (id, i) {
+          if (keys.indexOf(prefix + id) === -1) return;
+          add.push(id);
+          from.push(entry.from[i]);
+        });
+        entry.add = add;
+        entry.from = from;
       });
       return run;
     });
@@ -5980,144 +6010,334 @@
 
   // ── Depropagate assist ────────────────────────────────────────────────────
   //
-  // The reverse question, asked of a scene save that drops a related entity: which
-  // of the scene's tags came in along an active path from what was just removed, and
-  // no other related entity of the scene carries? Those are offered for removal,
-  // unticked. It needs the scene as it was *before* the save, since the save's input
-  // carries only the new list, so the read goes out ahead of the mutation and the
-  // mutation waits for it - one small query on a save that names one of these
-  // relations, and nothing at all otherwise.
+  // The reverse question, asked of a save that takes a source away from a target: which
+  // of the target's tags came in along an active path from what was just removed, and
+  // no source the target still has carries? Those are offered for removal, unticked. It
+  // needs the saved entity as it was *before* the save, since the save's input carries
+  // only the new list, so the read goes out ahead of the mutation and the mutation waits
+  // for it - one small query on a save that names one of these relations, and nothing at
+  // all otherwise.
   //
-  // Scenes only, and the three relations a `sceneUpdate` carries whole. Markers
-  // leave through their own destroy, images leave a gallery through the image's save,
-  // and a group's scenes and sub-groups through theirs: each is a save of something
-  // other than the target, and none is asked about yet.
-  // ponytail: scene-side relations only; a row per other (target, input field) when asked for.
+  // A source goes away in one of two saves, and each row below is one relation a save
+  // carries whole:
+  // - **the target's own** (`path`): a scene dropping a performer, its studio or a group,
+  //   an image leaving a gallery, a group dropping its studio or a sub-group. The saved
+  //   entity is the target, and the removed sources are read off it.
+  // - **the source's** (`leaves`): a scene leaving a group, an image leaving a gallery, a
+  //   group leaving the group that contains it, a marker deleted or moved to another
+  //   scene. The targets are what the saved entity left (`rel`, the walk from it to
+  //   them), and what it brought them is every active path into that type through it:
+  //   the paths whose walk starts with `back`, the rest of the walk read off the saved
+  //   entity. A gallery has no images field (`back: null`): its path is the reverse one.
+  // One save can be both - a scene leaving a group loses the group's tags, and the
+  // group the scene's - and both are offered in one dialog.
+  // ponytail: single saves only (a bulk edit is not a removal made by hand); a source's own
+  // tags changing (a performer losing a tag) and two-hop leavings (a deleted marker's tags
+  // on its scene's groups) are not asked about. Add a row when one is wanted.
+  var studioAfter = function (i) {
+    return i.studio_id === undefined ? undefined : (i.studio_id == null ? [] : [i.studio_id]);
+  };
+  var groupsAfter = function (i) {
+    var g = i.groups || i.movies;
+    return g && g.map(function (x) { return x.group_id != null ? x.group_id : x.movie_id; });
+  };
+  var descAfter = function (key) {
+    return function (i) { return i[key] && i[key].map(function (x) { return x.group_id; }); };
+  };
   var DEPROP = [
-    { path: 'tags:performer>scene', after: function (i) { return i.performer_ids; } },
-    { path: 'tags:studio>scene', after: function (i) {
-      return i.studio_id === undefined ? undefined : (i.studio_id == null ? [] : [i.studio_id]);
-    } },
-    { path: 'tags:group>scene', after: function (i) {
-      var g = i.groups || i.movies;
-      return g && g.map(function (x) { return x.group_id != null ? x.group_id : x.movie_id; });
+    { save: 'scene', path: 'tags:performer>scene', after: function (i) { return i.performer_ids; } },
+    { save: 'scene', path: 'tags:studio>scene', after: studioAfter },
+    { save: 'scene', path: 'tags:group>scene', after: groupsAfter },
+    { save: 'image', path: 'tags:gallery>image', after: function (i) { return i.gallery_ids; } },
+    { save: 'group', path: 'tags:studio>group', after: studioAfter },
+    { save: 'group', path: 'tags:subgroup>group', after: descAfter('sub_groups') },
+    { save: 'scene', leaves: 'group', rel: ['groups', 'group'], back: ['scenes'], after: groupsAfter },
+    { save: 'image', leaves: 'gallery', rel: ['galleries'], back: null, after: function (i) { return i.gallery_ids; } },
+    { save: 'group', leaves: 'group', rel: ['containing_groups', 'group'], back: ['sub_groups', 'group'],
+      after: descAfter('containing_groups') },
+    // Deleted, it has left its scene; moved, it has left the one it was on.
+    { save: 'marker', leaves: 'scene', rel: ['scene'], back: ['scene_markers'], after: function (i, destroy) {
+      return destroy ? [] : i.scene_id === undefined ? undefined : [i.scene_id];
     } },
   ];
 
-  // The scene, its tags, and every active tag path's sources with theirs - named, since
-  // the offer says where a tag came from.
-  function depropQuery(paths) {
-    var parts = [TARGETS.scene.fields, 'tags { id name }'];
-    paths.forEach(function (p) {
-      var sel = (SOURCES[p.sourceType].fields) + (p.markerTags ? ' primary_tag { id }' : '') + ' tags { id name }';
-      for (var i = p.walk.length - 1; i >= 0; i--) sel = p.walk[i] + ' { ' + sel + ' }';
-      parts.push(sel);
-    });
-    return 'query PTP_deprop_findScene($id: ID!) { findScene(id: $id) { ' + parts.join(' ') + ' } }';
+  // The save, if it is one the assist reads, with the ids it saves: a single save of a
+  // target, or a marker's update or delete - which are not target saves, a marker being
+  // nobody's target. Stash's own removals from a list name what leaves rather than what
+  // stays - images taken out of a gallery (its Images tab), sub-groups out of a group (its
+  // Sub-groups tab) - and are read as the saves that carry the same relation: `gone` is
+  // what each saved entity lost, `rows` the `DEPROP` rows (by `path` or `leaves`) it answers.
+  function depropSave(q, hit, input) {
+    var one = input && input.id != null ? [input.id] : [];
+    if (hit) return hit.bulk ? null : { type: hit.target, ids: one };
+    if (/\bsceneMarkersDestroy\b|\bsceneMarkerDestroy\b/.test(q)) {
+      return { type: 'marker', destroy: true, ids: input && input.ids ? input.ids : one };
+    }
+    if (/\bsceneMarkerUpdate\b/.test(q)) return { type: 'marker', ids: one };
+    if (/\bremoveGalleryImages\b/.test(q)) {
+      return { type: 'image', ids: (input && input.image_ids) || [], gone: [input.gallery_id],
+        rows: ['tags:gallery>image', 'gallery'] };
+    }
+    if (/\bremoveGroupSubGroups\b/.test(q)) {
+      return { type: 'group', ids: input && input.containing_group_id != null ? [input.containing_group_id] : [],
+        gone: input.sub_group_ids || [], rows: ['tags:subgroup>group'] };
+    }
+    return null;
   }
 
-  // Every active tag path into scenes backs a tag, markers' included: a tag a marker
-  // still carries is not offered, or target auto would put it back on the next save.
-  function depropPaths(s) {
+  function walkSel(walk, leaf) {
+    var sel = leaf;
+    for (var i = walk.length - 1; i >= 0; i--) sel = walk[i] + ' { ' + sel + ' }';
+    return sel;
+  }
+  // A source as the offer names it, with what it carries.
+  function sourceSel(p) {
+    return SOURCES[p.sourceType].fields + (p.markerTags ? ' primary_tag { id }' : '') + ' tags { id name }';
+  }
+  function uniq(list) { return list.filter(function (x, i) { return list.indexOf(x) === i; }); }
+
+  // Every active tag path into a type its walk can read; a gallery's one path is reverse.
+  function intoPaths(s, type) {
+    return enabledPaths(s).filter(function (p) { return p.target === type && p.kind === 'tags' && p.walk; });
+  }
+  // The active paths into what a `leaves` row's save left, through the saved entity.
+  function throughPaths(s, d) {
     return enabledPaths(s).filter(function (p) {
-      return p.target === 'scene' && p.kind === 'tags' && p.walk;
+      if (p.target !== d.leaves || p.kind !== 'tags') return false;
+      if (!d.back) return !!p.reverse && p.sourceType === d.save;
+      return !!p.walk && d.back.every(function (step, i) { return p.walk[i] === step; });
     });
   }
 
-  // Null at once where the assist has nothing to do with this save; otherwise a
-  // promise for what the save removes - `{ id, settings, removed }`, or null - that the
-  // wrapper waits on before forwarding. Never rejects: a failed read forwards the save.
-  function depropBefore(target, input) {
-    if (target !== 'scene' || !input || input.id == null) return null;
-    var touched = DEPROP.filter(function (d) { return d.after(input) !== undefined; });
-    if (!touched.length) return null;
+  // A target as it is now: its tags, and every active path's sources with theirs - named,
+  // since the offer says where a tag came from.
+  function depropQuery(type, paths) {
+    var t = TARGETS[type];
+    var parts = [t.fields, 'tags { id name }'];
+    if (t.organized) parts.push('organized');   // `entityBlocked`
+    paths.forEach(function (p) { parts.push(walkSel(p.walk, sourceSel(p))); });
+    return byIdQuery('PTP_deprop_' + t.one, t.one, uniq(parts).join(' '));
+  }
+
+  // The saved entity as it is before the save: what its own rows remove, the targets its
+  // `leaves` rows could take it from, and what it brings them.
+  function depropBeforeQuery(save, own, leaving) {
+    var info = TARGETS[save] || SOURCES[save];
+    var parts = [info.fields, 'tags { id name }'];
+    if (save === 'marker') parts.push('primary_tag { id name }');
+    own.forEach(function (o) { parts.push(walkSel(o.p.walk, sourceSel(o.p))); });
+    leaving.forEach(function (l) {
+      parts.push(walkSel(l.d.rel, 'id'));
+      l.paths.forEach(function (p) {
+        var rest = l.d.back ? p.walk.slice(l.d.back.length) : [];
+        if (rest.length) parts.push(walkSel(rest, sourceSel(p)));
+      });
+    });
+    return byIdQuery('PTP_deprop_' + info.one, info.one, uniq(parts).join(' '));
+  }
+
+  // Null at once where the assist has nothing to do with this save; otherwise a promise
+  // for what the save takes away - `{ save, ids, settings, affected }`, each affected
+  // target `{ type, id, cands: [{ path, src }] }` - or null, which the wrapper waits on
+  // before forwarding. Never rejects: a failed read forwards the save.
+  function depropBefore(dsave, input) {
+    var save = dsave.type, ids = dsave.ids;
+    if (!ids.length) return null;
+    var rows = DEPROP.filter(function (d) {
+      if (d.save !== save) return false;
+      return dsave.rows ? dsave.rows.indexOf(d.path || d.leaves) !== -1 : d.after(input, dsave.destroy) !== undefined;
+    });
+    if (!rows.length) return null;
+    // Whether a related id survives the save: in the list it puts, or not among what it removes.
+    var stays = function (d) {
+      var list = (dsave.gone || d.after(input, dsave.destroy)).map(String), kept = !dsave.gone;
+      return function (id) { return (list.indexOf(String(id)) !== -1) === kept; };
+    };
     // The settings cache, synchronously where it is warm - which is every save but the
     // first - so a save with the assist off is forwarded with no wait at all.
     if (_autoSettings && !_autoSettings.auto.depropagate) return null;
     return autoSettings().then(function (s) {
       if (!s.auto.depropagate) return null;
-      var paths = touched.map(function (d) { return pathById(d.path); })
-        .filter(function (p) { return pathOn(s, p); });
-      if (!paths.length) return null;
-      return gqlRequest(depropQuery(paths), { id: String(input.id) }).then(function (data) {
-        var ent = data.findScene;
-        if (!ent) return null;
-        var removed = [];
-        touched.forEach(function (d) {
+      var own = [], leaving = [];
+      rows.forEach(function (d) {
+        if (d.path) {
           var p = pathById(d.path);
-          if (paths.indexOf(p) === -1) return;
-          var after = d.after(input).map(String);
-          walkSources(ent, p).forEach(function (src) {
-            if (after.indexOf(String(src.id)) === -1) removed.push({ path: p, src: src });
+          if (pathOn(s, p)) own.push({ d: d, p: p });
+        } else {
+          var through = throughPaths(s, d);
+          if (through.length) leaving.push({ d: d, paths: through });
+        }
+      });
+      if (!own.length && !leaving.length) return null;
+      var info = TARGETS[save] || SOURCES[save], query = depropBeforeQuery(save, own, leaving);
+      return Promise.all(ids.map(function (id) {
+        return gqlRequest(query, { id: String(id) }).then(function (data) { return byIdResult(data, info.one); });
+      })).then(function (ents) {
+        var affected = [], at = {};
+        var add = function (type, id, cand) {
+          var k = type + ':' + id;
+          if (!at[k]) affected.push(at[k] = { type: type, id: String(id), cands: [] });
+          at[k].cands.push(cand);
+        };
+        ents.forEach(function (ent) {
+          if (!ent) return;
+          own.forEach(function (o) {
+            var kept = stays(o.d);
+            walkSources(ent, o.p).forEach(function (src) {
+              if (!kept(src.id)) add(save, ent.id, { path: o.p, src: src });
+            });
+          });
+          leaving.forEach(function (l) {
+            var kept = stays(l.d);
+            walkSources(ent, { walk: l.d.rel }).forEach(function (left) {
+              if (kept(left.id)) return;
+              l.paths.forEach(function (p) {
+                walkSources(ent, { walk: l.d.back ? p.walk.slice(l.d.back.length) : [] }).forEach(function (src) {
+                  // `up`: carried up from the saved entity, which `flowedDown` weighs.
+                  add(l.d.leaves, left.id, { path: p, src: src, up: true });
+                });
+              });
+            });
           });
         });
-        return removed.length ? { id: String(ent.id), settings: s, removed: removed } : null;
+        return affected.length ? { save: save, ids: ids.map(String), settings: s, affected: affected } : null;
       });
     }).then(null, function (e) {
-      console.error('[ptp2re] depropagate assist could not read the scene before the save:', e);
+      console.error('[ptp2re] depropagate assist could not read the ' + save + ' before the save:', e);
       return null;
     });
   }
 
-  // After the save landed: the scene as it is now, and the offer. A tag is offered
-  // when a removed source carried it, the scene still has it, and no source the scene
-  // still has - along any active path - carries it. Read after the save rather than
-  // from the before-state, so a source added in the same save counts as backing.
-  function offerDepropagate(b) {
-    var s = b.settings, paths = depropPaths(s);
-    return gqlRequest(depropQuery(paths), { id: b.id }).then(function (data) {
-      var ent = data.findScene;
-      if (!ent) return 0;
-      var has = {}, backed = {}, seen = {}, lines = [];
-      (ent.tags || []).forEach(function (t) { has[String(t.id)] = t; });
+  // Every tag an image still in the gallery carries: a gallery has no images field, so its
+  // one tag path is read as the run reads it, by images naming the gallery, a page at a time.
+  var DEPROP_PAGE = 1000;
+  function galleryBacking(id, backed) {
+    function page(p) {
+      return gqlRequest('query PTP_deprop_galleryImages($f: FindFilterType, $i: ImageFilterType) {' +
+        ' findImages(filter: $f, image_filter: $i) { images { id tags { id } } } }',
+      { f: { page: p, per_page: DEPROP_PAGE, sort: 'id', direction: 'ASC' },
+        i: { galleries: { value: [String(id)], modifier: 'INCLUDES' } } }).then(function (data) {
+        var images = ((data.findImages || {}).images) || [];
+        images.forEach(function (img) { (img.tags || []).forEach(function (t) { backed[String(t.id)] = true; }); });
+        return images.length < DEPROP_PAGE ? backed : page(p + 1);
+      });
+    }
+    return page(1);
+  }
+
+  // A target as it is after the save, and every tag still backed on it. Read after the save
+  // rather than from the before-state, so a source added in the same save counts as
+  // backing. Backed means carried by any source the target still has - on a path in Common
+  // mode, by every one of them, the rule that copied it. `left` counts the sources still
+  // on each path, by id.
+  function depropNow(s, a) {
+    var paths = intoPaths(s, a.type);
+    return gqlRequest(depropQuery(a.type, paths), { id: a.id }).then(function (data) {
+      var ent = byIdResult(data, TARGETS[a.type].one);
+      if (!ent) return null;
+      var backed = {}, left = {};
       paths.forEach(function (p) {
-        walkSources(ent, p).forEach(function (src) {
-          payloadOf(src, p).forEach(function (id) { backed[id] = true; });
+        var srcs = walkSources(ent, p), counts = {};
+        left[p.id] = srcs.length;
+        srcs.forEach(function (src) {
+          uniq(payloadOf(src, p)).forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
+        });
+        Object.keys(counts).forEach(function (id) {
+          if (!pathCommon(s, p) || counts[id] === srcs.length) backed[id] = true;
         });
       });
-      b.removed.forEach(function (r) {
-        payloadOf(r.src, r.path).forEach(function (id) {
-          if (!has[id] || backed[id] || seen[id]) return;
-          seen[id] = true;
-          var st = r.path.sourceType;
-          lines.push({ key: id, parts: [
-            { text: entityLabel('scene', ent), href: entityHref('scene', ent.id),
-              ent: { type: 'scenes', id: String(ent.id) } },
-            { text: ' - ' },
-            { text: 'Tag "' + (has[id].name || 'unknown') + '" (' + id + ')',
-              href: entityHref('tag', id), ent: { type: 'tags', id: id } },
-            { text: ' - was likely from ' },
-            { text: SOURCES[st].label + ' "' + (displayName(r.src) || 'untitled') + '" (' + r.src.id + ')',
-              href: entityHref(st, r.src.id), ent: { type: tipType(st), id: String(r.src.id) } },
-          ] });
-        });
+      var reverse = enabledPaths(s).some(function (p) { return p.target === a.type && p.kind === 'tags' && p.reverse; });
+      return (reverse ? galleryBacking(a.id, backed) : Promise.resolve(backed)).then(function () {
+        return { ent: ent, backed: backed, left: left };
       });
+    });
+  }
+
+  // After the save landed: each affected target as it is now, and one offer for them all.
+  // A tag is offered when a removed source carried it, the target still has it, and no
+  // source the target still has - along any active path - carries it. Offered only where
+  // the copy could have put the tag there: a target the exclusion filters keep out of
+  // propagation, or a tag they would refuse to copy, is never the plugin's doing. On a path
+  // in Common mode the removed source's tag was copied only if every source carried it,
+  // so it is offered only once no source is left on that path. And where a reversible pair
+  // is on and a tag sat on both ends of the removed link, it flowed down to the saved
+  // entity (`flowedDown`): that end is offered it, the other end keeps its own.
+  function offerDepropagate(b) {
+    var s = b.settings, filters = null, lines = [], found = {}, down = {};
+    var linkKey = function (pathId, target, src, tag) { return pathId + ':' + target + ':' + src + ':' + tag; };
+    b.affected.forEach(function (a) {
+      a.cands.forEach(function (r) {
+        if (r.up || !r.path.pair) return;
+        payloadOf(r.src, r.path).forEach(function (id) { down[linkKey(r.path.pair, r.src.id, a.id, id)] = true; });
+      });
+    });
+    var flowedDown = function (a, r, id) { return r.up && down[linkKey(r.path.id, a.id, r.src.id, id)]; };
+    return autoContext(s).then(function (ctx) {
+      filters = ctx.filters;
+      return b.affected.reduce(function (chain, a) {
+        return chain.then(function () { return depropNow(s, a); }).then(function (now) {
+          if (!now || filters.entityBlocked(a.type, now.ent)) return;
+          var has = {}, seen = {};
+          (now.ent.tags || []).forEach(function (t) { has[String(t.id)] = t; });
+          a.cands.forEach(function (r) {
+            if (pathCommon(s, r.path) && now.left[r.path.id]) return;
+            payloadOf(r.src, r.path).forEach(function (id) {
+              if (!has[id] || now.backed[id] || seen[id] || filters.tagBlocked(id) || flowedDown(a, r, id)) return;
+              seen[id] = true;
+              var key = a.type + ':' + a.id + ':' + id, st = r.path.sourceType;
+              found[key] = { type: a.type, id: a.id, ent: now.ent, tag: id };
+              lines.push({ key: key, parts: [
+                { text: entityLabel(a.type, now.ent), href: entityHref(a.type, now.ent.id),
+                  ent: { type: tipType(a.type), id: String(now.ent.id) } },
+                { text: ' - ' },
+                { text: 'Tag "' + (has[id].name || 'unknown') + '" (' + id + ')',
+                  href: entityHref('tag', id), ent: { type: 'tags', id: id } },
+                { text: ' - was likely from ' },
+                { text: SOURCES[st].label + ' "' + (displayName(r.src) || 'untitled') + '" (' + r.src.id + ')',
+                  href: entityHref(st, r.src.id), ent: { type: tipType(st), id: String(r.src.id) } },
+              ] });
+            });
+          });
+        });
+      }, Promise.resolve());
+    }).then(function () {
       if (!lines.length) return 0;
       return pick('Depropagate assist',
-        'Tags on this scene that came from a related entity the save removed, and that ' +
-        'no other related entity of the scene carries. Tick the ones to remove; nothing ' +
-        'is written until you press OK.', lines, false, { type: 'scene', ids: [b.id] }).then(function (keys) {
+        'Tags that came from a related entity the save removed, and that no other related ' +
+        'entity still carries. Tick the ones to remove; nothing is written until you press OK.',
+        lines, false, [{ type: b.save, ids: b.ids }].concat(b.affected.map(function (a) {
+          return { type: a.type, ids: [a.id] };
+        }))).then(function (keys) {
         if (!keys || !keys.length) return 0;
+        // One write per target, in the order the offer listed them.
+        var order = [], per = {};
+        keys.forEach(function (k) {
+          var f = found[k], at = f.type + ':' + f.id;
+          if (!per[at]) { order.push(at); per[at] = { type: f.type, id: f.id, ent: f.ent, tags: [] }; }
+          per[at].tags.push(f.tag);
+        });
         return guarded(function () {
           var lease = C.lease(PLUGIN_ID, 'depropagate assist', AUTO_LEASE_TTL_MS);
-          return gqlRequest(bulkMutation('scene'),
-            { input: { ids: [b.id], tag_ids: { ids: keys, mode: 'REMOVE' } } }).then(function () {
-            lease.release();
-            var pass = journalPass('Depropagate assist', false);
-            pass.entries([{ type: 'scenes', id: String(b.id), name: displayName(ent) || '', field: 'tag_ids',
-              before: keys.slice().sort(), after: [] }]);
-            pass.finish();
-            markWritten('scene', b.id);
-            var wrote = { scene: {} };
-            wrote.scene[b.id] = true;
-            evictWritten(wrote);
-            invalidateButtonProbes();
+          var pass = journalPass('Depropagate assist', false), wrote = {};
+          var done = function () { lease.release(); pass.finish(); evictWritten(wrote); invalidateButtonProbes(); };
+          return order.reduce(function (chain, at) {
+            var e = per[at];
+            return chain.then(function () {
+              return gqlRequest(bulkMutation(e.type), { input: { ids: [e.id], tag_ids: { ids: e.tags, mode: 'REMOVE' } } });
+            }).then(function () {
+              pass.entries([{ type: TARGETS[e.type].plural.toLowerCase(), id: e.id, name: displayName(e.ent) || '',
+                field: 'tag_ids', before: e.tags.slice().sort(), after: [] }]);
+              markWritten(e.type, e.id);
+              (wrote[e.type] = wrote[e.type] || {})[e.id] = true;
+            });
+          }, Promise.resolve()).then(function () {
+            done();
             if (logsToConsole(PLUGIN_ID)) {
-              console.info('[' + PLUGIN_NAME + '] depropagate assist removed ' +
-                plural(keys.length, 'tag', 'tags') + ' from scene ' + b.id);
+              console.info('[' + PLUGIN_NAME + '] depropagate assist removed ' + plural(keys.length, 'tag', 'tags') +
+                ' from ' + order.join(', '));
             }
             return keys.length;
-          }, function (e) { lease.release(); throw e; });
+          }, function (e) { done(); throw e; });
         });
       });
     }).then(null, function (e) {
@@ -6301,7 +6521,7 @@
   //
   // Settings - Tasks - Plugin Tasks renders every task of every plugin with the same
   // `btn-secondary`, so nothing on that page says which buttons rewrite the library.
-  // Core's `paintTaskButtons` repaints ours amber, re-applied every tick because React
+  // Core's `paintTaskButtons` repaints ours orange, re-applied every tick because React
   // hands back a button with Stash's own classes; `ownTaskName` decides what is ours,
   // the same rule the click interception keys on.
 
@@ -6324,9 +6544,9 @@
   //    hears about, so its own span would still show the old string. The cache is
   //    dropped by our fetch hook the moment that mutation lands, and the same hook
   //    calls this tick.
-  //  - **The button is teal like its twin in Settings - Tasks.** Amber is for a control
+  //  - **The button is blue like its twin in Settings - Tasks.** Orange is for a control
   //    that rewrites the library; this one edits a setting, and what that setting says
-  //    is already in amber underneath it.
+  //    is already in the highlight underneath it.
   //
   // The canonical rewrite is here rather than in the dialog because a config file can
   // hold anything and Stash's own modal is still reachable if ours never builds. It
@@ -6375,7 +6595,7 @@
 
     var btn = document.getElementById(btnId);
     if (!btn) {
-      btn = C.settingButton(taskName);
+      btn = C.settingButton(taskName, null, PLUGIN_ID);
       btn.id = btnId;
       btn._ptp2reOwn = true;
       btn.addEventListener('click', function (e) {
@@ -6441,7 +6661,7 @@
     }
     // A column per side and a line per page, the grouping the dialog has. A page
     // with every button on says so in two words rather than listing five captions;
-    // a caption whose path is off is grey, since that button is not drawn anywhere.
+    // a caption whose path is off is gray, since that button is not drawn anywhere.
     var list = el('div', 'ptp2re-btnstring');
     var cols = {};
     [['target', 'On target entity Edit tabs'], ['source', 'On source entity pages']]
@@ -6594,7 +6814,7 @@
   }
 
   var EXCL_FIELDS = [
-    { key: 'f1ExcludeTargetWithTagName', label: 'Exclude Target Entities Carrying This Tag', warn: 'semi', text: true, wide: true,
+    { key: 'f1ExcludeTargetWithTagName', label: 'Exclude Target Entities Carrying This Tag', warn: 'semi', text: true, wide: true, tag: true,
       mark: function (v) { return exclusionMark(TAG_ROWS[0], v); },
       tip: 'Enter one tag name. Nothing is ever copied onto an entity carrying that tag.\n\nMatched by ' +
         'exact name, case-sensitive; a tag one of whose aliases is that exact string counts too, with ' +
@@ -6643,7 +6863,7 @@
         'pipe, or any Unicode character you do not use in tag names - to separate on that instead, which ' +
         'is how a substring can then contain a space. It is matched literally, so punctuation needs no ' +
         'escaping, and surrounding whitespace is trimmed from each substring.' },
-    { key: 'f8ExcludeTagSubtreeName', label: 'Exclude This Tag and All Its Child Tags', warn: 'semi', text: true, wide: true,
+    { key: 'f8ExcludeTagSubtreeName', label: 'Exclude This Tag and All Its Child Tags', warn: 'semi', text: true, wide: true, tag: true,
       mark: function (v) { return exclusionMark(TAG_ROWS[1], v); },
       tip: 'Enter one tag name. That tag, and every tag anywhere under it in the hierarchy, is never copied ' +
         'onto anything.\n\nMatched by exact name, case-sensitive; a tag one of whose aliases is that ' +
@@ -6661,7 +6881,7 @@
     var q = function (k) { return String(s[k] || '').replace(/^\s+|\s+$/g, ''); };
     var link = function (n, name) {
       var row = { key: TAG_ROWS[n].key, linkId: TAG_ROWS[n].linkId + '-sum' };
-      return { text: '"' + name + '"', mark: function () { return exclusionMark(row, name); } };
+      return { text: '"' + name + '"', tag: true, mark: function () { return exclusionMark(row, name); } };
     };
     var on = [], field = q(F4_KEY);
     if (q(F1_KEY)) on.push(['targets tagged ', link(0, q(F1_KEY))]);
@@ -7938,11 +8158,24 @@
     // the variables themselves. Read as `v.input` alone, a marker save was never seen.
     var input = v.input || v;
     var hit = targetOfMutation(q);
-    // The one case the save waits for us: the assist needs the scene as it was.
+    // The one case the save waits for us: the assist needs the saved entity as it was.
     // Forwarded whatever the read does, so a failure there is never a failed save.
     // Not under a lease: a sibling's bulk write (Scene Variants' synchronize) is not a
     // removal the user made by hand.
-    var before = hit && !hit.bulk && !autoSuppressed() ? depropBefore(hit.target, input) : null;
+    var dsave = depropSave(q, hit, input);
+    var before = dsave && !autoSuppressed() ? depropBefore(dsave, input) : null;
+    // Registered on Core's settling registry like the reaction below, so a sibling reading
+    // an entity after this save waits for the offer to be answered: the saved entity at
+    // once, and each entity the offer may write once the read names it - still ahead of
+    // the save, which waits for that read.
+    var helds = [];
+    if (before) {
+      helds = dsave.ids.map(function (id) { return settle(dsave.type, id); });
+      before = before.then(function (b) {
+        (b ? b.affected : []).forEach(function (a) { helds.push(settle(a.type, a.id)); });
+        return b;
+      });
+    }
     var p = before ? before.then(forward, forward) : forward();
 
     try {
@@ -7975,9 +8208,7 @@
       }
 
       if (before) {
-        // Registered on Core's settling registry like the reaction below, so a sibling
-        // reading the scene after this save waits for the offer to be answered.
-        var offered = settle(hit.target, input.id);
+        var offered = function () { helds.forEach(function (d) { d(); }); };
         mutationSucceeded(p).then(function (ok) {
           if (!ok) { offered(); return; }
           before.then(function (b) { return b ? offerDepropagate(b) : 0; }).then(offered, offered);

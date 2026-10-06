@@ -44,7 +44,8 @@ is a write on offer and Cancel is what declines it — and **Close** whenever Ap
 then there is nothing to decline. Both do the same thing. Close turns green once Apply has written
 its changes clean: nothing is left to write, whether or not you take Undo up on its offer.
 
-**Press Escape** at any point to close the dialog, exactly as that button would. While a write
+**Press Escape** at any point to close the dialog, exactly as that button would; a read of the
+library still running ends there. While a write
 is actually in flight it does nothing — the button is disabled at that moment, and Stop is not
 something a stray keypress should do.
 
@@ -57,11 +58,11 @@ Scene "Beach Day" (412): source🟰dvd
 Scene "Rooftop" (417): shoot🟰2021-02
 ```
 
-Each of those coloured boxes is a **pill**, and clicking one does something:
+Each of those colored boxes is a **pill**, and clicking one does something:
 
 | Pill | Click |
 | --- | --- |
-| `"Beach Day" (412)` | Opens that entity's page in a **new tab** — or in this one, if ᝯㄝₓ Core's **Open Links in the Same Tab** is on. Hovering it opens a card: the entity's picture and the handful of fields it is recognised by — its studio, performers, tags, date and rating, or for a tag its aliases, parents, children and description. It is read on the first hover, never while the list is drawn. |
+| `"Beach Day" (412)` | Opens that entity's page in a **new tab** — or in this one, if ᝯㄝₓ Core's **Open Links in the Same Tab** is on. Hovering it opens a card: the entity's picture and the handful of fields it is recognized by — its studio, performers, tags, date and rating, or for a tag its aliases, parents, children and description. It is read on the first hover, never while the list is drawn. |
 | `shoot`, `2019-07` | **Copies** that text to the clipboard. The pill flashes green (ᝯㄝₓ Core's Match Background Color), or red if the copy failed (its Error Message Background Color). |
 | `Added`, `Replaced`, `Deleted` *(after Apply)* | Nothing. It is a label. |
 
@@ -75,7 +76,7 @@ and gets no mark; hovering any value names its type either way. `null` is the on
 null and an empty value both draw `␀`, and nothing else on the line tells them apart.
 
 Selecting lines and copying them gives you **plain text** — the pills come out as the text you see,
-with no colours to paste into anything.
+with no colors to paste into anything.
 
 - **Filter by Type** appears on a task run only, since a selection is one type already. It
   narrows the listing to one of the seven; **All types** puts them back.
@@ -97,7 +98,7 @@ with no colours to paste into anything.
   value are three different vocabularies — and an entry is kept when you leave the box, not on
   every keystroke. The lists live in this browser, not in your library or in the plugin settings.
 - The dropdown beside **Filter by Value** also offers three modes that are the whole query on
-  their own — the text box greys out for all three:
+  their own — the text box grays out for all three:
   - **is empty** lists only the fields set to the empty string — the one thing an empty box cannot
     ask for, since an empty box means no filter.
   - **is true** and **is not true** read the value as a flag, exactly the way the **Hide from Add
@@ -107,7 +108,7 @@ with no colours to paste into anything.
 
   Whatever they leave showing is exactly what **Apply** writes to.
 - Scroll it, select it, copy it — there is no export button because there does not need to be one.
-- Very long listings stop at **1000 lines on screen**, with a last line saying how many are not
+- Very long listings stop at **as many lines on screen as ᝯㄝₓ Core's Lines Drawn at Once says** (1,000 by default), with a last line saying how many are not
   shown. Only the display is capped: the counters, Apply and Undo all still cover everything you
   selected. Use the filters to see the rest.
 - The counters above it say how many entities were read, how many carry any custom field at all,
@@ -125,7 +126,7 @@ with no colours to paste into anything.
   clicked**, like the names in the listing. Messages sit in the same box as the listing,
   in the order they happened, and nothing is cleared until you close the dialog.
 - **Copy log** copies the counters and then the whole log in that same order — every message
-  and every listing, including the lines the 1000-line cap leaves off the screen.
+  and every listing, including the lines that cap leaves off the screen.
 - Entities carrying **no** custom fields get **one line each**, marked `␀`, so the filters reach
   them and so does **Apply**. Setting a field on exactly those is **Fields → Without fields**
   followed by an **Add**.
@@ -141,7 +142,7 @@ Below the list:
 | **Operation** — Remove | Deletes **that one field** from every entity in scope that has it. The entity's other custom fields are untouched. |
 | **Operation** — Rename | Moves the field to a new name, keeping each entity's value. Only selectable while everything in scope carries **one** field name — that is the name it renames. |
 | **Custom Field name** | Required. **Apply** stays disabled until it is filled in. Under **Rename** it is the *new* name, and says so. It remembers the last ten names written into it and offers them back — a list of its own, kept apart from the name *filter*'s. |
-| **Custom Field value** | May be empty — an empty string is a value like any other. Ignored by Remove, and greyed out under Rename. It remembers the last ten values too. |
+| **Custom Field value** | May be empty — an empty string is a value like any other. Ignored by Remove, and grayed out under Rename. It remembers the last ten values too. |
 
 Each of those has a tooltip on the dropdown itself.
 
@@ -167,7 +168,7 @@ moves the scope can take that away — a filter, the type filter, a rescan over 
 changed. When it does, **the operation is marked, never switched**: while Rename is the one selected it goes
 red — on the select and on its own line in the list, and on nothing else — **Apply** is blocked with
 the reason in its tooltip, and an `[INFO]` line says it is not possible any more and why. Pick
-another operation and the red goes; Rename is then simply greyed out like any unavailable choice. Nothing changes what you had selected — filter the scope back down to
+another operation and the red goes; Rename is then simply grayed out like any unavailable choice. Nothing changes what you had selected — filter the scope back down to
 one field name, or pick another operation. The line is said once on the way in, not once per
 keystroke.
 
@@ -294,14 +295,14 @@ Some details worth knowing:
   them all in one press, staged like everything else. The rows go with them: an orphan row is a
   description with no field behind it, so once the description is gone there is nothing left to
   show. The log lists what was pruned, and Apply writes it. With no orphan to clear, the button is
-  greyed out.
+  grayed out.
 - **`[store tag] x1`** is a field carried only by the tag the descriptions themselves live on — in
   practice the **Hide from Add Lists** field, which that tag wears to hide itself. The scan leaves
   that tag out, so this is what would otherwise read as an orphan; picking it names the tag, and
   **Prune orphans** leaves it alone. The count is always one: that tag.
 - **Apply does not close the editing.** It writes, reports what changed in the log, and leaves the
   box and the field list exactly where they were, so the next description can be typed straight
-  away — Apply greys out again until there is something new to write.
+  away — Apply grays out again until there is something new to write.
 - **Undo** puts the tag's description and name back exactly as they were before Apply, and the box
   with it. A tag the dialog *created* is left in place; delete it by hand if you do not want it.
 - **Rescan** re-reads the library and the store, keeping whatever you have typed.
@@ -354,7 +355,7 @@ default name.
 A locked field's **name**, **description** and **values** cannot change, and it cannot be
 **removed** from an entity. It can still be **added** where an entity does not have it. In detail:
 
-- **On Stash's own edit form** a locked field's value box is read-only — the same colour as the
+- **On Stash's own edit form** a locked field's value box is read-only — the same color as the
   others, with a no-entry cursor — and its remove button gone, with a 🔒 tooltip saying why; and a save from Stash's page that would still change or remove its value
   is refused before it reaches Stash, with a message saying which field and that nothing was written.
   Adding it where the entity does not have it is allowed.
@@ -379,7 +380,7 @@ A locked field's **name**, **description** and **values** cannot change, and it 
 It is for the fields you or another plugin keep by hand — an archived filename, a pinned [<abbr title="The title a variant set's partials are named after.">base-title</abbr>](../GLOSSARY.md#base-title) —
 that one bulk press could otherwise rewrite across the library. [ᝯㄝₓ Entity Name
 Maintainer](../EntityNameMaintainer/README.md), [ᝯㄝₓ Scene Variants](../SceneVariants/README.md) and
-[ᝯㄝₓ Scene Filename Manager](../SceneFilenameManager/README.md) honour the same list. Stash's own edit
+[ᝯㄝₓ Scene Filename Manager](../SceneFilenameManager/README.md) honor the same list. Stash's own edit
 form is not stopped by it. Names are matched exactly, case included.
 
 ## Relationship to the other plugins in this repo
@@ -411,8 +412,8 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Edit Custom Fields Across the Whole Library | 552 MB | 1150 MB | 1150 MB |
-| Manage Custom Field Descriptions and Locks | 214 MB | 312 MB | 312 MB |
+| Edit Custom Fields Across the Whole Library | 552 MB | 1151 MB | 1151 MB |
+| Manage Custom Field Descriptions and Locks | 214 MB | 311 MB | 311 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
@@ -429,7 +430,7 @@ images, a group's sub-groups, a studio's child studios, a performer's appears-wi
 known and handled; report the page's address (the `/…` part) if you find another and it can be
 added.
 
-**If the dialog's title counts fewer than you selected**, the plugin is failing to recognise some of
+**If the dialog's title counts fewer than you selected**, the plugin is failing to recognize some of
 the rows. It reads the selection off the page — a ticked checkbox, and the row's own link back to
 itself — so a card laid out in a way it does not expect is skipped rather than guessed at. Rows that
 link to a *relative* of their own type are handled: a tag card names its parent tag and a studio card
@@ -442,7 +443,7 @@ block on **Settings → Plugins** by the group's heading, which is the plugin's 
 only plugin here with no second route in. So the name in `CustomFieldsBulkEditor.js` and the name in
 `CustomFieldsBulkEditor.yml` have to be the same string: if the folder was updated a file at a time,
 copy it again whole. The two task buttons under **Settings → Tasks** go with it, since they are
-recognised by the same heading; the list-view menu item and its dialog are unaffected. Nothing in
+recognized by the same heading; the list-view menu item and its dialog are unaffected. Nothing in
 the console says any of this.
 
 ### Checking which version is actually running
@@ -467,6 +468,6 @@ edited in place without a version bump looks current to this check.
 Copy the `CustomFieldsBulkEditor` folder into your Stash plugins directory
 (`<stash-config-dir>/plugins/`), then **Settings → Plugins → Reload Plugins**, and reload the page.
 
-## Licence
+## License
 
 Same terms as the rest of this repository.

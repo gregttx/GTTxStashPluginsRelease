@@ -23,7 +23,7 @@ Writes the names of each scene's files, **without their extensions**, into the c
 ```
 [PLAN] Cool Shoot [412]: "cool.shoot.2024.1080p" [87] into "ᱜ╦╦🞮_Original_Filename"
 [PLAN] Two Angles [414]: "cam-a" [88], "cam-b" [89] into "ᱜ╦╦🞮_Original_Filename"
-[PLAN] Scene 413 [413]: "IMG_0413_b" [90] added to "ᱜ╦╦🞮_Original_Filename"
+[PLAN] Scene 413 [413]: "IMG_0413_b" [90] added to "ᱜ╦╦🞮_Original_Filename", which then holds "IMG_0413" [86], "IMG_0413_b" [90]
 [PLAN] Old Shoot [415]: "old.shoot" [91] rewritten by file id in "ᱜ╦╦🞮_Original_Filename"
 ```
 
@@ -147,7 +147,7 @@ under it and their names in the editor are in the Highlighted Text Color and the
 the **Original Filename Custom Field** row's heading is too, since Restore renames back to it.
 The editor holds:
 
-- the template **coloured** as it is read — a token green, a `!token` in ᝯㄝₓ Core's Accent Color (a light blue), anything that is not a
+- the template **colored** as it is read — a token green, a `!token` in ᝯㄝₓ Core's Accent Color (a light blue), anything that is not a
   token (or a tag no tag has) red; paired braces blue, a brace without its pair in the Highlighted Text Color. When the
   template cannot be read, the error is shown and the character it stopped at is marked;
 - every token as a button, with what it gives on hover, put in at the cursor;
@@ -173,8 +173,10 @@ reads the scenes the files leave before Stash moves them, and if a moved file ha
 opens a dialog offering to add it to the field of the scene it went to:
 
 ```
-[PLAN] Dest [50]: "a51" [51], "b52" [52], "c53" [53] added to "ᱜ╦╦🞮_Original_Filename"
+[PLAN] Dest [50]: "a51" [51], "b52" [52], "c53" [53] added to "ᱜ╦╦🞮_Original_Filename", which then holds "d50" [50], "a51" [51], "b52" [52], "c53" [53]
 ```
+
+A line adding to a value already there ends on what the field holds once Proceed has written it.
 
 A reassign also takes the name off the scene the file left, which no longer has that file - the
 field goes where nothing is left - unless that field is locked. A file with no archived name moves
@@ -192,7 +194,7 @@ for as long as the dialog stays open. Every pass is also kept in ᝯㄝₓ Core'
 back is marked undone there. **Copy log** puts the counters and every line on the clipboard.
 
 A run over a whole library writes far more lines than the dialog shows, so a bar over the log
-filters what is drawn: a box per kind of line — PLAN, SAME, EDIT (RENAME in Rename Files From Metadata), UNDO, INFO,
+filters what is drawn: a box per kind of line — PLAN, SAME, EDIT (RENAME in Rename Files From Metadata), UNDO (what Undo took back, without the merged value the PLAN line ends on), INFO,
 WARN, ERROR — to hide it,
 **Only cut names** in Rename Files From Metadata for the names cut to fit the length limits, and a
 **Find** box for any text in the line, in any case. The counters say how many lines match. It
@@ -242,6 +244,10 @@ With [ᝯㄝₓ Scene Variants](../SceneVariants/README.md) installed, the `base
 `stashid` from its reading of a scene's stash-ids and variant field. Without it, `basetitle` is the
 title, `variantpostfix` and `stashid` are empty, and the log says so.
 
+ᝯㄝₓ De-Spicer asks it which field the archive is kept in and each scene's
+archived names, and renames a scene's file only where one is archived - so Restore Original
+Filenames can always take it back.
+
 Every task takes the shared bulk-edit [<abbr title="The flag a plugin holds while it writes, so the others do not react to its writes.">lease</abbr>](../GLOSSARY.md#lease) while they write, so a sibling that [<abbr title="A plugin's automatic response to a save you just made in Stash - auto-propagation, auto-prune.">reacts</abbr>](../GLOSSARY.md#reaction) to saves
 stands down for them; a reassign or merge made during another plugin's bulk edit raises no dialog.
 
@@ -259,13 +265,13 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 114 MB | 161 MB | 157 MB |
-| Restore Original Filenames | 56 MB | 82 MB | 82 MB |
-| Rename Files From Metadata | 195 MB | 260 MB | 254 MB |
+| Archive Original Filenames | 116 MB | 161 MB | 161 MB |
+| Restore Original Filenames | 56 MB | 83 MB | 83 MB |
+| Rename Files From Metadata | 195 MB | 258 MB | 254 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows its last 1,000 log lines and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.
@@ -284,6 +290,6 @@ disagree, with a **Reload UI** button.
 Copy the `SceneFilenameManager/` folder and `GTTxCore/` into your Stash `plugins/` directory, press
 **Reload plugins** in Settings → Plugins, and reload the page.
 
-## Licence
+## License
 
 See [LICENSE](../LICENSE).

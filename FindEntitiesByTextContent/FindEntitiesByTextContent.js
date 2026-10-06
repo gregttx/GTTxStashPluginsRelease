@@ -32,11 +32,11 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 4.16.0 or newer, told by one of its exports (`levelRow`).
+  // The Core floor, ᝯㄝₓ Core 4.18.0 or newer, told by one of its exports (`linesDrawn`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.levelRow !== 'function') {
+  if (!C || typeof C.linesDrawn !== 'function') {
     if (window.console && console.error) {
-      console.error('[fretc] ᝯㄝₓ Find & Replace Entities by Text Content cannot start: it needs ᝯㄝₓ Core 4.16.0 or newer, installed and '
+      console.error('[fretc] ᝯㄝₓ Find & Replace Entities by Text Content cannot start: it needs ᝯㄝₓ Core 4.18.0 or newer, installed and '
         + 'enabled. Install or update it from the same source and reload the page.');
     }
     return;
@@ -47,6 +47,8 @@
     gqlRequest = C.gqlRequest, el = C.el, paintButton = C.paintButton, displayName = C.displayName,
     matchesIn = C.occurrences, context = C.matchContext;
 
+  // How many lines a dialog draws at once: Core's Lines Drawn at Once, read where it is used.
+  var linesDrawn = C.linesDrawn;
   var PLUGIN_ID   = 'FindEntitiesByTextContent';
   // The name is a display string and the id is the contract: the folder, the plugin id
   // and every storage key are untouched by a rename, which is why one costs a user
@@ -68,7 +70,7 @@
   // The major digit is zero and stays there until the plugin has been used in a live
   // Stash: it is the claim that the thing works, and no test in this repo can check a
   // guess about Stash's schema or about the markup its task panel renders.
-  var PLUGIN_VERSION = '4.0.13';
+  var PLUGIN_VERSION = '4.1.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -90,18 +92,17 @@
   // own control is orange where it writes and Stash's blue where it only reads, and the task
   // button is the way to the dialog that offers the write - exactly the shape of
   // `MergePerformerTagsToScenes`' orange task button, whose task also writes nothing until
-  // a second, deliberate press. The filter toggles wear the same orange for the colour's
+  // a second, deliberate press. The filter toggles wear the same orange for the color's
   // other job, marking a control as ours; they are a separate constant so the two reasons
   // cannot be read as one.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
-  // A filter that is letting its category through, in the same amber every other control
-  // these plugins draw wears. It marks the control as *ours* - the colour's other job -
+  // A filter that is letting its category through, in the same orange every other control
+  // these plugins draw wears. It marks the control as *ours* - the color's other job -
   // rather than saying the filter writes, which it does not. Kept in a constant of its
   // own precisely so the two reasons cannot be read as one.
   var FILTER_ON_VARIANT = 'btn-warning';
 
   var READ_PAGE     = 500;   // entities per page of the scan
-  var RESULT_BUFFER = 1000;   // rows on screen before the search pauses itself
   var HISTORY_MAX   = 50;    // the most previous searches the box will keep
   var TICK_MS       = 1000;
   // The busy cursor under the last line of the log. The counters say how far the search
@@ -221,7 +222,7 @@
     // share no module, not because they are meant to look different - and two of them
     // did drift, from #202b33 to #30404d, because nothing compared them.
     // `.tests/style.test.js` pins the overlap. #202b33 is Blueprint's dark-gray2, the
-    // step Stash's own page uses; every dim grey in these dialogs was chosen against it.
+    // step Stash's own page uses; every dim gray in these dialogs was chosen against it.
     '.fretc-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
     'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
     '.fretc-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
@@ -302,7 +303,7 @@
     '.fretc-ent{text-decoration:none;}' +
     '.fretc-ent:hover{text-decoration:underline;}' +
     '.fretc-attr{color:var(--gttx-muted,#a7b6c2);}' +
-    // Amber: the one thing on a result line that asks for a second look before Replace.
+    // The highlight: the one thing on a result line that asks for a second look before Replace.
     '.fretc-casediff{color:var(--gttx-highlight,#ffc107);white-space:nowrap;}' +
     '.fretc-ctx{overflow-wrap:anywhere;word-break:break-word;}' +
     '.fretc-mark{background:var(--gttx-match-bg,#3f6b46);border-radius:2px;padding:0 .1rem;}' +
@@ -325,7 +326,7 @@
     'white-space:nowrap;cursor:pointer;margin:0;}' +
     // A checkbox carries browser margins that put it off the row's centre line.
     '.fretc-check input{margin:0;}' +
-    // The sentence beside the replacement box. The log's own dim grey, and allowed to
+    // The sentence beside the replacement box. The log's own dim gray, and allowed to
     // wrap onto its own line on a narrow window - the row is already `flex-wrap`.
     '.fretc-hint{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;}' +
     '.fretc-readme{font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
@@ -344,8 +345,8 @@
     '.fretc-desc-collapsed .fretc-p:not(:first-child){display:none;}' +
     '.fretc-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
     'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
-    // **No per-setting hover box and no colour-coded toggle**, because this plugin
-    // declares no settings: both would style rows Stash never renders for it. The teal is
+    // **No per-setting hover box and no color-coded toggle**, because this plugin
+    // declares no settings: both would style rows Stash never renders for it. The blue is
     // not lost - it is on the task button, which Core's `paintTaskButtons` sets.
     'text-decoration:underline;}';
 
@@ -671,7 +672,7 @@
       'searched - they all start off. A long search pauses itself when the list is full; ' +
       'Continue clears what is on screen and carries on, and Copy log keeps every result ' +
       'either way.'));
-    // The run's own warnings go in the amber slot every writing dialog gives the backup
+    // The run's own warnings go in the highlighted slot every writing dialog gives the backup
     // sentence, which this head does not have - the same swap `TagBundleClipboard` makes,
     // and for the same reason: the standing sentence above is a fact about the dialog and
     // these are facts about this run.
@@ -777,7 +778,7 @@
     });
     cs.appendChild(this.caseBox);
     cs.appendChild(el('span', null, 'Case-sensitive'));
-    cs.title = 'Match the text exactly as typed, capitals included. Off, "beach" also ' +
+    cs.title = 'Match the text exactly as typed, capitals included. Off: "beach" also ' +
       'finds "Beach". It applies to a replacement as well, which finds what the search ' +
       'found; changing it takes effect on the next search. It starts as ᝯㄝₓ Core\'s ' +
       'Case-Sensitive Matching setting says; changing it here lasts for this dialog and ' +
@@ -829,7 +830,7 @@
     // **The two rows are not the same kind of control, and the labels say so.** A type
     // decides what is *read* - turning one on is what makes the next search go and look.
     // An attribute decides what is *shown*, over results already found, so it can only
-    // offer the names something has actually matched in. Same shape, same colour, same
+    // offer the names something has actually matched in. Same shape, same color, same
     // All On / All Off; different moment.
     this.attrRow = el('div', 'fretc-filterrow fretc-hidden');
     this.attrRow.appendChild(el('span', 'fretc-label', 'Attributes'));
@@ -848,7 +849,7 @@
     this.refreshBtn.title = 'Throw away what this search has found and start it again from ' +
       'the beginning, with whatever the box now says. Search carries the current one on; ' +
       'this one replaces it.';
-    // Amber: the one button here that writes. See "one colour for a plugin wrote this".
+    // Orange: the one button here that writes. See "one color for a plugin wrote this".
     this.replaceBtn = button('Replace', 'fretc-replace fretc-hidden');
     this.replaceBtn.className =
       this.replaceBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
@@ -861,7 +862,7 @@
     // Only ever visible while a replacement or an undo is writing, and the only way out
     // of one: Cancel and Escape are both unavailable there, because abandoning the
     // dialog would leave the mutations running headless and take the undo records with
-    // it. Grey - it stops a write, it does not make one.
+    // it. Gray - it stops a write, it does not make one.
     this.stopBtn = button('Stop', 'fretc-stop fretc-hidden');
     this.copyBtn = button('Copy log', 'fretc-copy');
     this.copyBtn.title = 'Copy the counters, the messages and every result as plain text - ' +
@@ -1092,7 +1093,7 @@
     this.syncReplace(busy);
     // Green when nothing is left to write: the search has run out and left nothing on
     // the list to replace. Undo does not take the green away - it is an offer, not
-    // something waiting on the user. A failed search and a stale script stay grey:
+    // something waiting on the user. A failed search and a stale script stay gray:
     // those say "something is wrong", not "nothing to do". Only ever while the
     // button reads Close - a green Cancel would promise the wrong thing.
     paintButton(this.cancelBtn, this.state === 'done' && !this.writing && !this.stale &&
@@ -1117,9 +1118,9 @@
     // row straight back with it.
     var on = !!this.replacing && !!text;
     this.show(this.replaceBar, on);
-    // **Amber in the one state that earns it.** The backup sentence is the first line of
-    // every head in this repo that can write, and it is amber in all of them; the other
-    // wording is a fact about a dialog that writes nothing, which is the grey note slot.
+    // **Highlighted in the one state that earns it.** The backup sentence is the first line of
+    // every head in this repo that can write, and it is highlighted in all of them; the other
+    // wording is a fact about a dialog that writes nothing, which is the gray note slot.
     // One element with the class swapped rather than two, so the sentence stays in the
     // place the siblings put it whichever of the two it is showing.
     this.noteFixedEl.className = on ? 'fretc-warn' : 'fretc-note';
@@ -1143,7 +1144,7 @@
     this.replaceBox.disabled = busy || writing || !text;
     this.replaceLabel.title = text
       ? 'Offer to replace the text you searched for, everywhere this search found it. ' +
-        'Off, this dialog reads and writes nothing at all.'
+        'Off: this dialog reads and writes nothing at all.'
       : 'Nothing to replace yet: a replacement replaces what a search found, so the box ' +
         'above has to say what to look for first.';
     this.undoBtn.disabled = writing;
@@ -1421,19 +1422,19 @@
           self.matched++;
           self.results.push(hit);
           self.learnAttrs(hit);
-          if (self.rendered < RESULT_BUFFER && self.shownAttrs(hit).length) self.addRow(hit);
+          if (self.rendered < linesDrawn() && self.shownAttrs(hit).length) self.addRow(hit);
         });
         if (list.length < READ_PAGE) { self.queue.shift(); self.page = 1; } else self.page++;
         self.progress();
         // The list filled while this page was being read. Stop here rather than at the
         // exact row: a page is the unit everything else in this loop works in, and
         // half a page of results already on screen is not a state worth inventing.
-        if (self.rendered >= RESULT_BUFFER && self.state === 'running') {
+        if (self.rendered >= linesDrawn() && self.state === 'running') {
           self.state = 'full';
           self.syncFooter();
           self.progress();
           self.msg('INFO', 'Paused: the list on screen holds ' +
-            plural(RESULT_BUFFER, 'result') + '. Continue clears it and carries on; every ' +
+            plural(linesDrawn(), 'result') + '. Continue clears it and carries on; every ' +
             'result so far is still in Copy log' + (self.replacing
               ? ', and Replace still covers all of them, not only the ones on screen.' : '.'));
           return;
@@ -1501,7 +1502,9 @@
   Run.prototype.replaceAll = function () {
     if (this.replaceBtn.disabled) return;
     var self = this;
-    var needle = this.textInput.value.trim();
+    // The text searched, which is what the listing shows matches of - not the box as it reads now,
+    // which may have been edited since without searching again.
+    var needle = this.needle;
     var to = this.replaceInput.value;
     var scope = this.replaceScope();
     this.remember('replaceHistory', to);
@@ -1852,7 +1855,7 @@
     if (!this.listEl) return;
     this.clearRows();
     for (var i = this.shownFrom; i < this.results.length; i++) {
-      if (this.rendered >= RESULT_BUFFER) break;
+      if (this.rendered >= linesDrawn()) break;
       if (this.shownAttrs(this.results[i]).length) this.addRow(this.results[i]);
     }
     this.progress();
