@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too.
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console.
 
 [<abbr title="De-Spicer's goal of making the library's metadata and entity images non-explicit: the words you list rewritten, and the images blurred or replaced.">Vanillify</abbr>](../GLOSSARY.md#vanillify) and anonymize your library.
 
@@ -27,6 +28,8 @@ Drawn at Once** says, 1000 by default - under a bar pinned above the lines as th
 and **Next**, which land on the new page's first line, and **⤒ Top** and **⤓ Bottom** within the page; Select
 All, the filters and Proceed reach every line, not only the page. **All On** and **All Off**, to the right of the
 filter rows, set every filter at once.
+
+<img src="screenshots/run.png" alt="The De-Spice Library dialog: goals and rules above, every change it would make listed below">
 
 A plan of more than 20,000 changes keeps no copy of the values it changes, so a whole library fits in
 the browser: each page reads its own values when it is shown, and each field is read again, checked
@@ -52,6 +55,8 @@ Stash's own backup with **Back Up Now**.
 ## The goals and the rules
 
 Two goals, either or both:
+
+<img src="screenshots/goals-and-rules.png" alt="The Goals and Rules settings dialog: Anonymize and Vanillify, and a rule for each kind of data">
 
 - **Anonymize** - nothing in the library names a real person, studio, place, site or file.
 - **Vanillify** - nothing in its text is explicit: every term in **Explicit Terms** is rewritten.
@@ -219,6 +224,8 @@ own editor: a filter box, **Add Term** and a × on each row, **Import YAML...** 
 **Restore Defaults** and **Clear All**; nothing is stored until **Save**. The plugin ships a default
 list of over two hundred terms, each with a neutral replacement of its own, so the rewritten text
 still tells them apart (`hand job = hand massage`, `foot job = foot massage`).
+
+<img src="screenshots/terms.png" alt="The Explicit Terms editor: each term with what replaces it">
 
 A term is found whole, in any case, and its replacement takes the case it was written in (`hot =
 warm` makes `Hot` into `Warm` and `HOT` into `WARM`). A term may be several words: between them a
@@ -413,6 +420,10 @@ two parts heads each in its dialog:
   the box, and **Removal Deletes**: library entries only, entries and generated files (the default),
   or entries, generated and media files; under **Real Library or Copy**, the three switches above,
   with All On and All Off.
+
+<img src="screenshots/reads.png" alt="The What a Run Reads dialog: a switch per entity-type, and the four exclusions with their tags and custom fields">
+
+<img src="screenshots/removal.png" alt="The Removal and Safety dialog: the removal tag, what a removal deletes, and the three real-library switches">
 
 Each row holds settings of one weight: the first three decide what a run touches, the last what lasts
 beyond the rewrite - deleting, and what makes undoing possible.

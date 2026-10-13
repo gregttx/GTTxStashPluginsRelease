@@ -18,10 +18,27 @@
   // The Core floor, ᝯㄝₓ Core 5.11.0 or newer, told by one of its exports (`selectionMenuItem`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
   if (!C || typeof C.selectionMenuItem !== 'function') {
-    if (window.console && console.error) {
-      console.error('[cpt2s] ᝯㄝₓ Merge Performer Tags To Scenes cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
-        + 'enabled. Install or update it from the same source and reload the page.');
-    }
+    var NAME = 'ᝯㄝₓ Merge Performer Tags To Scenes', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
+      + 'enabled. Install or update it from the same source and reload the page.';
+    if (window.console && console.error) console.error('[cpt2s] ' + NO_CORE);
+    // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
+    // its .yml, and a task pressed now is only queued, to fail in the server log - so a red line
+    // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
+    // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
+    var mark = function () {
+      var hs = document.querySelectorAll('.setting-group h3');
+      for (var i = 0; i < hs.length; i++) {
+        var h = hs[i], t = h.textContent;
+        if ((t !== NAME && t.indexOf(NAME + ' (') !== 0) || (h.nextSibling && h.nextSibling.className === 'gttx-no-core')) continue;
+        var line = document.createElement('div');
+        line.className = 'gttx-no-core';
+        line.style.cssText = 'color:#ff7b72;font-weight:600;margin:4px 0;white-space:normal';   // Core's Bad Result Text Color
+        line.textContent = NO_CORE;
+        h.parentNode.insertBefore(line, h.nextSibling);
+      }
+    };
+    if (window.MutationObserver) new MutationObserver(mark).observe(document.documentElement, { childList: true, subtree: true });
+    mark();
     return;
   }
   var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass, settle = C.settle,
@@ -70,7 +87,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '5.3.3';
+  var PLUGIN_VERSION      = '5.3.8';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running

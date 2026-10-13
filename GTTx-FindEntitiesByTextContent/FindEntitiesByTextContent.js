@@ -35,10 +35,27 @@
   // The Core floor, ᝯㄝₓ Core 5.7.0 or newer, told by one of its exports (`download`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
   if (!C || typeof C.download !== 'function') {
-    if (window.console && console.error) {
-      console.error('[fretc] ᝯㄝₓ Find & Replace Entities by Text Content cannot start: it needs ᝯㄝₓ Core 5.7.0 or newer, installed and '
-        + 'enabled. Install or update it from the same source and reload the page.');
-    }
+    var NAME = 'ᝯㄝₓ Find & Replace Entities by Text Content', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.7.0 or newer, installed and '
+      + 'enabled. Install or update it from the same source and reload the page.';
+    if (window.console && console.error) console.error('[fretc] ' + NO_CORE);
+    // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
+    // its .yml, and a task pressed now is only queued, to fail in the server log - so a red line
+    // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
+    // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
+    var mark = function () {
+      var hs = document.querySelectorAll('.setting-group h3');
+      for (var i = 0; i < hs.length; i++) {
+        var h = hs[i], t = h.textContent;
+        if ((t !== NAME && t.indexOf(NAME + ' (') !== 0) || (h.nextSibling && h.nextSibling.className === 'gttx-no-core')) continue;
+        var line = document.createElement('div');
+        line.className = 'gttx-no-core';
+        line.style.cssText = 'color:#ff7b72;font-weight:600;margin:4px 0;white-space:normal';   // Core's Bad Result Text Color
+        line.textContent = NO_CORE;
+        h.parentNode.insertBefore(line, h.nextSibling);
+      }
+    };
+    if (window.MutationObserver) new MutationObserver(mark).observe(document.documentElement, { childList: true, subtree: true });
+    mark();
     return;
   }
   var caseSensitive = C.caseSensitive, fold = C.fold, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural,
@@ -66,7 +83,7 @@
   // The one version that proves anything. The settings page reads the manifest over
   // GraphQL and goes current the moment plugins are reloaded, while the browser can
   // still be running a script it cached before the edit.
-  var PLUGIN_VERSION = '4.11.2';
+  var PLUGIN_VERSION = '4.11.5';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather

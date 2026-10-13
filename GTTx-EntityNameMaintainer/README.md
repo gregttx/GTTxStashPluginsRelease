@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too.
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console.
 
 Rename a performer, a studio, a tag or a scene, and every other place in your library that
 mentioned the old name goes on mentioning it. Stash moves one string; this plugin notices
@@ -15,6 +16,8 @@ It watches the tab you are working in for a rename. The moment one lands it read
 as it was a second earlier, then walks every text field of every Scene, Image,
 Gallery, Performer, Studio, [<abbr title="A group (formerly a movie) collects scenes in order; a group can hold other groups, its sub-groups.">Group</abbr>](../GLOSSARY.md#group) and Tag looking for it, and puts up a dialog listing what
 it found. The renamed entity itself is read as your save left it, and whatever that save changed on it is yours, not a mention to fix: swap a name and an alias in one save and the alias now holding the old name is left alone, while a details box the save carried unchanged is still offered.
+
+<img src="screenshots/rename.png" alt="After a performer is renamed, the dialog listing each place the old name is still written, ticked to follow">
 
 The fields it looks in:
 

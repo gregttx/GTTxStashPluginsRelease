@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too. Tag custom fields (the custom-field exclusion filter)
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console. Tag custom fields (the custom-field exclusion filter)
 and UI plugin component patching ([<abbr title="Holding changes for you to review rather than writing them - in Stash's edit form until you press Save, or in a plugin's dialog until you press Apply or Proceed.">staging</abbr>](../GLOSSARY.md#staging) tags in the scene edit form) both depend on that Stash.
 
 > ## ⚠ Backing up your database before the first library-wide run is strongly recommended
@@ -124,6 +125,8 @@ Whichever way tags get merged, every merge can optionally be logged to your brow
 
 The two buttons appear in different places, because each one sits where the content it acts on is visible.
 
+<img src="screenshots/merge.png" alt="Merge Performer Tags into All Their Scenes reviewing the tags each scene would gain">
+
 Both are **orange**, where Stash's own row actions are gray. Orange is this repo's
 color for "a plugin put this here, and pressing it writes to entities other than the one in front
 of you" — the same color `PropagateTagsAndPerformers` uses, so a row holding buttons from both
@@ -140,6 +143,8 @@ two dialogs look like Stash's own Edit buttons, but orange, and each row's headi
 of the settings inside it.
 
 **Performer page** — enable **Show Manual Buttons** in settings, then open any performer's page. If they have at least one tag and at least one scene, a **"Add Tags to all Scenes..."** button appears in the button bar on the detail view, just before the Delete button. Clicking it opens the review dialog scoped to that performer: it lists every tag it would add to every one of their scenes, and writes nothing until you press **Proceed**. Scenes already having all the tags are skipped, and **Undo** takes the merge back while the dialog stays open.
+
+<img src="screenshots/performer-button.png" alt="A performer's page with Add Tags to all Scenes... in its button bar, in orange">
 
 **The scene list's filter does not narrow this.** The button asks the server for every scene featuring the performer, so searching, filtering or ticking scenes in the Scenes tab below has no effect on which scenes are updated — narrow the list to three scenes and all of them are still merged. Use the scene page's "Add all Tags from all Performers" button if you want to act on one scene at a time. The button is deliberately hidden while the performer's edit form is open, since the scene list is not on screen there.
 
@@ -231,6 +236,8 @@ All in **Settings → Plugins → ᝯㄝₓ Merge Performer Tags To Scenes**, in
 its settings are set to and opening a dialog that holds them; every switch is off and every box empty
 until you change it. Each is stored under its own key as a row of its own would be, so `config.yml`
 still edits them, and the sibling plugin still reads the filters from there.
+
+<img src="screenshots/buttons.png" alt="The Buttons and Auto-Merge dialog: the manual buttons, Save Immediately and the two auto-merges">
 
 | Setting | Default | What it does |
 |---|---|---|
@@ -388,7 +395,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Merge Performer Tags into All Their Scenes | 273 MB | 293 MB | 283 MB |
+| Merge Performer Tags into All Their Scenes | 271 MB | 294 MB | 283 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 

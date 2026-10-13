@@ -1,7 +1,7 @@
 name: ᝯㄝₓ De-Spicer
 description: "Vanillify and anonymize your library: rewrite what names real people, studios and sites, and what is explicit, across every entity-type at once.\n\nRun it from Settings - Tasks - Plugin Tasks. Choose the goals - Anonymize, Vanillify or both - and how each kind of data is treated: kept, blanked, replaced by a placeholder or by a consistent pseudonym. The scan lists every change, entity by entity, before and after; nothing is written until you press Proceed.\n\nBACKING UP YOUR DATABASE BEFORE THE FIRST RUN IS STRONGLY RECOMMENDED.\n\nRequires Stash 0.31.0 or newer."
 url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-DeSpicer/README.md"
-version: 1.0.0
+version: 1.0.4
 ui:
   # Loaded before this script, and installed with it. `plugins.tsx` topologically
   # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished

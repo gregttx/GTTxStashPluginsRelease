@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too.
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console.
 
 A file's name is metadata nothing else in Stash remembers. Rename a file — by hand, with a renamer,
 with a tidy-up script — and the name it had is gone. This plugin keeps a copy of every scene's
@@ -59,6 +60,8 @@ alone, and the log says so.
 Renames the primary file of every scene to the name the **Rename Template** builds from its
 metadata, keeping the extension and folder, wherever the two differ. With an index in the template,
 **every file** of a scene is renamed.
+
+<img src="screenshots/rename-files.png" alt="Rename Files From Metadata: each scene's file name now and the name the template gives it">
 
 ```
 [PLAN] Song - Promo 2 [20]: "old.mp4" → "Song (2021) - Promo 2 [Bea, Ada, Cleo, +2] by Kim.mp4" (archived first)
@@ -151,6 +154,8 @@ The template and its four limits decide the names written to disk, so the row's 
 under it and their names in the editor are in the Highlighted Text Color and the button is orange;
 the **Original Filename Custom Field** row's heading is too, since Restore renames back to it.
 The editor holds:
+
+<img src="screenshots/template.png" alt="The Rename Template editor: the template colored by token, the tokens to insert, the limits, test values and the file name they give">
 
 - the template **colored** as it is read — a token green, a `!token` in ᝯㄝₓ Core's Accent Color (a light blue), anything that is not a
   token (or a tag no tag has) red; paired braces blue, a brace without its pair in the Highlighted Text Color. When the
@@ -274,8 +279,8 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 116 MB | 161 MB | 161 MB |
-| Restore Original Filenames | 56 MB | 83 MB | 83 MB |
+| Archive Original Filenames | 116 MB | 162 MB | 161 MB |
+| Restore Original Filenames | 56 MB | 82 MB | 82 MB |
 | Rename Files From Metadata | 199 MB | 258 MB | 258 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.

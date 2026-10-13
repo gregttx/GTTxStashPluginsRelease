@@ -2,7 +2,8 @@
 # ᝯㄝₓ Scene Variants
 
 Requires Stash 0.31.0 or newer, the floor [ᝯㄝₓ Core](../GTTx-Core/README.md) sets, and Core itself,
-installed and enabled alongside it. A source index installs Core for you; a hand copy must copy the `GTTxCore` folder too.
+installed and enabled alongside it. A source index installs Core for you; a hand copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console.
 
 A scene is often in your library twice: the whole thing, and a cut out of it. Stash has no way to
 say the two are the same work — [the request to link scenes to each other](https://github.com/stashapp/stash/issues/3201)
@@ -25,17 +26,7 @@ Open a scene that has other [<abbr title="Scene Variants: scenes that are the sa
 **Variants** tab, captioned with how many there are - **2 Variants**, **1 Variant**. Where finding
 them takes longer than a moment, the tab shows as **? Variants** until the count is in:
 
-```
-Details   Queue   Markers   Filter   File Info   History   2 Variants   Edit
-────────────────────────────────────────────────────────────┴────────────────
-2 other variants of this scene. Matched on 1 stash-id.
-  ┌────────┐  Cool Shoot
-  │ cover  │  Full-duration · 1920×1080 · 41:12
-  └────────┘
-  ┌────────┐  Cool Shoot - Clip 2
-  │ cover  │  Partial-duration · 1920×1080 · 4:03
-  └────────┘
-```
+<img src="screenshots/variants-tab.png" alt="A scene page with the Variants tab open, listing the scene's two promos">
 
 The tab sits just before **Edit**, which stays last, and is drawn in the Highlighted Text Color — the one tab in the tab strip
 Stash did not put there. It appears once the variants have been looked up, and only where there is
@@ -270,13 +261,7 @@ It draws as many sets as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by
 rest on a line below them; **Next Set** goes on through every one of them, and **Copy log** lists
 them all.
 
-```
- Drift-score weights: title [1] cover [5] other attribute [5] tag [1] performer [1] group [1]   ☐ Exclude Organized   ☐ Remember
-──────────────────────────────────────────────────────────────────────────────────────────
-▸ 28  3 scenes: Work - Variant A + 2 more   (1 title, 4 attr, 5 tag, 2 perf, 0 group)
-▸ 12  2 scenes: Rescanned One + 1 more      (1 title, 1 attr, 1 tag, 0 perf, 0 group, 1 cover)
-▸  7  2 scenes: Another Work + 1 more       (1 title, 1 attr, 1 tag, 0 perf, 0 group)
-```
+<img src="screenshots/review-sets.png" alt="Review Variant Sets listing four sets by how far their members have drifted apart, one opened on its scenes">
 
 The line above the listing is the **weight strip**: six numbers, one per kind of difference, each
 editable from 0 to 100, and the listing re-scores and re-sorts as you type. The title has a weight
@@ -430,13 +415,7 @@ The review dialog re-reads the variants and lists every difference first, one ch
 attribute per variant, nothing written until **Proceed**. Closing the dialog after it has written —
 or after an Undo — re-reads the list behind it, so the tab shows the variants as the run left them:
 
-```
- All ☐ Title   ☐ Date   ☑ Tags   ☑ Performers
-─────────────────────────────────────────────────────────────────────────────────
-☐ [SYNC]  Work - Variant B [77]  Title: "Work - Variant B" -> "Work - Variant A"
-☐ [SYNC]  Work - Variant B [77]  Date: "2023-12-31" -> "2024-01-05"
-☑ [SYNC]  Work - Variant B [77] ▸ Add 2 tags: Blonde, Outdoor
-```
+<img src="screenshots/synchronize.png" alt="Synchronize Variants listing what differs between a scene and its promos, each change ticked">
 
 **A changed value is shown once, as a word diff**, rather than twice for you to compare. Two
 60-character cuts of one opening sentence are identical and say nothing about the edit:
@@ -630,6 +609,8 @@ title rules are in the paler shade:
 | Compare Cover Images | off | Also compare the variants' cover images and offer this scene's where they differ — see [the rules](#synchronizing-a-variant-set) and [the set listing](#finding-the-sets-worth-synchronizing). |
 | Always Open the Full-Duration Variant | off | Open a partial-duration scene's [full-duration variant](#opening-the-full-duration-variant) in its place, with a 10-second notice at the top right and a link back. |
 
+<img src="screenshots/scene-page-behavior.png" alt="The Scene Page Behavior dialog: five switches, the two that act on their own in the Highlighted Text Color">
+
 Console logging is **Log Scene Variants to the Browser Console** in ᝯㄝₓ Core's **Dev Mods**: each
 variant lookup under `[svr]` - the scene, how many variants were found and what they were matched
 on. A failed query is reported whatever it says.
@@ -647,6 +628,8 @@ once and puts them in force at once:
 | Variant Base-Title Custom Field | `ᱜ╦╦🞮_Variant_Base_Name` | Set on any scene of a set, its base-title — read before the titles, the full-duration scene's value first, never written and never checked against the titles. The dialog line says the whole rule. |
 | Variant No-Rename Custom Field | `ᱜ╦╦🞮_Do_Not_Auto_Rename` | Set to anything on a scene, keeps Rename Variants from proposing a title for it. |
 | Exclude Scenes Carrying This Tag From Renaming | empty | A tag name: a scene carrying it, or a tag filed under it, is left out of Rename Variants. |
+
+<img src="screenshots/variants-title.png" alt="The Variants Title dialog: the postfix, the index rules and the custom fields a partial-duration scene is titled by">
 
 The defaults with a value are written into their boxes the first time the plugin loads, so the
 page and the dialog show the name the plugin is actually using; clearing one goes back to that
@@ -739,7 +722,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Migrate Variant Stash-IDs | 59 MB | 93 MB | 92 MB |
-| Flag Variants | 46 MB | 90 MB | 84 MB |
+| Flag Variants | 46 MB | 86 MB | 84 MB |
 | Review Variant Sets | 310 MB | — | — |
 | Rename Variants | 637 MB | 671 MB | 667 MB |
 

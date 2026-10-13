@@ -47,6 +47,10 @@ row are the row for [Undo History](#undo-history)'s settings, **Maximum Log Line
 ([below](#how-many-log-lines-a-dialog-keeps)), the **Case-Sensitive Matching** switch
 ([below](#where-every-case-sensitive-box-starts)) and [Dev Mods](#dev-mods).
 
+<img src="screenshots/settings.png" alt="Core's group on Settings → Plugins: each row says what its dialog holds now, above the button that opens it">
+
+<img src="screenshots/ui-customizations.png" alt="The UI Customizations dialog: a switch or a box for each setting, with what it does under it">
+
 ### The Scene Tagger's duration mismatch
 
 Stash's [<abbr title="Stash's Scene Tagger, which matches scenes against a stash-box.">tagger</abbr>](../GLOSSARY.md#tagger) prints **“Duration off by at least Ns”** among the other fields on a search result,
@@ -79,6 +83,8 @@ lands on the box around it, and a browser offers Paste over an input and not ove
 Turn on **Right-Click Paste in Tags and Performers Boxes** and the input is widened to fill the
 rest of the row. The pointer is then over an input, the browser offers its own Paste, and the
 paste takes the exact path Ctrl+V already takes.
+
+<img src="screenshots/right-click-paste.png" alt="A performer's Edit form, right-clicked in the Tags box just after its one tag: the browser's own menu, with Paste">
 
 No clipboard permission is asked for and no menu of ours is drawn — this is one CSS rule. The
 tags already in the box keep their own space and their remove buttons, because the input only
@@ -164,6 +170,8 @@ in the color the box holds, so a pick shows before Save does. They apply on ever
 as they are saved, and on a page opened later once the ᝯㄝₓ settings are read; until then that page
 shows the defaults. The defaults are written in the first time the Plugins tab of the settings page
 is opened. The row's summary lists each color in force after a square of it, outlined in black.
+
+<img src="screenshots/ui-customizations-colors.png" alt="The second half of UI Customizations: the seven color pickers, each with Default beside it and made-up lines drawn in its color">
 
 **Follow the Stash Theme**, a switch above them, draws the ᝯㄝₓ dialogs, tooltips and panes in the
 grays of the theme you run instead of their own dark ones. The grays are read off a hidden sample of
@@ -287,6 +295,8 @@ mark where the entity is Organized. A **tag** or a **setting** hovers to a **too
 description, or the setting's own help text. Both are fetched on the first hover and kept for the
 page.
 
+<img src="screenshots/hover-card.png" alt="A scene named in a listing, hovered: its card, with its cover, the rating as an orange banner and the Organized mark">
+
 A setting that names a **custom field** carries an **ⓕ** mark in the GTTx highlight color, the same as on the cards, at the end of its value. Hover
 it and the tooltip names the field, its description if it has one, and what in the library carries
 it - a count and the first few entities by name and id, a scene, image or gallery with no title by
@@ -356,8 +366,12 @@ does.
 ## Troubleshooting
 
 - **A plugin prints `… cannot start: it needs ᝯㄝₓ Core <version> or newer, installed and enabled.
-  Install or update it from the same source and reload the page.`** in the browser console and does
-  nothing else. It stops rather
+  Install or update it from the same source and reload the page.`** in the browser console, and the
+  same line in red under its name on Settings → Plugins and Settings → Tasks, and does nothing else.
+  Stash still lists its settings, drawn from the plugin's `.yml`, and its task buttons: one pressed
+  says *Added … to job queue*, and the job fails, in the Task Queue above and in Stash's log, with
+  `Error running plugin task: empty exec value` - the dialog
+  it should open is the plugin's own script, which has not started. It stops rather
   than limping because there is no half of it left to limp with - the dialogs, the tooltips and the
   buttons all live here. Install this plugin, enable it, or update it to the version named, and reload the page. Stash does not warn
   about either case: a missing dependency is skipped silently, and a disabled one is the same as an
@@ -372,6 +386,8 @@ What the ᝯㄝₓ plugins write, and what you save in Stash's own pages in this
 browser so it can be undone later — after the dialog that wrote it has closed, days later if need be.
 Open it from **Settings → Tasks → Undo History...**, or from the **↶** button in Stash's top bar, in the GTTx highlight color,
 beside Settings.
+
+<img src="screenshots/undo-history.png" alt="Undo History: each run a plugin wrote, newest first, with what it changed, and a tag hovered for its tooltip">
 
 - **The list** shows the history newest first, a run a row: when, who — *Your edit*, a plugin, or an
   *Undo* — what, and how many changes. Click a row for its changes: the entity, with its hover card,

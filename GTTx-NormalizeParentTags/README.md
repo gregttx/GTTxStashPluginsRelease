@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too. Tag custom fields (two of the exclusion filters) and the
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console. Tag custom fields (two of the exclusion filters) and the
 `organized` flag on studios both depend on that Stash.
 
 > ## ⚠ Backing up your database before the first run is strongly recommended
@@ -102,6 +103,8 @@ left exactly as they are — only which tags sit on which entity changes.
 ## The two-step dialog
 
 Running the task opens a dialog that works in two phases.
+
+<img src="screenshots/review.png" alt="Normalize Parent Tags reviewing a scene that carries both a tag and its parent">
 
 **At the top of it are the seven selectors** — one per entity-type, each Off, Prune or Roll-Up.
 They start from the auto-modes in the settings, **with Images off** whatever that setting
@@ -239,13 +242,7 @@ A third task, **Show Tag Hierarchy...**, opens a read-only browser of your whole
 nothing, so it is safe to open at any time — and it is the quickest way to understand what Prune
 and Roll-Up would do before running either.
 
-```
-▾ Hair Color (45)                                    2 children
-  ▾ Blonde (12)                                       2 children
-      Platinum (47)          ◆ 2 parents  leaf
-      Ash (48)               ⛔ never removed: name filter   leaf
-  ▸ Rare (6)                 ↩ shown under "Body" (4)
-```
+<img src="screenshots/hierarchy.png" alt="Show Tag Hierarchy: the tag tree, each tag with its counts">
 
 Each row reads **tag name followed by its id in brackets** — `Hair Color (45)` is the tag
 with id 45, the same id the plan names it by and the one in `/tags/45`. The numbers that
@@ -350,6 +347,8 @@ that is not mentioned at all is OFF.
 
 **The Auto-Mode Settings... dialog is the editor for it** — seven selectors, the same **Set All:**
 buttons under them, and an orange **Save**, so nobody has to type the line.
+
+<img src="screenshots/auto-mode.png" alt="The Auto-Mode Settings dialog: Off, Prune or Roll-Up for each entity-type, Scenes set to Prune">
 
 **On the settings page you get that dialog instead of Stash's text editor.** In the **Automatic
 mode per entity-type** row, the value is shown in words — `Performers=Off, Scenes=Prune, Scene
@@ -601,7 +600,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Normalize Parent Tags | 729 MB | 1111 MB | 1007 MB |
+| Normalize Parent Tags | 728 MB | 1109 MB | 1006 MB |
 | Auto-Mode Settings | 1 MB | — | — |
 | Show Tag Hierarchy | 15 MB | — | — |
 

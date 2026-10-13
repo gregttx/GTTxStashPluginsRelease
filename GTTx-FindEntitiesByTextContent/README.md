@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too.
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console.
 
 Which [<abbr title="One item in a Stash library - a scene, image, gallery, performer, studio, group, tag or scene marker.">entities</abbr>](../GLOSSARY.md#entity) in your library mention this text — and can I change it everywhere at once?
 
@@ -60,11 +61,7 @@ handful of fields it is recognized by — for a tag, its aliases, parents, child
 description. It is read on the first hover rather than while the list is drawn, so a search
 that finds thousands of entities costs nothing for the ones you never point at.
 
-```
-Beach day (1)      Scene · Title, Details ×2, URLs, Custom field value   …Beach day…
-Sandy (7)          Performer · Details                                   Likes the BEACH
-Outdoors (3)       Tag · Aliases, Custom field name                      beachy
-```
+<img src="screenshots/search.png" alt="Find & Replace listing every entity whose text mentions “beach”, with the matches shown in context">
 
 Click one to open it in a new tab, or in this one if ᝯㄝₓ Core is set that way. An attribute
 turned off after a search also hides the entities that only matched there, and drops that
@@ -377,7 +374,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Find & Replace Entities by Text Content | 830 MB | 1811 MB | 1628 MB |
+| Find & Replace Entities by Text Content | 830 MB | 1820 MB | 1628 MB |
 | Find & Replace: Export, Term counts | 147 MB | — | — |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.

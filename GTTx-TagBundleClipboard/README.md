@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too. Putting tags into an edit form depends on that Stash's UI
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console. Putting tags into an edit form depends on that Stash's UI
 plugin component patching.
 
 Copy a set of tags off one [<abbr title="One item in a Stash library - a scene, image, gallery, performer, studio, group, tag or scene marker.">entity</abbr>](../GLOSSARY.md#entity) and paste it onto another, however unrelated the two are.
@@ -25,6 +26,8 @@ next time you open the entity's page.
 **Paste.** Open the Edit tab of any other entity of any of those six types and press
 **📋Tags…**. A dialog lists the bundles on the clipboard, newest first. Pick one, tick the tags you
 want, and press Add — they go straight into the tag box on the form behind the dialog.
+
+<img src="screenshots/paste.png" alt="The paste dialog on a gallery's Edit tab: three bundles on the clipboard, the newest picked, and the parent tag Prune found redundant grayed and unticked">
 
 Then press Stash's own **Save**, exactly as if you had picked each tag from the dropdown yourself.
 

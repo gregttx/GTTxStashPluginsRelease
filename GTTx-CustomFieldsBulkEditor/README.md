@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too. `custom_fields` on the [<abbr title="Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.">entity-types</abbr>](../GLOSSARY.md#entity-type), and
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console. `custom_fields` on the [<abbr title="Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.">entity-types</abbr>](../GLOSSARY.md#entity-type), and
 `CustomFieldsInput` on their update mutations, are what this plugin is built on.
 
 > ## Backing up your database first is strongly recommended
@@ -33,12 +34,16 @@ whole selection — or the whole library — carries, and **one write across it*
 3. Pick **Custom Fields...** — after Stash's own items, with any other ᝯㄝₓ plugin's items in alphabetical order, in the
    Highlighted Text Color. It only appears while something is selected. Stash keeps a card ticked on another page or hidden by a filter; while its count of the selection is higher than the cards ticked on the page, the item is grayed out and does nothing, its tooltip saying why - tick them on one page.
 
+<img src="screenshots/selection-menu.png" alt="The Scenes list's toolbar with two scenes ticked and its “...” button pressed: Stash's own items, then each plugin's in the Highlighted Text Color">
+
 For the whole library, go to **Settings → Tasks → Plugin Tasks** and press
 **Edit Custom Fields Across the Whole Library...** — the orange button under this plugin's name. It
 opens the same dialog on everything, with no selecting to do. Reading a large library takes a
 while — 155,000 entities is about fifteen seconds — and the counter says which type it is on and how
 far through it is while you wait. A type whose read fails part way is left out whole, and the log
 says so: nothing lists or writes part of a type as if it were all of it.
+
+<img src="screenshots/selection.png" alt="Custom Fields... on two ticked scenes: each one's fields and values, and the operation to apply">
 
 **The way out is one button wearing two words.** It says **Cancel** while **Apply** is live — there
 is a write on offer and Cancel is what declines it — and **Close** whenever Apply is off, because
@@ -53,11 +58,7 @@ something a stray keypress should do.
 The dialog opens on what the entities in scope carry **now**. On a task run every line names its
 own type, because seven of them share the listing:
 
-```
-Scene "Beach Day" (412): shoot🟰2019-07
-Scene "Beach Day" (412): source🟰dvd
-Scene "Rooftop" (417): shoot🟰2021-02
-```
+<img src="screenshots/whole-library.png" alt="Edit Custom Fields Across the Whole Library: every field and its values, by entity-type">
 
 Each of those colored boxes is a **pill**, and clicking one does something:
 
@@ -253,6 +254,8 @@ that field's name everywhere in the bulk-edit dialog — **and on the entity's o
 shows the field's name and nothing else. Hover it there and you get the name, then the description
 under it; a locked field's name starts with 🔒, described or not.
 
+<img src="screenshots/descriptions.png" alt="Manage Custom Field Descriptions and Locks: the field “source” picked, its description and the scenes carrying it">
+
 That works on any detail page — a scene, a tag, a performer — in the details panel and in the
 **Custom Fields** section of the edit panel, once you open it. It is matched on the *name*, so it
 holds wherever Stash chose to put the field: the plain tooltip Stash gives that name is replaced,
@@ -334,6 +337,8 @@ or delete the tag's description by hand — which loses the descriptions in it.
 
 One switch, two names and a lock list, in Settings → Plugins. When they cannot be read, a dialog
 still lists what it finds but writes nothing, and says so: its defaults are not your settings.
+
+<img src="screenshots/settings.png" alt="Custom Fields Bulk Editor's four settings on Settings → Plugins">
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -418,7 +423,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Edit Custom Fields Across the Whole Library | 552 MB | 1150 MB | 1150 MB |
-| Manage Custom Field Descriptions and Locks | 308 MB | 318 MB | 318 MB |
+| Manage Custom Field Descriptions and Locks | 284 MB | 318 MB | 318 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 

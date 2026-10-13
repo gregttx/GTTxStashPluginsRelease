@@ -3,7 +3,8 @@
 
 Requires Stash 0.31.0 or newer and [ᝯㄝₓ Core](../GTTx-Core/README.md), installed and enabled alongside
 it. A source index (Stash's Settings → Plugins → Available Plugins) installs Core for you; a hand
-copy must copy the `GTTxCore` folder too. Tag custom fields (the custom-field exclusion filter)
+copy must copy the `GTTxCore` folder too. Without Core it does nothing but say so, in red under its name on Settings → Plugins and
+Settings → Tasks and in the browser console. Tag custom fields (the custom-field exclusion filter)
 and UI plugin component patching ([<abbr title="Holding changes for you to review rather than writing them - in Stash's edit form until you press Save, or in a plugin's dialog until you press Apply or Proceed.">staging</abbr>](../GLOSSARY.md#staging) into an edit form) both depend on that Stash.
 
 > ## ⚠ Backing up your database before the first library-wide run is strongly recommended
@@ -31,6 +32,8 @@ Stash entities are related to each other, and the tags and performers on one are
 another. A scene's performers each carry tags; so does its studio, and each of its markers. A
 gallery's images carry tags and performers of their own. A group's scenes carry everything above.
 This plugin copies those assignments **along the relationship**, onto the entity that links them.
+
+<img src="screenshots/propagate-all.png" alt="Propagate All reviewing the tags and performers it would carry along each path">
 
 It is always a **copy**. Nothing is ever removed from the source, and nothing is removed from the
 target either — the only thing in the plugin that removes anything at all is the dialog's Undo,
@@ -115,6 +118,8 @@ orange, since being written into is the half you are deciding about. It follows 
 you press it. The picture is sized to what is on it and centered in the dialog. Each toggle sits on its
 own arrow and is the same control the list shows, so a path set in one view is set in the other and
 is what Save writes. **List view** switches back, and the dialog opens on whichever of the two you last left it in.
+
+<img src="screenshots/paths.png" alt="The Path Settings dialog in System view: a box per entity-type, an arrow per path with its switch on it">
 
 **Rearranging it.** The diagram ships with a layout, and you can move it. Turn on **Layout edit
 mode** in ᝯㄝₓ Core's **Dev Mods...** and reopen the dialog: the System view shows an **Edit Layout**
@@ -356,6 +361,8 @@ the last thing in the row rather than being displaced by ours. On a page with tw
 the row gets a small gap between its two lines when it wraps; the gap is on the row rather than on
 the buttons, since a margin on a button in a flex row grows Stash's own buttons taller with it.
 
+<img src="screenshots/edit-tab-buttons.png" alt="A scene's Edit tab with Add all Tags from all Performers and Add Tags from Studio between Save and Delete, in orange">
+
 Every button this plugin draws is **orange**, where Stash's own row actions are gray.
 Orange is this repo's color for "a plugin put this here, and pressing it writes to entities other
 than the one in front of you" — the same color `MergePerformerTagsToScenes` uses for its two
@@ -395,6 +402,8 @@ or performers *out* to everything an enabled path reaches — a performer's own 
 Tags to all Scenes"** and **"Add Tags to all Groups"**, a studio's page the same two, and a
 scene, gallery, image or group's own page (not its Edit tab — its ordinary detail view) gets
 whichever of its own outgoing paths are enabled.
+
+<img src="screenshots/source-button.png" alt="A studio's own page with Add Tags to all Scenes, pushing its tags out to its scenes">
 
 Two paths have no source button: a scene [<abbr title="A scene marker: a moment in a scene (a time, and optionally an end), with a title, a primary tag and other tags.">marker</abbr>](../GLOSSARY.md#marker) has no page of its own to put one on, being
 something you view inside a scene's Markers tab rather than a page you navigate to directly.
@@ -532,6 +541,8 @@ itself is one line of text
 forgivingly, in any order and any case. A button nobody names is off. Upgrading from a release
 that had **Show Manual Buttons** on starts with every button on.
 
+<img src="screenshots/manual-buttons.png" alt="The Manual Buttons Settings dialog: target Edit-tab buttons on the left, source-page buttons on the right, those of paths that are off grayed">
+
 **Auto-Propagation and Depropagate Assist** — one row, naming whichever of the two
 [auto-modes](#the-auto-modes) are on and holding the button that opens the **Auto-Propagation and Depropagate Assist**
 dialog, a switch for each: **Auto-Propagate when the Target is Saved** and **Auto
@@ -542,6 +553,8 @@ a source brought when a save takes it away. The source-side mode fans out: savin
 performer can rewrite every scene they appear in. The setting is one line of text (`target, source,
 silent, depropagate`) and can be typed by hand; a word nobody names is off. Upgrading from a
 release that had either old switch on starts with that mode on, and asking.
+
+<img src="screenshots/auto-propagation.png" alt="The Auto-Propagation and Depropagate Assist dialog: the two auto-modes, Silent Auto-propagation and the depropagate assist">
 
 **Paths** — one row, listing the paths that are on in three columns and holding the button that
 opens the **Path Settings** dialog (the propagate dialog's own footer is the other way in). All fourteen are in that dialog, in three columns read top to
@@ -691,7 +704,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1157 MB | 1051 MB | 1034 MB |
+| Propagate All | 1163 MB | 1050 MB | 1034 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
