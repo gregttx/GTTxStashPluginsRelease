@@ -8,31 +8,42 @@ MB of JavaScript heap above what the page held before the task opened, read afte
 
 | Plugin | Task | scan | plan | write | undo | closed | scan time | write time |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| SceneFilenameManager 2.4.1 | Archive Original Filenames | 116.3 | 116.3 | 165.2 | 161.3 | 0.6 | 2.8 s | 3.5 s |
-| SceneFilenameManager 2.4.1 | Restore Original Filenames | 56.3 | 56.3 | 82.5 | 82.5 | 1.1 | 1.7 s | 1.7 s |
-| SceneFilenameManager 2.4.1 | Rename Files From Metadata | 194.9 | 194.9 | 257.8 | 253.8 | 1.4 | 12.9 s | 5.6 s |
-| SceneVariants 3.2.1 | Migrate Variant Stash-IDs | 58.5 | 58.5 | 93.2 | 92.3 | 1.3 | 3.1 s | 7.9 s |
-| SceneVariants 3.2.1 | Flag Variants | 46.1 | 46.1 | 90.4 | 84.1 | 1.3 | 3.9 s | 9.4 s |
-| SceneVariants 3.2.1 | Review Variant Sets | 309.5 | 302.5 | - | - | 1.4 | 51.9 s | - |
-| SceneVariants 3.2.1 | Rename Variants | 637.0 | 630.0 | 667.7 | 666.9 | 1.7 | 52.1 s | 5.0 s |
-| CustomFieldsBulkEditor 4.1.1 | Edit Custom Fields Across the Whole Library | 551.8 | 551.7 | 1150.2 | 1150.2 | 1.2 | 26.6 s | 53.2 s |
-| CustomFieldsBulkEditor 4.1.1 | Manage Custom Field Descriptions and Locks | 213.8 | 213.8 | 310.6 | 310.6 | 0.8 | 5.5 s | 13.9 s |
-| FindEntitiesByTextContent 4.1.1 | Find & Replace Entities by Text Content | 785.5 | 785.0 | 1745.1 | 1539.3 | 1.1 | 65.3 s | 343.3 s |
-| NormalizeParentTags 6.2.1 | Normalize Parent Tags | 734.5 | 720.0 | 1090.8 | 986.2 | 1.0 | 370.3 s | 590.1 s |
-| NormalizeParentTags 6.2.1 | Auto-Mode Settings | 0.8 | 0.7 | - | - | 0.7 | 0.2 s | - |
-| NormalizeParentTags 6.2.1 | Show Tag Hierarchy | 15.2 | 15.2 | - | - | 0.6 | 0.5 s | - |
-| MergePerformerTagsToScenes 5.2.1 | Merge Performer Tags into All Their Scenes | 272.9 | 268.6 | 295.4 | 282.8 | 0.9 | 23.5 s | 25.0 s |
-| PropagateTagsAndPerformers 6.4.1 | Propagate All | 979.2 | 821.1 | 863.4 | 845.5 | 1.0 | 157.0 s | 125.4 s |
+| SceneFilenameManager 2.4.10 | Archive Original Filenames | 116.3 | 116.3 | 161.4 | 161.4 | 0.7 | 2.7 s | 3.5 s |
+| SceneFilenameManager 2.4.10 | Restore Original Filenames | 56.3 | 56.3 | 82.6 | 82.6 | 1.1 | 1.7 s | 1.8 s |
+| SceneFilenameManager 2.4.10 | Rename Files From Metadata | 198.6 | 198.6 | 257.7 | 257.5 | 1.4 | 13.8 s | 6.0 s |
+| SceneVariants 3.3.2 | Migrate Variant Stash-IDs | 58.5 | 58.5 | 93.3 | 92.3 | 1.4 | 3.1 s | 7.6 s |
+| SceneVariants 3.3.2 | Flag Variants | 46.1 | 46.1 | 90.2 | 84.1 | 1.3 | 4.0 s | 9.0 s |
+| SceneVariants 3.3.2 | Review Variant Sets | 309.5 | 302.5 | - | - | 1.4 | 51.3 s | - |
+| SceneVariants 3.3.2 | Rename Variants | 637.0 | 630.0 | 670.5 | 667.0 | 1.7 | 51.3 s | 5.0 s |
+| CustomFieldsBulkEditor 4.1.15 | Edit Custom Fields Across the Whole Library | 551.8 | 551.8 | 1150.2 | 1150.2 | 1.2 | 26.8 s | 63.5 s |
+| CustomFieldsBulkEditor 4.1.15 | Manage Custom Field Descriptions and Locks | 307.7 | 213.8 | 318.4 | 318.4 | 0.8 | 5.8 s | 14.8 s |
+| FindEntitiesByTextContent 4.11.2 | Find & Replace Entities by Text Content | 829.5 | 829.5 | 1810.7 | 1628.4 | 1.1 | 20.9 s | 337.5 s |
+| FindEntitiesByTextContent 4.11.2 | Find & Replace: Export, Term counts | 147.3 | 0.6 | - | - | 0.6 | 77.5 s | - |
+| DeSpicer 1.0.0 | De-Spice Library | 438.2 | 438.2 | 1098.1 | 440.3 | 0.7 | 168.5 s | 341.5 s |
+| NormalizeParentTags 6.3.2 | Normalize Parent Tags | 729.1 | 729.1 | 1110.8 | 1007.3 | 1.0 | 369.0 s | 553.2 s |
+| NormalizeParentTags 6.3.2 | Auto-Mode Settings | 0.8 | 0.7 | - | - | 0.7 | 0.2 s | - |
+| NormalizeParentTags 6.3.2 | Show Tag Hierarchy | 15.2 | 15.2 | - | - | 0.5 | 0.5 s | - |
+| MergePerformerTagsToScenes 5.3.3 | Merge Performer Tags into All Their Scenes | 272.8 | 268.6 | 293.4 | 282.7 | 0.9 | 23.9 s | 22.8 s |
+| PropagateTagsAndPerformers 6.8.4 | Propagate All | 1157.3 | 999.1 | 1050.5 | 1033.5 | 1.0 | 207.4 s | 164.4 s |
 
 ## Against the baseline
 
-No marker moved by more than 15% or 8 MB, and `closed` by no more than 1 MB, or 2 MB with a soak that did not grow. **Pass.**
+**Accepted** as the baseline, with these changes from the one before it:
+
+| Task | Marker | Baseline | Now | Change |
+|---|---|--:|--:|---|
+| CustomFieldsBulkEditor / Manage Custom Field Descriptions and Locks | scan | 213.8 | 307.7 | +93.9 MB |
+| FindEntitiesByTextContent / Find & Replace: Export, Term counts | - | - | - | new task, no baseline |
+| PropagateTagsAndPerformers / Propagate All | scan | 978.9 | 1157.3 | +178.4 MB |
+| PropagateTagsAndPerformers / Propagate All | plan | 820.8 | 999.1 | +178.3 MB |
+| PropagateTagsAndPerformers / Propagate All | write | 863.2 | 1050.5 | +187.3 MB |
+| PropagateTagsAndPerformers / Propagate All | undo | 845.5 | 1033.5 | +188 MB |
 
 `closed` grew by more than 1 MB, and a soak of 5 runs at a scale of 0.01 showed it does not grow from run to run - a fixed cost or a compaction, not a leak:
 
 | Task | Baseline | Now | Change |
 |---|--:|--:|---|
-| CustomFieldsBulkEditor / Edit Custom Fields Across the Whole Library | 0 | 1.2 | +1.2 MB, soak 1.04, 1.15, 1.21, 1.23, 1.27 MB |
+| CustomFieldsBulkEditor / Edit Custom Fields Across the Whole Library | 0 | 1.2 | +1.2 MB, soak 1.05, 1.16, 1.22, 1.24, 0.26 MB |
 
 ## What each task planned and wrote
 
@@ -45,15 +56,17 @@ No marker moved by more than 15% or 8 MB, and `closed` by no more than 1 MB, or 
 - **SceneVariants / Rename Variants** - Renumber by duration on, every proposal selected. Scanned 100000 scenes. 33333 variant sets found. 57692 renames proposed. showing the last 1000 of 62182 lines. Then: Scanned 100000 scenes. 33333 variant sets found. 57692 renames proposed. 57692 renames written. showing the last 1000 of 119875 lines. (58101 requests)
 - **CustomFieldsBulkEditor / Edit Custom Fields Across the Whole Library** - Overwrite one field with a new value on every entity of all seven types. 1128300 entities read, 205000 with custom fields, 275000 fields in total, 1198300 lines listed. Apply covers 1128300 entities. Then: Applied. 1128300 entity changes written (13799 requests)
 - **CustomFieldsBulkEditor / Manage Custom Field Descriptions and Locks** - One field, held by every scene and performer and one image in ten, renamed. 4 custom fields, 1 described, 1 unsaved change Then: 4 custom fields, 1 described, no unsaved changes - last Apply written (14439 requests)
-- **FindEntitiesByTextContent / Find & Replace Entities by Text Content** - All seven types, searching "e" - in nearly every text - and replacing every match. Scanned 1128300 of 1128300 entities · 881274 matches · 836 on screen · finished Scenes 100000/100000 · Images 1000000/1000000 · Galleries 20000/20000 · Performe (901169 requests)
+- **FindEntitiesByTextContent / Find & Replace Entities by Text Content** - All seven types, searching "e" - in nearly every text - and replacing every match. Scanned 1128300 of 1128300 entities · 6053287 matches in 881274 entities · 1000 on screen · finished Scenes 100000/100000 (2918028 matches) · Images 1000000/100 (901169 requests)
+- **FindEntitiesByTextContent / Find & Replace: Export, Term counts** - All seven types exported as Term counts, Min count 5; nothing written. Exported 1128300 entities read: saved to your browser's downloads as fretc-export-2026-10-12-1716.csv. (2266 requests)
+- **DeSpicer / De-Spice Library** - Anonymize and Vanillify over every entity-type, every rule as the goals say, images kept; every change written. Scanned 1148300 entities · 2945080 changes found · 2945080 to write Performers 5000/5000 · Studios 300/300 · Groups 1000/1000 · Tags 2000/2000 · Scenes 100000/1 Then: Done in 4 min 31 s · 2,945,080 written to 1,148,300 entities · nothing left · 26 WARN Scanned 1148300 entities · 2945080 changes found · 0 to write · written 29 (2301223 requests)
 - **NormalizeParentTags / Normalize Parent Tags** - Roll-Up on all seven types, over a tag tree five levels deep. Review complete. 1146296 entity changes planned, 9847213 log lines - showing the last 1000 of 9847213 lines Performers 5000 / 5000 Studios 300 / 300 Groups 1000 Then: Finished. 1146296 entity changes applied - showing the last 1000 of 19694426 lines Performers 5000 / 5000 Studios 300 / 300 Groups 1000 / 1000 Galleries 20000 / (1017643 requests)
 - **NormalizeParentTags / Auto-Mode Settings** - The dialog opened; it reads nothing. no counters (2 requests)
 - **NormalizeParentTags / Show Tag Hierarchy** - Every tag expanded, with its counts loaded. 2000 tags, 20 roots. 2000 rows shown - click a tag for what Prune and Roll-Up would do with it. (4 requests)
 - **MergePerformerTagsToScenes / Merge Performer Tags into All Their Scenes** - Every performer's tags onto every scene of theirs. Review complete. 100000 scenes to update, 1192070 tag assignments to add. Nothing has been written. - showing the last 1000 of 300004 lines Then: Finished. 100000 scenes updated, 1192070 tag assignments added - showing the last 1000 of 400008 lines (100516 requests)
-- **PropagateTagsAndPerformers / Propagate All** - Every path, one direction of each reversible pair, union rather than common. Review complete. 221000 entity changes planned, 2724690 log lines - showing the last 1000 of 2724690 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 2000 Then: Finished. 221000 entity changes applied - showing the last 1000 of 5449369 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 20000 Scenes 1: 100000 / 10000 (145194 requests)
+- **PropagateTagsAndPerformers / Propagate All** - Every path, one direction of each reversible pair, union rather than common. Review complete. 221000 entity changes planned, 3907583 log lines - showing the last 1000 of 3907583 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 2000 Then: Finished. 221000 entity changes applied - showing the last 1000 of 7815155 lines Images 1: 1000000 / 1000000 Galleries 1: 20000 / 20000 Scenes 1: 100000 / 10000 (145204 requests)
 
 ## What the synthetic server could not answer
 
 Answered with null, or matching everything; where a task depends on one, its numbers understate what a real Stash would cost: `query findSavedFilters`, `field studio.organized`.
 
-<sub>Fingerprint 2dfdd5b1a8027d7b (the plugins, the harness and this tool). Generated by `node .tools/memory-watermark.js`.</sub>
+<sub>Fingerprint 3baaf70df016ced4 (the plugins, the harness and this tool). Generated by `node .tools/memory-watermark.js`.</sub>

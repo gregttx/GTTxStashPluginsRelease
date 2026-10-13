@@ -1,0 +1,5014 @@
+// Custom Fields Bulk Editor
+//
+// Requires Stash 0.31.0 or newer: `custom_fields` on the seven entity-types, and
+// `CustomFieldsInput` on their update mutations, are what this plugin is built on.
+//
+// Stash can already store a custom field on a Scene, Image, Gallery, Performer,
+// Studio, Group or Tag, and its UI can only edit one record at a time. The API has
+// no such limit - five of the seven accept `custom_fields` on their *bulk* mutation,
+// and the other two take one single update each - so this plugin adds the one thing
+// missing: a view of what a selection actually carries, and one write across it.
+//
+// It adds a "Custom Fields..." item to the "..." menu of any entity list view while
+// something is selected, plus two tasks (the descriptions and the locks), four settings,
+// and a watch on Stash's own edit forms that keeps locked fields locked.
+//
+// The design notes, and the reasoning behind the parts that look arbitrary, are in
+// AGENTS.md next to this file.
+(function () {
+  'use strict';
+
+  // ── The shared blocks, from ᝯㄝₓ Core ─────────────────────────────────────
+  //
+  // These used to be copies in this file, pinned byte-identical by a test that could
+  // prove the copies agreed and never that this plugin could run one. They are bound
+  // here instead: `ui: requires:` in the .yml is topologically sorted by Stash and
+  // `useScript` sets `async = false`, so Core has finished running before this line.
+  // Binding rather than looking up per call is what keeps every call site below
+  // reading exactly as it did when the block was local.
+  var C = (window.__GTTx__ || {}).core;
+  // The Core floor, ᝯㄝₓ Core 5.11.0 or newer, told by one of its exports (`selectionMenuItem`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.selectionMenuItem !== 'function') {
+    if (window.console && console.error) {
+      console.error('[cfbe] ᝯㄝₓ Custom Fields Bulk Editor cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
+    }
+    return;
+  }
+  var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass, gqlRequest = C.gqlRequest,
+    settingRow = C.settingRow, showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop,
+    plural = C.plural, linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard,
+    holdWidth = C.holdWidth, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
+    cfTipTick = C.cfTipTick, staleReloadButton = C.staleReloadButton,
+    installedVersion = C.installedVersion, gate = C.gate('cfbe'), ownTaskName = C.ownTaskName,
+    paintButton = C.paintButton, paintTaskButtons = C.paintTaskButtons, wireEscape = C.wireEscape,
+    unwireEscape = C.unwireEscape, displayName = C.displayName, fakeOk = C.fakeOk;
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
+
+  // How many lines a dialog draws at once: Core's Lines Drawn at Once, read where it is used.
+  var linesDrawn = C.linesDrawn;
+  var PLUGIN_ID   = 'CustomFieldsBulkEditor';
+  var PLUGIN_NAME = 'ᝯㄝₓ Custom Fields Bulk Editor';
+  // The name the dialog head wears. The same string here, because this name already
+  // fits in a title that goes on to name an entity-type and a count - the constant
+  // exists so that every head in the repo reads from one expression, not because
+  // every plugin has to shorten. See the repo-root AGENTS.md, "one name prefix".
+  var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Custom Fields Bulk Editor';
+
+  // The one version that proves anything. The settings page reads the manifest over
+  // GraphQL and goes current the moment plugins are reloaded, while the browser can
+  // still be running a script it cached before the edit. This constant travels
+  // inside the file; bump it with the manifest and the yml, or the `version` suite
+  // fails.
+  var PLUGIN_VERSION = '4.1.15';
+
+  // Printed before anything else runs, so a script that loads and then throws is told
+  // apart from one that never loaded at all. Through whatever the console offers
+  // rather than console.info directly: this is the first statement in the file.
+  function cfbe(message) {
+    if (typeof console !== 'undefined' && (console.info || console.log)) {
+      (console.info || console.log).call(console, message);
+    }
+  }
+
+  cfbe('[cfbe] CustomFieldsBulkEditor.js ' + PLUGIN_VERSION + ' loaded. This is the ' +
+    'running script\'s own version - the settings page reads the manifest instead, which can be ' +
+    'newer than the script your browser has cached.');
+
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-CustomFieldsBulkEditor/README.md';
+  var STYLE_ID   = 'cfbe-style';
+
+  // The one control this plugin draws into Stash's own UI, and the button that
+  // writes, in orange. Stash's own menu items and row actions are neutral, and these
+  // are not the same kind of thing: this one reaches out and rewrites every entity in
+  // a selection. See "one color for a plugin wrote this" in the repo-root AGENTS.md.
+  var PLUGIN_BTN_VARIANT = 'btn-warning';
+
+  var CHUNK_SIZE   = 100;   // entity ids per read alias batch and per bulk mutation
+  var READ_PAGE    = 5000;  // entities per page of the task's whole-library read
+  var UNDO_ARM_MS  = 4000;  // how long Undo stays armed for its second click
+  var TICK_MS      = 1000;
+  // The busy cursor under the last line of the listing. The counters say how far a
+  // read or a write has got; this says it is still going, which is the question a
+  // page of 5,000 entities leaves unanswered for seconds at a time.
+  // The two boxes in the descriptions dialog's right pane say what they are, since one
+  // is typed into and the other is read-only and neither is obvious from its contents.
+  var NAME_HEAD  = 'Name';
+  var LOCK_MARK = '\ud83d\udd12';     // 🔒, a field in the Locked Custom Fields setting
+  var UNLOCK_MARK = '\ud83d\udd13';   // 🔓, one that is not
+  var DESC_HEAD  = 'Description';
+  var USERS_HEAD = 'List of entities';
+  var EQ = '🟰';  // the name-value separator, U+1F7F0
+  var NONE = '␀';      // "no field here": what an Add starts from, a Delete ends at, U+2400
+  var ARROW = ' ⇒ ';
+
+  // ── What the filter boxes remember ────────────────────────────────────────
+  //
+  // The last few things typed into each of the three filter boxes, offered back as the
+  // browser's own autocomplete. `localStorage` rather than the plugin settings, for the
+  // two reasons `FindEntitiesByTextContent` gives: it belongs to the person at this
+  // browser rather than to the server, and `configurePlugin` **replaces** a plugin's
+  // settings block, so a plugin writing its own config as a side effect of typing is one
+  // careless write away from losing everything else in it.
+  //
+  // Per box rather than one shared list: an entity name, a field name and a value are
+  // three different vocabularies, and a box offering the other two's entries back is
+  // noise in the one place a user is trying to narrow something.
+  var FILTER_STORE_KEY = '__GTTx__.cfbeFilters';
+  var FILTER_HISTORY_MAX = 10;
+
+  function readFilterHistory() {
+    try {
+      var raw = window.localStorage.getItem(FILTER_STORE_KEY);
+      var v = raw ? JSON.parse(raw) : null;
+      return v && typeof v === 'object' ? v : {};
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function writeFilterHistory(v) {
+    try {
+      window.localStorage.setItem(FILTER_STORE_KEY, JSON.stringify(v));
+    } catch (e) { /* a browser that will not store is not a reason to refuse a filter */ }
+  }
+
+  // Newest first, no duplicates, capped. Returns the list so a caller can render it
+  // without reading the store back.
+  function rememberFilter(key, text) {
+    var t = String(text == null ? '' : text).trim();
+    if (!t) return null;
+    var all = readFilterHistory();
+    var list = (all[key] || []).filter(function (x) { return x !== t; });
+    list.unshift(t);
+    all[key] = list.slice(0, FILTER_HISTORY_MAX);
+    writeFilterHistory(all);
+    return all[key];
+  }
+
+  // `a1` scopes the *task* only - a selection is exactly what the user picked - and it
+  // is off by default, so an install that never opens the settings page behaves as it
+  // always did. Stash stores an unset BOOLEAN as absent, which is the same thing as
+  // false here.
+  //
+  // `b1` names the tag that holds the description store (§22) and `c1` the custom field
+  // that hides an entity from Stash's add/select dropdowns (§23). A STRING setting the
+  // user has cleared arrives as the empty string, which is not the same as never having
+  // set it: an empty `c1` is how the dropdown filter is turned off, so the default is
+  // only used where the key is absent. An empty `b1` cannot name a tag, so that one
+  // falls back to the default either way.
+  var DEFAULT_STORE_TAG = 'ᱜ╦╦🞮 🗃️🔌 🛂🧲 🛠🛈🖫 ❌∙';
+  var DEFAULTS = {
+    a1SkipImagesInTask: false,
+    b1DescriptionTagName: DEFAULT_STORE_TAG,
+    c1ExcludeFromAddListField: 'ᱜ╦╦🞮_exclude_from_add_list',
+    d1LockedFields: '',
+  };
+
+  // The custom fields no bulk write of this plugin's, or of Find & Replace's, may touch:
+  // exact names, comma- or newline-separated. A lock guards a field a person or another
+  // plugin keeps by hand - an archived filename, a pinned base-title - against the one
+  // press that rewrites it across the library, and on Stash's own edit form against a
+  // hand's edit or removal too (`lockFormTick`, `lockGuard`). Adding one where it is
+  // missing is never stopped.
+  function lockedFields(s) {
+    var out = [];
+    String((s && s.d1LockedFields) || '').split(/[,\n]/).forEach(function (t) {
+      t = t.trim();
+      if (t && out.indexOf(t) === -1) out.push(t);
+    });
+    return out;
+  }
+
+  // Which of `names` are locked, in the order given - for the sentence that refuses.
+  function lockedAmong(s, names) {
+    var locked = lockedFields(s);
+    return names.filter(function (n, i) {
+      return n && locked.indexOf(n) !== -1 && names.indexOf(n) === i;
+    });
+  }
+
+  // A locked field's description is locked with it: the dialog shows it read-only, Prune
+  // keeps it, and `updateDescriptions` skips it.
+  function descLocked(s, name) {
+    return name != null && lockedFields(s).indexOf(String(name)) !== -1;
+  }
+
+  function lockSentence(names) {
+    return (names.length === 1 ? '"' + names[0] + '" is' : '"' + names.join('", "') + '" are') +
+      ' locked in this plugin\u2019s Locked Custom Fields setting: ' +
+      (names.length === 1 ? 'its' : 'their') + ' name, description and values cannot change, ' +
+      'and ' + (names.length === 1 ? 'it' : 'they') + ' cannot be removed from an entity - ' +
+      'only added where missing. Take ' +
+      (names.length === 1 ? 'it' : 'them') + ' off that list first.';
+  }
+  // The default this replaced: a name in a namespace with no owner, so a setting
+  // still reading it is moved onto the prefixed one wherever it is read.
+  // COMPAT: `Exclude_from_add_list`, the hide field's default before the prefix
+  // (since CustomFieldsBulkEditor 2.0.1); remove when no install can still hold it - never
+  // on its own: an install may skip releases.
+  var LEGACY_HIDE_FIELD = 'Exclude_from_add_list';
+  var SKIP_IMAGES_NAME = 'Skip Images in the Whole-Library Task';
+
+  // The custom field the store tag carries so it can be found again after any rename,
+  // and the value written into `c1ExcludeFromAddListField` on it. Neither is a setting:
+  // the marker is this plugin's own plumbing, and the value is what §23's filter reads
+  // as "marked".
+  // The name carries the same prefix the plugins wear, because a custom field lives in
+  // one flat namespace shared with whatever the user (or another plugin) keeps there,
+  // and `cfbe_desc_store` was a name anyone could have picked. `LEGACY_STORE_FIELD` is
+  // that old name, upgraded silently the first time a store wearing it is found.
+  var STORE_FIELD = 'ᱜ╦╦🞮_🛂🧲_🛠🛈🖫_desc_store';
+  // COMPAT: `cfbe_desc_store`, the store marker's name before the prefix
+  // (since CustomFieldsBulkEditor 2.0.1); remove when no store can still wear it - never
+  // on its own: a store is upgraded only when this plugin next reads it.
+  var LEGACY_STORE_FIELD = 'cfbe_desc_store';
+  var MARK_VALUE = '1';
+
+  // The alias the store tag is created with, so it stays findable by typing something
+  // an ASCII keyboard can produce.
+  var STORE_TAG_ALIAS = 'GTTx Custom Field Description Store';
+
+  // The sentence above the JSON in the store tag's description. Stash renders that
+  // description on the tag's card and detail page, so it opens with something a human
+  // can act on; the blob is parsed from the first `{` to the last `}`, which is why the
+  // header must not contain a brace.
+  var STORE_HEADER = PLUGIN_NAME + ' - custom field descriptions. Managed by the ' +
+    'plugin: edit them in Settings - Tasks - "' + 'Manage Custom Field Descriptions and Locks...' +
+    '". Delete this whole description to reset the store.';
+
+  // ── The seven entity-types ────────────────────────────────────────────────
+  //
+  // Keyed by the plural segment Stash puts in the URL, because that is also how a
+  // list view is recognised: `/scenes`, `/performers/12/scenes` and `/tags/9/images`
+  // all end in the type they list. `/scenes/markers` ends in `markers`, which is not
+  // a key here and so is not a list this plugin offers anything on - SceneMarker is
+  // the one selectable entity in Stash with no `custom_fields` field at all, so there
+  // is nothing to edit rather than something left undone.
+  //
+  //   one         the by-id query; every entity in a batch is one alias of it
+  //   fields      what `displayName` reads, so the list can name the entity
+  //   route       matches this type's own detail link, which is how a selected card
+  //               is turned back into an id
+  //   bulk        the mutation that takes `ids` and one `custom_fields` delta.
+  //               Absent for Studio and Tag: `BulkStudioUpdateInput` and
+  //               `BulkTagUpdateInput` carry no `custom_fields` field, so those two
+  //               are written one at a time through `single` instead. That is a
+  //               schema fact, not a scoping decision - do not "add the missing bulk".
+  var ENTITIES = {
+    scenes: {
+      key: 'scenes', label: 'Scene', plural: 'Scenes',
+      one: 'findScene', fields: 'title files { basename }',
+      route: /^\/scenes\/(\d+)(?:[/?#]|$)/,
+      bulk: 'bulkSceneUpdate', bulkInput: 'BulkSceneUpdateInput',
+      single: 'sceneUpdate', singleInput: 'SceneUpdateInput',
+    },
+    images: {
+      key: 'images', label: 'Image', plural: 'Images',
+      one: 'findImage',
+      fields: 'title visual_files { ... on ImageFile { basename } ... on VideoFile { basename } }',
+      route: /^\/images\/(\d+)(?:[/?#]|$)/,
+      bulk: 'bulkImageUpdate', bulkInput: 'BulkImageUpdateInput',
+      single: 'imageUpdate', singleInput: 'ImageUpdateInput',
+    },
+    galleries: {
+      key: 'galleries', label: 'Gallery', plural: 'Galleries',
+      one: 'findGallery', fields: 'title files { basename } folder { basename }',
+      route: /^\/galleries\/(\d+)(?:[/?#]|$)/,
+      bulk: 'bulkGalleryUpdate', bulkInput: 'BulkGalleryUpdateInput',
+      single: 'galleryUpdate', singleInput: 'GalleryUpdateInput',
+    },
+    performers: {
+      key: 'performers', label: 'Performer', plural: 'Performers',
+      one: 'findPerformer', fields: 'name',
+      route: /^\/performers\/(\d+)(?:[/?#]|$)/,
+      bulk: 'bulkPerformerUpdate', bulkInput: 'BulkPerformerUpdateInput',
+      single: 'performerUpdate', singleInput: 'PerformerUpdateInput',
+    },
+    groups: {
+      key: 'groups', label: 'Group', plural: 'Groups',
+      one: 'findGroup', fields: 'name',
+      route: /^\/groups\/(\d+)(?:[/?#]|$)/,
+      bulk: 'bulkGroupUpdate', bulkInput: 'BulkGroupUpdateInput',
+      single: 'groupUpdate', singleInput: 'GroupUpdateInput',
+    },
+    studios: {
+      key: 'studios', label: 'Studio', plural: 'Studios',
+      one: 'findStudio', fields: 'name',
+      route: /^\/studios\/(\d+)(?:[/?#]|$)/,
+      bulk: null, bulkInput: null,
+      single: 'studioUpdate', singleInput: 'StudioUpdateInput',
+    },
+    tags: {
+      key: 'tags', label: 'Tag', plural: 'Tags',
+      one: 'findTag', fields: 'name',
+      route: /^\/tags\/(\d+)(?:[/?#]|$)/,
+      bulk: null, bulkInput: null,
+      single: 'tagUpdate', singleInput: 'TagUpdateInput',
+    },
+  };
+
+  // The filter argument each `find<Plural>` query takes, for the two queries that ask
+  // "which entities carry this custom field" rather than "give me everything". A table
+  // rather than a rule because six of the seven are the singular of the key and
+  // `galleries` is not - `gallery_filter`, not `gallerie_filter`. Read off
+  // stashapp/stash `develop` (schema.graphql), 2026-08-16; every one of the seven
+  // filter types carries `custom_fields: [CustomFieldCriterionInput!]`.
+  var FILTER_ARG = {
+    scenes: 'scene_filter', images: 'image_filter', galleries: 'gallery_filter',
+    performers: 'performer_filter', groups: 'group_filter', studios: 'studio_filter',
+    tags: 'tag_filter',
+  };
+
+  // This plugin never reacts to a save - its `window.fetch` wrapper only filters the add
+  // lists and refuses a save that would break a lock - so it registers no `respecters` entry - claiming to honour leases while
+  // having nothing to stand down would be a lie a sibling's dialog would repeat to
+  // the user. It has no relationship-copy paths, so it declares nothing either, and
+  // it puts no button in an entity's action row, so it takes no `order` priority.
+  // `coop()` still creates all four fields, for shape-consistency with its siblings.
+
+  // ── Settings ──────────────────────────────────────────────────────────────
+
+  // Core's one shared read (`pluginConfig`) brings the other ᝯㄝₓ plugins' settings too -
+  // what the sibling plugins' cross-checks read, for free. Nothing here needs them yet.
+  // `fresh`: past the answer every plugin shares - a task or dialog opening, which must
+  // see a change another tab saved a moment ago.
+  function loadSettings(fresh) {
+    return pluginConfig(fresh).then(function (data) {
+      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      var s = {};
+      for (var k in DEFAULTS) {
+        if (!hasOwn(DEFAULTS, k)) continue;
+        // A cleared STRING setting is the empty string, and that is a *choice* - it is
+        // how the dropdown filter is switched off. So the default applies only where
+        // the key is absent, never where the user has emptied it.
+        s[k] = typeof DEFAULTS[k] === 'boolean' ? !!raw[k] : effective(raw, k);
+      }
+      // Except this one: the empty string cannot name a tag, so it means the same as
+      // never having set it.
+      if (!s.b1DescriptionTagName) s.b1DescriptionTagName = DEFAULT_STORE_TAG;
+      seedDefaults(raw);
+      return s;
+    });
+  }
+
+  // Stash's plugin settings have no `default:` in the manifest - the panel shows
+  // whatever is in `config.yml`, which is nothing at all until the user types in the
+  // box. So a STRING setting reads as empty while the plugin is quietly using its
+  // default, and the two states a blank box can mean - "never set" and "deliberately
+  // cleared", which are *not* the same thing here - look identical.
+  //
+  // Writing the defaults in once settles both: the box shows the name it is actually
+  // using, and clearing it becomes a visible choice. Only keys that are absent are
+  // seeded, so this can never overwrite an answer the user has given, and the whole
+  // map goes back because `configurePlugin` replaces it rather than merging.
+  // Silent on failure: a settings write nobody asked for must not put an error in
+  // front of someone who came here to look at custom fields.
+  var _seeded = false;
+  function seedDefaults(raw) {
+    if (_seeded) return;
+    var input = {};
+    var missing = 0;
+    var k;
+    for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+    for (k in DEFAULTS) {
+      // An empty default has nothing to show in the box, so there is nothing to seed.
+      if (!hasOwn(DEFAULTS, k) || typeof DEFAULTS[k] === 'boolean' || DEFAULTS[k] === '') continue;
+      if (hasOwn(raw, k) && raw[k] != null) continue;
+      input[k] = DEFAULTS[k];
+      missing++;
+    }
+    // And the one upgrade: a hide field still named the unprefixed default is written
+    // back under the prefixed one, so the box says what `effective` is already using.
+    // COMPAT: a hide field still set to `Exclude_from_add_list`
+    // (since CustomFieldsBulkEditor 2.0.1); remove when `LEGACY_HIDE_FIELD` goes.
+    if (input.c1ExcludeFromAddListField === LEGACY_HIDE_FIELD) {
+      input.c1ExcludeFromAddListField = DEFAULTS.c1ExcludeFromAddListField;
+      missing++;
+    }
+    if (!missing) return;
+    _seeded = true;
+    gqlRequest('mutation CFBE_SeedSettings($id: ID!, $input: Map!) ' +
+      '{ configurePlugin(plugin_id: $id, input: $input) }',
+    { id: PLUGIN_ID, input: input }).then(null, function () { _seeded = false; });
+  }
+
+  // Shown on Stash's settings page from its first paint, by the same rule (Core's
+  // `showDefaults`); the seed above is what writes them.
+  showDefaults(PLUGIN_ID, function () {
+    var out = {};
+    for (var k in DEFAULTS) {
+      if (hasOwn(DEFAULTS, k) && typeof DEFAULTS[k] !== 'boolean' && DEFAULTS[k] !== '') out[k] = DEFAULTS[k];
+    }
+    return out;
+  });
+
+  // The effective value of one setting, out of the raw map: the same "absent means the
+  // default, empty means cleared" rule `loadSettings` reads by, so the two can never
+  // disagree about what the plugin is actually using.
+  //
+  // The one thing it does not answer literally: a `c1` still reading the old default is
+  // read as the new one, so every caller sees the upgraded name at once rather than
+  // after the seed below has landed. A user who had typed that name in themselves is
+  // moved with it, which is the same trade the marker rename makes - the old name is
+  // one anything could have taken, and being right about it is worth more than keeping
+  // a name nobody chose deliberately.
+  function effective(raw, key) {
+    var v = hasOwn(raw, key) && raw[key] != null ? String(raw[key]) : DEFAULTS[key];
+    // COMPAT: a hide field still set to `Exclude_from_add_list`
+    // (since CustomFieldsBulkEditor 2.0.1); remove when `LEGACY_HIDE_FIELD` goes.
+    return key === 'c1ExcludeFromAddListField' && v === LEGACY_HIDE_FIELD ? DEFAULTS[key] : v;
+  }
+
+  // ── The description store ─────────────────────────────────────────────────
+  //
+  // One tag holds every custom field's description, in its own `description` string
+  // rather than in its `custom_fields` map. The map was the obvious place and it is
+  // taken: the same tag has to carry the marker below, and `ᱜ╦╦🞮_exclude_from_add_list`,
+  // and each of those would be indistinguishable from a description entry keyed on the
+  // same name. The description is a `text` column (migration 36 of stashapp/stash), so
+  // there is no length to design around, and one `tagUpdate` writes the whole store
+  // atomically - version, field list and all.
+  //
+  // A human sentence first, because Stash renders this description on the tag's card
+  // and detail page; the blob is everything from the first `{` to the last `}`.
+  function parseStore(text) {
+    var s = String(text == null ? '' : text);
+    var empty = { version: null, hideField: '', descriptions: {} };
+    // A blank description is an empty store - that is what deleting it by hand does,
+    // and it is the documented way to reset. Anything else has to parse: text that
+    // does not is somebody's writing, and writing over it is the one move here with no
+    // way back. A `{` with no `}` after it took a round to get right, because reading
+    // "no blob found" off it treats a mangled store as an empty one.
+    if (!s.trim()) return empty;
+    var open = s.indexOf('{');
+    var close = s.lastIndexOf('}');
+    if (open === -1 || close < open) {
+      return { broken: true, version: null, hideField: '', descriptions: {} };
+    }
+    try {
+      var blob = JSON.parse(s.slice(open, close + 1));
+      return {
+        version: blob.version || null,
+        hideField: blob.hideField || '',
+        descriptions: (blob.descriptions && typeof blob.descriptions === 'object')
+          ? blob.descriptions : {},
+      };
+    } catch (e) {
+      // Deliberately not "assume empty": a description somebody hand-edited into
+      // invalid JSON may still hold every description they ever wrote, and writing over
+      // it would be the one unrecoverable move here.
+      return { broken: true, version: null, hideField: '', descriptions: {} };
+    }
+  }
+
+  function serialiseStore(store) {
+    return STORE_HEADER + '\n\n' + JSON.stringify({
+      version: PLUGIN_VERSION,
+      hideField: store.hideField || '',
+      descriptions: store.descriptions || {},
+    });
+  }
+
+  // Numeric, part by part, so "0.10.0" is newer than "0.9.0" - which a string compare
+  // gets backwards, and which this plugin will reach.
+  function cmpVersion(a, b) {
+    var x = String(a || '').split('.');
+    var y = String(b || '').split('.');
+    for (var i = 0; i < Math.max(x.length, y.length); i++) {
+      var d = (parseInt(x[i], 10) || 0) - (parseInt(y[i], 10) || 0);
+      if (d) return d < 0 ? -1 : 1;
+    }
+    return 0;
+  }
+
+  // Found by its marker custom field, never by its name: the name is a setting the user
+  // is invited to change, and a store that could be lost by renaming it would be a
+  // store nobody should keep anything in. Two marked tags is a state nothing here
+  // creates, so it is resolved rather than refused - the one whose name matches the
+  // setting, else the lowest id - and the dialog says which it took. A store still
+  // wearing `LEGACY_STORE_FIELD` is moved onto the current marker on the way past,
+  // which costs a second query only while no upgraded store exists.
+  function markedTags(field) {
+    return gqlRequest('query CFBE_Store($f: TagFilterType) { findTags(filter: { per_page: -1 }, ' +
+      'tag_filter: $f) { tags { id name description custom_fields aliases ' +
+      'parents { name } children { name } } } }',
+    { f: { custom_fields: [{ field: field, modifier: 'NOT_NULL' }] } })
+      .then(function (data) { return ((data && data.findTags) || {}).tags || []; });
+  }
+
+  // A tag wearing one of the unprefixed names is moved onto the current one where it is
+  // found, in one update per tag, and nothing about it is reported: the store is the
+  // same store, and neither name was something a user chose. Used for the marker, and
+  // for the mark the store tag wears to hide itself.
+  function moveTagField(tags, from, to) {
+    if (!tags.length) return Promise.resolve(tags);
+    var marks = {};
+    marks[to] = MARK_VALUE;
+    return Promise.all(tags.map(function (t) {
+      var fields = t.custom_fields || {};
+      delete fields[from];
+      fields[to] = MARK_VALUE;
+      t.custom_fields = fields;
+      return gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
+        '{ tagUpdate(input: $input) { id name description } }',
+      { input: { id: t.id, custom_fields: { partial: marks, remove: [from] } } });
+    })).then(function () { return tags; });
+  }
+
+  // **The one rule two callers pick by**, written once. This is the reader above and
+  // the settings row's link, which must land on the same tag or the link points at
+  // something the store is not kept on. Two marked tags is a state nothing here
+  // creates, so it is resolved rather than refused - the one whose name matches the
+  // setting, else the lowest id.
+  function pickStoreTag(tags, wanted) {
+    if (!tags || !tags.length) return null;
+    for (var i = 0; i < tags.length; i++) {
+      if (String(tags[i].name) === wanted) return tags[i];
+    }
+    return tags.slice().sort(function (a, b) {
+      return (parseInt(a.id, 10) || 0) - (parseInt(b.id, 10) || 0);
+    })[0];
+  }
+
+  function findStoreTag(settings) {
+    return markedTags(STORE_FIELD).then(function (tags) {
+      // COMPAT: a store still marked `cfbe_desc_store` (since CustomFieldsBulkEditor 2.0.1);
+      // remove when `LEGACY_STORE_FIELD` goes.
+      return tags.length ? tags : markedTags(LEGACY_STORE_FIELD).then(function (old) {
+        return moveTagField(old, LEGACY_STORE_FIELD, STORE_FIELD);
+      });
+    })
+      .then(function (tags) {
+        var tag = pickStoreTag(tags, settings.b1DescriptionTagName);
+        if (!tag) return null;
+        // The store tag hides itself with the hide field, so that field's own rename
+        // has to reach this one mark - nothing else can, since every scan leaves
+        // the store tag out. The entities the *user* marked are left where they are:
+        // that is a bulk write, and Migrate in the descriptions dialog is where it
+        // belongs.
+        var hide = settings.c1ExcludeFromAddListField;
+        // COMPAT: a store tag still hiding itself with `Exclude_from_add_list`
+        // (since CustomFieldsBulkEditor 2.0.1); remove when `LEGACY_HIDE_FIELD` goes.
+        if (hide === DEFAULTS.c1ExcludeFromAddListField &&
+            hasOwn(tag.custom_fields || {}, LEGACY_HIDE_FIELD)) {
+          return moveTagField([tag], LEGACY_HIDE_FIELD, hide).then(function () { return tag; });
+        }
+        return tag;
+      });
+  }
+
+  // Read once per dialog and cached for the page, because the tooltips in the bulk
+  // dialog want it too and it is one small query either way. `_storeTagId` is what
+  // keeps the store tag out of the listings that would otherwise show this plugin's own
+  // plumbing back to the user.
+  var _descriptions = {};
+  // The locked fields as last read, for the 🔒 on a field name's tooltip.
+  var _lockedNow = [];
+  var _storeTagId = null;
+  var _storeTagFields = {};        // its own custom fields - the marker, and the hide field
+  // Its name, and its description as last read or written: what Undo History puts back.
+  var _storeTagName = '';
+  var _storeTagDesc = '';
+  var _store = null;               // the parsed blob, for the writes a rename has to make
+
+  function readStore(settings) {
+    return findStoreTag(settings).then(function (tag) {
+      var parsed = tag ? parseStore(tag.description) : { version: null, hideField: '', descriptions: {} };
+      _storeTagId = tag ? String(tag.id) : null;
+      _storeTagFields = (tag && tag.custom_fields) || {};
+      _storeTagName = (tag && tag.name) || '';
+      _storeTagDesc = (tag && tag.description) || '';
+      _store = parsed;
+      _descriptions = parsed.broken ? {} : parsed.descriptions;
+      return { tag: tag, store: parsed };
+    }, function (e) {
+      // A store that cannot be read is not a reason to refuse a bulk edit: the bulk
+      // dialog only wants it for tooltips, and the manage dialog reports it itself.
+      _descriptions = {};
+      _storeTagId = null;
+      _storeTagFields = {};
+      _store = null;
+      throw e;
+    });
+  }
+
+  // ── Styles ────────────────────────────────────────────────────────────────
+
+  var CSS =
+    // Kept literally identical to the three sibling plugins' stylesheets wherever
+    // the dialogs overlap, down to the hex values. They are separate strings because
+    // the plugins share no module, not because they are meant to look different -
+    // and two of them did drift, from #202b33 to #30404d, because nothing compared
+    // them. `.tests/style.test.js` pins the overlap now. #202b33 is Blueprint's
+    // dark-gray2, the step Stash's own page uses; every dim gray in these dialogs was
+    // chosen against it.
+    '.cfbe-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
+    'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
+    '.cfbe-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
+    'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
+    '.cfbe-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
+    '.cfbe-title{font-size:1.1rem;font-weight:600;}' +
+    '.cfbe-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.cfbe-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.cfbe-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.cfbe-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
+    'white-space:pre-wrap;}' +
+    '.cfbe-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;font-size:.8rem;' +
+    'line-height:1.35;min-height:14rem;}' +
+    '.cfbe-line{white-space:pre-wrap;word-break:break-word;}' +
+    '.cfbe-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
+    'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
+    'font-weight:600;}' +
+    '.cfbe-ERROR{color:#ff7373;} .cfbe-WARN{color:var(--gttx-highlight,#ffc107);} .cfbe-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.cfbe-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
+    'flex-wrap:wrap;align-items:center;}' +
+    '.cfbe-foot button{margin-right:.5rem;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.cfbe-hidden{display:none !important;}' +
+    // The filter row, shared with NormalizeParentTags' find bar: same position in the
+    // dialog (a strip under the head), same job, so the same rule.
+    '.cfbe-search{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);position:relative;' +
+    'display:flex;gap:.5rem;align-items:center;}' +
+    // ── This dialog's own ───────────────────────────────────────────────────
+    //
+    // **Both of this plugin's dialogs are a fixed height, and the siblings' are not.**
+    // `.cfbe-modal` has a `max-height` and no `height` - it is pinned byte-identical
+    // across the four plugins, and for a dialog that is only a log that is right: it
+    // sizes to what it holds and grows to the cap. These two are not only a log. The
+    // bulk dialog's list shrinks as a filter narrows it, and the descriptions dialog's
+    // textarea is user-resizable, so the modal moved under the pointer in both - the
+    // window jumping to a new size while you are reading it. A modifier rather than an
+    // edit to the shared rule, for the reason `.cfbe-listwrap` is one.
+    '.cfbe-modal.cfbe-tall{height:88vh;}' +
+    // Three labelled boxes with a mode each do not fit one line on a narrow window,
+    // and the shared `.cfbe-search` is pinned across the four plugins - so the
+    // wrap is a modifier here, the same escape hatch `.cfbe-tall` above is. `gap` is
+    // already both axes, so the wrapped line spaces itself.
+    '.cfbe-search-wrap{flex-wrap:wrap;}' +
+    // The list was a <textarea> once, which is what made it selectable and
+    // copyable with nothing to press and kept a selection of several thousand
+    // entities down to one node. Pills need real elements, so the node count is back
+    // and `linesDrawn()` is what keeps it bounded - the same trade the siblings
+    // make with `LOG_RENDER_CAP`.
+    '.cfbe-list{width:100%;height:100%;min-height:0;box-sizing:border-box;overflow:auto;' +
+    'background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;' +
+    'font-family:monospace;font-size:.8rem;line-height:1.9;padding:.35rem .5rem;}' +
+    // A modifier on the shared `.cfbe-log`, not an edit to it: that rule is pinned
+    // byte-identical across the four dialogs (`.tests/style.test.js`) and its 14rem
+    // floor is right for a plain log. This box holds the whole session - listings and
+    // messages together - so a floor tall enough to push the modal past its own
+    // max-height on a short window costs the dialog more than it buys the list.
+    '.cfbe-listwrap{min-height:8rem;}' +
+    '.cfbe-entry{white-space:pre-wrap;word-break:break-word;}' +
+    // `display:inline`, deliberately: a selection dragged across inline-*block* pills
+    // copies with line breaks nobody selected, and copying the listing as text is the
+    // reason this list exists at all. Vertical padding is 0 for the same reason it
+    // would otherwise overlap the line above.
+    '.cfbe-pill{display:inline;border-radius:3px;padding:0 .3rem;background:var(--gttx-card,#30404d);}' +
+    '.cfbe-pill-act{background:var(--gttx-raised,#394b59);color:var(--gttx-muted,#a7b6c2);}' +
+    '.cfbe-pill-ent{background:#2c4a63;text-decoration:none;}' +
+    '.cfbe-pill-cf{cursor:pointer;}' +
+    '.cfbe-pill-ent:hover,.cfbe-pill-cf:hover{background:var(--gttx-raised,#425a6b);}' +
+    '.cfbe-pill-copied{background:var(--gttx-match-bg,#3f6b46);}' +
+    // Real text, so it takes the selection highlight like the rest of the line;
+    // `selectionText` is what keeps it out of what gets copied.
+    // One rule for both, so the legend's ␀ cannot drift from the list's. The mark is
+    // the one character in a monospace line that a monospace face renders as a box of
+    // its own; the legend is not monospace, but it quotes the list, so the two have to
+    // agree. Font only - the legend keeps its own color and size.
+    '.cfbe-none,.cfbe-nonemark{font-family:sans-serif;}' +
+    '.cfbe-none{color:var(--gttx-muted,#a7b6c2);}' +
+    // The type mark after a value, and the same mark beside the value box saying what
+    // that box will store. Small, gray and sans-serif like the ␀ it sits next to: it
+    // is a fact *about* the value rather than part of it, and a listing full of them
+    // still has to read as a list of values.
+    '.cfbe-vtype{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;font-family:sans-serif;}' +
+    '.cfbe-pill-failed{background:var(--gttx-error-bg,#7a3b3b);}' +
+    '.cfbe-editor{padding:.5rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
+    'flex-wrap:wrap;align-items:center;}' +
+    '.cfbe-label{color:var(--gttx-muted,#a7b6c2);font-size:.85rem;white-space:nowrap;}' +
+    '.cfbe-input,.cfbe-select{background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
+    'border-radius:3px;padding:.25rem .5rem;}' +
+    '.cfbe-input{flex:1 1 10rem;min-width:8rem;}' +
+    // The × that empties a filter box, inside the box. `NormalizeParentTags` got here
+    // first and these two rules are its, byte-identical with the prefix swapped - a
+    // class two plugins share has to mean the same thing in both, and this one does.
+    // The filter boxes carry the right padding that keeps the text clear of the icon;
+    // `.cfbe-input` at large does not, since the editor's two boxes have no ×.
+    '.cfbe-inputwrap{position:relative;display:flex;align-items:center;flex:1 1 0;}' +
+    '.cfbe-clear{position:absolute;right:.35rem;top:50%;transform:translateY(-50%);' +
+    'background:none;border:0;color:var(--gttx-muted,#a7b6c2);font-size:1.1rem;line-height:1;cursor:pointer;' +
+    'padding:0 .35rem;}' +
+    '.cfbe-clear:hover{color:var(--gttx-fg,#f5f8fa);}' +
+    '.cfbe-filterbox{padding-right:1.9rem;}' +
+    // The value box is disabled while the mode is the whole query, and these inputs
+    // set their own background and color, so the browser's own disabled look does not
+    // show through.
+    '.cfbe-input:disabled{opacity:.5;}' +
+    // The mode currently chosen cannot be applied over the scope as it stands. The log's
+    // own ERROR red, on the select - which is what is visible while the list is shut -
+    // and on the one option it is about, which is what is visible while it is open.
+    //
+    // **An option inherits the select's color**, so reddening the select reddens every
+    // option in the list with it. The middle rule puts them back; the marked one is two
+    // classes deep and outranks it. Without that pair, "mark Rename" marks all four.
+    '.cfbe-bad{color:#ff7373;}' +
+    'select.cfbe-bad{border-color:#ff7373;}' +
+    'select.cfbe-bad option{color:var(--gttx-fg,#f5f8fa);}' +
+    'select.cfbe-bad option.cfbe-bad{color:#ff7373;}' +
+    // ── The manage-descriptions dialog ──────────────────────────────────────
+    //
+    // Two panes over one log. None of these selectors exists in a sibling, so
+    // `.tests/style.test.js` correctly leaves them alone - the pinning is for rules two
+    // dialogs both draw, and no other dialog here has a second pane.
+    '.cfbe-panes{display:flex;gap:.5rem;padding:.5rem 1rem;flex:2 1 auto;min-height:0;}' +
+    '.cfbe-names{flex:0 0 20rem;overflow:auto;min-height:8rem;background:var(--gttx-bg,#1f2b33);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.25rem 0;}' +
+    '.cfbe-name{display:block;width:100%;box-sizing:border-box;text-align:left;border:0;' +
+    'background:none;color:var(--gttx-fg,#f5f8fa);font-family:monospace;font-size:.8rem;cursor:pointer;' +
+    'padding:.1rem .5rem;}' +
+    '.cfbe-name:hover{background:var(--gttx-raised,#3c4f5d);}' +
+    '.cfbe-name-on{background:var(--gttx-raised,#425a6b);}' +
+    '.cfbe-name-orphan{color:var(--gttx-highlight,#ffc107);}' +
+    // Not the orphan highlight: a store-tag field is accounted for, not a loose end.
+    '.cfbe-name-store{color:#48aff0;}' +
+    // After the two above, so a locked orphan or store-tag field still reads as locked.
+    '.cfbe-name-locked{color:#ff7373;}' +
+    '.cfbe-detail{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:.35rem;}' +
+    '.cfbe-detail-head{color:var(--gttx-muted,#a7b6c2);font-size:.85rem;display:flex;align-items:center;' +
+    'gap:.35rem;flex-wrap:wrap;}' +
+    // The selected field's name *is* the rename box - the heading was already showing
+    // it, so an editable one is the same words with a caret in them. Monospace, like
+    // every other place a field name is shown here.
+    '.cfbe-namebox{flex:1 1 12rem;min-width:8rem;background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.15rem .4rem;' +
+    'font-family:monospace;font-size:.8rem;}' +
+    '.cfbe-readonly-row button{display:none;}' +
+    '.cfbe-rename,.cfbe-lock{padding:.05rem .4rem;line-height:1.2;flex:0 0 auto;}' +
+    // Gray, not orange: the glyph drowned on the orange. Large enough to read as a switch.
+    '.cfbe-lock{font-size:1.25rem;padding:0 .35rem;}' +
+    '.cfbe-text{width:100%;box-sizing:border-box;min-height:5rem;background:var(--gttx-bg,#1f2b33);' +
+    'color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.35rem .5rem;' +
+    'font-family:inherit;font-size:.85rem;resize:vertical;color-scheme:dark;}' +
+    // **The grip the user drags, drawn rather than left to the browser.** Chrome paints
+    // the default one in the widget colors of a light page - a white square on this
+    // dark box - and a `::-webkit-resizer` with a background of its own replaces that
+    // image outright, so the triangle has to be drawn here or there is nothing to take
+    // hold of. `color-scheme:dark` above is the other half, for the scrollbar beside it
+    // and for Firefox, which has no such pseudo-element.
+    '.cfbe-text::-webkit-resizer{background:linear-gradient(315deg,var(--gttx-dim,#7d8f9c) 0 45%,' +
+    'transparent 45%);}' +
+    // **`flex-basis:0`, not `auto`, and that is what makes the box above resizable.** A
+    // basis of `auto` is the content's own height, and this list holds every entity
+    // carrying the field - thousands of lines on a real library. The column then runs a
+    // shrink of thousands of pixels, weighted by basis: this box takes it until its own
+    // `min-height` stops it, and every pixel after that comes off the textarea, which
+    // therefore sat at its minimum however far it was dragged. With a basis of 0 there
+    // is no deficit to distribute: the textarea keeps the height it was given and this
+    // box grows into whatever is left.
+    '.cfbe-users{flex:1 1 0;overflow:auto;min-height:5rem;background:var(--gttx-bg,#1f2b33);' +
+    'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.35rem .5rem;font-family:monospace;' +
+    'font-size:.8rem;line-height:1.9;}' +
+    // The same modifier trick `.cfbe-listwrap` is: the shared `.cfbe-log` claims the
+    // column with `flex:1 1 auto`, and in this dialog the panes above it are what the
+    // room belongs to. Editing the shared rule for a local need is what the pinning in
+    // `.tests/style.test.js` exists to stop.
+    '.cfbe-logshort{flex:1 1 10rem;min-height:5rem;}' +
+    // The handle between the panes and the log. A textarea gets its grip from
+    // `resize:vertical` for free; a flex row between two boxes has no such thing, so
+    // this is the one place here that needs a drag of its own.
+    '.cfbe-divider{flex:0 0 auto;height:.6rem;margin:0 1rem;cursor:row-resize;}' +
+    '.cfbe-divider::after{content:"";display:block;height:2px;margin-top:.2rem;' +
+    'background:var(--gttx-border,#394b59);border-radius:1px;}' +
+    '.cfbe-divider:hover::after{background:var(--gttx-accent,#7cc4ff);}' +
+    '.cfbe-readme{font-size:.8rem;margin-top:.35rem;display:inline-block;}' +
+    // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
+    // picture. Fixed to the viewport and placed from the node, because the logs these
+    // open over are `overflow:auto` boxes that would clip a positioned child against
+    // their own top edge. `pointer-events:none` is load-bearing: a box that took the
+    // pointer would fire mouseleave on the node, close, hand the pointer back and
+    // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
+    // box and it belongs to none of them.
+    '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.gttx-tipbox.gttx-tip-open{display:block;}' +
+    '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
+    // The description store tag's own row, when a store exists. A link, so the tag is
+    // one click away and the name beside it can be selected; the same blue every other
+    // link this plugin draws uses.
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
+    // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
+    // unprefixed class in this repo besides the Reload UI button's id, and for the
+    // same reason - five plugins draw the identical mark.
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
+    // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
+    // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
+    // so the first line arrived half covered, and nothing in CSS can move a tooltip the
+    // browser owns.
+    //
+    // **`position:fixed`, placed from the mark's own rect** - which is the second answer,
+    // not the first. It was `position:absolute` against the wrapper, and that failed in
+    // both of the ways an absolutely positioned box can: an inline `<span>` is a poor
+    // containing block, and Stash's settings card clips what overflows it, so the box
+    // landed in the corner of the page and was cut off by the section edge. Fixed to the
+    // viewport is the one position nothing on the page can clip, and it is the same
+    // conclusion - and the same `tipPlace` arithmetic - the shared entity card reached
+    // about a scrolling log.
+    //
+    // `pointer-events:none` is load-bearing, not tidiness: a box that took the pointer
+    // would fire mouseleave on the mark, close, hand the pointer back and reopen.
+    '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
+    'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
+    'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
+    'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
+    '.cfbe-tagicon{margin-left:.9rem;text-decoration:none;}' +
+    // After the tag icon the link goes close: the icon already stands apart from the name.
+    '.gttx-tagglyph+.cfbe-tagicon{margin-left:.3rem;}' +
+    '.cfbe-tagicon:hover{text-decoration:underline;}' +
+    // ── The settings page ───────────────────────────────────────────────────
+    //
+    // Stash renders the description as one text node in a `.sub-heading` that is
+    // `white-space: normal`, and a description cannot carry markup - it is passed to
+    // React as a child, so any tag in it is escaped. So the blank lines are made
+    // visible by the class, and then rebuilt as divs: under `pre-wrap` a blank line
+    // is always one whole line-height and nothing in CSS can target it.
+    //
+    // Scoped to our own group, never applied to `.sub-heading` at large - another
+    // plugin's description is not ours to reflow.
+    //
+    // The three rules below are the description half of the shared design, and the
+    // four after them the per-setting half - byte-identical with the siblings' copies,
+    // and required of this plugin, which has a setting of its own to tip.
+    '.cfbe-own-group .sub-heading{white-space:pre-wrap;}' +
+    '.cfbe-own-group .sub-heading .cfbe-p{margin:0 0 .35em;}' +
+    '.cfbe-own-group .sub-heading .cfbe-p:last-child{margin-bottom:0;}' +
+    '.cfbe-desc-collapsed .cfbe-p:not(:first-child){display:none;}' +
+    '.cfbe-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
+    'text-decoration:underline;}' +
+    // The per-setting hover box: a summary on the row, the rest behind a ⓘ that opens
+    // from the mark, the summary or the setting's own name. Stash's `title` slot cannot
+    // be sized, placed or opened from the keyboard, which is why this exists.
+    '.cfbe-tipped{position:relative;}' +
+    '.cfbe-tip{margin-left:.35rem;cursor:pointer;opacity:.65;font-style:normal;' +
+    'font-size:1.05em;}' +
+    '.cfbe-tip:hover,.cfbe-tip:focus{opacity:1;outline:none;}' +
+    // pointer-events:none is load-bearing, not tidiness. Opened from the setting's
+    // name the box lands over the h3, so a box that took the pointer would fire
+    // mouseleave on the name, close, hand the pointer back to the name, and reopen -
+    // a flicker loop for as long as it is hovered.
+    '.cfbe-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
+    'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
+    'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.cfbe-tipped.cfbe-tip-open .cfbe-tipbox{display:block;}' +
+    // The menu item, in the Highlighted Text Color because it is the one thing this plugin puts
+    // into Stash's own chrome and it leads to a write. Stash's `.dropdown-item` supplies the
+    // padding, the hover and the layout; only the two things that are ours are set - over Stash's
+    // own `div.dropdown-menu .dropdown-item` white, which outranked a bare class (seen live).
+    'div.dropdown-menu .dropdown-item.cfbe-menu-item{cursor:pointer;color:var(--gttx-highlight,#ffc107);}';
+
+  function injectStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    var style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = CSS;
+    (document.head || document.body || document.documentElement).appendChild(style);
+  }
+
+  function button(label, className) {
+    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
+    b.type = 'button';
+    return b;
+  }
+
+  // A drag handle that pins the height of the element above it, so the flex column
+  // below takes whatever is left. The listeners go on `document` rather than on the
+  // handle: a fast drag leaves the pointer behind, and a mouseup outside the 10px bar
+  // would otherwise never arrive and the drag would latch.
+  function splitter(above) {
+    var bar = el('div', 'cfbe-divider');
+    bar.title = 'Drag to give the log below more or less room.';
+    var y0 = 0, h0 = 0;
+    function set(px) {
+      px = Math.max(40, Math.round(px));
+      above.style.flex = '0 0 ' + px + 'px';
+      return px;
+    }
+    // **Both limits are measured, not named.** A ceiling of `room - 200` knew neither the
+    // height of the dialog's own chrome nor the floor of the log below it, and was wrong
+    // in both directions: dragged down it pushed the footer off the bottom edge of a
+    // fixed-height modal, dragged up it squeezed the panes past their own content. One
+    // reading each says by how much - the modal overflows when this pane is too tall
+    // (everything below it has already shrunk to its `min-height`), and the pane itself
+    // overflows when it is too short. Whatever the chrome around them changes to, the
+    // measurement is still right.
+    function move(ev) {
+      var parent = above.parentNode;
+      if (!parent) return;
+      var want = set(h0 + (ev.clientY - y0));
+      var over = parent.scrollHeight - parent.clientHeight;
+      if (over > 0) want = set(want - over);
+      var under = above.scrollHeight - above.clientHeight;
+      if (under > 0) set(want + under);
+    }
+    function up() {
+      document.removeEventListener('mousemove', move);
+      document.removeEventListener('mouseup', up);
+    }
+    bar.addEventListener('mousedown', function (ev) {
+      y0 = ev.clientY;
+      h0 = above.offsetHeight || above.clientHeight || 0;
+      document.addEventListener('mousemove', move);
+      document.addEventListener('mouseup', up);
+      if (ev.preventDefault) ev.preventDefault();   // no text selection while dragging
+    });
+    return bar;
+  }
+
+  // Marks a control as holding something that cannot be applied. A class rather than an
+  // inline color, so the one rule below is the only place the red is written - and it is
+  // the same red every ERROR line in these dialogs already uses.
+  function paintBad(node, bad) {
+    if (!node) return;
+    var cls = String(node.className || '').replace(/\s*cfbe-bad\b/g, '');
+    node.className = bad ? (cls + ' cfbe-bad').replace(/^\s+/, '') : cls;
+  }
+
+  // ── Naming a value ────────────────────────────────────────────────────────
+  //
+  // Custom field values are an arbitrary JSON `Map`, so anything that is not already
+  // a string is shown as JSON rather than as `[object Object]`.
+  function valueText(v) {
+    if (v == null) return '';
+    if (typeof v === 'string') return v;
+    try { return JSON.stringify(v); } catch (e) { return String(v); }
+  }
+
+  // What groups entities into one write: the value itself, type included. Its printed text
+  // would make "1" and 1 - and "" and null - one value, and the write would give one of
+  // them the other's type.
+  function valueKey(v) {
+    if (v === undefined) return 'u';
+    try { return JSON.stringify(v); } catch (e) { return 'x' + String(v); }
+  }
+
+  // **Stash's own rule for what a typed value is, copied from
+  // `ui/v2.5/src/components/Shared/CustomFields.tsx`.** Its editor stores a
+  // numeric-looking value as a JSON *number* and everything else as a string. This
+  // plugin wrote strings, so a rating set here was `"5"` where the same field set in
+  // Stash's own panel was `5` - the same field holding two types depending on which
+  // editor last touched it, and Stash's numeric custom-field criteria (BETWEEN, <, >)
+  // compare the two differently. Same regex and same conversion, so a field written
+  // from either place holds the same thing.
+  //
+  // The *name* is deliberately not put through this: a key is a key, and Stash's own
+  // editor does not convert it either.
+  function isNumeric(v) { return /^-?(?:0|(?:[1-9][0-9]*))(?:\.[0-9]+)?$/.test(v); }
+  function convertCustomValue(v) { return isNumeric(v) ? Number(v) : v; }
+
+  // What a value *is*, for the mark after it. Stash stores a custom field as a string,
+  // a number or SQL NULL - `getSQLValueFromCustomFieldInput` refuses arrays and objects
+  // outright - and a boolean can reach the map through the API, so all four are named.
+  //
+  // **The string is the one type this does not mark.** It is what almost every value
+  // is, and a mark on every line would say nothing; the pill's own title names the type
+  // whichever it is, which is where "what is this one" gets asked. `null` is the mark
+  // that earns its place on its own: a null and an empty value both render as the
+  // empty mark, and nothing else on the line tells them apart.
+  function valueType(v) {
+    if (v === null) return 'null';
+    if (typeof v === 'number') return 'num';
+    if (typeof v === 'boolean') return 'bool';
+    return '';
+  }
+
+  var TYPE_WORDS = { num: 'a number', bool: 'a boolean', 'null': 'null' };
+  function typeWord(v) { return TYPE_WORDS[valueType(v)] || 'text'; }
+
+  // Present and not obviously false: the value is read rather than merely its presence,
+  // so that clearing a field to `0` unmarks the entity without having to delete the key.
+  //
+  // **One predicate for both places a value is read as a yes/no**: the dropdown filter
+  // of §23 and the listing's "is true" mode. A custom field is a string map with no
+  // boolean in it, so this is the whole of what "true" means in this plugin - and two
+  // answers to it, one hiding an entity and one listing it, would be a bug waiting for
+  // whichever value fell between them.
+  function isMarked(v) {
+    if (v == null || v === false || v === 0) return false;
+    var s = String(v).trim().toLowerCase();
+    return s !== '' && s !== '0' && s !== 'false';
+  }
+
+  // ── The menu item ─────────────────────────────────────────────────────────
+  //
+  // In a list's "..." menu while something is ticked, through Core's one reconciler for
+  // every plugin's items there - which reads the route, the open menu and the selection.
+  // Not on the marker list (SceneMarker has no custom fields) - Core lists no type for it.
+  C.selectionMenuItem({
+    owner: PLUGIN_ID, label: 'Custom Fields...', cls: 'cfbe-menu-item',
+    show: function (type) { return hasOwn(ENTITIES, type); },
+    tip: function (type, ids) {
+      // The sheet coloring the item, which no dialog may have put on the page yet (seen live:
+      // the item stood in Stash's white until a dialog had opened).
+      injectStyle();
+      return 'View and bulk edit the custom fields of the ' + ids.length + ' selected ' +
+        (ids.length === 1 ? ENTITIES[type].label.toLowerCase() : ENTITIES[type].plural.toLowerCase()) +
+        '. Opens a dialog listing what they carry now; nothing is written until you press Apply.';
+    },
+    run: function (type, ids) { startRun(type, ids); },
+  });
+
+  // ── The library-wide task ─────────────────────────────────────────────────
+  //
+  // Declared in the yml so Stash renders a button for it in Settings → Tasks, and
+  // handled entirely here: the click never reaches the server, because there is no
+  // `exec` behind it and nothing server-side to run. A capture-phase listener on
+  // `document` runs before React's own handler and stops the propagation, which is
+  // what keeps PluginTasks' "added job to queue" toast from appearing over a dialog
+  // that is already open.
+  //
+  // **One layer, where `MergePerformerTagsToScenes` has two.** Its second layer
+  // answers the `runPluginTask` mutation inside a `fetch` wrapper it already has for
+  // auto-merge. This plugin has no wrapper and gains nothing else from one, and the
+  // failure it would cover is visible and harmless: if the click is not recognised,
+  // no dialog opens and Stash queues a job that does nothing. Add the second layer if
+  // that is ever seen, not before.
+  var TASK_NAME = 'Edit Custom Fields Across the Whole Library...';
+  var TASK_DESC = 'Manage Custom Field Descriptions and Locks...';
+  var TASK_NAMES = [TASK_NAME, TASK_DESC];
+
+  if (document.addEventListener) {
+    document.addEventListener('click', function (event) {
+      var target = event.target;
+      var btn = target && target.closest ? target.closest('button') : null;
+      // Which of our tasks, because two share this path and the click opens the right
+      // dialog; Core's check also asks the button's own SettingGroup for our heading,
+      // since another plugin may declare a task by the same name.
+      var task = btn && ownTaskName(btn, PLUGIN_NAME, TASK_NAMES);
+      if (!task) return;
+      if (event.preventDefault) event.preventDefault();
+      if (event.stopPropagation) event.stopPropagation();
+      if (task === TASK_DESC) startDescRun(); else startRun(null, null);
+    }, true);
+  }
+
+  // ── The dialog ────────────────────────────────────────────────────────────
+
+  var _active = null;
+
+  // `type` names one of the seven and `ids` is what was selected; both null is the
+  // task, which walks every type instead. The dialog is the same object either way -
+  // the difference lives in `specs`, and in every entity carrying the spec it came
+  // from rather than the run holding one for all of them.
+  // The task reads the settings **at the click** rather than at load, so flipping
+  // the switch and pressing the button in the same page session does what it says. A
+  // read that fails opens the dialog to list on a copy of the defaults, writing nothing
+  // (`noteUnread`).
+  var _opening = false;
+
+  // A selection reads them too, since the Locked Custom Fields list governs its Apply.
+  function startRun(type, ids) {
+    if (_active) { _active.focus(); return; }
+    if (_opening) return;                      // a second click inside the round trip
+    _opening = true;
+    var go = function (s, failed) {
+      _opening = false;
+      openRun(type || null, type ? ids : null, s);
+      if (failed && _active) noteUnread(_active);
+    };
+    loadSettings(true).then(function (s) { go(s, false); }, function () { go(defaultsCopy(), true); });
+  }
+
+  // A dialog opened on the defaults because the settings could not be read lists, and writes
+  // nothing: the defaults name the wrong store tag and hide field for a user who set their own, and
+  // the Locked Custom Fields list is not in force. `unread` is what every write checks.
+  function noteUnread(run) {
+    run.unread = 'this plugin\u2019s settings could not be read - close and open the dialog again';
+    run.msg('ERROR', 'This plugin\u2019s settings could not be read, so nothing here is written: the ' +
+      'defaults it lists on are not your settings, and the Locked Custom Fields list is not in force. ' +
+      'Close and open it again to try again.');
+    run.syncApply();
+  }
+
+  // A copy, so nothing a dialog does to its settings - a rename following the hide field, a lock
+  // toggled - lands on the defaults every later read falls back on.
+  function defaultsCopy() {
+    var copy = {};
+    for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) copy[k] = DEFAULTS[k];
+    return copy;
+  }
+
+  // The manage-descriptions task. Same shape as the whole-library one - the settings
+  // are read at the click, not at load - because both of its settings name something
+  // the dialog is about to go looking for.
+  function startDescRun() {
+    if (_active || _opening) { if (_active) _active.focus(); return; }
+    _opening = true;
+    var go = function (s) {
+      _opening = false;
+      if (_active) return;
+      _active = new DescRun(s);
+      _active.begin();
+    };
+    loadSettings(true).then(go, function () { go(defaultsCopy()); if (_active) noteUnread(_active); });
+  }
+
+  function openRun(type, ids, settings) {
+    if (_active) { _active.focus(); return; }
+    _active = new Run(type, ids, settings);
+    _active.begin();
+  }
+
+  // Images are optional in the whole-library task and nowhere else: they are usually
+  // the most numerous type by a wide margin, so on a large library they are most of the
+  // read - and a selection is exactly what the user picked, image lists included.
+  function allSpecs(settings) {
+    var out = [];
+    for (var k in ENTITIES) {
+      if (!hasOwn(ENTITIES, k)) continue;
+      if (k === 'images' && settings.a1SkipImagesInTask) continue;
+      out.push(ENTITIES[k]);
+    }
+    return out;
+  }
+
+  function Run(type, ids, settings) {
+    this.type = type;
+    this.settings = settings || defaultsCopy();
+    this.spec = type ? ENTITIES[type] : null;   // null: the whole library, every type
+    this.specs = type ? [ENTITIES[type]] : allSpecs(this.settings);
+    this.ids = ids || [];
+    // { id, label, fields } per entity that still exists, in selection order, and how
+    // many of them carry a custom field.
+    this.entities = [];
+    this.withFields = 0;
+    // The listing, flattened: one per (entity, custom field).
+    this.rows = [];
+    // What the last Apply wrote, and what each entity carried before it. This is what
+    // Undo replays - a per-key delta, never a stored copy of the whole map, so it puts
+    // back exactly the one field this dialog changed and touches nothing else.
+    this.changes = [];
+    // `{from, to}` while the last Apply renamed the field the "Hide from Add Lists"
+    // setting names, so an Undo can take the setting back with it.
+    this.hideRename = null;
+    this.descCopied = null;     // a partial rename's description copy, which its Undo takes off
+    this.applied = 0;
+    this.failed = 0;
+    this.undone = 0;
+    // Set by checkVersion when the running script is not the one Stash has installed.
+    this.stale = false;
+    this.undoArmed = 0;
+    // Which type the whole-library read is on, and how far into it: the progress line
+    // is the only thing saying a 15-second read is moving at all.
+    this.loadingWhat = '';
+    // How many entities were left out because they are this plugin's own plumbing -
+    // today only ever the store tag, and reported rather than dropped in silence.
+    this.storeSkipped = 0;
+    // Every line the listing holds, uncapped, as plain text - what Copy log copies.
+    // Built beside the nodes rather than read back off them, so the 1000-line render
+    // cap does not silently truncate a copied log too.
+    this.listText = [];
+    this.state = 'loading';
+    this.build();
+  }
+
+  Run.prototype.build = function () {
+    injectStyle();
+    var self = this;
+
+    this.backdrop = el('div', 'cfbe-backdrop');
+    this.modal = el('div', 'cfbe-modal cfbe-tall');
+    this.backdrop.appendChild(this.modal);
+
+    var head = el('div', 'cfbe-head');
+    // A plain block, so a title too long for one line wraps rather than being clipped.
+    head.appendChild(el('div', 'cfbe-title', PLUGIN_SHORT_NAME + ' - ' + (this.spec
+      ? this.spec.plural + ' - ' + this.ids.length + ' selected'
+      : 'Whole library')));
+    // The stale-script warning gets a box of its own, in the same red the settings
+    // banner uses, rather than a sentence appended to `noteEl` among the run's other
+    // warnings. Every other note here is about the library or another plugin; this one
+    // is about the dialog itself running code the user has already replaced. It reads
+    // as a different kind of thing because it is one.
+    this.staleEl = el('div', 'cfbe-stale cfbe-hidden', '');
+    head.appendChild(this.staleEl);
+    head.appendChild(el('div', 'cfbe-warn',
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this dialog wrote, ' +
+      'while it stays open, and cannot account for changes made elsewhere in the meantime.'));
+    // Built from spans rather than one string, so the ␀ can carry `cfbe-nonemark` and
+    // render in the same face the list draws it in. The two plain spans are unclassed
+    // and inherit everything the legend sets; the legend itself gets no text of its own,
+    // the same shape `rowNode` uses for a line.
+    var legend = el('div', 'cfbe-legend');
+    legend.appendChild(el('span', null,
+      'Reading the list: the number in brackets after the entity name is its id. The rest of ' +
+      'the line reads: entity: field name ' + EQ + ' field value, and after Apply, ' +
+      'what changed as before ' + ARROW.trim() + ' after. '));
+    legend.appendChild(el('span', 'cfbe-nonemark', NONE));
+    legend.appendChild(el('span', null,
+      ' marks nothing there - an entity carrying no custom fields at all, no field on that ' +
+      'side of a change, or a field set to an empty value; it is a mark on the screen only, ' +
+      'and copies as nothing. A value that is not text says so after it - num, bool or null - ' +
+      'since a null and an empty value look alike. Click an entity to open it; ' +
+      'click a field name or value to copy it. Counts are written with prefix "x".'));
+    head.appendChild(legend);
+    this.noteEl = el('div', 'cfbe-note', '');
+    head.appendChild(this.noteEl);
+    this.modal.appendChild(head);
+
+    this.progressEl = el('div', 'cfbe-progress', 'Loading...');
+    this.modal.appendChild(this.progressEl);
+
+    var filters = el('div', 'cfbe-search cfbe-search-wrap');
+    // Only on a task run: a selection is one type by construction, and a pulldown
+    // offering the six it cannot contain would be six ways to empty the list. Left
+    // null otherwise, which is what `filtered` reads.
+    if (!this.spec) {
+      var typeOpts = [['', 'All types']];
+      this.specs.forEach(function (s) { typeOpts.push([s.key, s.plural]); });
+      this.typeFilter = this.select('cfbe-filter-type', typeOpts, '');
+      this.typeFilter.addEventListener('change', function () { self.filterChanged(); });
+      filters.appendChild(el('span', 'cfbe-label', 'Type'));
+      filters.appendChild(this.typeFilter);
+    }
+    // Whether an entity carries any custom fields at all is a property of the *entity*
+    // rather than of a line, so it sits beside Type rather than among the three text
+    // filters that read a line.
+    //
+    // **"Any" is the default and has to be.** With the scope select gone, Apply covers
+    // exactly what is listed - so a filter defaulting to "With fields" would put the
+    // entities this listing was extended for out of reach of the one operation that
+    // exists for them.
+    this.fieldsFilter = this.select('cfbe-filter-fields', [
+      ['', 'Any', FIELDS_TIPS['']], ['has', 'With fields', FIELDS_TIPS.has],
+      ['none', 'Without fields', FIELDS_TIPS.none],
+    ], '');
+    this.fieldsFilter.addEventListener('change', function () { self.filterChanged(); });
+    filters.appendChild(el('span', 'cfbe-label', 'Fields'));
+    filters.appendChild(this.fieldsFilter);
+    // Entity before name, at the user's ask: the filters read left to right in the
+    // order a line does - which entity, then which field on it.
+    filters.appendChild(el('span', 'cfbe-label', 'Filter by Entity'));
+    this.entMode = this.select('cfbe-filter-entmode', TEXT_MODES, 'contains');
+    filters.appendChild(this.entMode);
+    this.entFilter = this.input('cfbe-filter-ent');
+    // The one filter box whose subject is not on the line as plain text: the row shows
+    // the entity as a pill, so the box has to say what shape it is matching against.
+    this.entFilter.title = this.entMode.title = 'Matches the entity name and id together, ' +
+      'as name, space, id in brackets - so "Cool Scene (42)", "Cool Scene" and "(42)" all ' +
+      'find that one row.';
+    filters.appendChild(this.clearable(this.entFilter));
+    filters.appendChild(el('span', 'cfbe-label', 'Filter by Name'));
+    this.nameMode = this.select('cfbe-filter-namemode', TEXT_MODES, 'contains');
+    filters.appendChild(this.nameMode);
+    this.nameFilter = this.input('cfbe-filter-name');
+    filters.appendChild(this.clearable(this.nameFilter));
+    filters.appendChild(el('span', 'cfbe-label', 'Filter by Value'));
+    // The mode is a control of its own rather than something typed into the box, because
+    // any sentinel the box could carry is also a value somebody is allowed to have.
+    this.valueMode = this.select('cfbe-filter-mode', TEXT_MODES.concat([
+      ['empty', 'is empty'], ['true', 'is true'], ['nottrue', 'is not true'],
+    ]), 'contains');
+    // The two truth modes are one predicate away from being a lie about themselves -
+    // "no" and "off" are true by it - so the rule goes on the control rather than in a
+    // release note nobody has open.
+    this.valueMode.title = '"is true" reads a value the way the add-list filter does: ' +
+      'empty, 0 and false are not true, and everything else is - "no" and "off" included. ' +
+      '"is empty" is the narrower of the two.';
+    filters.appendChild(this.valueMode);
+    this.valueFilter = this.input('cfbe-filter-value');
+    filters.appendChild(this.clearable(this.valueFilter));
+    [this.nameFilter, this.entFilter, this.valueFilter].forEach(function (i) {
+      i.addEventListener('input', function () { self.filterChanged(); });
+    });
+    // The datalists go in the row beside their boxes; a `<datalist>` renders nothing, so
+    // where it sits is only about keeping it in the same subtree React cannot reach.
+    this.historyLists = {};
+    filters.appendChild(this.historied(this.entFilter, 'ent'));
+    filters.appendChild(this.historied(this.nameFilter, 'name'));
+    filters.appendChild(this.historied(this.valueFilter, 'value'));
+    [this.nameMode, this.entMode].forEach(function (s) {
+      s.addEventListener('change', function () { self.filterChanged(); });
+    });
+    this.valueMode.addEventListener('change', function () {
+      // Nothing to type in when the mode is the whole query, and a box left enabled
+      // would read as a second condition that is silently not applied.
+      self.valueFilter.disabled = !needsText(self.valueMode.value);
+      self.filterChanged();
+    });
+    this.modal.appendChild(filters);
+
+    var listWrap = el('div', 'cfbe-log cfbe-listwrap');
+    this.listEl = el('div', 'cfbe-list');
+    // The pills are markup, and a copy out of markup carries the markup with it. The
+    // selection's own text is what the user sees, so that is what goes on the
+    // clipboard - as `text/html` too, or a rich editor would paste the pills back.
+    this.listEl.addEventListener('copy', function (ev) {
+      var text = window.getSelection ? selectionText(window.getSelection()) : '';
+      if (!text || !ev || !ev.clipboardData) return;
+      ev.clipboardData.setData('text/plain', text);
+      ev.clipboardData.setData('text/html',
+        text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'));
+      if (ev.preventDefault) ev.preventDefault();
+    });
+    listWrap.appendChild(this.listEl);
+    this.modal.appendChild(listWrap);
+
+    var ops = el('div', 'cfbe-editor');
+    // Per option *and*, in `syncOps`, on the select itself: an `<option title>` is
+    // honoured by some browsers and ignored by others, while the select's own title is
+    // reliable everywhere - so it carries whichever mode is currently chosen.
+    this.modeSel = this.select('cfbe-mode', [
+      ['add', 'Add', MODE_TIPS.add], ['overwrite', 'Overwrite', MODE_TIPS.overwrite],
+      ['remove', 'Remove', MODE_TIPS.remove], ['rename', 'Rename', MODE_TIPS.rename],
+    ], 'add');
+    ops.appendChild(el('span', 'cfbe-label', 'Operation'));
+    ops.appendChild(this.modeSel);
+    // **There is no "Apply to" beside it any more.** Apply covers the entities the
+    // filters leave listed, always. Its "All" setting could write to entities the list
+    // was not showing, which is the one thing a dialog built around a listing must not
+    // do - and the only reason it had to exist was that an entity carrying no custom
+    // fields had no line to be filtered *to*. It has one now, so clearing the filters
+    // buys what "All" bought, visibly. The counter under the list says how many
+    // entities that is, because a line is not an entity.
+    this.modeSel.addEventListener('change', function () { self.syncOps(); });
+    this.modal.appendChild(ops);
+
+    var fields = el('div', 'cfbe-editor');
+    // The label is rewritten under Rename: the box means the *new* name there, and a
+    // box that means two things needs to say which one it means right now.
+    this.nameLabel = el('span', 'cfbe-label', 'Custom Field name');
+    fields.appendChild(this.nameLabel);
+    this.nameInput = this.input('cfbe-field-name');
+    fields.appendChild(this.nameInput);
+    fields.appendChild(el('span', 'cfbe-label', 'Custom Field value'));
+    this.valueInput = this.input('cfbe-field-value');
+    fields.appendChild(this.valueInput);
+    [this.nameInput, this.valueInput].forEach(function (i) {
+      i.addEventListener('input', function () { self.syncApply(); });
+    });
+    // The same memory the filter boxes have, and the field-name box is the strongest
+    // case for it in the plugin: the names repeat, and unlike a filter this one feeds a
+    // *write*, so a typo here makes a junk field across a selection rather than merely
+    // showing nothing. Its own list, kept apart from the name *filter*'s - one is what
+    // you are looking at and the other is what you are about to write.
+    // What the box will actually *store*, beside the box. Stash's own editor turns a
+    // numeric-looking value into a number and this one now does the same, which is
+    // invisible until something compares the field as a number - so it is said here,
+    // where the value is typed, rather than left to be discovered in the listing.
+    this.valueTypeEl = el('span', 'cfbe-vtype', '');
+    fields.appendChild(this.valueTypeEl);
+    fields.appendChild(this.historied(this.nameInput, 'field'));
+    fields.appendChild(this.historied(this.valueInput, 'fieldvalue'));
+    this.modal.appendChild(fields);
+
+    var foot = el('div', 'cfbe-foot');
+    this.cancelBtn = button('Cancel', 'cfbe-cancel');
+    // Orange: this is the button that writes. See "one color for a plugin wrote this".
+    this.applyBtn = button('Apply', 'cfbe-apply');
+    this.applyBtn.className = this.applyBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.undoBtn = button('Undo', 'cfbe-undo cfbe-hidden');
+    this.undoBtn.className = this.undoBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.rescanBtn = button('Rescan', 'cfbe-rescan cfbe-hidden');
+    this.copyBtn = button('Copy log', 'cfbe-copy');
+    this.closeBtn = button('Close', 'cfbe-close cfbe-hidden');
+    this.applyBtn.disabled = true;
+    this.undoBtn.title = 'Put back the value each entity carried before Apply, field by field. ' +
+      'Only what this dialog wrote, and only while it stays open.';
+    this.rescanBtn.title = 'Read the custom fields again and list what they are now. ' +
+      'Undo stays available; a fresh Apply is what replaces it.';
+    this.copyBtn.title = 'Copy the counters, the [INFO] lines and the whole listing as plain ' +
+      'text - including the lines the 1000-line cap leaves off the screen.';
+
+    this.cancelBtn.addEventListener('click', function () { self.close(); });
+    this.applyBtn.addEventListener('click', function () { self.apply(); });
+    this.undoBtn.addEventListener('click', function () { self.undo(); });
+    this.rescanBtn.addEventListener('click', function () { self.rescan(); });
+    this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.closeBtn.addEventListener('click', function () { self.close(); });
+
+    // The siblings' footer order, which three of the four plugins already had:
+    // <write> Cancel [Stop] Copy log Undo Rescan Close. There is no Stop here - a
+    // write is one bulk mutation per batch and the dialog disables its own footer for
+    // the duration - so Apply takes Proceed's leading position and the rest follow.
+    [this.applyBtn, this.cancelBtn, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
+      .forEach(function (b) { foot.appendChild(b); });
+    this.modal.appendChild(foot);
+
+    wireEscape(this, 'cfbe');
+    document.body.appendChild(this.backdrop);
+  };
+
+  Run.prototype.input = function (className) {
+    var i = el('input', 'cfbe-input ' + className);
+    i.type = 'text';
+    i.value = '';
+    return i;
+  };
+
+  // A filter box that remembers what has been typed into it, through the browser's own
+  // `<datalist>` - which is the whole feature: no dropdown of ours to build, to place, to
+  // close on a click elsewhere, or to keep in step with the box beside it.
+  //
+  // Recorded on `change` rather than on `input`: `change` is the browser saying the user
+  // has finished with the box (blur, or Enter), where `input` fires per keystroke and
+  // would fill the list with the prefixes of one word.
+  Run.prototype.historied = function (input, key) {
+    var self = this;
+    var list = el('datalist');
+    list.id = 'cfbe-history-' + key;
+    input.setAttribute('list', list.id);
+    this.historyLists[key] = list;
+    this.fillHistory(key, (readFilterHistory() || {})[key] || []);
+    input.addEventListener('change', function () {
+      var kept = rememberFilter(key, input.value);
+      if (kept) self.fillHistory(key, kept);
+    });
+    return list;
+  };
+
+  Run.prototype.fillHistory = function (key, entries) {
+    var list = this.historyLists[key];
+    if (!list) return;
+    while (list.firstChild) list.removeChild(list.firstChild);
+    entries.forEach(function (t) {
+      var o = el('option');
+      o.value = t;
+      list.appendChild(o);
+    });
+  };
+
+  // A filter box with the × that empties it, in a wrapper the icon positions against -
+  // `NormalizeParentTags`' `clearableInput`, which pinning the icon to the row instead
+  // of the box could not do here: this row holds three of them. Hidden while the box is
+  // empty, so the row never shows a press that would do nothing.
+  Run.prototype.clearable = function (input) {
+    var self = this;
+    var wrap = el('div', 'cfbe-inputwrap');
+    input.className += ' cfbe-filterbox';
+    var clear = el('button', 'cfbe-clear cfbe-hidden', '\u00d7');
+    clear.type = 'button';
+    clear.title = 'Empty this filter.';
+    var sync = function () { self.show(clear, !!input.value); };
+    input.addEventListener('input', sync);
+    clear.addEventListener('click', function () {
+      input.value = '';
+      sync();
+      if (input.focus) input.focus();
+      self.filterChanged();
+    });
+    wrap.appendChild(input);
+    wrap.appendChild(clear);
+    return wrap;
+  };
+
+  // `[value, label]`, or `[value, label, tooltip]`. The options are kept on `_opts` as
+  // well as in the DOM: a mode that is only sometimes available has to be disabled by
+  // name later, and walking `childNodes` for it would be the same lookup written twice.
+  Run.prototype.select = function (className, options, initial) {
+    var s = C.dropdown('cfbe-select ' + className);
+    s._opts = {};
+    options.forEach(function (o) {
+      var opt = el('option', null, o[1]);
+      opt.value = o[0];
+      if (o[2]) opt.title = o[2];
+      s._opts[o[0]] = opt;
+      s.appendChild(opt);
+    });
+    s.value = initial;
+    return s;
+  };
+
+  Run.prototype.focus = function () {
+    if (this.modal && this.modal.scrollIntoView) this.modal.scrollIntoView();
+  };
+
+  // Empty hides it. Both dialogs check once on open and again on a Rescan, so the
+  // reset is what stops a warning surviving a reload the user has already done.
+  Run.prototype.showStale = function (msg) {
+    this.staleEl.textContent = msg || '';
+    if (msg) staleReloadButton(this.staleEl);
+    this.show(this.staleEl, !!msg);
+  };
+
+  Run.prototype.show = function (node, visible) {
+    node.className = node.className.replace(/\s*cfbe-hidden/g, '') + (visible ? '' : ' cfbe-hidden');
+  };
+
+  Run.prototype.setState = function (state) {
+    this.state = state;
+    var listing = state === 'listing';
+    // `undoing` counts as applied for the footer: the write it is performing started
+    // from this half of it, and flipping back to Cancel/Apply mid-undo would offer a
+    // second write over a library the first one is still moving.
+    var applied = state === 'applied' || state === 'undoing';
+    var busy = state === 'applying' || state === 'undoing';
+    // Cancel and Apply while there is something to decide; Undo and Close once there
+    // is something to take back. The two pairs never overlap: after Apply the listing
+    // describes a library this dialog has already changed, so offering Apply again
+    // over it would write from a plan the user is no longer looking at.
+    this.show(this.cancelBtn, !applied);
+    this.show(this.applyBtn, !applied);
+    // Shown for as long as there is something to take back, in *any* state - not only
+    // in `applied`. A Rescan returns the dialog to `listing`, and hiding Undo there
+    // would mean rescanning quietly threw the undo away.
+    this.show(this.undoBtn, this.changes.length > 0);
+    this.show(this.rescanBtn, listing || applied);
+    this.show(this.closeBtn, applied);
+    this.cancelBtn.disabled = busy;
+    this.undoBtn.disabled = busy;
+    this.rescanBtn.disabled = busy;
+    this.closeBtn.disabled = busy;
+    // Green once the pass has run: the listing describes a library this dialog has
+    // already changed, and nothing is waiting on the user. Undo does not take the green
+    // away - it is an offer. Failures and a stale script stay gray: those say
+    // "something is wrong", not "nothing to do". The Close that `swapCancelForClose`
+    // shows over a disabled Apply is not painted: an empty name box is waiting for
+    // input, which is the opposite of nothing to do.
+    paintButton(this.closeBtn, state === 'applied' && !this.failed && !this.stale
+      ? 'btn-success' : 'btn-secondary');
+    [this.modeSel, this.nameInput, this.valueInput].forEach(function (n) {
+      n.disabled = !listing;
+    });
+    // **The filters decide what Apply covers, so they are unavailable while it writes.**
+    // That is the repo's rule about a control that steers a run, and it only started
+    // applying to these boxes when the scope select went: until then a filter could be
+    // told it was only narrowing the screen. No title swap - the progress line sits
+    // directly above this row and says "Applying." for the whole of it.
+    var self = this;
+    this.filterControls().forEach(function (n) {
+      if (!n) return;
+      n.disabled = busy ||
+        (n === self.valueFilter && !needsText(self.valueMode.value));
+    });
+    // After the loop, because Rename disables the value box in `listing` too.
+    this.syncOps();
+    this.spin(state === 'loading' || busy);
+  };
+
+  // A cursor cycling under the last line of the log for as long as work is in flight,
+  // and gone the moment it is not. It sits in the log beside the blocks and the
+  // messages rather than inside one, and carries no `-line` class, since it is not a
+  // message and must not be read back as one; `msg` and `fillList` move it back to the
+  // end after appending under it. `state` is the single source of truth for whether it
+  // runs: every path in and out of a read or a write goes through setState.
+  Run.prototype.spin = function (on) {
+    if (!on) {
+      if (this.spinEl && this.spinEl.parentNode) this.spinEl.parentNode.removeChild(this.spinEl);
+      this.spinEl = null;
+      return;
+    }
+    if (!this.spinEl) this.spinEl = C.busyCursor('div', 'cfbe-spin');
+    this.listEl.appendChild(this.spinEl);
+  };
+
+  // Apply is enabled by the one rule the user asked for - a non-empty field name,
+  // an empty value being a legitimate thing to store - plus the version gate, which
+  // is the only warning in this repo's dialogs that blocks. Undo is deliberately not
+  // gated on it: stranding the user with changes they cannot take back is worse than
+  // the mismatch it protects against.
+  // **Cancel and Close are the same button wearing the word that fits.** Both call
+  // `close()` and always have - the difference is what the user is declining. With
+  // Apply live there is a write on offer, and Cancel says "not that one"; with Apply
+  // off there is nothing to decline, and a button saying Cancel invites the question
+  // of what it is cancelling. So the pair swaps on Apply's own disabled flag rather
+  // than on the state, which is what keeps it right when a filter or a mode change
+  // switches Apply off without moving the dialog anywhere.
+  //
+  // Called from `syncApply` in both dialogs, which is the one place `applyBtn.disabled`
+  // is written and is reached from every route that can move it - `setState`, a
+  // keystroke in a filter box, a mode change, a rescan.
+  function swapCancelForClose(run) {
+    var offerClose = hasClass(run.applyBtn, 'cfbe-hidden') || run.applyBtn.disabled;
+    run.show(run.cancelBtn, !offerClose);
+    run.show(run.closeBtn, offerClose);
+  }
+
+  // The locked names the press in front of the user would write: the field in the name
+  // box, and for a Rename the field it renames from.
+  // A lock means the field's name, its description, its presence on an entity and its
+  // value there cannot change. Setting it where an entity has none changes none of those,
+  // so Add is open on a locked field - it never overwrites - and so is a Rename *onto* a
+  // locked name, which refuses every entity already carrying it. Overwrite and Remove are
+  // refused, and so is a Rename *from* a locked field.
+  Run.prototype.lockedHit = function () {
+    var name = String(this.nameInput.value || '').trim();
+    var mode = this.modeSel.value;
+    return mode === 'add' ? [] : lockedAmong(this.settings, mode === 'rename' ? [this.renameName] : [name]);
+  };
+
+  Run.prototype.syncApply = function () {
+    var rename = this.modeSel.value === 'rename';
+    var locked = this.lockedHit();
+    // `!this.covered`: the scope is the listing, and a listing filtered down to no
+    // entity leaves Apply nothing to write - an orange button that writes nothing.
+    this.applyBtn.disabled = this.state !== 'listing' || !!this.unread ||
+      !String(this.nameInput.value || '').trim() || this.stale ||
+      (rename && !this.renameName) || !this.covered || locked.length > 0;
+    // **What Apply covers, on the button that does it.** With the "Apply to" select
+    // gone the scope is the listing, and a listing is counted in lines while a write is
+    // counted in entities - so the number the user needs before pressing is one nothing
+    // on screen would otherwise state.
+    var covers = 'Apply covers ' + plural(this.covered || 0, 'entity', 'entities') +
+      ' - the ones listed now. Clear the filters to cover everything this dialog read.';
+    this.applyBtn.title = this.unread ? 'Nothing is written: ' + this.unread + '.'
+      : locked.length ? lockSentence(locked) : rename && !this.renameName
+      ? 'Rename needs one field name in scope: what Apply covers carries more than one, ' +
+        'or nothing at all. Filter the list down to a single field name first.'
+      : (rename
+        ? 'Rename "' + this.renameName + '" on everything in scope, keeping each value. '
+        : '') + covers;
+    // What the value box will actually store, beside the box: Stash's numeric
+    // conversion is invisible until something compares the field as a number.
+    this.valueTypeEl.textContent = this.valueInput.disabled
+      ? '' : typeWord(convertCustomValue(String(this.valueInput.value || '')));
+    swapCancelForClose(this);
+  };
+
+  Run.prototype.note = function (message) {
+    this.msg('WARN', message);
+    this.noteEl.textContent = this.noteEl.textContent
+      ? this.noteEl.textContent + ' ' + message : message;
+  };
+
+  // Into the listing itself, at the end, so a message sits where it happened rather
+  // than in a strip of its own that has to be read against the list beside it. One
+  // box, one scrollbar, one order of events - and nothing here ever clears it, so the
+  // whole session is still there when the dialog closes.
+  //
+  // The text goes in as a child node rather than as the line's own `textContent`, so
+  // that a caller can append pills after it - setting text and then appending would
+  // drop one or the other depending on whose DOM you are in. Returns the line for
+  // exactly that.
+  Run.prototype.msg = function (kind, message) {
+    var line = el('div', 'cfbe-line cfbe-' + kind);
+    line.appendChild(textNode('[' + kind + '] ' + message));
+    this.listEl.appendChild(line);
+    if (this.spinEl) this.listEl.appendChild(this.spinEl);   // back to the end
+    this.scrollList();
+    return line;
+  };
+
+  // A tally inside a message line, with every name a click-to-copy pill: these are the
+  // strings that get typed into Field name and Value next, and retyping one by hand is
+  // how a bulk edit reaches the wrong key.
+  Run.prototype.tallyMsg = function (kind, lead, t, tail, named) {
+    var line = this.msg(kind, lead);
+    t.forEach(function (pair, i) {
+      if (i) line.appendChild(textNode(', '));
+      line.appendChild(copyPill(pair[0], named));
+      line.appendChild(textNode(' x' + pair[1]));
+    });
+    line.appendChild(textNode(tail == null ? '.' : tail));
+    this.scrollList();
+    return line;
+  };
+
+  // Both boxes, because this dialog is the only one of the four with two of them: the
+  // siblings' `.<prefix>-log` is itself the scroller, while here it is a wrapper around
+  // `.cfbe-list`. Which of the two actually scrolls depends on whether the inner box's
+  // `height:100%` resolves - against a flex parent whose own height comes from a
+  // `max-height` it is not definite, the inner one grows instead and the wrapper is
+  // what has the overflow. Scrolling the one that cannot move costs nothing; scrolling
+  // only the wrong one leaves the last line off screen.
+  Run.prototype.scrollList = function () {
+    [this.listEl, this.listEl.parentNode].forEach(function (box) {
+      if (box && typeof box.scrollHeight === 'number') box.scrollTop = box.scrollHeight;
+    });
+  };
+
+  Run.prototype.begin = function () {
+    var self = this;
+    this.setState('loading');
+
+    // Said rather than assumed, for the reason every skip in `reportSkips` is: a type
+    // missing from a whole-library run is otherwise indistinguishable from a bug.
+    if (!this.spec && this.settings.a1SkipImagesInTask) {
+      this.msg('INFO', 'Images are left out of this run: "' + SKIP_IMAGES_NAME +
+        '" is on in this plugin\'s settings.');
+    }
+
+    // Someone else's lease, held right now. Ours is taken in apply(). It is advisory
+    // and this is a manual action, so it does not block - but two plugins rewriting
+    // the same entities at once is worth saying out loud.
+    if (coop().leases.length) {
+      this.note('Another plugin is applying bulk changes right now (' +
+        coop().leases[0].owner + ' - ' + coop().leases[0].label + '). Running both at once ' +
+        'means each may undo part of the other; let it finish first.');
+    }
+
+    // Not chained ahead of the read: one small query against a batch that may be a
+    // hundred, and it lands long before Apply is reachable.
+    this.checkVersion();
+
+    // The store *is* chained ahead of it, and that is the difference: the field-name
+    // pills carry their descriptions as tooltips, and `_storeTagId` is what keeps this
+    // plugin's own plumbing tag out of the listing. One small query in front of a read
+    // that may take fifteen seconds. A store that cannot be read is not a reason to
+    // refuse a bulk edit - the pills simply have nothing to say.
+    readStore(this.settings).then(null, function (e) {
+      self.msg('WARN', 'The custom field descriptions could not be read: ' +
+        (e && e.message ? e.message : String(e)) + ' Field names have no tooltips in ' +
+        'this listing, and the tag that keeps them may be listed too - leave it unticked.');
+    }).then(function () {
+      return self.load();
+    }).then(function () {
+      if (self.closed) return;
+      self.setState('listing');
+      self.renderList();
+      self.summarise();
+    }, function (e) {
+      if (self.closed) return;
+      self.msg('ERROR', 'Reading custom fields failed: ' + (e && e.message ? e.message : String(e)));
+      self.setState('listing');
+      self.renderList();
+      self.summarise();
+    });
+  };
+
+  // Re-read and re-list, in place. `begin()` again rather than a second loader: a
+  // rescan has to re-check the version and re-warn about someone else's lease for the
+  // same reasons the first read did, and both live there.
+  //
+  // `changes` is deliberately kept, so Undo survives a rescan - it writes by id, not
+  // through the entity objects the read has just replaced. A fresh Apply is what
+  // replaces it, which is the one thing that can.
+  Run.prototype.rescan = function () {
+    this.entities = [];
+    this.withFields = 0;
+    this.rows = [];
+    this.applied = 0;
+    this.failed = 0;
+    this.undone = 0;
+    this.loadingWhat = '';
+    // The listing on screen described the library as it was, and this is about to
+    // describe it as it is - so the old one goes rather than sitting above the new one
+    // where it is read first. Only the listing: every message stays, and so does the
+    // report of every Apply, whose `before ⇒ after` lines are what actually record what
+    // the old listing showed.
+    if (this.listBlock && this.listBlock.parentNode) {
+      this.listBlock.parentNode.removeChild(this.listBlock);
+    }
+    this.listBlock = null;
+    this.blockEl = null;
+    this.msg('INFO', 'Rescanning.');
+    this.begin();
+  };
+
+  // The line a listing of 155,000 entities cannot give by being scrolled: every
+  // custom field name in scope, with how many entities carry it, in the `x250` form
+  // the legend describes. Emitted once per read, so a rescan restates it.
+  Run.prototype.summarise = function () {
+    if (this.storeSkipped) {
+      this.msg('INFO', 'The custom field descriptions are kept on tag ' + _storeTagId +
+        ', which is left out of this listing: what it carries is this plugin\'s own ' +
+        'plumbing. Edit the descriptions in Settings - Tasks - "' + TASK_DESC + '".');
+    }
+    // The rows a `none` entity contributes are lines rather than fields, so they are
+    // no more part of this tally than they are part of the "fields in total" counter.
+    var t = tally(this.rows.filter(function (r) { return !r.none; }),
+      function (r) { return r.name; });
+    if (!t.length) {
+      this.msg('INFO', 'No custom fields on any of the ' + this.entities.length + ' ' +
+        this.noun(this.entities.length) + ' in scope.');
+      return;
+    }
+    this.tallyMsg('INFO', 'Custom fields found: ', t, null, true);
+  };
+
+  Run.prototype.checkVersion = function () {
+    var self = this;
+    installedVersion(PLUGIN_ID, 'CFBEPluginVersion').then(function (installed) {
+      if (!installed || installed === PLUGIN_VERSION) {
+        console.info('[cfbe] running ' + PLUGIN_VERSION + ', Stash reports ' +
+          (installed || 'nothing') + ' installed.');
+        self.showStale('');
+        return;
+      }
+      self.stale = true;
+      var msg = '\u26a0 This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
+        ', but Stash has ' + installed + ' installed. Reload the page (F5) before applying ' +
+        'anything; if this warning comes back, hard-refresh with Ctrl+Shift+R ' +
+        '(\u2318+Shift+R on a Mac).';
+      // Into the log as well as the box: Copy log is how a user reports this, and a
+      // warning that only exists as chrome is one they cannot paste.
+      self.msg('WARN', msg);
+      self.showStale(msg);
+      self.syncApply();
+    });
+  };
+
+  // ── Reading ───────────────────────────────────────────────────────────────
+  //
+  // One aliased by-id query per batch of a hundred, rather than a filtered list query
+  // per entity-type. Every one of the seven has a `find<Type>(id:)`, so one query
+  // shape serves all of them and nothing here has to be right about the shape of
+  // seven different filter inputs.
+  // The store tag carries this plugin's own plumbing - the marker custom field, and
+  // whatever marks it hidden from the dropdowns - and none of that is the user's data
+  // to bulk edit. So it is left out of every listing here, counted rather than dropped
+  // in silence: a tag missing from a whole-library run has to say why, the same as an
+  // entity skipped by `plan()` does.
+  Run.prototype.keep = function (spec, ent) {
+    if (spec.key === 'tags' && _storeTagId && String(ent.id) === _storeTagId) {
+      this.storeSkipped++;
+      return false;
+    }
+    return true;
+  };
+
+  Run.prototype.load = function () {
+    var self = this;
+    if (!this.spec) {
+      return this.specs.reduce(function (p, spec) {
+        return p.then(function () { return self.closed ? null : self.loadAll(spec); });
+      }, Promise.resolve());
+    }
+    var chunks = [];
+    for (var i = 0; i < this.ids.length; i += CHUNK_SIZE) {
+      chunks.push(this.ids.slice(i, i + CHUNK_SIZE));
+    }
+    return chunks.reduce(function (p, chunk) {
+      return p.then(function () { return self.closed ? null : self.loadChunk(chunk); });
+    }, Promise.resolve());
+  };
+
+  Run.prototype.loadChunk = function (ids) {
+    var self = this;
+    var spec = this.spec;
+    var parts = ids.map(function (id, i) {
+      return 'r' + i + ': ' + spec.one + '(id: ' + JSON.stringify(String(id)) + ') { id ' +
+        spec.fields + ' custom_fields }';
+    });
+    return gqlRequest('query CFBE_Read { ' + parts.join(' ') + ' }', null).then(function (data) {
+      ids.forEach(function (id, i) {
+        var ent = data && data['r' + i];
+        // An entity deleted between the selection and the read is reported rather
+        // than silently dropped: the count in the head came from the selection.
+        if (!ent) { self.msg('WARN', spec.label + ' ' + id + ' no longer exists.'); return; }
+        if (!self.keep(spec, ent)) return;
+        self.take(spec, ent);
+      });
+    });
+  };
+
+  // One entity kept, and the count of those carrying a field kept with it: the progress
+  // line asked that question of every entity read so far, on every page and again on
+  // every batch written, which is a pass over the whole library per page.
+  Run.prototype.take = function (spec, ent) {
+    var fields = ent.custom_fields || {};
+    for (var k in fields) {
+      if (hasOwn(fields, k)) { this.withFields++; break; }
+    }
+    this.entities.push({ spec: spec, id: String(ent.id),
+      display: displayName(ent) || 'untitled', fields: fields });
+  };
+
+  // The task's read: one query per type, paged. `per_page: -1` is the repo's
+  // convention for "everything" and is what this asked for first - but a library of
+  // 155,000 entities answers that in one 15-second silence, with a dialog that looks
+  // hung and a counter that goes from nothing to the final number. Reported live.
+  //
+  // **A progress counter can only count what has arrived**, so the read has to arrive
+  // in pieces. `count` comes back with every page, which is what makes the line a
+  // fraction rather than a tally, and it costs nothing extra to ask for.
+  //
+  // `READ_PAGE` is the whole trade: smaller pages update the line more often and cost
+  // one round trip each. 5,000 puts a 155,000-entity-type at 31 requests and a line
+  // that moves several times a second - a thousand would be 155 round trips of
+  // latency added to a read the user has already been told is slow.
+  //
+  // **The query name and the field it returns are both derivable.** `find<Plural>`
+  // for all seven, and the list inside it is named by the same plural segment the
+  // table is already keyed on - so neither needs a column of its own. If a future
+  // Stash breaks that pattern for one type, give that spec an explicit field rather
+  // than teaching this function about exceptions.
+  //
+  // Failures are per type: a Stash that refuses one query still lists the other six,
+  // with a line saying which one is missing. Silently showing six sevenths of a
+  // library and calling it the library is the outcome worth avoiding.
+  Run.prototype.loadAll = function (spec) {
+    var self = this;
+    var query = 'find' + spec.plural;
+    var read = 0;
+    // Taken into the listing only once every page of the type is in: a page that fails drops the
+    // whole type, so nothing lists - or writes - part of one as if it were all of it.
+    var got = [];
+
+    function page(n) {
+      return gqlRequest('query CFBE_ReadAll { ' + query + '(filter: { per_page: ' +
+        READ_PAGE + ', page: ' + n + ' }) { count ' + spec.key + ' { id ' + spec.fields +
+        ' custom_fields } } }', null).then(function (data) {
+        if (self.closed) return;
+        var res = (data && data[query]) || {};
+        var list = res[spec.key] || [];
+        list.forEach(function (ent) { if (self.keep(spec, ent)) got.push(ent); });
+        self.held = got.length;     // counted on the progress line while they wait
+        read += list.length;
+        self.loadingWhat = spec.plural.toLowerCase() + ' - ' + read +
+          (typeof res.count === 'number' ? ' of ' + res.count : '');
+        self.renderProgress();
+        // A short page is the last one. A last page that happens to be exactly full
+        // costs one more query returning nothing, which is cheaper than trusting
+        // `count` to agree with what a concurrent edit leaves in the list.
+        if (list.length >= READ_PAGE) return page(n + 1);
+        got.forEach(function (ent) { self.take(spec, ent); });
+        got = null;
+        self.held = 0;
+      });
+    }
+
+    return page(1).then(null, function (e) {
+      got = null;
+      self.held = 0;
+      self.msg('ERROR', 'Reading ' + spec.plural.toLowerCase() + ' failed' + (read ? ' after ' + read + ' of them' : '') +
+        ': ' + (e && e.message ? e.message : String(e)) + ' None of them are in this listing, ' +
+        'and nothing here will write to them.');
+    });
+  };
+
+  // ── The listing ───────────────────────────────────────────────────────────
+
+  // **An entity carrying no custom fields gets a line of its own.** It used to
+  // contribute none, which made it invisible in a dialog whose whole subject is what
+  // the entities carry - and, once the scope select went, unreachable: Apply covers
+  // the filtered listing, and a row is the only way into it. Adding the field that is
+  // missing is the operation these entities exist in this dialog for.
+  //
+  // The row is marked `none` rather than inferred from an empty name later. Every
+  // predicate that reads a line - the filters, the rename precondition, the field
+  // tally - has to tell "this entity has no fields" from "this field is named with the
+  // empty string", which Stash refuses to store but this code should not have to know.
+  Run.prototype.buildRows = function () {
+    var rows = [];
+    var fieldCount = 0;
+    this.entities.forEach(function (e) {
+      var names = [];
+      for (var k in e.fields) { if (hasOwn(e.fields, k)) names.push(k); }
+      names.sort();
+      if (!names.length) {
+        rows.push({ spec: e.spec, id: e.id, display: e.display,
+          name: '', value: '', raw: undefined, none: true });
+        return;
+      }
+      fieldCount += names.length;
+      names.forEach(function (k) {
+        rows.push({ spec: e.spec, id: e.id, display: e.display,
+          name: k, value: valueText(e.fields[k]), raw: e.fields[k] });
+      });
+    });
+    this.rows = rows;
+    // Counted while the rows are built rather than derived from their length: a `none`
+    // row is a line and not a field, and every counter that says "fields" means this.
+    this.fieldCount = fieldCount;
+  };
+
+  // How many *entities* a set of rows reaches. The listing counts lines and Apply
+  // counts entities - one entity carrying five fields is five lines and one write - so
+  // with the scope select gone this is the number that says what Apply covers, and it
+  // is not one the user can read off the list.
+  function countEntities(rows) {
+    var seen = {}, n = 0;
+    rows.forEach(function (r) {
+      var k = r.spec.key + ':' + r.id;
+      if (!hasOwn(seen, k)) { seen[k] = true; n++; }
+    });
+    return n;
+  }
+
+  // `[['a', 12], ['b', 3]]` over whatever `key` names, sorted. One function for every
+  // summary line: the read counts field names, an Apply counts Added/Replaced/Deleted,
+  // a skipped Add counts the values it left alone. Pairs rather than the joined string
+  // it used to return, because a name in a summary is worth a copy pill and a
+  // string cannot carry one - `tallyText` is the same line where plain text will do.
+  function tally(items, key) {
+    var counts = {};
+    var names = [];
+    items.forEach(function (item) {
+      var k = key(item);
+      if (!hasOwn(counts, k)) { counts[k] = 0; names.push(k); }
+      counts[k]++;
+    });
+    names.sort();
+    return names.map(function (n) { return [n, counts[n]]; });
+  }
+
+  function tallyText(t) {
+    return t.map(function (pair) { return pair[0] + ' x' + pair[1]; }).join(', ');
+  }
+
+  // ── Pills ─────────────────────────────────────────────────────────────────
+  //
+  // A line reads `<Type> {"name" (id)}: {field}🟰{value}`, and a change line is the
+  // same with an action pill in front and a before ⇒ after. Three kinds, three
+  // behaviours: the action pill says what happened and does nothing, the entity pill
+  // is a link to that entity, and a field name or value copies itself.
+  function textNode(s) { return el('span', null, s); }
+
+  // Real text, not `content:` on an empty span, and that is the second thing this
+  // mark has been through. Generated content cannot be selected: it paints no
+  // highlight when the user drags across the line, so a line with a mark in it looked
+  // like it had a hole in the selection. Selectable is worth more than the guarantee
+  // the empty span bought, because the guarantee can be had another way - see
+  // `selectionText`, which drops the mark *elements* from what gets copied.
+  function noneNode(title) {
+    var n = el('span', 'cfbe-none', NONE);
+    n.title = title;
+    return n;
+  }
+
+  // What a copy out of the list should say: the values the entities really have, with
+  // the marks left out - they stand for nothing being there, so they stand for nothing
+  // in the text either.
+  //
+  // Read off a *clone* of the selected range with the mark elements removed, never by
+  // stripping the mark's character out of the string: an entity name is free to
+  // contain that character, and this user's names are full of Unicode marks. Changing
+  // `NONE` therefore stays a one-line change, which is what it was.
+  //
+  // `cloneContents` keeps the ancestors of a partial selection, so a multi-row
+  // selection arrives as one `.cfbe-entry` per line and a within-one-row selection as
+  // the pills themselves - which is why the newline goes in only between entries.
+  function selectionText(sel) {
+    var plain = sel ? String(sel) : '';
+    if (!plain || !sel.rangeCount || !sel.getRangeAt) return plain;
+    var frag;
+    try { frag = sel.getRangeAt(0).cloneContents(); } catch (e) { return plain; }
+    if (!frag || !frag.querySelectorAll || !frag.childNodes) return plain;
+    var marks = frag.querySelectorAll('.cfbe-none');
+    for (var i = 0; i < marks.length; i++) {
+      if (marks[i].parentNode) marks[i].parentNode.removeChild(marks[i]);
+    }
+    var out = '';
+    for (var j = 0; j < frag.childNodes.length; j++) {
+      var kid = frag.childNodes[j];
+      if (j && hasClass(kid, 'cfbe-entry')) out += '\n';
+      out += kid.textContent || '';
+    }
+    return out;
+  }
+
+  function pill(kind, text) { return el('span', 'cfbe-pill cfbe-pill-' + kind, text); }
+
+  function entityPill(spec, id, display) {
+    var a = el('a', 'cfbe-pill cfbe-pill-ent', '"' + display + '" (' + id + ')');
+    a.href = '/' + spec.key + '/' + id;
+    a.target = linkTarget();
+    a.rel = 'noopener noreferrer';
+    a.title = 'Open this ' + spec.label.toLowerCase() + (linkTarget() ? ' in a new tab' : '');
+    // One pill builds every entity name in both dialogs - the listing, the change lines
+    // and the descriptions dialog's carriers pane - so the card goes on here and nowhere
+    // else. It replaces the title above while it is open and hands it back after.
+    entityTip(a, spec.key, id);
+    return a;
+  }
+
+  // An empty name or value is a real thing to store, and it was rendering as a pill
+  // with nothing in it - indistinguishable from a bug, and the actual complaint that
+  // sent this round. It gets the same ∅ the absent side gets, for the same reason and
+  // by the same mechanism: the pill's *text* stays empty, so a click still copies the
+  // empty string and a selection still reads it as one.
+  // `named` says this pill holds a custom field *name* rather than a value, which is
+  // the only thing that can carry a description. Passed by the caller rather than
+  // guessed from the store: a value that happens to read like a field name is a value,
+  // and a tooltip explaining it as a field would be a confident lie.
+  // `raw` is the value the pill is showing *before* it was rendered as text, passed
+  // only where there is one: a tally's pills hold names and counts and would otherwise
+  // be told they are text, which is a claim rather than an omission.
+  function copyPill(text, named, raw) {
+    var p = pill('cf', text === '' ? null : text);
+    // A null and an empty string both render as nothing, and the two are different
+    // things - the mark says which, because it is the only place on the line that can.
+    if (text === '') {
+      p.appendChild(noneNode(raw === null
+        ? 'null - this field is set to no value at all'
+        : 'empty - this field is set, to nothing'));
+    }
+    var desc = named && hasOwn(_descriptions, text) ? String(_descriptions[text] || '') : '';
+    // What the click does comes first, because it is true of every pill; the
+    // description is what only some of them have, and it is the longer half. A name
+    // pill says *which* of the two things on the line it copies, and labels the
+    // description rather than letting a sentence run on from the click.
+    p.title = named
+      ? 'Click to copy Name' + (desc ? '\nDescription: ' + desc : '')
+      : 'Click to copy' + (raw === undefined
+        ? '' : '\nStored as ' + typeWord(raw) + '.');
+    p.addEventListener('click', function () {
+      // A drag-select that ends inside a pill fires a click, and copying the pill
+      // there would take the clipboard off the selection the user just made. A plain
+      // click has already collapsed any selection by the time it arrives.
+      if (window.getSelection && String(window.getSelection())) return;
+      var base = 'cfbe-pill cfbe-pill-cf';
+      copyToClipboard(text, function (ok) {
+        p.className = base + (ok ? ' cfbe-pill-copied' : ' cfbe-pill-failed');
+        setTimeout(function () { p.className = base; }, 900);
+      });
+    });
+    return p;
+  }
+
+  // A field side of a line: the pair, or ∅ where there is no field on that side.
+  // `noneTitle` is what that ∅ means here - an entity with no custom fields at all is
+  // not the same absence as the empty side of a change, and the mark is the only thing
+  // on the line either can say it with.
+  // A value pill and the mark that says what type it is. One function, because a value is
+  // drawn in two dialogs - the listing here and the carriers pane in the descriptions
+  // dialog - and a number that says it is one on one screen and not on the other is
+  // worse than neither saying it.
+  //
+  // The space is in the text rather than a margin: `.cfbe-entry` is `pre-wrap`, so it
+  // renders as a gap, and a copy out of the list gets it too - a margin would put `5num`
+  // on the clipboard.
+  function appendValue(row, text, raw) {
+    row.appendChild(copyPill(text, false, raw));
+    var t = valueType(raw);
+    if (t) row.appendChild(el('span', 'cfbe-vtype', ' ' + t));
+  }
+
+  function appendField(row, field, noneTitle) {
+    if (!field) { row.appendChild(noneNode(noneTitle || 'no field here')); return; }
+    row.appendChild(copyPill(field.name, true));
+    row.appendChild(textNode(EQ));
+    appendValue(row, field.value, field.raw);
+  }
+
+  Run.prototype.rowNode = function (r, action, before, after) {
+    var row = el('div', 'cfbe-entry');
+    if (action) {
+      row.appendChild(pill('act', action));
+      row.appendChild(textNode(' '));
+    }
+    // The row's own spec, not the run's: a task run has seven types in one listing,
+    // and the type word in front of a line is the only thing that says which.
+    var spec = r.spec || this.spec;
+    row.appendChild(textNode(spec.label + ' '));
+    row.appendChild(entityPill(spec, r.id, r.display));
+    row.appendChild(textNode(': '));
+    appendField(row, before, r.none ? 'this entity carries no custom fields' : null);
+    if (action) {
+      row.appendChild(textNode(ARROW));
+      appendField(row, after);
+    }
+    return row;
+  };
+
+  // The same line as `rowNode`, as text. The ␀ marks are left out for the reason a
+  // copied *selection* leaves them out: they stand for nothing being there, so they
+  // stand for nothing in the text either.
+  function fieldText(field) {
+    if (!field) return '';
+    var t = valueType(field.raw);
+    return field.name + EQ + field.value + (t ? ' [' + t + ']' : '');
+  }
+
+  Run.prototype.lineText = function (r, action, before, after) {
+    var spec = r.spec || this.spec;
+    return (action ? action + ' ' : '') + spec.label + ' "' + r.display + '" (' + r.id + '): ' +
+      // The mark is dropped from copied text everywhere else here, because it stands
+      // for nothing being there. A whole line that would otherwise end in a colon is
+      // the one place that leaves the reader with nothing at all, so it says the words.
+      (r.none && !action ? '(no custom fields)' : fieldText(before)) +
+      (action ? ARROW + fieldText(after) : '');
+  };
+
+  // Which side of a change holds a field, and what to call what happened. Read off
+  // the two sides rather than off the mode, which is what makes an undo name itself
+  // correctly: reversing an Added is a Deleted. One function, because the node, the
+  // text and the summary tally all have to agree about it.
+  function changeSides(c, reversed) {
+    var before = c.had ? { name: c.name, value: valueText(c.before), raw: c.before } : null;
+    // `c.to` is a rename: the value is the same on both sides and the *name* moves,
+    // which is also why the action word cannot be read off which side is missing.
+    var after = c.remove
+      ? null : { name: c.to || c.name, value: valueText(c.after), raw: c.after };
+    if (reversed) { var swap = before; before = after; after = swap; }
+    return { before: before, after: after,
+      action: c.to ? 'Renamed' : !before ? 'Added' : !after ? 'Deleted' : 'Replaced' };
+  }
+
+  // One place where the cap is applied, so both the listing and the change recap say
+  // the same thing when there is more than the DOM should hold. `text` runs over
+  // *every* item, capped or not: Copy log is not a copy of the DOM, and it hangs on
+  // the block rather than on the run so an earlier block can still be copied whole.
+  //
+  // A listing goes into a block of its own, appended after whatever the log already
+  // holds. Re-filtering rewrites the current block in place - it restates what is in
+  // scope *now*, and one new listing per keystroke is not a history of anything -
+  // while a rescan or a write clears `blockEl` first and so starts another.
+  Run.prototype.fillList = function (items, build, text) {
+    var self = this;
+    var block = this.blockEl;
+    if (!block) {
+      block = this.blockEl = el('div', 'cfbe-block');
+      this.listEl.appendChild(block);
+      if (this.spinEl) this.listEl.appendChild(this.spinEl);   // back to the end
+    }
+    while (block.firstChild) block.removeChild(block.firstChild);
+    // **`_cfbeText`, not `_text`.** A plain property on the node, like `_coopOwner` in
+    // the siblings - but the name has to be one nothing else uses, and `_text` is what
+    // `.tests/npt-harness.js` stores an element's own text in. Every `appendChild` after
+    // the assignment nulled it there, so `copyLog` silently fell back to reading the
+    // DOM: the uncapped text this line exists for was never once exercised by a suite,
+    // while the checks about Copy log all passed off the fallback.
+    block._cfbeText = items.map(function (item) { return text.call(self, item); });
+    items.slice(0, linesDrawn()).forEach(function (item) {
+      block.appendChild(build.call(self, item));
+    });
+    if (items.length > linesDrawn()) {
+      block.appendChild(el('div', 'cfbe-entry cfbe-INFO',
+        '... and ' + plural(items.length - linesDrawn(), 'more line') + ' not shown. ' +
+        'Filter to narrow the list; every one of them is still in scope.'));
+    }
+  };
+
+  // The two modes every text filter here offers, and the only two that read the box
+  // beside them - the value filter's other three are the whole query on their own.
+  var TEXT_MODES = [['contains', 'contains'], ['omits', 'omits']];
+
+  function needsText(mode) { return mode === 'contains' || mode === 'omits'; }
+
+  // An empty box filters nothing, in **either** mode: "omits nothing" is every row, not
+  // none. Everything else is one `indexOf`, negated for "omits".
+  function textMatch(hay, needle, mode) {
+    if (!needle) return true;
+    var found = String(hay).toLowerCase().indexOf(needle) !== -1;
+    return mode === 'omits' ? !found : found;
+  }
+
+  // The entity as one string to filter on. Not the pill's own text, which quotes the
+  // name: typing what the row shows has to work, and `"Cool Scene" (42)` would then
+  // refuse `Cool Scene (42)` over a quote nobody thinks of as part of the name.
+  function entityText(r) { return r.display + ' (' + r.id + ')'; }
+
+  // The value test is judged on the **raw** value, not on the text the row shows: an
+  // empty array is `[]` on screen and not-true underneath, and the mode has to agree
+  // with the dropdown filter that reads the same field, which never sees the text.
+  Run.prototype.filtered = function () {
+    var name = String(this.nameFilter.value || '').toLowerCase();
+    var nameMode = this.nameMode.value;
+    var ent = String(this.entFilter.value || '').toLowerCase();
+    var entMode = this.entMode.value;
+    var type = this.typeFilter ? this.typeFilter.value : '';
+    var fields = this.fieldsFilter.value;
+    var mode = this.valueMode.value;
+    var value = needsText(mode) ? String(this.valueFilter.value || '').toLowerCase() : '';
+    // **Is the value box asking anything at all?** An empty box under `contains` or
+    // `omits` is not a filter, and the three truth modes are a filter with no text - so
+    // this is the one predicate that says whether a *value* condition is in play, which
+    // is what decides whether an entity with no value to test can survive it.
+    var askingValue = !needsText(mode) || !!value;
+    return this.rows.filter(function (r) {
+      if (type && r.spec.key !== type) return false;
+      if (fields === 'has' && r.none) return false;
+      if (fields === 'none' && !r.none) return false;
+      if (!textMatch(entityText(r), ent, entMode)) return false;
+      // A `none` row carries no name and no value, so the two filters that read those
+      // are answered by what the row *is* rather than by matching an empty string
+      // against them. A name typed in is a name this entity does not have - correct
+      // either way round, and `omits` keeps it for the same reason. A value condition
+      // takes it out full stop: there is no field there to have a value.
+      if (r.none) return (!name || nameMode === 'omits') && !askingValue;
+      if (!textMatch(r.name, name, nameMode)) return false;
+      if (mode === 'empty') return r.value === '';
+      if (mode === 'true') return isMarked(r.raw);
+      if (mode === 'nottrue') return !isMarked(r.raw);
+      return textMatch(r.value, value, mode);
+    });
+  };
+
+  // **The listing is one block, and it is the only block this ever writes into.** It is
+  // a statement about what the entities in scope carry *now*, so there is never a
+  // reason to have two of them - and `blockEl` alone could not say that, because an
+  // Apply's report is a block too and the two were sharing the reference. Two things
+  // fell out of that, and the second is the reported bug:
+  //
+  //   - a filter keystroke in the `applied` state rewrote the **report** with a
+  //     listing, since `fillList` refills whatever `blockEl` points at;
+  //   - a rescan left the superseded listing on screen *above* the fresh one, so the
+  //     first thing read after pressing Rescan was still the old value. Live report:
+  //     a custom field changed elsewhere, Rescan pressed, nothing seen to change.
+  //
+  // So the listing keeps a reference of its own. `rescan` drops that node, which is
+  // what puts the fresh listing last; `renderChanges` still starts a block of its own
+  // and is never reached from here.
+  Run.prototype.renderList = function () {
+    this.buildRows();
+    var rows = this.filtered();
+    this.blockEl = this.listBlock && this.listBlock.parentNode ? this.listBlock : null;
+    this.fillList(rows, function (r) {
+      return this.rowNode(r, null, r.none ? null : { name: r.name, value: r.value, raw: r.raw });
+    }, function (r) {
+      return this.lineText(r, null, r.none ? null : { name: r.name, value: r.value, raw: r.raw });
+    });
+    this.listBlock = this.blockEl;
+    // Both the counter and Apply's own tooltip say how far a press reaches, and both
+    // are drawn from here rather than each counting for itself.
+    this.covered = countEntities(rows);
+    this.renderProgress(rows.length);
+    this.syncOps(rows);
+  };
+
+  // Every control that narrows the listing, in one list: the two places that need it
+  // are this and `setState`, and a filter added to one and not the other is a filter
+  // that either cannot be locked during a write or cannot be read during a plan.
+  Run.prototype.filterControls = function () {
+    return [this.typeFilter, this.fieldsFilter, this.entMode, this.entFilter,
+      this.nameMode, this.nameFilter, this.valueMode, this.valueFilter];
+  };
+
+  // The filters *are* the scope now, so a keystroke here is a change to what Apply
+  // covers - which is why this refuses to run while one is in flight. `setState`
+  // disables the controls, and this is the guard behind them: the × on a filter box
+  // and any future route in go through here too, and a flag read at render time is no
+  // guard against something that starts after the render.
+  Run.prototype.filterChanged = function () {
+    if (this.state === 'applying' || this.state === 'undoing') return;
+    this.renderList();
+  };
+
+  // The one field name everything in scope carries, or null if they carry more than one
+  // - which is the whole of Rename's precondition. `rows` is passed in where the caller
+  // has just computed it: this runs on every keystroke in a filter box, over a listing
+  // that can be six figures long.
+  Run.prototype.renameFrom = function (rows) {
+    var scoped = rows || this.filtered();
+    var name = null;
+    for (var i = 0; i < scoped.length; i++) {
+      // An entity carrying no custom fields has nothing to rename and lands in
+      // `skipped.absent` when the plan is made, so it must not be able to break the
+      // one-name precondition either - otherwise clearing the filters, which is now
+      // how a user covers the whole library, would turn Rename off for good.
+      if (scoped[i].none) continue;
+      if (name === null) name = scoped[i].name;
+      else if (scoped[i].name !== name) return null;
+    }
+    return name;
+  };
+
+  // Rename is offered only while the scope carries exactly one field name, and the value
+  // box is not part of it. A mode that *becomes* unavailable while selected **stays
+  // selected**, and is marked rather than replaced: switching the operation under someone
+  // about to press Apply is the silent change this refuses to make, and it refuses it
+  // whatever moved the scope - a rescan, a filter, a type filter, an Apply that emptied a
+  // field. Red on the option, red on the select while it is the one chosen, Apply already
+  // disabled with the reason in its title, and one `[INFO]` line on the way in.
+  //
+  // So this runs from `renderList` - every filter keystroke, every read - and the log
+  // line is what needs the transition rather than the state: `_renameLost` is set on the
+  // way in and cleared the moment Rename is possible again, so a scope that comes back
+  // and goes away twice says so twice and a scope that stays broken says it once.
+  Run.prototype.syncOps = function (rows) {
+    var rename = this.modeSel.value === 'rename';
+    this.renameName = this.renameFrom(rows);
+    var lost = !this.renameName;
+    // **Red marks a selection that cannot be applied, not an option that is unavailable.**
+    // An unavailable option nobody has chosen is simply disabled, which the browser
+    // already grays - a second color on it would be the list shouting about a mode the
+    // user is not in. So both marks carry the same condition, and picking another
+    // operation takes them both off.
+    if (this.modeSel._opts && this.modeSel._opts.rename) {
+      this.modeSel._opts.rename.disabled = lost;
+      paintBad(this.modeSel._opts.rename, rename && lost);
+    }
+    paintBad(this.modeSel, rename && lost);
+    if (rename && lost && !this._renameLost) {
+      this._renameLost = true;
+      this.msg('INFO', 'Rename is not possible any more: it moves one custom field to a ' +
+        'new name, so it needs exactly one field name in scope, and what Apply covers now ' +
+        'carries ' + (this.fieldCount ? 'more than one' : 'none') + '. The operation is ' +
+        'left as you set it and marked in red; Apply stays off until it is changed, or ' +
+        'until the scope is filtered back down to a single field name.');
+    }
+    if (!lost) this._renameLost = false;
+    this.modeSel.title = MODE_TIPS[this.modeSel.value] || '';
+    this.fieldsFilter.title = FIELDS_TIPS[this.fieldsFilter.value] || '';
+    this.valueInput.disabled = rename || this.state !== 'listing';
+    this.nameLabel.textContent = rename ? 'New Custom Field name' : 'Custom Field name';
+    this.syncApply();
+  };
+
+  // What to call the things in scope. A selection run knows its one type; the task
+  // has seven and calls them entities, which is also what the counters say.
+  // `n` is the count it follows, so one reads "1 studio", never "1 studios" (seen live).
+  Run.prototype.noun = function (n) {
+    if (n === 1) return this.spec ? this.spec.label.toLowerCase() : 'entity';
+    return this.spec ? this.spec.plural.toLowerCase() : 'entities';
+  };
+
+  Run.prototype.renderProgress = function (listed) {
+    var withFields = this.withFields;
+
+    var summary;
+    if (this.state === 'loading') {
+      // The task has no denominator until every type has answered, so it counts up
+      // rather than towards - and names the type it is on, since one of the seven can
+      // be most of the wait on a large library.
+      summary = this.spec
+        ? 'Loading. ' + this.entities.length + ' of ' + this.ids.length + ' read'
+        : 'Loading ' + (this.loadingWhat || '') + '. ' + (this.entities.length + (this.held || 0)) + ' read so far';
+    } else if (this.state === 'applying') {
+      summary = 'Applying. ' + this.applied + ' of ' + plural(this.changes.length, 'entity change') + ' written';
+    } else if (this.state === 'undoing') {
+      summary = 'Undoing. ' + this.undone + ' of ' + plural(this.changes.length, 'change') + ' reversed';
+    } else if (this.state === 'applied') {
+      summary = 'Applied. ' + plural(this.applied, 'entity change') + ' written' +
+        (this.failed ? ', ' + this.failed + ' failed' : '') +
+        (this.undone ? ', ' + this.undone + ' reversed by Undo' : '');
+    } else {
+      // **Lines and entities are different numbers, and only one of them is what Apply
+      // covers.** One entity carrying five fields is five lines and one write, and an
+      // entity carrying none is one line and one write - so with the scope select gone,
+      // a counter that stopped at "lines listed" would leave the size of the next press
+      // to be worked out by eye.
+      summary = this.entities.length + ' ' + this.noun(this.entities.length) + ' read, ' +
+        withFields + ' with custom fields, ' + plural(this.fieldCount, 'field') + ' in total, ' +
+        plural(listed == null ? this.rows.length : listed, 'line') + ' listed. Apply covers ' +
+        plural(this.covered == null ? this.entities.length : this.covered, 'entity', 'entities') + '.';
+    }
+    this.progressEl.textContent = summary;
+  };
+
+  // ── Applying ──────────────────────────────────────────────────────────────
+
+  // What the three modes mean, and why they are not Stash's own bulk tabs: a custom
+  // field holds one value per key, so there is no list to append to. "Add" therefore
+  // means *do not overwrite* - only entities that do not already carry the key are
+  // written - and "Overwrite" means every entity in scope regardless. That is the
+  // distinction worth having, and it is the only one the data shape allows.
+  Run.prototype.plan = function () {
+    var mode = this.modeSel.value;
+    var name = String(this.nameInput.value || '').trim();
+    var value = convertCustomValue(String(this.valueInput.value || ''));
+    // What the value *reads* as, for every comparison and every sentence about it. The
+    // value itself may now be a number, and comparing a number with the text a listing
+    // shows would make every entity look changed.
+    var valueStr = valueText(value);
+
+    // **The scope is the listing, always.** There is no "Apply to" to read: what is on
+    // screen is what a press covers, and an entity carrying no custom fields has a line
+    // of its own so it is reachable here exactly like any other. Keyed by type *and*
+    // id, since ids are only unique within a type and a task run has all seven in one
+    // listing - a filtered scene 5 would otherwise carry tag 5 into the write with it.
+    var keep = {};
+    this.filtered().forEach(function (r) { keep[r.spec.key + ':' + r.id] = true; });
+    var scope = this.entities.filter(function (e) {
+      return hasOwn(keep, e.spec.key + ':' + e.id);
+    });
+
+    // Three reasons an entity in scope gets no change, all of them worth a line: they
+    // are the difference between "it worked" and "it did nothing to half of these",
+    // and a dialog that said the same thing either way would hide it. The order matters -
+    // an "Add" over a key that already holds the asked-for value is *unchanged*, not
+    // *refused*, so the equal-value test runs first for every mode that writes one.
+    var changes = [];
+    var skipped = { present: [], unchanged: [], absent: [], collide: [] };
+
+    // Rename is the one mode whose *source* field is not the one in the box: the box
+    // holds the new name, and the old one is whatever the scope carries - which is why
+    // it is only offered while the scope carries exactly one. `from` is read here
+    // rather than trusted from `syncOps`, so a plan is never made from a stale answer.
+    if (mode === 'rename') {
+      var from = this.renameFrom();
+      scope.forEach(function (e) {
+        if (!from || !hasOwn(e.fields, from)) { skipped.absent.push(e); return; }
+        if (name === from) { skipped.unchanged.push(e); return; }
+        // The write is `partial` plus `remove` in one input, so an entity that already
+        // carries the new name would have it overwritten and the old value lost. That
+        // is a merge, not a rename, and it is not this dialog's to decide.
+        if (hasOwn(e.fields, name)) { skipped.collide.push({ value: valueText(e.fields[name]) }); return; }
+        changes.push({
+          spec: e.spec, id: e.id, display: e.display, entity: e, name: from, to: name,
+          had: true, before: e.fields[from], after: e.fields[from], remove: false,
+        });
+      });
+      return { mode: mode, name: name, from: from, value: value, valueStr: valueStr,
+        changes: changes, skipped: skipped };
+    }
+
+    scope.forEach(function (e) {
+      var has = hasOwn(e.fields, name);
+      var now = has ? valueText(e.fields[name]) : null;
+      if (mode === 'remove') {
+        if (!has) { skipped.absent.push(e); return; }
+      // **Compared as values, not as text, which the numeric conversion is what makes
+      // possible.** An entity holding the string `"5"` when a number 5 is asked for is
+      // *not* already right - that is exactly the field this conversion exists to put
+      // in step with Stash's own editor, and comparing the two as text would refuse to
+      // write the one entity that needs it. `now` stays what the skip line prints.
+      } else if (has && e.fields[name] === value) {
+        skipped.unchanged.push(e); return;
+      } else if (mode === 'add' && has) {
+        skipped.present.push({ value: now }); return;
+      }
+      changes.push({
+        spec: e.spec, id: e.id, display: e.display, entity: e, name: name,
+        had: has, before: has ? e.fields[name] : null,
+        after: mode === 'remove' ? null : value, remove: mode === 'remove',
+      });
+    });
+    return { mode: mode, name: name, value: value, valueStr: valueStr,
+      changes: changes, skipped: skipped };
+  };
+
+  // What a value looks like inside a sentence, where an empty one has to say so.
+  function quoted(value) { return value === '' ? 'empty' : '"' + value + '"'; }
+
+  // What each operation does, in the tooltip rather than in a legend: the four differ
+  // in what they refuse, which is the part a caption cannot carry. "Add" not
+  // overwriting is the one that has surprised people (§6), and Rename's condition is
+  // the one that explains why it is sometimes grayed out.
+  var MODE_TIPS = {
+    add: 'Set the field only where it is missing. An entity that already carries it is ' +
+      'left alone, whatever its value - "Add" never overwrites.',
+    overwrite: 'Set this one field on every entity in scope, replacing the value it ' +
+      'already has there. Every other custom field on those entities is left untouched - ' +
+      '"Overwrite" replaces one field\'s value, never an entity\'s whole set of fields.',
+    remove: 'Delete this one field from every entity in scope that has it. The entity\'s ' +
+      'other custom fields are left untouched.',
+    rename: 'Rename the field itself, keeping each entity\'s value. Available only when ' +
+      'everything in scope carries the same one field name; "Custom Field name" is the ' +
+      'new name, and the value box is not used.',
+  };
+
+  var FIELDS_TIPS = {
+    '': 'Every entity, whether or not it carries any custom fields.',
+    has: 'Only entities that carry at least one custom field.',
+    none: 'Only entities that carry none at all - the ones an "Add" is for. They are ' +
+      'listed with ' + NONE + ' where the field would be.',
+  };
+
+  Run.prototype.reportSkips = function (planned) {
+    var s = planned.skipped;
+    var self = this, noun = function (n) { return ' ' + self.noun(n) + ': "' + planned.name + '" '; };
+    if (planned.mode === 'rename') {
+      if (s.absent.length) {
+        this.msg('INFO', 'Skipped ' + s.absent.length + ' ' + this.noun(s.absent.length) + ': "' +
+          (planned.from || '') + '" is not set there, so there is nothing to rename.');
+      }
+      if (s.unchanged.length) {
+        this.msg('INFO', 'Skipped ' + s.unchanged.length + ' ' + this.noun(s.unchanged.length) +
+          ': the new name is the name it already has.');
+      }
+      if (s.collide.length) {
+        this.tallyMsg('WARN', 'Skipped ' + s.collide.length + ' ' + this.noun(s.collide.length) + ': "' +
+          planned.name + '" is already set there, and renaming onto it would ' +
+          'overwrite that value. Kept: ',
+        tally(s.collide, function (r) { return r.value; }),
+        '. Remove or rename that field first.');
+      }
+      return;
+    }
+    if (s.present.length) {
+      this.tallyMsg('WARN', 'Skipped ' + s.present.length + noun(s.present.length) +
+        'is already set there to another value, and "Add" never overwrites. Kept: ',
+      tally(s.present, function (r) { return r.value; }),
+      '. Use "Overwrite" to replace them.');
+    }
+    if (s.unchanged.length) {
+      this.msg('INFO', 'Skipped ' + s.unchanged.length + noun(s.unchanged.length) + 'is already ' +
+        quoted(planned.valueStr) + ' there, so there is nothing to write.');
+    }
+    // An INFO rather than a WARN, for the reason the one above it is: nothing was
+    // refused, the end state asked for is already the one on the entity.
+    if (s.absent.length) {
+      this.msg('INFO', 'Skipped ' + s.absent.length + noun(s.absent.length) +
+        'is not set there, so there is nothing to remove.');
+    }
+  };
+
+  // Renaming the field the **Hide from Add Lists** setting names is a rename of the
+  // setting too, and nothing else here can notice it: leave the setting on the old name
+  // and the dropdown filter goes on looking for a field nothing carries any more, so
+  // every entity the user had hidden quietly comes back into the add lists. The store
+  // tag carries that field to hide *itself* and is never in this dialog's scope
+  // (`keep`), so its own mark has to be moved by hand or it un-hides itself the same way.
+  //
+  // The description filed under the old name is deliberately *not* moved here. The
+  // descriptions dialog compares the store's `hideField` with the setting and moves it
+  // on its next open - that is the code that knows how to write the store, and this one
+  // would be a second copy of it.
+  // A rename moves the field's **description** with it, for every field and not only
+  // the hide one: the description is filed under the name, so a rename that left it
+  // behind turned it into an orphan and left the renamed field undescribed - the value
+  // follows the name, and this is the other thing that has to.
+  //
+  // It writes the store from the module-level copy `readStore` cached, because the bulk
+  // dialog holds no store of its own. Refused rather than forced in the two states the
+  // descriptions dialog also refuses to write in - a description that is not our JSON,
+  // and a store stamped by a newer release - since both are cases where writing the
+  // whole blob back is what loses something. Resolves either way, so the caller can
+  // chain the hide-field rename after it and never have two writes to one tag in
+  // flight at once.
+  // `mode`: 'move' (the default), 'copy' - a rename that left the old name on other entities,
+  // which keep needing its description - or 'drop', the Undo of a copy, taking `to`'s copy off.
+  Run.prototype.moveDescription = function (from, to, into, mode) {
+    var self = this;
+    mode = mode || 'move';
+    if (mode === 'drop') {
+      if (!_storeTagId || !_store || !hasOwn(_descriptions, to) || _descriptions[to] !== _descriptions[from]) return Promise.resolve();
+    } else if (!_storeTagId || !_store || !hasOwn(_descriptions, from)) return Promise.resolve();
+    if (_store.broken || (_store.version && cmpVersion(_store.version, PLUGIN_VERSION) > 0)) {
+      this.msg('WARN', 'The description filed under "' + from + '" stays there: the ' +
+        'description store on tag ' + _storeTagId + ' is ' + (_store.broken
+        ? 'not something this plugin wrote' : 'from a newer release') + ', and this ' +
+        'dialog will not write over it. "Manage Custom Field Descriptions and Locks..." says how ' +
+        'to recover it.');
+      return Promise.resolve();
+    }
+    if (mode !== 'drop' && hasOwn(_descriptions, to)) {
+      this.msg('INFO', '"' + to + '" already has a description, so the one under "' +
+        from + '" was left where it is rather than written over. Both are in "Manage ' +
+        'Custom Field Descriptions...".');
+      return Promise.resolve();
+    }
+
+    var descriptions = {};
+    for (var k in _descriptions) {
+      if (!hasOwn(_descriptions, k)) continue;
+      if (mode === 'drop' && k === to) continue;
+      descriptions[mode === 'move' && k === from ? to : k] = _descriptions[k];
+    }
+    if (mode === 'copy') descriptions[to] = _descriptions[from];
+    // The store records which field the hide setting named when it was last written, so
+    // a rename of *that* field moves this too - or the descriptions dialog would read
+    // the difference as a rename of the setting and offer to migrate a library that has
+    // already moved. A copy moves neither: the old name is still carried.
+    var hideField = mode === 'move' && _store.hideField === from ? to : _store.hideField;
+    var after = serialiseStore({ hideField: hideField, descriptions: descriptions });
+    return gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
+      '{ tagUpdate(input: $input) { id } }',
+    { input: { id: _storeTagId, description: after } })
+      .then(function () {
+        recordStoreWrite(mode === 'move' ? 'Custom field renamed: its description moved'
+          : mode === 'copy' ? 'Custom field renamed on some: its description copied'
+            : 'Custom field rename undone: the copied description taken off', after, into);
+        _descriptions = descriptions;
+        _store = { version: PLUGIN_VERSION, hideField: hideField, descriptions: descriptions };
+        self.msg('INFO', mode === 'move' ? 'The description of "' + from + '" moved to "' + to + '" in the description store.'
+          : mode === 'copy' ? 'The description of "' + from + '" was copied to "' + to + '": entities still carry "' +
+            from + '", which keeps it too.'
+            : 'The description copied to "' + to + '" was taken off again.');
+      }, function (e) {
+        self.msg('WARN', 'The field was renamed, but its description is still filed ' +
+          'under "' + from + '": ' + (e && e.message ? e.message : String(e)) +
+          ' Move it by hand in "Manage Custom Field Descriptions and Locks...".');
+      });
+  };
+
+  // How many entities still carry custom field `field`, across the seven types, or null where that
+  // could not be read. The store tag is left out: it is never in a dialog's scope (`keep`), and
+  // its own mark follows the hide setting (`moveStoreMark`).
+  function carriersOf(field) {
+    var parts = Object.keys(ENTITIES).map(function (k) {
+      var spec = ENTITIES[k];
+      return k + ': find' + spec.plural + '(filter: { per_page: 2 }, ' + spec.label.toLowerCase() + '_filter: ' +
+        '{ custom_fields: [{ field: ' + JSON.stringify(field) + ', modifier: NOT_NULL }] }) { count ' + spec.key + ' { id } }';
+    });
+    return gqlRequest('query CFBE_Carriers { ' + parts.join(' ') + ' }', null).then(function (d) {
+      return Object.keys(ENTITIES).reduce(function (n, k) {
+        var block = (d && d[k]) || {}, count = block.count || 0;
+        var store = k === 'tags' && (block[ENTITIES[k].key] || []).some(function (t) { return String(t.id) === _storeTagId; });
+        return n + count - (store ? 1 : 0);
+      }, 0);
+    }, function () { return null; });
+  }
+
+  // Decided against the **live** setting rather than against `this.settings`: the run's
+  // copy is as old as the dialog, or the defaults where the read at the click failed, and
+  // a rename of a default the user has since changed would move a setting that was never
+  // pointing at it. Resolves to whether the setting moved, which
+  // is what an Undo needs to know.
+  //
+  // The whole map goes back because `configurePlugin` replaces `plugins.<id>` rather
+  // than merging it, the same reason `seedDefaults` sends `raw` along with its keys.
+  Run.prototype.followHideRename = function (from, to) {
+    var self = this;
+    return gqlRequest('query CFBEConfig($ids: [ID!]) { configuration { plugins(include: $ids) } }', { ids: [PLUGIN_ID] }).then(function (data) {
+      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      if (effective(raw, 'c1ExcludeFromAddListField') !== from) return false;
+      var input = {};
+      for (var k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+      input.c1ExcludeFromAddListField = to;
+      return gqlRequest('mutation CFBE_SetSetting($id: ID!, $input: Map!) ' +
+        '{ configurePlugin(plugin_id: $id, input: $input) }',
+      { id: PLUGIN_ID, input: input }).then(function () {
+        self.settings.c1ExcludeFromAddListField = to;
+        self.msg('INFO', 'The "Hide from Add Lists - Custom Field Name" setting now ' +
+          'reads "' + to + '", so what was marked with "' + from + '" stays hidden ' +
+          'from the add lists. Its description moves with it the next time "Manage ' +
+          'Custom Field Descriptions..." is opened.');
+        self.moveStoreMark(from, to);
+        return true;
+      });
+    // After the read, not beside it: a write that fails says so too, rather than being lost.
+    }).then(null, function (e) {
+      self.msg('WARN', 'The field was renamed, but the "Hide from Add Lists - Custom ' +
+        'Field Name" setting could not be updated: ' +
+        (e && e.message ? e.message : String(e)) + ' Set it to "' + to + '" by hand, or ' +
+        'nothing marked with it is hidden from the add lists any more.');
+      return false;
+    });
+  };
+
+  // The store tag marks *itself* with the hide field, and is never in this dialog's
+  // scope (`keep`) - so its mark is the one the rename cannot reach on its own, and a
+  // tag left carrying the old name stops hiding itself.
+  Run.prototype.moveStoreMark = function (from, to) {
+    var self = this;
+    if (!_storeTagId || !hasOwn(_storeTagFields, from)) return;
+    var mark = {};
+    mark[to] = MARK_VALUE;
+    gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
+      '{ tagUpdate(input: $input) { id } }',
+    { input: { id: _storeTagId, custom_fields: { partial: mark, remove: [from] } } })
+      .then(function () {
+        delete _storeTagFields[from];
+        _storeTagFields[to] = MARK_VALUE;
+      }, function () {
+        self.msg('WARN', 'The description store tag (' + _storeTagId + ') still carries "' +
+          from + '" rather than "' + to + '", so it may start showing up in the add lists.');
+      });
+  };
+
+  Run.prototype.apply = function () {
+    var self = this;
+    if (!this.covered) return;   // guarded in the handler, not only at render
+    var locked = this.lockedHit();
+    if (locked.length) { this.msg('ERROR', lockSentence(locked)); return; }
+    var planned = this.plan();
+    this.reportSkips(planned);
+    if (!planned.changes.length) {
+      this.msg('INFO', 'Nothing to change: no ' + this.noun() +
+        ' in scope need "' + planned.name + '" ' +
+        (planned.mode === 'remove' ? 'removed.'
+          : planned.mode === 'rename' ? 'as their field name.' : 'set to that value.'));
+      return;
+    }
+
+    this.changes = planned.changes;
+    this.applied = 0;
+    this.failed = 0;
+    this.undone = 0;
+    this.setState('applying');
+    this.renderProgress();
+
+    // Grouped by the delta each entity needs, which for an apply is one delta for all
+    // of them: an ADD/Overwrite sets the same key to the same value, and a Remove
+    // drops the same key. So this is one bulk mutation per chunk, not one per entity.
+    var payload = planned.mode === 'remove'
+      ? { remove: [planned.name] }
+      : (function () { var p = {}; p[planned.name] = planned.value; return { partial: p }; })();
+
+    // One batch per entity-type, because the mutation is per type: five of the seven
+    // take a bulk update and two do not, and an id means nothing without the type it
+    // belongs to. A selection run has exactly one batch, as it always did.
+    //
+    // **A rename groups by value as well**, because it carries each entity's own value
+    // over to the new key - the same grouping Undo below uses, and for the same reason.
+    var byType = {};
+    var batches = [];
+    planned.changes.forEach(function (c) {
+      var key = planned.mode === 'rename'
+        ? c.spec.key + '|' + valueKey(c.before) : c.spec.key;
+      if (!hasOwn(byType, key)) {
+        byType[key] = { spec: c.spec, ids: [], cf: planned.mode === 'rename'
+          ? (function () { var p = {}; p[c.to] = c.before;
+            return { partial: p, remove: [c.name] }; })()
+          : payload };
+        batches.push(byType[key]);
+      }
+      byType[key].ids.push(c.id);
+    });
+    var label = 'Custom Fields - ' + planned.mode + ' "' + planned.name + '"';
+    var written = {};
+
+    this.runWrites(batches, label, written).then(function (ok) {
+      self.applied = ok;
+      // A chunk that failed wrote nothing: its entities are neither shown as changed nor offered to Undo.
+      var landed = planned.changes.filter(function (c) { return hasOwn(written, c.spec.key + ':' + c.id); });
+      if (landed.length < planned.changes.length) {
+        self.msg('WARN', plural(planned.changes.length - landed.length, 'entity', 'entities') +
+          ' not written (the write failed) - left out of the changes below and of Undo.');
+      }
+      planned.changes = landed;
+      self.changes = landed;
+      // Only once something was actually written: a rename that failed everywhere must
+      // not move a description, or the setting, off the name the library still carries.
+      // The move is recorded in the rename's own run, so undoing the rename from Undo
+      // History puts the description back with it.
+      // A rename that left the old name on entities outside its scope - a selection, a filtered
+      // list, a chunk that failed - copies the description instead, and leaves the hide setting
+      // naming the old name those entities still carry (`carriersOf`; unreadable counts as carried).
+      var renamed = ok && planned.mode === 'rename' && planned.from, held = [];
+      self.descCopied = null;
+      (renamed ? carriersOf(planned.from) : Promise.resolve(0)).then(function (left) {
+        if (!renamed) return null;
+        if (left !== 0) {
+          self.descCopied = { from: planned.from, to: planned.name };
+          self.msg('INFO', (left == null ? 'What else carries "' + planned.from + '" could not be read' : plural(left, 'entity',
+            'entities') + ' outside this rename still ' + (left === 1 ? 'carries' : 'carry') + ' "' + planned.from + '"') +
+            ', so its description is copied rather than moved, and the Hide from Add Lists setting is left as it is.');
+          return self.moveDescription(planned.from, planned.name, held, 'copy');
+        }
+        return self.moveDescription(planned.from, planned.name, held).then(function () {
+          return self.followHideRename(planned.from, planned.name).then(function (moved) {
+            if (moved) self.hideRename = { from: planned.from, to: planned.name };
+          });
+        });
+      }).then(function () {
+        self.recordPass(label, planned.changes, written, false, held);
+      });
+      // The local copy is moved with the server's, so Undo compares against what the
+      // dialog actually wrote rather than against the map it read at open.
+      planned.changes.forEach(function (c) {
+        if (planned.mode === 'remove') delete c.entity.fields[c.name];
+        else if (planned.mode === 'rename') {
+          c.entity.fields[c.to] = c.before;
+          delete c.entity.fields[c.name];
+        } else c.entity.fields[c.name] = planned.value;
+      });
+      self.renderChanges(planned, false);
+      self.setState('applied');
+      self.renderProgress();
+    });
+  };
+
+  // Undo replays each change as its own inverse: put the previous value back where
+  // there was one, remove the key where there was not. A stored copy of the whole map
+  // written back would be simpler and wrong - it would revert every unrelated edit
+  // made in between, which is the one thing an undo must not do.
+  //
+  // It arms and asks, with the count in the caption: one click here starts a write
+  // across a selection, with Close as its neighbour.
+  Run.prototype.undo = function () {
+    var self = this;
+    var now = Date.now();
+    if (!this.undoArmed || now - this.undoArmed > UNDO_ARM_MS) {
+      this.undoArmed = now;
+      this.undoBtn.textContent = 'Undo ' + plural(this.changes.length, 'change') + '?';
+      setTimeout(function () {
+        if (self.undoBtn.textContent !== 'Undo') self.undoBtn.textContent = 'Undo';
+      }, UNDO_ARM_MS);
+      return;
+    }
+    this.undoArmed = 0;
+    this.undoBtn.textContent = 'Undo';
+
+    // An Add onto a locked field, or a Rename onto a locked name, is undone by taking the
+    // locked field off again - which a lock forbids. Those entities keep it; the rest of
+    // the undo goes ahead, and a line says how many were kept and why.
+    var settings = this.settings;
+    var removes = function (c) {
+      return c.to ? lockedAmong(settings, [c.to]).length > 0
+        : !c.had && lockedAmong(settings, [c.name]).length > 0;
+    };
+    var kept = this.changes.filter(removes);
+    var undoable = this.changes.filter(function (c) { return !removes(c); });
+    if (kept.length) {
+      this.msg('WARN', 'Kept on ' + plural(kept.length, 'entity', 'entities') + ': ' +
+        lockSentence(lockedAmong(settings, kept.map(function (c) { return c.to || c.name; }))));
+    }
+    if (!undoable.length) return;
+
+    // One batch per distinct previous value, plus one for everything that had no
+    // value at all. Entities that shared a value before the apply share a mutation.
+    var groups = {};
+    undoable.forEach(function (c) {
+      // By type as well as by previous value, for the reason `apply` groups by type.
+      var key = c.spec.key + '|' + (c.had ? 'v:' + valueKey(c.before) : 'absent');
+      if (!groups[key]) {
+        // Reversing a rename puts the old key back *and* takes the new one off - one
+        // input, both halves, or the undo would leave the field under both names.
+        groups[key] = { spec: c.spec, ids: [], cf: c.to
+          ? (function () { var p = {}; p[c.name] = c.before;
+            return { partial: p, remove: [c.to] }; })()
+          : c.had
+            ? (function () { var p = {}; p[c.name] = c.before; return { partial: p }; })()
+            : { remove: [c.name] } };
+      }
+      groups[key].ids.push(c.id);
+    });
+
+    var batches = [];
+    for (var k in groups) { if (hasOwn(groups, k)) batches.push(groups[k]); }
+
+    this.setState('undoing');
+    this.renderProgress();
+    var undoWritten = {};
+    this.runWrites(batches, 'Custom Fields (undo)', undoWritten).then(function (ok) {
+      self.undone = ok;
+      // The description followed the rename out, and the setting with it where the
+      // rename was the hide field's; both follow the undo back, in the undo's own run.
+      // Read off the changes rather than remembered separately - `c.to` is what a rename
+      // leaves on one.
+      var ren = null, held = [];
+      undoable.forEach(function (c) { if (!ren && c.to) ren = { from: c.name, to: c.to }; });
+      var copied = self.descCopied;
+      self.descCopied = null;
+      ((ok && ren) ? (copied ? self.moveDescription(copied.from, copied.to, held, 'drop')
+        : self.moveDescription(ren.to, ren.from, held)) : Promise.resolve()).then(function () {
+        self.recordPass('Custom Fields, undone', undoable, undoWritten, true, held);
+        if (!(ok && ren) || !self.hideRename) return null;
+        var h = self.hideRename;
+        self.hideRename = null;
+        return self.followHideRename(h.to, h.from);
+      });
+      undoable.forEach(function (c) {
+        if (c.to) delete c.entity.fields[c.to];
+        if (c.had) c.entity.fields[c.name] = c.before;
+        else delete c.entity.fields[c.name];
+      });
+      // The listing names what was put back, not the entities a lock kept.
+      var all = self.changes;
+      self.changes = undoable;
+      self.renderChanges(null, true);
+      self.changes = all;
+      // Back to `applied` rather than to `listing`: the listing this dialog opened
+      // with describes a library it has now written to twice, and re-offering Apply
+      // over it would write from a plan nobody is looking at. **Rescan** is the way
+      // back to a plan, and it is in the footer beside this.
+      //
+      // `changes` is kept, so Undo stays offered until the dialog closes. Pressing it
+      // again re-asserts the same before-values, which is idempotent - it was cleared
+      // here once, which left an undone run with Close as its only option.
+      self.setState('applied');
+      self.renderProgress();
+    });
+  };
+
+  // Undo History, which ᝯㄝₓ Core keeps. A change here is a custom field's value on
+  // one entity - there, or not - so it is recorded as it is: `before` and `after`, absent
+  // as `undefined`; a rename as the old name going and the new one arriving.
+  function journalEntries(changes, reversed) {
+    var out = [];
+    changes.forEach(function (c) {
+      var base = { type: c.spec.key, id: String(c.id), name: c.display || '' };
+      var one = function (field, before, after) {
+        out.push({ type: base.type, id: base.id, name: base.name, field: 'custom_fields.' + field,
+          before: reversed ? after : before, after: reversed ? before : after });
+      };
+      if (c.to) {
+        one(c.name, c.before, undefined);
+        one(c.to, undefined, c.before);
+      } else {
+        one(c.name, c.had ? c.before : undefined, c.remove ? undefined : c.after);
+      }
+    });
+    return out;
+  }
+
+  function journalPass(label, libraryWide) {
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide });
+  }
+
+  // A write to the description store made outside the descriptions dialog - a field's
+  // description moved by its rename, or a sibling's replacement through
+  // `updateDescriptions` - in Undo History as the store tag's description before and
+  // after, the way the dialog records its own. Entity Name Maintainer leaves descriptions
+  // to this store, so without it a rename's replacements in them were in neither history.
+  // `into`: an array the caller's own pass takes the entry from, so a description moved by
+  // a rename is in the rename's run and undoing the rename puts it back too.
+  function recordStoreWrite(label, after, into) {
+    if (into && _storeTagId) {
+      into.push(['tags', _storeTagId, _storeTagName, { id: _storeTagId, description: after },
+        { id: _storeTagId, description: _storeTagDesc }]);
+      _storeTagDesc = after;
+      return;
+    }
+    var pass = journalPass(label, false);
+    if (_storeTagId) {
+      pass.add('tags', _storeTagId, _storeTagName, { id: _storeTagId, description: after },
+        { id: _storeTagId, description: _storeTagDesc });
+      pass.finish();
+    }
+    _storeTagDesc = after;
+  }
+
+  // What landed of `changes`, per the chunks `runWrites` reports written - handed over a
+  // slice at a time, each written before the next is built, so a pass over the whole
+  // library never holds its entries all at once.
+  var JOURNAL_SLICE = 2000;
+  function journalSlices(pass, changes, keep, reversed) {
+    var at = 0;
+    function next() {
+      if (at >= changes.length) return pass.finish();
+      var slice = changes.slice(at, at + JOURNAL_SLICE).filter(keep);
+      at += JOURNAL_SLICE;
+      pass.entries(journalEntries(slice, reversed));
+      return pass.drain().then(next);
+    }
+    return next();
+  }
+
+  // `extra`: `pass.add` arguments recorded in the same run - the description a rename moved.
+  Run.prototype.recordPass = function (label, changes, writtenIds, reversed, extra) {
+    var pass = journalPass(label, !this.spec), self = this;
+    (extra || []).forEach(function (a) { pass.add.apply(pass, a); });
+    journalSlices(pass, changes, function (c) { return hasOwn(writtenIds, c.spec.key + ':' + c.id); }, reversed)
+      .then(function (line) { if (line) self.msg('INFO', line); });
+  };
+
+  // The one write driver, shared by Apply and Undo. Takes the lease, renews it per
+  // batch and releases it in every outcome - success, failure, an empty batch list -
+  // so a reactive plugin is never left standing down. `written` gains `<type>:<id>` for
+  // every entity a chunk wrote, which is what Undo History records.
+  Run.prototype.runWrites = function (batches, label, written) {
+    var self = this;
+    var lease = C.lease(PLUGIN_ID, label);
+    var ok = 0;
+
+    // One chunk per bulk mutation - or per *entity* where there is no bulk mutation,
+    // so that one refused Studio is reported as one failure rather than taking the
+    // ninety-nine that were written with it out of the count. The batch carries the
+    // spec, so a task run's Studios chunk one at a time while its Scenes go a hundred
+    // at a time, in the same pass.
+    var chunks = [];
+    batches.forEach(function (b) {
+      var size = b.spec.bulk ? CHUNK_SIZE : 1;
+      for (var i = 0; i < b.ids.length; i += size) {
+        chunks.push({ spec: b.spec, ids: b.ids.slice(i, i + size), cf: b.cf });
+      }
+    });
+
+    return chunks.reduce(function (p, chunk) {
+      return p.then(function () {
+        lease.renew();
+        return self.writeChunk(chunk.spec, chunk).then(function () {
+          ok += chunk.ids.length;
+          if (written) chunk.ids.forEach(function (id) { written[chunk.spec.key + ':' + id] = true; });
+          self.applied = self.state === 'applying' ? ok : self.applied;
+          self.undone = self.state === 'undoing' ? ok : self.undone;
+          self.renderProgress();
+        }, function (e) {
+          self.failed += chunk.ids.length;
+          self.msg('ERROR', 'Writing ' + chunk.ids.length + ' ' +
+            chunk.spec.plural.toLowerCase() + ' failed: ' +
+            (e && e.message ? e.message : String(e)));
+        });
+      });
+    }, Promise.resolve()).then(function () {
+      lease.release();
+      return ok;
+    }, function (e) {
+      lease.release();
+      throw e;
+    });
+  };
+
+  // Five of the seven take the whole chunk in one bulk mutation. Studio and Tag have
+  // no `custom_fields` on their bulk input, so they arrive here one id at a time
+  // (`runWrites` chunks them that way) and go out as single updates - sequentially,
+  // for the same reason everything else here is sequential: a hundred parallel writes
+  // against a Stash that is also serving the page is not a kindness.
+  Run.prototype.writeChunk = function (spec, chunk) {
+    if (spec.bulk) {
+      return gqlRequest('mutation CFBE_' + spec.bulk + '($input: ' + spec.bulkInput + '!) { ' +
+        spec.bulk + '(input: $input) { id } }',
+      { input: { ids: chunk.ids, custom_fields: chunk.cf } });
+    }
+    return gqlRequest('mutation CFBE_' + spec.single + '($input: ' + spec.singleInput +
+      '!) { ' + spec.single + '(input: $input) { id } }',
+    { input: { id: chunk.ids[0], custom_fields: chunk.cf } });
+  };
+
+  // After a write the log gains what happened, under the listing that described the
+  // library before it. The older block is not a claim about now - it is what was
+  // there, with the [INFO] line saying what was done to it in between.
+  Run.prototype.renderChanges = function (planned, reversed) {
+    this.blockEl = null;
+    this.fillList(this.changes, function (c) {
+      var s = changeSides(c, reversed);
+      return this.rowNode(c, s.action, s.before, s.after);
+    }, function (c) {
+      var s = changeSides(c, reversed);
+      return this.lineText(c, s.action, s.before, s.after);
+    });
+    // Counted over every change, never over the rendered rows: the listing stops at
+    // linesDrawn() and the summary is the thing that has to be right about a write
+    // bigger than the screen.
+    var acts = tallyText(tally(this.changes, function (c) { return changeSides(c, reversed).action; }));
+    if (planned) {
+      this.msg('INFO', 'Applied "' + planned.mode + '" on field "' + planned.name + '" to ' +
+        this.changes.length + ' ' + this.noun(this.changes.length) + ': ' + acts + '.');
+    } else {
+      this.msg('INFO', 'Reversed ' + plural(this.changes.length, 'change') + ': ' + acts + '.');
+    }
+  };
+
+  // The counters, then the log in the order it happened: every message as itself, and
+  // every listing from the text built beside its nodes rather than from the DOM, so
+  // what is copied includes the lines the render cap left off the screen.
+  Run.prototype.copyLog = function () {
+    var self = this;
+    var parts = [this.progressEl.textContent || ''];
+    var kids = this.listEl.childNodes || [];
+    for (var i = 0; i < kids.length; i++) {
+      parts = kids[i]._cfbeText
+        ? parts.concat(kids[i]._cfbeText) : parts.concat([kids[i].textContent || '']);
+    }
+    copyToClipboard(parts.join('\n'), function (ok) {
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
+      setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
+    });
+  };
+
+  Run.prototype.close = function () {
+    this.closed = true;   // also what ends a read still running (`load`)
+    unwireEscape(this);
+    this.spin(false);
+    if (this.backdrop && this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
+    _active = null;
+  };
+
+  // ── Manage custom field descriptions ──────────────────────────────────────
+  //
+  // The second dialog. It reads the same library the task does, and writes to exactly
+  // one entity - the store tag - plus, if the user asks for it, one custom field rename
+  // across the entities carrying it.
+  //
+  // It borrows the first dialog's machinery by assignment rather than by inheritance:
+  // `loadAll`, `msg`, `runWrites` and the rest are the same functions, and the two
+  // objects agree on the handful of fields those touch. There is no module between
+  // these plugins, and there is no class hierarchy inside one either.
+  function DescRun(settings) {
+    this.settings = settings || defaultsCopy();
+    this.spec = null;                       // always a whole-library read
+    this.specs = allSpecs(this.settings);
+    this.entities = [];
+    this.withFields = 0;
+    this.rows = [];
+    this.changes = [];
+    this.applied = 0;
+    this.failed = 0;
+    this.undone = 0;
+    this.stale = false;
+    this.storeSkipped = 0;
+    this.loadingWhat = '';
+    this.undoArmed = 0;
+    this.tag = null;             // the store tag as read, null if there is none yet
+    this.store = null;           // its parsed blob
+    this.base = {};              // descriptions as read - what the diff is against
+    this.desc = {};              // the working copy the textarea edits
+    this.hideField = '';         // the field name the store was last written with
+    this.fields = {};            // custom field name -> the entities carrying it
+    this.names = [];             // the left pane, in order
+    this.sel = null;
+    this.blocked = '';           // why Apply is off, if it is
+    this.created = false;        // this dialog is what made the store tag
+    this.undoTo = null;          // the tag's name and description before Apply
+    this.migration = null;       // an armed custom field rename, once the scan finds one
+    this.state = 'loading';
+    this.build();
+  }
+
+  DescRun.prototype.build = function () {
+    injectStyle();
+    var self = this;
+
+    this.backdrop = el('div', 'cfbe-backdrop');
+    this.modal = el('div', 'cfbe-modal cfbe-tall');
+    this.backdrop.appendChild(this.modal);
+
+    var head = el('div', 'cfbe-head');
+    head.appendChild(el('div', 'cfbe-title',
+      PLUGIN_SHORT_NAME + ' - Manage Custom Field Descriptions and Locks'));
+    // The stale-script warning gets a box of its own, in the same red the settings
+    // banner uses, rather than a sentence appended to `noteEl` among the run's other
+    // warnings. Every other note here is about the library or another plugin; this one
+    // is about the dialog itself running code the user has already replaced. It reads
+    // as a different kind of thing because it is one.
+    this.staleEl = el('div', 'cfbe-stale cfbe-hidden', '');
+    head.appendChild(this.staleEl);
+    head.appendChild(el('div', 'cfbe-warn',
+      'Backing up your database before proceeding is strongly recommended. Undo only reverses what this dialog wrote, ' +
+      'while it stays open, and cannot account for changes made elsewhere in the meantime.'));
+    head.appendChild(el('div', 'cfbe-legend',
+      'Every custom field in the library is on the left, with how many entities carry ' +
+      'it; pick one to write what it means. A field marked [orphan] has a description ' +
+      'but no entity left carrying it; one marked [store tag] is carried only by the ' +
+      'tag the descriptions themselves live on, which this scan leaves out. ' +
+      'The descriptions live in the description of one ' +
+      'tag, and nothing is written until you press Apply. A value under a field that is ' +
+      'not text says so after it - num, bool or null - the same mark the bulk dialog ' +
+      'draws, since a null and an empty value look alike. Counts are written with ' +
+      'prefix "x". The lock in front of the name is a switch: pressing it writes the ' +
+      'field into, or out of, the Locked Custom Fields setting at once - a setting, not ' +
+      'the library, so Apply has no part in it.'));
+    this.noteEl = el('div', 'cfbe-note', '');
+    head.appendChild(this.noteEl);
+    this.modal.appendChild(head);
+
+    this.progressEl = el('div', 'cfbe-progress', 'Loading...');
+    this.modal.appendChild(this.progressEl);
+
+    var panes = this.panesEl = el('div', 'cfbe-panes');
+    this.namesEl = el('div', 'cfbe-names');
+    panes.appendChild(this.namesEl);
+    var detail = el('div', 'cfbe-detail');
+    this.detailEl = el('div', 'cfbe-detail-head');
+    // The lock in front of the name is the switch: a press writes the Locked Custom
+    // Fields setting at once, rather than the library through Apply. Gray rather than
+    // orange, by choice: the glyph is the whole caption, and it drowned on the orange.
+    this.lockBtn = button(UNLOCK_MARK, 'cfbe-lock cfbe-hidden');
+    this.lockBtn.addEventListener('click', function () { self.toggleLock(); });
+    this.detailEl.appendChild(this.lockBtn);
+    this.detailLabel = el('span', null, NAME_HEAD + ' - pick a custom field on the left.');
+    this.detailEl.appendChild(this.detailLabel);
+    // The name the heading was already showing, as a box. Editing it and pressing
+    // Rename stages a rename of the field itself - the same staged, undoable
+    // `this.migration` the hide-field Migrate button fills in, so Apply is still the
+    // only thing that writes.
+    this.nameBox = el('input', 'cfbe-namebox cfbe-hidden');
+    this.nameBox.type = 'text';
+    this.nameBox.title = 'The custom field\'s own name. Change it to stage a rename of the ' +
+      'field across the library; Apply writes it, and Undo Rename takes it off.';
+    // **Undo Rename, not Rename.** Typing a new name *is* the instruction, so a second
+    // press to confirm it was a click for nothing; what the row needs is a way back. So
+    // the button appears only once a rename is staged, and takes it off.
+    this.renameBtn = button('Undo Rename', 'cfbe-rename cfbe-hidden');
+    this.renameBtn.className = this.renameBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.renameBtn.title = 'Put the custom field\'s name back to what the library has, and ' +
+      'take the staged rename off with it.';
+    this.nameBox.addEventListener('input', function () { self.syncRename(); });
+    // **On `change`, never on `input`** - the browser saying the user has finished with
+    // the box, by blurring it or pressing Enter. Per keystroke would stage a rename per
+    // character. Same event and same reason as the filter boxes' history.
+    this.nameBox.addEventListener('change', function () { self.renameField(); });
+    this.renameBtn.addEventListener('click', function () { self.undoRename(); });
+    this.detailEl.appendChild(this.nameBox);
+    this.detailEl.appendChild(this.renameBtn);
+    detail.appendChild(this.detailEl);
+    // The name and the description are two things about one field, so they get a head
+    // each rather than one head naming the field and a box under it that has to be
+    // guessed at. Same class as the other two heads in this pane.
+    detail.appendChild(el('div', 'cfbe-detail-head', DESC_HEAD));
+    this.textEl = el('textarea', 'cfbe-text');
+    this.textEl.disabled = true;
+    this.textEl.addEventListener('input', function () {
+      if (self.sel == null) return;
+      // Guarded here as well as by `disabled`: a locked description is not taken.
+      if (descLocked(self.settings, self.sel)) {
+        self.textEl.value = String(self.desc[self.sel] || '');
+        return;
+      }
+      self.desc[self.sel] = self.textEl.value;
+      self.renderNames();
+      self.syncApply();
+    });
+    detail.appendChild(this.textEl);
+    this.usersHead = el('div', 'cfbe-detail-head', USERS_HEAD);
+    detail.appendChild(this.usersHead);
+    this.usersEl = el('div', 'cfbe-users');
+    detail.appendChild(this.usersEl);
+    panes.appendChild(detail);
+    this.modal.appendChild(panes);
+    this.modal.appendChild(splitter(panes));
+
+    var listWrap = el('div', 'cfbe-log cfbe-listwrap cfbe-logshort');
+    this.listEl = el('div', 'cfbe-list');
+    listWrap.appendChild(this.listEl);
+    this.modal.appendChild(listWrap);
+
+    var ops = el('div', 'cfbe-editor');
+    this.pruneBtn = button('Prune orphans', 'cfbe-prune');
+    this.pruneBtn.title = 'Drop every description whose custom field no longer exists ' +
+      'on any entity. Staged like every other edit here: Apply is what writes it.';
+    this.pruneBtn.addEventListener('click', function () { self.prune(); });
+    ops.appendChild(this.pruneBtn);
+    this.migrateBtn = button('Migrate', 'cfbe-migrate cfbe-hidden');
+    this.migrateBtn.className = this.migrateBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.migrateBtn.addEventListener('click', function () { self.armMigration(); });
+    ops.appendChild(this.migrateBtn);
+    this.modal.appendChild(ops);
+
+    var foot = el('div', 'cfbe-foot');
+    this.cancelBtn = button('Cancel', 'cfbe-cancel');
+    this.applyBtn = button('Apply', 'cfbe-apply');
+    this.applyBtn.className = this.applyBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.undoBtn = button('Undo', 'cfbe-undo cfbe-hidden');
+    this.undoBtn.className = this.undoBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.rescanBtn = button('Rescan', 'cfbe-rescan cfbe-hidden');
+    this.copyBtn = button('Copy log', 'cfbe-copy');
+    this.closeBtn = button('Close', 'cfbe-close cfbe-hidden');
+    this.applyBtn.disabled = true;
+    this.undoBtn.title = 'Put the store tag back the way it was before Apply. ' +
+      'Only what this dialog wrote, and only while it stays open.';
+    this.rescanBtn.title = 'Read the library and the store again. Unsaved edits in this ' +
+      'dialog are kept.';
+    this.copyBtn.title = 'Copy the counters and the whole log as plain text.';
+
+    this.cancelBtn.addEventListener('click', function () { self.close(); });
+    this.applyBtn.addEventListener('click', function () { self.apply(); });
+    this.undoBtn.addEventListener('click', function () { self.undo(); });
+    this.rescanBtn.addEventListener('click', function () { self.rescan(); });
+    this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.closeBtn.addEventListener('click', function () { self.close(); });
+    [this.applyBtn, this.cancelBtn, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
+      .forEach(function (b) { foot.appendChild(b); });
+    this.modal.appendChild(foot);
+
+    wireEscape(this, 'cfbe');
+    document.body.appendChild(this.backdrop);
+  };
+
+  // Borrowed whole from the first dialog. Every one of these reads only fields both
+  // objects have, which is what the constructor above is being careful about.
+  DescRun.prototype.msg = Run.prototype.msg;
+  DescRun.prototype.tallyMsg = Run.prototype.tallyMsg;
+  DescRun.prototype.note = Run.prototype.note;
+  DescRun.prototype.scrollList = Run.prototype.scrollList;
+  DescRun.prototype.fillList = Run.prototype.fillList;
+  DescRun.prototype.load = Run.prototype.load;          // `spec` is null: the task's branch
+  DescRun.prototype.loadAll = Run.prototype.loadAll;
+  DescRun.prototype.take = Run.prototype.take;
+  DescRun.prototype.keep = Run.prototype.keep;
+  DescRun.prototype.checkVersion = Run.prototype.checkVersion;
+  DescRun.prototype.runWrites = Run.prototype.runWrites;
+  DescRun.prototype.writeChunk = Run.prototype.writeChunk;
+  DescRun.prototype.copyLog = Run.prototype.copyLog;
+  DescRun.prototype.close = Run.prototype.close;
+  DescRun.prototype.focus = Run.prototype.focus;
+  DescRun.prototype.show = Run.prototype.show;
+  DescRun.prototype.showStale = Run.prototype.showStale;
+  DescRun.prototype.noun = Run.prototype.noun;
+  DescRun.prototype.spin = Run.prototype.spin;
+
+  DescRun.prototype.begin = function () {
+    var self = this;
+    this.setState('loading');
+
+    if (this.settings.a1SkipImagesInTask) {
+      this.msg('INFO', 'Images are left out of this run: "' + SKIP_IMAGES_NAME +
+        '" is on in this plugin\'s settings. A description for a field only images ' +
+        'carry will read as an orphan here.');
+    }
+    if (coop().leases.length) {
+      this.note('Another plugin is applying bulk changes right now (' +
+        coop().leases[0].owner + ' - ' + coop().leases[0].label + '). Running both at once ' +
+        'means each may undo part of the other; let it finish first.');
+    }
+    this.checkVersion();
+
+    readStore(this.settings).then(function (r) {
+      self.tag = r.tag;
+      self.store = r.store;
+      self.adoptStore();
+    }, function (e) {
+      self.blocked = 'the description store could not be read';
+      self.msg('ERROR', 'Reading the description store failed: ' +
+        (e && e.message ? e.message : String(e)) + ' Nothing will be written.');
+    }).then(function () {
+      return self.load();
+    }).then(function () { if (!self.closed) self.ready(); }, function (e) {
+      if (self.closed) return;
+      self.msg('ERROR', 'Reading the library failed: ' + (e && e.message ? e.message : String(e)));
+      self.ready();
+    });
+  };
+
+  // What the store says, and what this dialog is allowed to do about it. The version
+  // gate is the one thing here that blocks: a store written by a newer release may hold
+  // keys this script would drop on the next write, and dropping them silently is worse
+  // than refusing.
+  DescRun.prototype.adoptStore = function () {
+    if (!this.tag) {
+      this.msg('INFO', 'No description store yet. Apply will create tag "' +
+        this.settings.b1DescriptionTagName + '" to hold the descriptions, marked with ' +
+        'custom field "' + STORE_FIELD + '" so that renaming it later cannot lose them.');
+    } else {
+      this.msg('INFO', 'Descriptions are kept on tag "' + this.tag.name + '" (' +
+        this.tag.id + ')' + (this.store.version ? ', last written by version ' +
+        this.store.version : '') + '.');
+    }
+
+    if (this.tag && this.store.broken) {
+      this.blocked = 'the store tag\'s description is not valid JSON';
+      this.msg('ERROR', 'The description of tag ' + this.tag.id + ' is not something ' +
+        'this plugin wrote: the JSON in it does not parse. Nothing will be written, so ' +
+        'that whatever is in there is not lost. To recover: fix or delete that ' +
+        'description by hand on the tag\'s own edit page, then reopen this dialog.');
+      return;
+    }
+    if (this.store.version && cmpVersion(this.store.version, PLUGIN_VERSION) > 0) {
+      this.blocked = 'the store was written by a newer version';
+      this.msg('ERROR', 'The store on tag ' + this.tag.id + ' was written by ' +
+        PLUGIN_NAME + ' ' + this.store.version + ', and this page is running ' +
+        PLUGIN_VERSION + '. Editing is off, because a newer release may keep things in ' +
+        'there that this one would drop on the next write. To recover: install and load ' +
+        'that version (or newer), or - if it is gone - delete that tag\'s description by ' +
+        'hand, which resets the store and loses the descriptions in it.');
+      return;
+    }
+
+    var d = this.store.descriptions || {};
+    for (var k in d) {
+      if (hasOwn(d, k)) { this.base[k] = String(d[k]); this.desc[k] = String(d[k]); }
+    }
+    this.hideField = this.store.hideField || '';
+
+    // The one description this plugin seeds itself, so that the field it asks the user
+    // to mark entities with is documented in the same place every other field is.
+    var hide = this.settings.c1ExcludeFromAddListField;
+    if (hide && !hasOwn(this.desc, hide)) {
+      this.desc[hide] = 'Set on an entity to hide it from Stash\'s add/select ' +
+        'dropdowns. Any value other than empty, 0 or false counts as set. Read by ' +
+        PLUGIN_NAME + '.';
+      this.msg('INFO', 'Seeded a description for "' + hide + '", the field named by ' +
+        'this plugin\'s "Hide from Add Lists" setting. Edit it like any other; Apply ' +
+        'writes it.');
+    }
+
+    // What another plugin asked this one to document while there was nowhere to put it -
+    // no store tag yet, or one this release will not write over. Seeded into the working
+    // copy exactly like the hide field's own description above, so it goes out on the
+    // same Apply and nothing is written on the way in.
+    var queued = [];
+    for (var q in _pendingDescriptions) {
+      if (!hasOwn(_pendingDescriptions, q) || hasOwn(this.desc, q)) continue;
+      this.desc[q] = _pendingDescriptions[q];
+      queued.push(q);
+    }
+    if (queued.length) {
+      this.msg('INFO', 'Another plugin asked for ' + plural(queued.length, 'description') +
+        ' to be filed here while there was nowhere to put ' +
+        (queued.length === 1 ? 'it' : 'them') + ': ' + queued.join(', ') +
+        '. Seeded like any other; Apply writes ' + (queued.length === 1 ? 'it' : 'them') + '.');
+    }
+
+    // A rescan's unsaved edits, put back over the baseline that has just been re-read.
+    var self = this;
+    if (this.pendingEdits) {
+      this.pendingEdits.forEach(function (c) {
+        if (c.after) self.desc[c.name] = c.after; else delete self.desc[c.name];
+      });
+      this.pendingEdits = null;
+    }
+  };
+
+  // The library has arrived: what carries what, which descriptions have nothing left
+  // carrying them, and whether the hide field has been renamed since the store was
+  // last written.
+  DescRun.prototype.ready = function () {
+    var self = this;
+    this.fields = {};
+    this.entities.forEach(function (e) {
+      for (var k in e.fields) {
+        if (!hasOwn(e.fields, k)) continue;
+        if (!hasOwn(self.fields, k)) self.fields[k] = [];
+        self.fields[k].push(e);
+      }
+    });
+
+    var found = [];
+    for (var k in this.fields) { if (hasOwn(this.fields, k)) found.push(k); }
+    found.sort();
+    // The store tag is left out of the scan (`keep`), so a field only *it* carries -
+    // the hide-from-add-lists field it marks itself with - has an entity behind it that
+    // this dialog cannot see. Calling that an orphan is wrong twice: it reads as
+    // "nothing uses this any more", and Prune would then offer to drop the description
+    // of the one field this plugin asks the user to use.
+    var storeOnly = [];
+    var orphans = [];
+    for (var d in this.desc) {
+      if (!hasOwn(this.desc, d) || hasOwn(this.fields, d)) continue;
+      if (hasOwn(_storeTagFields, d)) storeOnly.push(d); else orphans.push(d);
+    }
+    storeOnly.sort();
+    orphans.sort();
+    this.names = found.concat(storeOnly, orphans);
+    this.storeOnly = storeOnly;
+    this.orphans = orphans;
+
+    this.msg('INFO', plural(found.length, 'custom field') + ' found across ' +
+      plural(this.entities.length, 'entity', 'entities') + ', ' +
+      plural(this.described(found), 'of them', 'of them') + ' described' +
+      (orphans.length ? ', and ' + plural(orphans.length, 'description') +
+        ' with no entity left carrying the field' : '') + '.');
+    if (storeOnly.length) {
+      this.msg('INFO', plural(storeOnly.length, 'field') + ' marked [store tag]: ' +
+        storeOnly.join(', ') + '. Nothing else in the library carries ' +
+        (storeOnly.length === 1 ? 'it' : 'them') + ', but the description store tag "' +
+        (this.tag ? this.tag.name : '') + '" does - and this scan leaves that tag out. ' +
+        'Not an orphan, and Prune leaves ' + (storeOnly.length === 1 ? 'it' : 'them') +
+        ' alone.');
+    }
+
+    // A rename of the hide-field setting since the store was last written. The
+    // description follows it here, in the working copy; the entities carrying the old
+    // key are a library write and wait for the button.
+    var hide = this.settings.c1ExcludeFromAddListField;
+    if (this.hideField && hide && this.hideField !== hide) {
+      if (hasOwn(this.desc, this.hideField) && !hasOwn(this.desc, hide)) {
+        this.desc[hide] = this.desc[this.hideField];
+        delete this.desc[this.hideField];
+        this.msg('INFO', 'The "Hide from Add Lists" setting has been renamed from "' +
+          this.hideField + '" to "' + hide + '" since the store was written; its ' +
+          'description has moved with it.');
+      }
+      var carriers = this.fields[this.hideField] || [];
+      if (carriers.length) {
+        this.migration = { from: this.hideField, to: hide, entities: carriers, armed: false };
+        this.migrateBtn.textContent = 'Migrate ' + carriers.length + ' to "' + hide + '"';
+        this.show(this.migrateBtn, true);
+        this.note(plural(carriers.length, 'entity', 'entities') + ' still carry the old ' +
+          'field name "' + this.hideField + '". They are not hidden from the dropdowns ' +
+          'any more. "Migrate" stages the rename; Apply writes it.');
+      }
+    }
+
+    this.setState('listing');
+    // The selected field's entity list is drawn by `pick`, so a rescan redraws it too,
+    // or the counts move and the list under them does not.
+    if (this.sel != null) this.pick(this.sel); else this.renderNames();
+    this.renderProgress();
+  };
+
+  DescRun.prototype.described = function (names) {
+    var self = this;
+    return names.filter(function (n) {
+      return hasOwn(self.desc, n) && String(self.desc[n]).trim() !== '';
+    }).length;
+  };
+
+  DescRun.prototype.renderNames = function () {
+    var self = this;
+    while (this.namesEl.firstChild) this.namesEl.removeChild(this.namesEl.firstChild);
+    this.names.forEach(function (name) {
+      var store = !hasOwn(self.fields, name) && hasOwn(_storeTagFields, name);
+      var orphan = !hasOwn(self.fields, name) && !store;
+      var has = String(self.desc[name] || '').trim() !== '';
+      var changed = String(self.desc[name] || '') !== String(self.base[name] || '');
+      var locked = descLocked(self.settings, name);
+      var b = el('button', 'cfbe-name' + (self.sel === name ? ' cfbe-name-on' : '') +
+        (orphan ? ' cfbe-name-orphan' : store ? ' cfbe-name-store' : '') +
+        (locked ? ' cfbe-name-locked' : ''),
+      (changed ? '* ' : has ? '• ' : '  ') + name +
+        (orphan ? ' [orphan]' : store ? ' [store tag] x1' : ' x' + self.fields[name].length));
+      b.type = 'button';
+      b.title = orphan
+        ? 'Described, but no entity in this scan carries it'
+        : store
+          ? 'Carried by the description store tag itself, which this scan leaves out - ' +
+            'no other entity carries it'
+          : plural(self.fields[name].length, 'entity', 'entities') + ' carry this field';
+      if (locked) b.title += '. Locked in the Locked Custom Fields setting.';
+      b.addEventListener('click', function () { self.pick(name); });
+      self.namesEl.appendChild(b);
+    });
+  };
+
+  DescRun.prototype.pick = function (name) {
+    this.sel = name;
+    this.textEl.value = String(this.desc[name] || '');
+    this.textEl.disabled = !this.editable() || descLocked(this.settings, name);
+    this.textEl.title = descLocked(this.settings, name) ? lockSentence([name]) : '';
+    this.sizeText();
+    var users = this.fields[name] || [];
+    // A field only the store tag carries has one carrier this scan never read, so the
+    // pane names it and draws it as a row of its own rather than reading as an orphan.
+    var store = !users.length && hasOwn(_storeTagFields, name) && this.tag;
+    // The lock state on the switch in front of the name, and (Read-only) after it.
+    var locked = descLocked(this.settings, name);
+    this.detailLabel.textContent = NAME_HEAD + (locked ? ' (Read-only)' : '');
+    this.detailLabel.title = locked ? lockSentence([name])
+      : 'Not locked. Press the lock to protect its name, description and values from ' +
+        'bulk edits.';
+    this.lockBtn.textContent = locked ? LOCK_MARK : UNLOCK_MARK;
+    this.lockBtn.title = locked
+      ? 'Locked. Press to take "' + name + '" out of the Locked Custom Fields setting, ' +
+        'written at once.'
+      : 'Not locked. Press to write "' + name + '" into the Locked Custom Fields setting, ' +
+        'at once: its name, description and values then cannot change, and it cannot be ' +
+        'removed from an entity - only added where missing.';
+    this.show(this.lockBtn, true);
+    this.nameBox.value = name;
+    this.show(this.nameBox, true);
+    this.syncRename();
+    // A staged rename has moved the name in this dialog's own maps and has not touched
+    // the library, so the values are still filed under the name the field still has.
+    var valueKey = this.stagedFrom(name) || name;
+    this.usersHead.textContent = USERS_HEAD + ' - ' + (users.length
+      ? plural(users.length, 'entity', 'entities') + ' carry "' + name + '"'
+      : store
+        ? 'only the description store tag carries "' + name + '", to hide itself from ' +
+          'the add lists. This plugin\'s own plumbing, and left out of the scan.'
+        : 'no entity in this scan carries "' + name +
+          '" (orphan). Clearing the box above removes it.');
+    while (this.usersEl.firstChild) this.usersEl.removeChild(this.usersEl.firstChild);
+    var self = this;
+    if (store) {
+      var row = el('div', 'cfbe-entry');
+      row.appendChild(textNode(ENTITIES.tags.label + ' '));
+      row.appendChild(entityPill(ENTITIES.tags, this.tag.id, this.tag.name));
+      row.appendChild(textNode(': '));
+      appendValue(row, valueText(_storeTagFields[valueKey]), _storeTagFields[valueKey]);
+      this.usersEl.appendChild(row);
+    }
+    users.slice(0, linesDrawn()).forEach(function (e) {
+      var row = el('div', 'cfbe-entry');
+      row.appendChild(textNode(e.spec.label + ' '));
+      row.appendChild(entityPill(e.spec, e.id, e.display));
+      row.appendChild(textNode(': '));
+      appendValue(row, valueText(e.fields[valueKey]), e.fields[valueKey]);
+      self.usersEl.appendChild(row);
+    });
+    if (users.length > linesDrawn()) {
+      this.usersEl.appendChild(el('div', 'cfbe-entry cfbe-INFO',
+        '... and ' + plural(users.length - linesDrawn(), 'more', 'more') + ' not shown.'));
+    }
+    this.renderNames();
+  };
+
+  // ── Renaming the field itself ─────────────────────────────────────────────
+  //
+  // The heading already showed the selected field's name, so the rename control is that
+  // name with a caret in it and a button that appears once it has been changed. The
+  // alternative considered was a **Rename Custom Field...** button opening a sub-dialog:
+  // one more modal, one more footer, one more Escape target, to hold a single text box
+  // that was already on the page.
+  //
+  // **It stages; Apply writes.** `this.migration` is the slot the hide-field Migrate
+  // button already fills - `{from, to, entities, armed}`, written by `runMigration`
+  // inside `apply` and reversed by `undo` - so a user-driven rename needed no write path,
+  // no undo and no second grouping of its own. That is also what keeps §22's rule intact:
+  // nothing in this dialog writes before Apply, including this.
+  //
+  // **And it refreshes the list without a rescan**, because nothing has been written yet:
+  // the name moves in `fields`, `desc` and `names`, and the entities keep their values
+  // under the old key until the write lands. A rescan here would re-read a library that
+  // has not changed and would have to drop the staged rename to stay honest, which is why
+  // Rescan is held back while one is staged rather than being the refresh.
+
+  // The name a staged rename moved this one *from*, or null. What the users pane reads
+  // its values by, and what a rename-back is compared against.
+  DescRun.prototype.stagedFrom = function (name) {
+    var m = this.migration;
+    return m && m.armed && !m.done && m.to === name ? m.from : null;
+  };
+
+  // **Here rather than in `syncApply`**, which `pick()` does not call: the box was
+  // therefore left in whatever state the last Apply-sync had put it in, which on a freshly
+  // opened dialog is "nothing selected, so disabled" - and the first thing that called
+  // `syncApply` again was the textarea's own `input` handler. So the name could not be
+  // edited until the description had been. `pick()` calls this one, and so does
+  // `syncApply`, which is what keeps a state change (a write in flight, a blocked store)
+  // reaching it too.
+  DescRun.prototype.syncRename = function () {
+    this.nameBox.disabled = !this.editable() || this.sel == null;
+    this.lockBtn.disabled = !this.editable() || this.sel == null || !!this.locking;
+    // Offered only while there is a staged rename to take back, which is the whole of
+    // what it does.
+    this.show(this.renameBtn, this.sel != null && !!this.stagedFrom(this.sel));
+    this.renameBtn.disabled = !this.editable();
+  };
+
+  // The switch. The map is read from the server and sent back whole, since
+  // `configurePlugin` replaces it; the dialog's own copy follows the write, and Stash's
+  // cached configuration is evicted so the settings page shows the new list.
+  DescRun.prototype.toggleLock = function () {
+    var self = this, name = this.sel;
+    if (name == null || !this.editable() || this.locking) return;
+    var was = descLocked(this.settings, name);
+    // A lock landing on a name with a rename staged would be applied to the new name
+    // and refused for the old one: one instruction at a time.
+    if (!was && this.stagedFrom(name)) {
+      this.msg('WARN', 'Undo the staged rename of "' + name + '" before locking it.');
+      return;
+    }
+    this.locking = true;
+    this.syncRename();
+    gqlRequest('query CFBEConfig($ids: [ID!]) { configuration { plugins(include: $ids) } }', { ids: [PLUGIN_ID] }).then(function (data) {
+      var raw = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+      var input = {}, k;
+      for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+      var list = lockedFields(raw).filter(function (n) { return n !== name; });
+      if (!was) list.push(name);
+      input.d1LockedFields = list.join(', ');
+      return gqlRequest('mutation CFBE_SetSetting($id: ID!, $input: Map!) ' +
+        '{ configurePlugin(plugin_id: $id, input: $input) }',
+      { id: PLUGIN_ID, input: input }).then(function () { return input.d1LockedFields; });
+    }).then(function (value) {
+      self.settings.d1LockedFields = value;
+      self.msg('INFO', '"' + name + '" is ' + (was ? 'unlocked: taken out of' : 'locked: written into') +
+        ' the Locked Custom Fields setting.');
+      evictConfiguration();
+    }, function (e) {
+      self.msg('ERROR', 'The Locked Custom Fields setting could not be written: ' +
+        (e && e.message ? e.message : String(e)));
+    }).then(function () {
+      self.locking = false;
+      self.renderNames();
+      if (self.sel === name) self.pick(name);
+      self.syncRename();
+      self.syncApply();
+    });
+  };
+
+  // The settings page reads the configuration through Stash's Apollo cache; evicting
+  // the root field makes it ask again. Where Apollo is absent the box catches up on the
+  // next visit instead.
+  function evictConfiguration() {
+    var client = window.__APOLLO_CLIENT__;
+    if (!client || !client.cache || !client.cache.evict) return;
+    try {
+      client.cache.evict({ id: 'ROOT_QUERY', fieldName: 'configuration' });
+      if (client.cache.gc) client.cache.gc();
+    } catch (e) { /* the box catches up on the next visit */ }
+  }
+
+  // The way off a staged rename: put the library's own name back in the box and let
+  // `renameField` see there is nothing left to write. One path, not two.
+  DescRun.prototype.undoRename = function () {
+    var from = this.sel == null ? null : this.stagedFrom(this.sel);
+    if (!from || !this.editable()) return;
+    this.nameBox.value = from;
+    this.renameField();
+  };
+
+  DescRun.prototype.renameField = function () {
+    var from = this.sel;
+    var to = String(this.nameBox.value || '').trim();
+    if (from == null || !to || to === from || !this.editable()) return;
+
+    // A name something else already has: the write would land two fields on one key and
+    // silently keep one value. Refused rather than merged - the same call `plan()`'s
+    // rename makes in the other dialog, for the same reason.
+    if (hasOwn(this.fields, to) || hasOwn(this.desc, to) || hasOwn(_storeTagFields, to)) {
+      this.msg('ERROR', 'Cannot rename "' + from + '" to "' + to + '": a custom field of ' +
+        'that name already exists. Renaming onto it would overwrite its values, which is ' +
+        'a merge rather than a rename.');
+      return;
+    }
+    var locked = lockedAmong(this.settings, [this.stagedFrom(from) || from, from, to]);
+    if (locked.length) {
+      this.msg('ERROR', 'Cannot rename "' + from + '" to "' + to + '": ' + lockSentence(locked));
+      return;
+    }
+    // The hide field's name is a *setting*, and this dialog already implements the other
+    // direction: change the setting, and Migrate moves the entities. Renaming it from
+    // here would leave the setting pointing at a name nothing carries, and everything
+    // hidden would come back into the add lists with nothing saying so.
+    if (from === this.settings.c1ExcludeFromAddListField) {
+      this.msg('ERROR', 'Cannot rename "' + from + '" from here: it is the field named by ' +
+        'the "Hide from Add Lists" setting. Change that setting instead - this dialog then ' +
+        'offers Migrate to move the entities, and the setting and the field stay in step.');
+      return;
+    }
+    // One rename at a time. The slot holds the entities to write and the name to write
+    // them back to; taking it over would drop whichever rename was in it, including the
+    // hide-field migration this dialog offered on its own.
+    var m = this.migration;
+    if (m && !m.done && m.to !== from) {
+      this.msg('ERROR', 'A rename of "' + m.from + '" to "' + m.to + '" is already ' +
+        (m.armed ? 'staged' : 'offered') + '. Press Apply first, or close this dialog, ' +
+        'before renaming another field.');
+      return;
+    }
+
+    var orig = this.stagedFrom(from) || from;
+    if (orig === to) {
+      // Renamed back to what it is called in the library: there is nothing left to write.
+      this.migration = null;
+      this.msg('INFO', 'The staged rename of "' + orig + '" is canceled - the name is ' +
+        'back to what the library has.');
+    } else {
+      this.migration = { from: orig, to: to, entities: this.fields[from] || [], armed: true };
+      this.msg('INFO', 'Staged: rename custom field "' + orig + '" to "' + to + '" on ' +
+        plural((this.fields[from] || []).length, 'entity', 'entities') +
+        ', with its description. Apply writes it, and Undo puts the old name back.');
+    }
+
+    // The list, without a rescan: nothing has been written, so moving the name in this
+    // dialog's own maps *is* the refresh.
+    this.moveName(from, to, true);
+    this.pick(to);
+    this.syncApply();
+  };
+
+  // One field name moved through everything this dialog lists it in. `withDesc` is what
+  // the two callers differ on, and it is not a convenience:
+  //
+  //  - **Staging a rename** moves the description too, and leaves `base` alone - so the
+  //    diff reads as the old description going and the new one arriving, which is
+  //    exactly what the store has to end up holding.
+  //  - **Undoing one** must not, because `undo()` has already rebuilt `desc` *and* `base`
+  //    from the store it put back, which is keyed by the old name. Moving again would
+  //    file the description under a name it is already under, or under none.
+  //
+  // Getting that second half wrong is what left the left pane naming the field the way
+  // the reversed rename had, with no description under it.
+  DescRun.prototype.moveName = function (from, to, withDesc) {
+    var move = function (bag) {
+      if (bag && hasOwn(bag, from)) { bag[to] = bag[from]; delete bag[from]; }
+    };
+    move(this.fields);
+    if (withDesc) move(this.desc);
+    var swap = function (list) {
+      return (list || []).map(function (n) { return n === from ? to : n; });
+    };
+    this.names = swap(this.names);
+    this.orphans = swap(this.orphans);
+    this.storeOnly = swap(this.storeOnly);
+    if (this.sel === from) this.sel = to;
+  };
+
+  // Grow the box to whatever description was just loaded, so a long one is read without
+  // scrolling, and stop at four fifths of the pane so the list under it never vanishes.
+  // Only ever on `pick()`: the box is `resize:vertical`, and re-sizing one the user has
+  // just dragged would fight them. The floor is the CSS `min-height`, which is why this
+  // clears the height first and then only ever sets a bigger one - a short description
+  // lands back on the default split rather than on one line.
+  DescRun.prototype.sizeText = function () {
+    var box = this.textEl;
+    if (!box.style) return;
+    box.style.height = '';
+    var room = this.panesEl ? this.panesEl.clientHeight : 0;
+    var want = box.scrollHeight;
+    if (!room || !want) return;
+    box.style.height = Math.min(want + 4, Math.round(room * 0.8)) + 'px';
+  };
+
+  DescRun.prototype.prune = function () {
+    var self = this;
+    var gone = this.prunable();
+    if (!gone.length) { this.msg('INFO', 'No orphan descriptions to prune.'); return; }
+    gone.forEach(function (n) { delete self.desc[n]; });
+    // And out of the list with them: an orphan row is a *description* with no field
+    // behind it, so once the description is gone there is nothing left for the row to
+    // be. `diff()` reads `desc` against `base`, not `names`, so the write still goes
+    // out on Apply - and a Rescan lists whatever the library actually has.
+    var kept = function (n) { return gone.indexOf(n) === -1; };
+    this.names = this.names.filter(kept);
+    this.orphans = this.orphans.filter(kept);
+    if (gone.indexOf(this.sel) !== -1) {
+      this.sel = null;
+      this.textEl.value = '';
+      // The head is an editable name; leaving it naming a field that has just gone would
+      // offer a rename of nothing.
+      this.detailLabel.textContent = NAME_HEAD + ' - pick a custom field on the left.';
+      this.show(this.nameBox, false);
+      this.show(this.renameBtn, false);
+    }
+    this.msg('INFO', 'Pruned ' + plural(gone.length, 'orphan description') +
+      ': ' + gone.join(', ') + '. Apply writes it.');
+    this.renderNames();
+    this.syncApply();
+  };
+
+  DescRun.prototype.armMigration = function () {
+    if (!this.migration) return;
+    this.migration.armed = true;
+    this.migrateBtn.disabled = true;
+    this.msg('INFO', 'Staged: rename custom field "' + this.migration.from + '" to "' +
+      this.migration.to + '" on ' + plural(this.migration.entities.length, 'entity', 'entities') +
+      '. Apply writes it, and Undo puts the old name back.');
+    this.syncApply();
+  };
+
+  // What Apply would write, as a list of `{name, before, after}`. An empty `after` is a
+  // description being removed, which is how the box clears one.
+  DescRun.prototype.diff = function () {
+    var out = [];
+    var seen = {};
+    var k;
+    for (k in this.desc) {
+      if (!hasOwn(this.desc, k)) continue;
+      seen[k] = true;
+      var after = String(this.desc[k]).trim();
+      var before = hasOwn(this.base, k) ? String(this.base[k]) : '';
+      if (after !== before) out.push({ name: k, before: before, after: after });
+    }
+    for (k in this.base) {
+      if (hasOwn(this.base, k) && !hasOwn(seen, k) && String(this.base[k]) !== '') {
+        out.push({ name: k, before: String(this.base[k]), after: '' });
+      }
+    }
+    out.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
+    return out;
+  };
+
+  // **Only things a user would call a change.** Two of these used to be here and are
+  // not, because both are housekeeping that *rides along* with a write rather than
+  // reasons to make one - and both lit Apply on a dialog nobody had touched:
+  //
+  //  - **A store stamped by an older release.** Every write stamps the current version
+  //    anyway, so the restamp happens on the next real Apply. Counting it meant Apply
+  //    was live on open after every upgrade of this plugin, asking for a press that
+  //    changed nothing anyone could see.
+  //  - **No store tag yet.** With nothing to file in it, Apply would create a tag in the
+  //    library for an empty store. A description typed or seeded is what makes one worth
+  //    creating, and that shows up in the diff on its own.
+  //
+  // What is left is: a description edited or seeded, the store tag needing the name the
+  // setting now gives it, the hide field having moved, and a rename staged and not yet
+  // written.
+  DescRun.prototype.pending = function () {
+    return this.diff().length > 0 ||
+      (this.tag && this.tag.name !== this.settings.b1DescriptionTagName) ||
+      (this.hideField !== this.settings.c1ExcludeFromAddListField) ||
+      // **`done`, not merely `armed`.** `runMigration` marks a rename written and leaves
+      // it armed - the flag says the user asked for it, not that it is still owed - so
+      // reading `armed` alone left Apply enabled for the rest of the session over a
+      // dialog with nothing left to write, and every press re-sent the store.
+      // `undo()` clears `done` again, which is what re-offers Apply after a reversal.
+      !!(this.migration && this.migration.armed && !this.migration.done);
+  };
+
+  // **A written Apply does not end this dialog the way it ends the other one.** There
+  // the listing *is* the plan, so once it has been written the lines on screen describe
+  // a library that has moved on and the only honest next step is a rescan. Here the
+  // left pane is the library's custom fields, which an Apply does not touch, and the
+  // box is what the user came to type in - so editing stays open afterwards, with the
+  // write's own report in the log below it. Apply is simply disabled again until the
+  // next unsaved change, which `pending()` already answers.
+  DescRun.prototype.editable = function () {
+    return (this.state === 'listing' || this.state === 'applied') && !this.blocked && !this.unread;
+  };
+
+  DescRun.prototype.setState = function (state) {
+    this.state = state;
+    var applied = state === 'applied' || state === 'undoing';
+    var busy = state === 'applying' || state === 'undoing';
+    var edit = this.editable();
+    this.show(this.cancelBtn, !applied);
+    this.show(this.applyBtn, true);
+    this.show(this.undoBtn, !!this.undoTo || !!(this.migration && this.migration.done));
+    this.show(this.rescanBtn, state === 'listing' || state === 'applied');
+    this.show(this.closeBtn, applied);
+    this.cancelBtn.disabled = busy;
+    this.undoBtn.disabled = busy;
+    this.rescanBtn.disabled = busy;
+    this.closeBtn.disabled = busy;
+    this.textEl.disabled = !edit || this.sel == null || descLocked(this.settings, this.sel);
+    this.syncApply();
+    this.spin(state === 'loading' || busy);
+  };
+
+  // The orphans a press would actually clear, so the button and the press agree about
+  // whether there is anything to do.
+  DescRun.prototype.prunable = function () {
+    var self = this;
+    return (this.orphans || []).filter(function (n) {
+      return hasOwn(self.desc, n) && !descLocked(self.settings, n);
+    });
+  };
+
+  DescRun.prototype.syncApply = function () {
+    this.pruneBtn.disabled = !this.editable() || !this.prunable().length;
+    this.syncRename();
+    // A rescan re-reads the library and rebuilds `fields` from it, which would leave a
+    // staged rename holding entity objects from the previous read and a name the new
+    // read has never heard of. Apply is the way forward from here, and Cancel is the way
+    // out; the button says so rather than quietly dropping the rename.
+    var staged = !!(this.migration && this.migration.armed && !this.migration.done);
+    this.rescanBtn.disabled = staged || this.state === 'applying' || this.state === 'undoing';
+    this.rescanBtn.title = staged
+      ? 'Not while a custom field rename is staged - press Apply first, or close this ' +
+        'dialog to discard it.'
+      : 'Read the library and the store again. Unsaved edits in this dialog are kept.';
+    this.applyBtn.disabled = !this.editable() || this.stale || !this.pending();
+    this.applyBtn.title = this.blocked || this.unread
+      ? 'Editing is off: ' + (this.blocked || this.unread) + '.'
+      : 'Write the descriptions to the store tag. Nothing else in the library is ' +
+        'touched unless a rename is staged.';
+    swapCancelForClose(this);
+  };
+
+  DescRun.prototype.renderProgress = function () {
+    var summary;
+    if (this.state === 'loading') {
+      summary = 'Loading ' + (this.loadingWhat || '') + '. ' + this.entities.length +
+        ' read so far';
+    } else if (this.state === 'applying') {
+      summary = 'Applying.';
+    } else if (this.state === 'undoing') {
+      summary = 'Undoing.';
+    } else {
+      // A rename Undo took back stays staged for Apply, with the list naming the field the
+      // old way again: only this line says Apply would write it once more.
+      var changes = this.diff().length, m = this.migration, staged = m && m.armed && !m.done ? m : null;
+      summary = this.names.length + ' custom fields, ' +
+        this.described(this.names) + ' described, ' +
+        (changes ? plural(changes, 'unsaved change') : 'no unsaved changes') +
+        (staged ? '; the rename of "' + staged.from + '" to "' + staged.to + '" is staged - Apply writes it' : '') +
+        (this.state === 'applied' && !changes && !staged ? ' - last Apply written' : '');
+    }
+    this.progressEl.textContent = summary;
+  };
+
+  // One `tagCreate` or one `tagUpdate` carries the whole store - name, description and
+  // the marker custom field - so there is no state in which the tag exists but cannot
+  // be found again. The custom field rename, if one is staged, is a separate pass over
+  // the library through the same `runWrites` an Apply in the other dialog uses.
+  DescRun.prototype.apply = function () {
+    var self = this;
+    // An Undo puts the list back on the old name (see `undo`), so a re-apply of the same
+    // staged rename starts from there and has to move it forward again - *before* the
+    // diff and the store are built from `desc`, or the description would be filed under
+    // the name the library is about to stop using. On a first apply this is a no-op:
+    // staging already moved it.
+    var m = this.migration;
+    if (m && m.armed && !m.done && hasOwn(this.fields, m.from)) {
+      this.moveName(m.from, m.to, true);
+      // `moveName` moves the maps; the pane is drawn from them and has to be told.
+      // Staging goes through `renameField`, which redraws on its own.
+      if (this.sel != null) this.pick(this.sel); else this.renderNames();
+    }
+    var changes = this.diff();
+    if (!this.pending()) { this.msg('INFO', 'Nothing to change.'); return; }
+
+    this.setState('applying');
+    this.renderProgress();
+    this.undoTo = this.tag ? { name: this.tag.name, description: this.tag.description || '' } : null;
+
+    var store = {
+      hideField: this.settings.c1ExcludeFromAddListField,
+      descriptions: {},
+    };
+    for (var k in this.desc) {
+      if (!hasOwn(this.desc, k)) continue;
+      var v = String(this.desc[k]).trim();
+      if (v) store.descriptions[k] = v;
+    }
+    var description = serialiseStore(store);
+    var name = this.settings.b1DescriptionTagName;
+    var marks = {};
+    marks[STORE_FIELD] = MARK_VALUE;
+    if (store.hideField) marks[store.hideField] = MARK_VALUE;
+
+    var write = this.tag
+      ? gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) { tagUpdate(input: $input) ' +
+        '{ id name description } }',
+      { input: { id: this.tag.id, name: name, description: description,
+        custom_fields: { partial: marks } } })
+      : gqlRequest('mutation CFBE_TagCreate($input: TagCreateInput!) { tagCreate(input: $input) ' +
+        '{ id name description } }',
+      { input: { name: name, description: description, custom_fields: marks,
+        aliases: [STORE_TAG_ALIAS], ignore_auto_tag: true } });
+
+    var lease = C.lease(PLUGIN_ID, 'Custom field descriptions and locks');
+    write.then(function (data) {
+      var tag = (data && (data.tagUpdate || data.tagCreate)) || null;
+      // The store tag is a tag like any other, so Undo History has it too: its name and
+      // description as they were, or its creation.
+      // Where this Apply also renames a field, the store's change goes in the rename's run
+      // (`runMigration` takes `heldStore`), so undoing the rename puts its description
+      // back too; whatever the rename does not take is recorded on its own below.
+      var m = self.migration;
+      if (tag && self.tag && m && m.armed && !m.done) {
+        self.heldStore = [['tags', self.tag.id, name, { id: self.tag.id, name: name, description: description },
+          { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' }]];
+      } else {
+        var pass = journalPass('Custom field descriptions', false);
+        if (tag) {
+          if (self.tag) {
+            pass.add('tags', self.tag.id, name, { id: self.tag.id, name: name, description: description },
+              { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
+          } else {
+            pass.entries([{ type: 'tags', id: String(tag.id), name: name, action: 'create' }]);
+          }
+          pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        }
+      }
+      if (!self.tag) {
+        self.created = true;
+        self.msg('INFO', 'Created tag "' + name + '"' + (tag ? ' (' + tag.id + ')' : '') +
+          ' to hold the descriptions.');
+      } else if (self.tag.name !== name) {
+        self.msg('INFO', 'Renamed the store tag from "' + self.tag.name + '" to "' + name + '".');
+      }
+      self.tag = { id: tag ? String(tag.id) : (self.tag && self.tag.id),
+        name: name, description: description };
+      _storeTagId = self.tag.id;
+      _storeTagName = name;
+      _storeTagDesc = description;
+      self.reportChanges(changes, false);
+      self.base = {};
+      for (var kk in store.descriptions) {
+        if (hasOwn(store.descriptions, kk)) self.base[kk] = store.descriptions[kk];
+      }
+      self.hideField = store.hideField;
+      self.store = { version: PLUGIN_VERSION, hideField: store.hideField,
+        descriptions: store.descriptions };
+      _descriptions = store.descriptions;
+      lease.release();
+      return self.runMigration(false).then(function () {
+        var left = self.heldStore;
+        self.heldStore = null;
+        var own = left && journalPass('Custom field descriptions', false);
+        if (own) {
+          left.forEach(function (a) { own.add.apply(own, a); });
+          own.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        }
+      });
+    }, function (e) {
+      lease.release();
+      self.msg('ERROR', 'Writing the descriptions failed: ' +
+        (e && e.message ? e.message : String(e)) +
+        (/UNIQUE|unique|exists/.test(String(e && e.message)) ? ' A tag called "' + name +
+          '" already exists and is not this one - rename it, or point the setting at ' +
+          'another name.' : ''));
+      self.undoTo = null;
+    }).then(function () {
+      self.setState('applied');
+      self.renderProgress();
+    });
+  };
+
+  // Written as one line per description rather than as a listing block: there are
+  // dozens of these at most, and each one is a sentence the user typed.
+  DescRun.prototype.reportChanges = function (changes, reversed) {
+    if (!changes.length) return;
+    var self = this;
+    this.blockEl = null;
+    this.fillList(changes, function (c) {
+      var before = reversed ? c.after : c.before;
+      var after = reversed ? c.before : c.after;
+      var row = el('div', 'cfbe-entry');
+      row.appendChild(pill('act', !before ? 'Added' : !after ? 'Deleted' : 'Replaced'));
+      row.appendChild(textNode(' '));
+      row.appendChild(copyPill(c.name, true));
+      row.appendChild(textNode(': '));
+      if (before) row.appendChild(copyPill(before)); else row.appendChild(noneNode('no description'));
+      row.appendChild(textNode(ARROW));
+      if (after) row.appendChild(copyPill(after)); else row.appendChild(noneNode('no description'));
+      return row;
+    }, function (c) {
+      var before = reversed ? c.after : c.before;
+      var after = reversed ? c.before : c.after;
+      return (!before ? 'Added' : !after ? 'Deleted' : 'Replaced') + ' ' + c.name +
+        ': ' + before + ARROW + after;
+    });
+    this.msg('INFO', (reversed ? 'Reversed ' : 'Wrote ') +
+      plural(changes.length, 'description') + '.');
+    this.lastChanges = changes;
+  };
+
+  // The staged custom field rename: one delta per (type, value), because entities that
+  // shared a value share a mutation - the same grouping Undo in the other dialog uses,
+  // and for the same reason.
+  DescRun.prototype.runMigration = function (reversed) {
+    var self = this;
+    var m = this.migration;
+    if (!m || !m.armed || (reversed ? !m.done : m.done)) return Promise.resolve();
+    var from = reversed ? m.to : m.from;
+    var to = reversed ? m.from : m.to;
+    // Forward only: Undo is never gated, and puts back what this dialog wrote.
+    var locked = reversed ? [] : lockedAmong(this.settings, [from, to]);
+    if (locked.length) {
+      this.msg('ERROR', 'The rename of "' + from + '" to "' + to + '" was not written: ' +
+        lockSentence(locked));
+      return Promise.resolve();
+    }
+
+    var groups = {};
+    var batches = [];
+    var clashes = 0;
+    m.entities.forEach(function (e) {
+      var value = e.fields[from];
+      if (value === undefined) return;
+      // An entity already holding the new name keeps both fields: moving onto it would
+      // overwrite that value, and the undo would then delete it. Decided on the way
+      // forward and kept, so the undo leaves the same entities alone.
+      if (!reversed) e.clash = e.fields[to] !== undefined;
+      if (e.clash) { clashes++; return; }
+      var key = e.spec.key + '|' + valueKey(value);
+      if (!hasOwn(groups, key)) {
+        var partial = {};
+        partial[to] = value;
+        groups[key] = { spec: e.spec, ids: [], cf: { partial: partial, remove: [from] } };
+        batches.push(groups[key]);
+      }
+      groups[key].ids.push(e.id);
+    });
+    if (clashes && !reversed) {
+      this.msg('WARN', plural(clashes, 'entity', 'entities') + ' already holding "' + to + '" kept both fields: ' +
+        'nothing was moved onto a value already there.');
+    }
+    // Nothing to write is still a rename that has happened: an orphan description
+    // renamed here has no carriers, and marking it done is what lets Rescan come back
+    // and stops Apply offering the same staged rename again.
+    if (!batches.length) { m.done = !reversed; return Promise.resolve(); }
+
+    var label = 'Custom field rename "' + from + '" to "' + to + '"', written = {};
+    return this.runWrites(batches, label, written)
+      .then(function (ok) {
+        // Recorded as the rename it is on each entity: `from` going, `to` arriving.
+        var pass = journalPass(reversed ? label + ', undone' : label, true);
+        if (self.heldStore) {
+          self.heldStore.forEach(function (a) { pass.add.apply(pass, a); });
+          self.heldStore = null;
+        }
+        // As a rename on each entity - `from` going, `to` arriving - in slices. Every
+        // change is built here, ahead of the move below: a slice built after it would
+        // find `from` gone from every entity and record nothing.
+        var renamed = [];
+        m.entities.forEach(function (e) {
+          if (e.fields[from] === undefined || !hasOwn(written, e.spec.key + ':' + e.id)) return;
+          renamed.push({ spec: e.spec, id: e.id, display: e.display || e.label || '', name: from, to: to,
+            before: e.fields[from] });
+        });
+        journalSlices(pass, renamed, function () { return true; }, false)
+          .then(function (line) { if (line) self.msg('INFO', line); });
+        m.done = !reversed;
+        m.entities.forEach(function (e) {
+          if (e.fields[from] === undefined) return;
+          e.fields[to] = e.fields[from];
+          delete e.fields[from];
+        });
+        self.msg('INFO', (reversed ? 'Reversed the rename on ' : 'Renamed "' + from +
+          '" to "' + to + '" on ') + plural(ok, 'entity', 'entities') + '.');
+      });
+  };
+
+  // Undo puts the store tag back the way it was - one write, because the store is one
+  // field - and reverses the rename if one went out with it. A tag this dialog
+  // *created* is left in place: deleting an entity the user may since have used
+  // elsewhere is not something an undo of a description edit should do.
+  DescRun.prototype.undo = function () {
+    var self = this;
+    var now = Date.now();
+    if (!this.undoArmed || now - this.undoArmed > UNDO_ARM_MS) {
+      this.undoArmed = now;
+      this.undoBtn.textContent = 'Undo?';
+      setTimeout(function () {
+        if (self.undoBtn.textContent !== 'Undo') self.undoBtn.textContent = 'Undo';
+      }, UNDO_ARM_MS);
+      return;
+    }
+    this.undoArmed = 0;
+    this.undoBtn.textContent = 'Undo';
+    this.setState('undoing');
+    this.renderProgress();
+
+    var back = this.undoTo, failed = false;
+    var lease = C.lease(PLUGIN_ID, 'Custom field descriptions and locks (undo)');
+    var write = back
+      ? gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) { tagUpdate(input: $input) ' +
+        '{ id name description } }',
+      { input: { id: this.tag.id, name: back.name, description: back.description } })
+      : Promise.resolve(null);
+
+    write.then(function () {
+      lease.release();
+      if (back) {
+        // Recorded like the Apply it reverses: the store tag's name and description.
+        var pass = journalPass('Custom field descriptions, undone', false);
+        pass.add('tags', self.tag.id, back.name, { id: self.tag.id, name: back.name, description: back.description },
+          { id: self.tag.id, name: self.tag.name, description: self.tag.description || '' });
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        _storeTagName = back.name;
+        _storeTagDesc = back.description;
+        var parsed = parseStore(back.description);
+        self.base = {};
+        self.desc = {};
+        for (var k in parsed.descriptions) {
+          if (!hasOwn(parsed.descriptions, k)) continue;
+          self.base[k] = String(parsed.descriptions[k]);
+          self.desc[k] = String(parsed.descriptions[k]);
+        }
+        self.hideField = parsed.hideField || '';
+        self.store = parsed;
+        _descriptions = parsed.descriptions;
+        self.tag = { id: self.tag.id, name: back.name, description: back.description };
+        self.reportChanges(self.lastChanges || [], true);
+      } else if (self.created) {
+        self.msg('WARN', 'The store tag was created by this dialog, so there is nothing ' +
+          'to put its description back to. The tag itself is left in place - delete it ' +
+          'by hand if it is not wanted.');
+      }
+      // Whether there is a rename to take back has to be read *before* `runMigration`
+      // clears it, and the list has to be moved back after - the write reverses what the
+      // library holds, and nothing else was going to reverse what this dialog shows.
+      var m = self.migration;
+      var reversing = !!(m && m.armed && m.done);
+      return self.runMigration(true).then(function () {
+        if (reversing) self.moveName(m.to, m.from, false);
+      });
+    }, function (e) {
+      lease.release();
+      failed = true;
+      self.msg('ERROR', 'Undo failed: ' + (e && e.message ? e.message : String(e)) + ' Press Undo again to retry.');
+    }).then(function () {
+      // A failed put-back is still this dialog's to undo: Undo stays.
+      if (!failed) self.undoTo = null;
+      self.setState('applied');
+      // The box has to be re-read from the restored working copy, not just re-rendered
+      // around it: editing stays open after an Undo, so a box still showing the text
+      // that was just reversed would be the next thing typed over.
+      if (self.sel != null) self.pick(self.sel); else self.renderNames();
+      self.renderProgress();
+    });
+  };
+
+  // A fresh read of the library and the store, keeping whatever is being typed: the
+  // edits in this dialog are the reason it is open, and throwing them away on a rescan
+  // would make the button a way to lose work.
+  DescRun.prototype.rescan = function () {
+    this.entities = [];
+    this.fields = {};
+    this.loadingWhat = '';
+    this.blockEl = null;
+    this.blocked = '';
+    this.msg('INFO', 'Rescanning. Unsaved edits are kept.');
+    // The *edits*, not the whole working copy: what comes back from the store is the
+    // new baseline, and only the lines this dialog changed go back over the top of it.
+    // Held for `adoptStore` to re-apply rather than merged here, because the store has
+    // not been read yet and merging into what it is about to fill would be a race.
+    this.pendingEdits = this.diff();
+    this.desc = {};
+    this.base = {};
+    this.begin();
+  };
+
+  // ── The settings page ─────────────────────────────────────────────────────
+  //
+  // The group gets the siblings' description treatment - a one-line summary, the rest
+  // behind **Show more**, the stale-script banner, and a labelled link to the README
+  // under it - and each setting row the per-setting hover box: Core's `settingsPage`,
+  // with this plugin's classes. **The group is found by its heading only** (`keys: []`):
+  // what has to be found is the group header's own description, and the one setting id
+  // this plugin has points into a setting row. Core compares the heading exactly, after
+  // stripping the version suffix Settings → Plugins appends, and leaves the Settings →
+  // Tasks group - headed the same - alone by its task buttons.
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'cfbe', keys: [], tasks: TASK_NAMES, readmeUrl: README_URL,
+    readmeLabel: 'GTTx-CustomFieldsBulkEditor/README.md', injectStyle: injectStyle,
+  });
+
+  var STORE_LINK_ID = 'cfbe-store-tag';
+  var STORE_LINK_MARK = '🔗';      // link symbol
+  var STORE_LINK_TTL_MS = 15000;             // so a store made just now is found without a reload
+  var _storeLinkAt = 0, _storeLinkWait = null;
+
+  function lookupStoreTag() {
+    if (_storeLinkWait && Date.now() - _storeLinkAt < STORE_LINK_TTL_MS) return _storeLinkWait;
+    _storeLinkAt = Date.now();
+    _storeLinkWait = markedTags(STORE_FIELD).then(function (tags) {
+      // COMPAT: a store still marked `cfbe_desc_store` (since CustomFieldsBulkEditor 2.0.1);
+      // remove when `LEGACY_STORE_FIELD` goes.
+      return tags.length ? tags : markedTags(LEGACY_STORE_FIELD);
+    }).then(function (tags) {
+      return filterSettings().then(function (s) {
+        return pickStoreTag(tags, s.b1DescriptionTagName);
+      });
+    }).then(null, function () { return null; });   // a link is not worth an error
+    return _storeLinkWait;
+  }
+
+  function storeTagLinkTick() {
+    var key = 'b1DescriptionTagName';
+    if (!settingRow(PLUGIN_ID, key)) return;
+    lookupStoreTag().then(function (tag) {
+      var row = settingRow(PLUGIN_ID, key);
+      var node = document.getElementById(STORE_LINK_ID);
+      var glyph = document.getElementById(STORE_LINK_ID + '-glyph');
+      if (!row || !tag) {
+        if (node && node.parentNode) node.parentNode.removeChild(node);
+        if (glyph && glyph.parentNode) glyph.parentNode.removeChild(glyph);
+        return;
+      }
+      // The tag icon before the 🔗, as every box naming a tag draws it (Core's `tagGlyph`); a Core
+      // without it leaves the link alone.
+      if (!glyph && typeof C.tagGlyph === 'function') {
+        glyph = C.tagGlyph();
+        glyph.id = STORE_LINK_ID + '-glyph';
+      }
+      if (!node) {
+        node = el('a', 'cfbe-tagicon', STORE_LINK_MARK);
+        node.id = STORE_LINK_ID;
+        node.target = linkTarget();
+        node.rel = 'noopener noreferrer';
+      }
+      node.href = '/tags/' + tag.id;
+      // The tooltip goes through `tagTip`, which draws it as a `title` and reopens it as a
+      // box with the tag's picture above it wherever the tag has one.
+      tagTip(node, tag.id, tagLinkTitle(tag, 'The descriptions are stored on this tag. It is ' +
+        'found by the mark it carries rather than by this name, so renaming it here cannot ' +
+        'lose it.'));
+      // At the end of Stash's own `.value`, so the link is on the same line as the name
+      // and to the left of the Edit button. `.setting` is
+      // `display:flex;align-items:center` with the heading, the value and the
+      // sub-heading stacked in one flex child and Edit alone in the other, so a node
+      // beside `.value` starts a line of its own beneath it and one next to Edit is
+      // centred against the whole stack. React owns this subtree; the tick re-adds the
+      // link, so a re-render dropping it costs a second.
+      var host = byClass(row, 'value') || row;
+      if (node.parentNode !== host) host.appendChild(node);
+      if (glyph && glyph.nextSibling !== node) host.insertBefore(glyph, node);
+    });
+  }
+
+  // The one setting here that names a custom field. `filterSettings` is read once per page
+  // and never refreshed - right for the dropdown filter it was built for, and wrong for a
+  // mark that has to describe whatever the box says now - so this takes a short-TTL read
+  // of its own, and only once the row is actually on the page. A settings page showing our
+  // group but none of our rows still costs nothing, which is what its own suite pins.
+  var CF_TICK_TTL_MS = 10000;
+  var _cfTickAt = 0, _cfTickWait = null, _cfTickSettings = null;
+
+  function cfFieldTick() {
+    var key = 'c1ExcludeFromAddListField', locks = 'd1LockedFields';
+    if (!settingRow(PLUGIN_ID, key) && !settingRow(PLUGIN_ID, locks)) return;
+    if (!_cfTickWait || Date.now() - _cfTickAt > CF_TICK_TTL_MS) {
+      _cfTickAt = Date.now();
+      _cfTickWait = loadSettings().then(function (s) { _cfTickSettings = s; }, function () {});
+    }
+    // Trimmed and nothing else: this is a map key, so a name holding a double space is a
+    // different key from one holding a single.
+    cfTipTick(PLUGIN_ID, key, _cfTickSettings
+      ? String(_cfTickSettings[key] || '').trim() : '');
+    // The locked list: one mark per name, drawn after the name it describes. Shown, not
+    // edited here: Stash's Edit box holds its own copy of the value and does not see a
+    // write from the lock switch until a reload, so the switch is the one way to change it.
+    cfTipTick(PLUGIN_ID, locks, _cfTickSettings ? lockedFields(_cfTickSettings) : []);
+    var lockRow = settingRow(PLUGIN_ID, locks);
+    if (lockRow && !hasClass(lockRow, 'cfbe-readonly-row')) {
+      lockRow.className = ((lockRow.className || '') + ' cfbe-readonly-row').replace(/^\s+/, '');
+    }
+  }
+
+  function settingsTick() {
+    var group = page.group();
+    if (!group) return;
+    page.decorate(group);
+    for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) page.tip(k);   // by heading, so not in `keys`
+    storeTagLinkTick();
+    cfFieldTick();
+  }
+
+  // ── Hiding entities from Stash's add/select dropdowns ─────────────────────
+  //
+  // An entity carrying the field named by `c1ExcludeFromAddListField` is dropped from
+  // the six `Find*ForSelect` queries Stash's own select components run - the dropdown
+  // you pick a tag, performer, studio, group, gallery or scene from while editing
+  // something else. It is still on its list page, still on the entities that already
+  // have it, and still in the API: this hides it from being *added*, nothing more.
+  //
+  // All six types rather than tags alone, for the reason the feature exists at all: a
+  // plumbing entity is plumbing whatever its type.
+  //
+  // **This is what made the plugin wrap `window.fetch`**, which §7 of its AGENTS.md
+  // said it never would. It still registers no `respecters` entry: it filters what a
+  // *read* answers, and never reacts to anyone's write, so there is nothing for it to
+  // stand down from while a sibling holds a lease.
+  var SELECT_OPS = {
+    FindScenesForSelect: 'scenes', FindGalleriesForSelect: 'galleries',
+    FindPerformersForSelect: 'performers', FindStudiosForSelect: 'studios',
+    FindGroupsForSelect: 'groups', FindTagsForSelect: 'tags',
+  };
+
+  var _marked = {};            // entity key -> Promise of { ids: {}, count: n }
+  var _filterSettings = null;
+
+  function filterSettings() {
+    if (!_filterSettings) {
+      _filterSettings = loadSettings().then(null, function () { return DEFAULTS; });
+    }
+    return _filterSettings;
+  }
+
+  // Lazily, once per type per page load, and never refreshed - the same cache-first
+  // bargain Stash's own UI makes with its tag list: mark something in another tab and
+  // this tab picks it up on reload.
+  // Polling six queries against a library this size to catch a rare edit would cost
+  // more than it saves.
+  function markedIds(spec, field) {
+    if (_marked[spec.key]) return _marked[spec.key];
+    _marked[spec.key] = gqlRequest('query CFBE_Marked { find' + spec.plural +
+      '(filter: { per_page: -1 }, ' + FILTER_ARG[spec.key] + ': { custom_fields: [{ field: ' +
+      JSON.stringify(field) + ', modifier: NOT_NULL }] }) { ' + spec.key +
+      ' { id custom_fields } } }', null).then(function (data) {
+      var list = ((data && data['find' + spec.plural]) || {})[spec.key] || [];
+      var out = { ids: {}, count: 0 };
+      list.forEach(function (o) {
+        if (!isMarked((o.custom_fields || {})[field])) return;
+        out.ids[String(o.id)] = true;
+        out.count++;
+      });
+      return out;
+    }, function () {
+      delete _marked[spec.key];   // a failed read is not kept: the next dropdown asks again
+      return { ids: {}, count: 0 };
+    });
+    return _marked[spec.key];
+  }
+
+  // **A by-id request under the same operation name must not be filtered**, and this is
+  // the one thing here that would have been a data loss rather than a nuisance.
+  // `StashService.ts` has two functions per type behind one operation:
+  // `queryFindTagsForSelect(filter)` asks what to *offer*, and
+  // `queryFindTagsByIDForSelect(ids)` asks for the ones already *assigned*, so the
+  // editor can draw them. Filtering the second would make a marked tag vanish out of the
+  // form of every entity that already has it - and then saving that form would take the
+  // tag off. `ids` in the variables is what tells them apart.
+  function selectOp(init) {
+    try {
+      var body = init && init.body;
+      if (!body || typeof body !== 'string') return null;
+      var req = JSON.parse(body);
+      if (!hasOwn(SELECT_OPS, req.operationName)) return null;
+      var ids = req.variables && req.variables.ids;
+      if (ids && ids.length) return null;
+      return SELECT_OPS[req.operationName];
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function filterSelectResponse(resp, key) {
+    var spec = ENTITIES[key];
+    return filterSettings().then(function (s) {
+      var field = s.c1ExcludeFromAddListField;
+      if (!field) return resp;                       // cleared: the filter is off
+      return markedIds(spec, field).then(function (marked) {
+        if (!marked.count) return resp;
+        return resp.clone().json().then(function (json) {
+          var res = ((json || {}).data || {})['find' + spec.plural];
+          var list = res && res[spec.key];
+          if (!list || !list.length) return resp;
+          var kept = list.filter(function (o) { return !marked.ids[String(o.id)]; });
+          if (kept.length === list.length) return resp;
+          res[spec.key] = kept;
+          // The count rides along on these queries and Stash shows it as "N more" - so
+          // it has to lose exactly what the list did, or the dropdown offers to load
+          // entities that are not there.
+          if (typeof res.count === 'number') res.count -= (list.length - kept.length);
+          // A real `Response`, because Apollo reads the body through it.
+          return new Response(JSON.stringify(json),
+            { status: resp.status, statusText: resp.statusText, headers: resp.headers });
+        });
+      });
+    });
+  }
+
+  // ── A locked field on Stash's own pages ───────────────────────────────────
+  //
+  // On an edit form, a locked field's value box is read-only and its remove button gone,
+  // with a tooltip saying why. And a save of Stash's own page - one Apollo names, which no
+  // ᝯㄝₓ plugin's does - that would still change or remove a locked field's value is refused
+  // before it reaches Stash, with a message Stash shows: another client, a bulk edit, a
+  // form this script had not reached. The plugins' own writes keep the lock by their own
+  // rules - Scene Filename Manager adds names to a locked archive, which the lock allows.
+  // A lock list or a value that cannot be read lets the save through.
+  function lockTip(name) {
+    return '\ud83d\udd12 "' + name + '" is locked in \u176f\u311d\u2093 Custom Fields Bulk Editor\'s Locked Custom Fields, ' +
+      'so its value cannot be changed or removed here. Unlock it there to edit it.';
+  }
+
+  function lockFormTick() {
+    if (!document.querySelector || !document.querySelector('.custom-fields-row')) return;
+    loadSettings().then(function (s) {
+      var locked = lockedFields(s);
+      Array.prototype.slice.call(document.querySelectorAll('.custom-fields-row')).forEach(function (row) {
+        if (hasClass(row, 'custom-fields-new')) return;
+        var within = function (cls, tag) { var box = row.querySelector('.' + cls); return box && box.querySelector(tag); };
+        var label = within('custom-fields-field', 'label');
+        // The text, not the title: `detailTip` has put the field's description in that.
+        var name = label ? String(label.textContent || '').trim() : '';
+        var on = !!name && locked.indexOf(name) !== -1;
+        var input = within('custom-fields-value', 'input');
+        var remove = row.querySelector('.custom-fields-remove');
+        if (input && (on || input._cfbeLocked)) {
+          // Bootstrap paints a read-only box light gray, a white box on Stash's dark form:
+          // it keeps the color it had, with a cursor saying it cannot be typed in.
+          if (on && !input._cfbeLocked && window.getComputedStyle) input._cfbeBg = window.getComputedStyle(input).backgroundColor;
+          input.style.backgroundColor = on ? input._cfbeBg || '' : '';
+          input.style.cursor = on ? 'not-allowed' : '';
+          input.readOnly = on;
+          input.title = on ? lockTip(name) : '';
+          input._cfbeLocked = on;
+        }
+        if (remove && (on || remove._cfbeLocked)) {
+          remove.style.display = on ? 'none' : '';
+          remove._cfbeLocked = on;
+        }
+      });
+    }, function () { /* the form stays as Stash drew it; the save is still guarded */ });
+  }
+
+  var LOCK_TYPES = { Scene: ['findScenes', 'scenes'], Image: ['findImages', 'images'],
+    Gallery: ['findGalleries', 'galleries'], Performer: ['findPerformers', 'performers'],
+    Studio: ['findStudios', 'studios'], Group: ['findGroups', 'groups'], Tag: ['findTags', 'tags'] };
+
+  // The refusal Stash will show, or null to let the save through.
+  function lockGuard(init) {
+    var body = null;
+    try { body = init && typeof init.body === 'string' ? JSON.parse(init.body) : null; } catch (e) { body = null; }
+    if (!body || !body.operationName) return Promise.resolve(null);
+    var m = /\b(?:bulk)?(Scene|Image|Gallery|Performer|Studio|Group|Tag)Update\s*\(/.exec(body.query || '');
+    var input = m && body.variables && body.variables.input;
+    var cf = input && input.custom_fields;
+    if (!cf || typeof cf !== 'object') return Promise.resolve(null);
+    var ids = input.ids || (input.id != null ? [input.id] : []);
+    if (!ids.length) return Promise.resolve(null);
+    return loadSettings(true).then(function (s) {
+      var locked = lockedFields(s);
+      var partial = cf.partial || {}, remove = cf.remove || [];
+      var touched = cf.full ? locked : locked.filter(function (n) {
+        return hasOwn(partial, n) || remove.indexOf(n) !== -1;
+      });
+      if (!touched.length) return null;
+      var t = LOCK_TYPES[m[1]];
+      return gqlRequest('query CFBE_LockRead($ids: [ID!]) { ' + t[0] + '(ids: $ids, filter: { per_page: -1 }) { ' +
+        t[1] + ' { id custom_fields } } }', { ids: ids.map(String) }).then(function (d) {
+        var hit = [];
+        (((d || {})[t[0]] || {})[t[1]] || []).forEach(function (e) {
+          var now = e.custom_fields || {};
+          touched.forEach(function (n) {
+            if (!hasOwn(now, n) || hit.indexOf(n) !== -1) return;   // absent: adding it is allowed
+            var gone = cf.full ? !hasOwn(cf.full, n) : remove.indexOf(n) !== -1;
+            var next = cf.full ? cf.full[n] : partial[n];
+            if (gone || (hasOwn(cf.full || partial, n) && JSON.stringify(next) !== JSON.stringify(now[n]))) hit.push(n);
+          });
+        });
+        if (!hit.length) return null;
+        return 'Not saved: ' + hit.map(function (n) { return '"' + n + '"'; }).join(', ') + (hit.length === 1 ? ' is' : ' are') +
+          ' locked in \u176f\u311d\u2093 Custom Fields Bulk Editor\'s Locked Custom Fields, and this save would change or ' +
+          'remove ' + (hit.length === 1 ? 'its value' : 'their values') + '. Unlock ' + (hit.length === 1 ? 'it' : 'them') +
+          ' there first; nothing was written.';
+      });
+    }).then(null, function () { return null; });
+  }
+
+  // Wrapped once, and every failure path returns the original response: a dropdown that
+  // shows one entity too many is a nuisance, and one that shows nothing because a
+  // filter threw is a broken editor.
+  function installSelectFilter() {
+    // The "wrapped already" flag has to outlive this IIFE - a second evaluation of the
+    // script would otherwise wrap `fetch` twice - so it goes on `__GTTx__`, the one
+    // global this repo takes. `coopObject()` is what creates that namespace.
+    coopObject();
+    var ns = window.__GTTx__;
+    if (!window.fetch || ns.cfbeSelectFilter) return;
+    ns.cfbeSelectFilter = true;
+    var orig = window.fetch;
+    window.fetch = function (url, init) {
+      var self = this, args = arguments;
+      // A save that would change a locked field is held for the check, and refused.
+      if (init && typeof init.body === 'string' && /custom_fields/.test(init.body) && /Update\s*\(/.test(init.body)) {
+        return lockGuard(init).then(function (refusal) {
+          return refusal ? fakeOk({ errors: [{ message: refusal }], data: null }) : orig.apply(self, args);
+        });
+      }
+      var out = orig.apply(this, arguments);
+      var key = selectOp(init);
+      if (!key || !out || typeof out.then !== 'function') return out;
+      return out.then(function (resp) {
+        try {
+          return filterSelectResponse(resp, key).then(null, function () { return resp; });
+        } catch (e) {
+          return resp;
+        }
+      });
+    };
+  }
+
+  // ── The descriptions, on Stash's own detail pages ─────────────────────────
+  //
+  // A custom field's description was only ever visible inside this plugin's dialogs,
+  // which is the one place a user is already thinking about custom fields. The place
+  // they need it is the entity page, where the field's *name* is all Stash shows.
+  //
+  // **Matched on the name, not on Stash's markup.** Every other anchor in this plugin
+  // guesses a class and pays for it (§8), and here there is a signal that needs no
+  // guess: the store already holds the exact names, so an element whose whole text *is*
+  // one of them is the field's name wherever Stash chose to put it - a `<dt>`, a span, a
+  // table cell. A release that restyles that panel cannot break it.
+  //
+  // Four things bound what that costs:
+  //
+  //  - **Only on a detail route.** `/scenes/12`, `/tags/9` and the rest. A list page
+  //    shows no custom fields, and not walking it is most of the saving.
+  //  - **Only with descriptions to show.** No store, or a store with nothing in it, and
+  //    the walk never starts.
+  //  - **Leaves only, and never a link or a field the user can type in.** A tag pill is
+  //    an `<a>`; an input carries its value rather than a name.
+  //  - **Never over a title that says something we do not.** Ours is remembered on the
+  //    node; a title of Stash's own that is *only the name* is replaced, since the
+  //    enhanced one opens with that same name and adds the description under it.
+  //
+  // The residue is a false positive: a leaf elsewhere on a detail page whose text is
+  // exactly a custom field's name gets a tooltip about a field. That is a tooltip on the
+  // wrong word, against a description that is missing everywhere - and the asymmetry is
+  // what decided this. A class guess fails the other way, silently and completely.
+  var DETAIL_ROUTE =
+    /^\/(scenes|images|galleries|performers|studios|groups|tags)\/\d+(?:\/|$)/;
+
+  function onDetailPage() {
+    return DETAIL_ROUTE.test(String(location.pathname || ''));
+  }
+
+  // The one string this puts on the page, in the user's own shape.
+  function detailTip(name) {
+    var d = String(_descriptions[name] || '').trim();
+    var head = (_lockedNow.indexOf(name) !== -1 ? '\ud83d\udd12 ' : '') + name;
+    return d ? head + '\n\nDescription: ' + d : head;
+  }
+
+  // Stash renders a field's name in two places, and neither is the bare name as text:
+  //
+  //   detail panel  `<span class="detail-item-title" title="Color">Color:</span>`
+  //                 - `DetailItem` appends the colon when `fullWidth` is set, which
+  //                   `CustomFields` sets for every field.
+  //   edit panel    `<label title="Color">Color</label>`, inside the collapsed
+  //                 "Custom Fields" section. Only a *new* row is an input, and a field
+  //                 with no name yet has no description to show.
+  //
+  // Both carry the name in `title`, which is why that is read first: it is the name
+  // exactly, with nothing to undo. The text is the fallback for a Stash that stops
+  // setting it, and one trailing colon comes off it.
+  function fieldNameAt(n) {
+    var t = String(n.title == null ? '' : n.title).trim();
+    var known = function (x) { return hasOwn(_descriptions, x) || _lockedNow.indexOf(x) !== -1; };
+    if (t && known(t)) return t;
+    var text = String(n.textContent == null ? '' : n.textContent)
+      .trim().replace(/:$/, '').replace(/\s+$/, '');
+    return text && known(text) ? text : '';
+  }
+
+  function decorateDetailNames(root) {
+    var kids = root.childNodes || [];
+    for (var i = 0; i < kids.length; i++) {
+      var n = kids[i];
+      if (!n || !n.tagName) continue;
+      var tag = String(n.tagName).toUpperCase();
+      if (tag === 'A' || tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' ||
+          tag === 'SCRIPT' || tag === 'STYLE') continue;
+      if (hasClass(n, 'cfbe-backdrop')) continue;             // our own dialogs
+      // `n.childNodes` is a live NodeList here, which has none of the Array methods the
+      // harness's fake collection hands back. Index it.
+      var leaf = true, kn = n.childNodes;
+      for (var j = 0; kn && j < kn.length; j++) {
+        if (kn[j] && kn[j].tagName) { leaf = false; break; }
+      }
+      if (leaf) {
+        var name = fieldNameAt(n);
+        // A title of Stash's own here is the field name and nothing else, so replacing
+        // it loses nothing - and refusing to was what left every described field
+        // wearing the plain tooltip. A title saying anything else is somebody's.
+        if (name && (!n.title || n._cfbeTip || n.title === name)) {
+          n.title = detailTip(name);
+          n._cfbeTip = true;
+        }
+        continue;
+      }
+      decorateDetailNames(n);
+    }
+  }
+
+  var _detailStore = null;
+
+  function detailTick() {
+    if (!onDetailPage()) return;
+    // One read for the page, chained off the settings the dropdown filter already
+    // fetches. A store that cannot be read leaves the names untouched, which is what
+    // they were before this existed.
+    if (!_detailStore) {
+      _detailStore = filterSettings().then(function (s) { return readStore(s); })
+        .then(null, function () { return null; });
+    }
+    loadSettings().then(function (s) { _lockedNow = lockedFields(s); }, function () {});
+    var names = _lockedNow.length;
+    for (var k in _descriptions) { if (hasOwn(_descriptions, k)) { names++; break; } }
+    if (!names) return;
+    var root = document.getElementById('root') || document.body;
+    if (root) decorateDetailNames(root);
+  }
+
+  // ── What this plugin answers for another ──────────────────────────────────
+  //
+  // One entry, and it exists because the alternative is a second plugin holding a copy
+  // of this one's store format: the JSON shape, the sentence in front of it, the version
+  // gate, the marker field, the rule about a broken store. That is a *decision* this
+  // plugin owns, which is the repo's test for when to publish a call rather than let a
+  // mechanism be copied.
+  //
+  // `describeField(name, text)` documents a field **only where it has no description**,
+  // and resolves to a word rather than throwing: a caller seeding documentation for a
+  // field of its own has no business overwriting a sentence the user wrote, and no
+  // business failing because it could not.
+  //
+  // `descriptions()` and `updateDescriptions(patch)` are the read and write halves of
+  // the same reasoning, added for `EntityNameMaintainer`: a rename that has to reach
+  // the *text* of a description cannot text-replace this store, because the store is
+  // JSON and rewriting it by substring is how it stops parsing. That plugin already
+  // skips the store tag for exactly that reason. So it asks for the descriptions as
+  // strings and hands back the ones it changed, and the JSON stays this plugin's.
+  //
+  // **It never creates the store tag.** A caller loading is not a user action, and
+  // making a tag in somebody's library because another plugin's script ran is exactly
+  // the write §22 refuses to make even from a dialog that is open. So where there is no
+  // store yet - or where the store is one this release will not write over - the
+  // description is *queued* instead, and `adoptStore` seeds it the next time the
+  // descriptions dialog is opened, alongside the one this plugin seeds for its own hide
+  // field. Nothing is written until that dialog's Apply, which is the rule the queue
+  // exists to keep.
+  var API_VERSION = PLUGIN_VERSION;
+
+  // name -> description, for fields a caller asked to document that the store could not
+  // take at the time. Per page load: a caller that still wants it asks again next load.
+  var _pendingDescriptions = {};
+
+  function storeWritable() {
+    return !!_storeTagId && !!_store && !_store.broken &&
+      !(_store.version && cmpVersion(_store.version, PLUGIN_VERSION) > 0);
+  }
+
+  // Through the same queue as `updateDescriptions`, for the same reason: the siblings call it two or
+  // three at a time, and each call writes the whole store back.
+  function apiDescribeField(name, description) {
+    var run = _descQueue.then(function () { return describeFieldNow(name, description); });
+    _descQueue = run.then(null, function () {});
+    return run;
+  }
+  function describeFieldNow(name, description) {
+    var field = String(name == null ? '' : name).trim();
+    var text = String(description == null ? '' : description).trim();
+    if (!field || !text) return Promise.resolve('rejected');
+    return filterSettings().then(function (s) {
+      return readStore(s).then(function () { return s; });
+    }).then(function () {
+      if (hasOwn(_descriptions, field)) return 'kept';
+      if (!storeWritable()) {
+        _pendingDescriptions[field] = text;
+        return 'queued';
+      }
+      var descriptions = {};
+      for (var k in _descriptions) {
+        if (hasOwn(_descriptions, k)) descriptions[k] = _descriptions[k];
+      }
+      descriptions[field] = text;
+      var after = serialiseStore({ hideField: _store.hideField, descriptions: descriptions });
+      return gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
+        '{ tagUpdate(input: $input) { id } }',
+      { input: { id: _storeTagId, description: after } })
+        .then(function () {
+          // Not a run of its own - siblings describe their fields as a page loads - but the
+          // store's text as it now is, or the next recorded write's "before" would drop this.
+          _storeTagDesc = after;
+          _descriptions = descriptions;
+          _store = { version: PLUGIN_VERSION, hideField: _store.hideField,
+            descriptions: descriptions };
+          return 'added';
+        });
+    }).then(null, function () {
+      _pendingDescriptions[field] = text;
+      return 'queued';
+    });
+  }
+
+  // `descriptions()` is the read half, and it re-reads the store rather than answering
+  // from the page's cache: a caller asking is about to show these to somebody, and
+  // another tab may have written since this one last looked. The answer is a copy, so
+  // a caller editing it cannot edit this plugin's own state.
+  function apiDescriptions() {
+    return filterSettings().then(function (s) {
+      return readStore(s);
+    }).then(function () {
+      var out = {};
+      for (var k in _descriptions) {
+        if (hasOwn(_descriptions, k)) out[k] = _descriptions[k];
+      }
+      return out;
+    });
+  }
+
+  // `updateDescriptions(patch)` is the write half, and it is deliberately not
+  // `describeField` with the guard taken off. Three differences, each one a decision:
+  //
+  //  - **It overwrites.** That is the point: a caller here is editing prose the user
+  //    wrote - a name replaced inside a sentence - rather than seeding documentation
+  //    for a field of its own.
+  //  - **It writes only names the store already has.** Creating one is `describeField`'s
+  //    job, where the caller is the field's author. A name this store has never heard of
+  //    arriving in a patch is a caller's mistake - a typo, a stale copy - and inventing
+  //    an entry for it would file somebody's sentence under a field nothing carries.
+  //    Those names come back in `skipped` rather than failing the write.
+  //  - **It never queues.** `describeField` queues because it runs at *load*, where
+  //    there is no user and no dialog. This one runs from a caller's own Proceed, where
+  //    a silent deferral would report a write that has not happened. A store that
+  //    cannot be written rejects, with the reason in the message.
+  // One at a time: each call reads the store, patches it and writes the whole of it back, so two at
+  // once would each write over the other - two descriptions reported written, one in the library.
+  // Siblings send them in parallel batches (Entity Name Maintainer, De-Spicer).
+  var _descQueue = Promise.resolve();
+  function apiUpdateDescriptions(patch) {
+    var run = _descQueue.then(function () { return updateDescriptionsNow(patch); });
+    _descQueue = run.then(null, function () {});
+    return run;
+  }
+  function updateDescriptionsNow(patch) {
+    if (!patch || typeof patch !== 'object') {
+      return Promise.reject(new Error('updateDescriptions needs an object of name -> description.'));
+    }
+    // The lock list read fresh, not off the filter's once-a-page cache: a lock added a
+    // minute ago must hold. A read that fails writes nothing rather than guess.
+    var locks = null;
+    return loadSettings(true).then(function (s) {
+      locks = s;
+      return readStore(s);
+    }, function () {
+      throw new Error('The settings could not be read, so the Locked Custom Fields list is ' +
+        'unknown and no description is written.');
+    }).then(function () {
+      if (!_storeTagId || !_store) {
+        throw new Error('There is no custom field description store in this library yet.');
+      }
+      if (_store.broken) {
+        throw new Error('The description store cannot be read, so nothing will be written ' +
+          'over it. Open Manage Custom Field Descriptions and Locks to see what it holds.');
+      }
+      if (_store.version && cmpVersion(_store.version, PLUGIN_VERSION) > 0) {
+        throw new Error('The description store was written by ' + PLUGIN_NAME + ' ' +
+          _store.version + ' and this page is running ' + PLUGIN_VERSION + '.');
+      }
+      var descriptions = {};
+      for (var k in _descriptions) {
+        if (hasOwn(_descriptions, k)) descriptions[k] = _descriptions[k];
+      }
+      var written = [], skipped = [];
+      for (var name in patch) {
+        if (!hasOwn(patch, name)) continue;
+        if (!hasOwn(descriptions, name) || descLocked(locks, name)) { skipped.push(name); continue; }
+        var text = String(patch[name] == null ? '' : patch[name]);
+        if (text === descriptions[name]) continue;
+        descriptions[name] = text;
+        written.push(name);
+      }
+      if (!written.length) return { written: [], skipped: skipped };
+      var after = serialiseStore({ hideField: _store.hideField, descriptions: descriptions });
+      return gqlRequest('mutation CFBE_TagUpdate($input: TagUpdateInput!) ' +
+        '{ tagUpdate(input: $input) { id } }',
+      { input: { id: _storeTagId, description: after } })
+        .then(function () {
+          recordStoreWrite('Custom field descriptions rewritten', after);
+          _descriptions = descriptions;
+          _store = { version: PLUGIN_VERSION, hideField: _store.hideField,
+            descriptions: descriptions };
+          return { written: written, skipped: skipped };
+        });
+    });
+  }
+
+  // The question Find & Replace asks before a replacement reaches a custom field:
+  // resolves to a worker answering `isLocked(name)` synchronously, from settings read
+  // now. The list is this plugin's setting, so the rule stays here rather than being
+  // copied; a failed read rejects, and a caller treats that as "cannot tell".
+  function apiLocks() {
+    return loadSettings(true).then(function (s) {
+      var names = lockedFields(s);
+      return {
+        names: names.slice(),
+        isLocked: function (name) { return names.indexOf(String(name)) !== -1; },
+      };
+    });
+  }
+
+  coop().api[PLUGIN_ID] = {
+    version: API_VERSION,
+    locks: apiLocks,
+    describeField: apiDescribeField,
+    descriptions: apiDescriptions,
+    updateDescriptions: apiUpdateDescriptions,
+  };
+
+  // ── Ticking ───────────────────────────────────────────────────────────────
+  //
+  // Stash is a SPA, so there is no page load to hang this off: the tick re-derives what
+  // it draws, and every signal below is just a reason to run it again.
+  function tick() {
+    try { detailTick(); } catch (e) { console.error('[cfbe] detail tick failed', e); }
+    try { lockFormTick(); } catch (e) { console.error('[cfbe] lock tick failed', e); }
+    try { settingsTick(); } catch (e) { console.error('[cfbe] settings tick failed', e); }
+    try { paintTaskButtons(PLUGIN_NAME, TASK_NAMES, function () { return PLUGIN_BTN_VARIANT; }); } catch (e) { console.error('[cfbe] task paint failed', e); }
+  }
+
+  if (window.addEventListener) {
+    window.addEventListener('load', tick);
+    window.addEventListener('popstate', function () { setTimeout(tick, 300); });
+  }
+  setInterval(tick, TICK_MS);
+  tick();
+  installSelectFilter();
+}());

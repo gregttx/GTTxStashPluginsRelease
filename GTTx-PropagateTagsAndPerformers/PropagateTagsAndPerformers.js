@@ -1,0 +1,8635 @@
+// Propagate Tags and Performers to Related Entities
+//
+// Requires Stash 0.31.0 or newer: tag custom_fields (the custom-field exclusion
+// filter) and PluginApi component patching (staging into an edit form) both depend
+// on it.
+//
+// Copies tags and performers along Stash's own entity relationships - a scene's
+// performers' tags onto the scene, a gallery's images' performers onto the gallery,
+// a group's scenes' tags onto the group. It is always a *copy*: nothing is ever
+// removed from the source, and the only code here that removes anything at all is
+// the task dialog's Undo, taking back what that same dialog wrote.
+//
+// The design notes, and the reasoning behind the parts that look arbitrary, are in
+// AGENTS.md next to this file.
+(function () {
+  'use strict';
+
+  // ── The shared blocks, from ᝯㄝₓ Core ─────────────────────────────────────
+  //
+  // These used to be copies in this file, pinned byte-identical by a test that could
+  // prove the copies agreed and never that this plugin could run one. They are bound
+  // here instead: `ui: requires:` in the .yml is topologically sorted by Stash and
+  // `useScript` sets `async = false`, so Core has finished running before this line.
+  // Binding rather than looking up per call is what keeps every call site below
+  // reading exactly as it did when the block was local.
+  var C = (window.__GTTx__ || {}).core;
+  // The Core floor, ᝯㄝₓ Core 5.11.0 or newer, told by one of its exports (`selectionMenuItem`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.selectionMenuItem !== 'function') {
+    if (window.console && console.error) {
+      console.error('[ptp2re] ᝯㄝₓ Propagate Tags and Performers to Related Entities cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
+    }
+    return;
+  }
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
+  var showDefaults = C.showDefaults, stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
+    coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn,
+    domBus = C.domBus, plural = C.plural, linkTarget = C.linkTarget,
+    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    holdWidth = C.holdWidth, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
+    splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny, cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
+    staleReloadButton = C.staleReloadButton, ensureRowSpacing = C.ensureRowSpacing,
+    insertBeforeImportantAction = C.insertBeforeImportantAction,
+    hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass,
+    gqlRequest = C.gqlRequest, settingRow = C.settingRow,
+    writePluginSettings = C.writePluginSettings, installedVersion = C.installedVersion,
+    displayName = C.displayName, wireEscape = C.wireEscape, unwireEscape = C.unwireEscape,
+    paintButton = C.paintButton, paintTaskButtons = C.paintTaskButtons,
+    ownTaskName = C.ownTaskName, fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
+    findEditContainer = C.findEditContainer;
+  var partsText = C.partsText;
+  var runLog = C.runLog, linesDrawn = C.linesDrawn;   // log lines kept in the DOM; all stay in `lines`
+
+  var PLUGIN_ID   = 'PropagateTagsAndPerformers';
+  var PLUGIN_NAME = 'ᝯㄝₓ Propagate Tags and Performers to Related Entities';
+  // The name the dialog wears. `PLUGIN_NAME` is the manifest's, and it has to stay
+  // byte-identical to the `.yml` because Core's `settingsPage` finds this plugin's block
+  // on the settings page by matching that heading - but as the first third of a
+  // dialog title that also names a task, a path and an entity, it is the least
+  // informative third and the longest. Two names, one of them free to be short.
+  var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Propagate Tags & Performers';
+
+  // The two siblings this plugin reads settings from by name. NormalizeParentTags is
+  // `checkHierarchySibling`'s, below; MergePerformerTagsToScenes is the exclusion
+  // filters' - see `importSiblingExclusions`. The *overlap* with the second is still
+  // detected generically, through `coop().declares` rather than by name, because it
+  // is the kind of collision a future relationship-copying plugin could have too; a
+  // settings shape is not, and there is nothing generic to key an import on.
+  var NPT_ID   = 'NormalizeParentTags';
+  var NPT_NAME = 'ᝯㄝₓ Normalize Parent Tags';
+  var MPTTS_ID   = 'MergePerformerTagsToScenes';
+  var MPTTS_NAME = 'ᝯㄝₓ Merge Performer Tags To Scenes';
+
+  // The one version that proves anything. The settings page reads the manifest over
+  // GraphQL and goes current the moment plugins are reloaded, while the browser can
+  // still be running a script it cached before the edit - so a heading reading one
+  // version over the previous one's behaviour is the normal look of a stale script,
+  // not a contradiction.
+  // This constant travels inside the file. Bump it with the manifest and the yml;
+  // the `version` suite fails if the three disagree.
+  var PLUGIN_VERSION = '6.8.4';
+
+  // Printed before anything else runs, so a script that loads and then throws is
+  // told apart from one that never loaded at all: banner plus error means the new
+  // code is running and broken, no banner means the browser is still on the old one.
+  console.info('[ptp2re] PropagateTagsAndPerformers.js ' + PLUGIN_VERSION + ' loaded. This is the ' +
+    'running script\'s own version - the settings page reads the manifest instead, which can be ' +
+    'newer than the script your browser has cached.');
+
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-PropagateTagsAndPerformers/README.md';
+  var STYLE_ID       = 'ptp2re-style';
+
+  // Every button this plugin puts on a page, and every task button Stash renders for
+  // it, in orange. Stash's own row actions are `btn-secondary`, so a button of ours
+  // sitting among them was indistinguishable from one of its own - and these are not
+  // the same kind of thing: Stash's write what is in the form in front of you, ours
+  // reach out and rewrite other entities. Orange says "this one is mine and it writes"
+  // without claiming the primary role `btn-primary` would.
+  //
+  // A Bootstrap variant class rather than a color of our own, so the hover, focus
+  // and active states come from Stash's theme and stay in step with it. Its
+  // `btn-warning` renders white text, unlike stock Bootstrap's dark - checked live,
+  // 2026-08-11 - so nothing here overrides the foreground. `btn-dark` is worth
+  // knowing about and not worth using: Stash themes it identically to
+  // `btn-secondary`, so it would read as no change at all.
+  var PLUGIN_BTN_VARIANT = 'btn-warning';
+  // Stash's blue for a control that only reads, or that writes nothing but a setting of ours.
+  var READONLY_BTN_VARIANT = 'btn-primary';
+
+  // Declared in the manifest so Stash lists it under Settings - Tasks - Plugin
+  // Tasks, but run in the browser: this plugin has no exec, so a queued job could
+  // only fail.
+  var TASK_PROPAGATE_ALL = 'Propagate All...';
+  // The editor for the one setting the path block is now. It writes a setting rather
+  // than the library, and it is **not** a task: Stash's task list is for things that
+  // act on the library, and this one only changes which paths are enabled. It opens
+  // from the run dialog's own footer and from the button that takes over the Paths
+  // settings row - both places a user is already looking at what it edits.
+  var TASK_PATHS = 'Path Settings...';
+  var TASK_BUTTONS = 'Manual Buttons Settings...';
+  var TASK_AUTO = 'Auto-Propagation and Depropagate Assist...';
+  // The one item this plugin puts in a list's "..." menu of actions on the ticked cards.
+  var SEL_ITEM_LABEL = 'Propagate...';
+  // On a constant because `setState` swaps it for the reason the button is unavailable
+  // and has to be able to put it back.
+  var PATHS_BTN_TIP = 'Choose which of the fourteen paths run. Saving there changes ' +
+    'nothing already planned above - press Rescan to plan with the paths you have just set.';
+  var TASKS = [TASK_PROPAGATE_ALL];
+
+  var PAGE_SIZE      = 500;    // targets per page while walking the library
+  var CHUNK_SIZE     = 100;    // target ids per bulk mutation
+  var PROGRESS_TIP =
+    'Each segment is one pass: the entity-type it walks, then the pipeline stage it ' +
+    'runs in, then how many of that pass\u2019s entities have been read out of how ' +
+    'many it found. Stages run in order and a later one sees what an earlier one ' +
+    'added \u2014 markers put tags on a scene in stage 2, and stage 4 carries that ' +
+    'scene\u2019s tags on to its groups \u2014 so one type can appear more than once ' +
+    'with a different stage each time. A segment appears only once its pass has ' +
+    'started.';
+  var UNDO_ARM_MS    = 4000;   // how long Undo stays armed for its second click
+
+  // Auto-mode. The lease it takes is measured in the seconds one reaction lasts, not
+  // the minutes a library-wide task does, so it gets its own much shorter TTL - a
+  // crashed tab must not stand a sibling down for five minutes over one scene save.
+  var AUTO_LEASE_TTL_MS    = 30000;
+  var AUTO_SETTINGS_TTL_MS = 10000;  // settings are re-read at most this often
+  var AUTO_COOLDOWN_MS     = 8000;   // per-entity: how long after our own write we ignore it
+  var AUTO_COOLDOWN_MAX    = 2000;   // entries kept before the expired ones are swept
+
+  // ── Targets ───────────────────────────────────────────────────────────────
+  //
+  // The five entities anything is ever written to. Everything a write needs hangs
+  // off this table so a path only has to name its target - `bulk` for the task,
+  // `single` for auto-mode to watch, `route` for the manual buttons to recognise a
+  // page, `fields` for the log to name the entity.
+  //
+  // `organized` records which of them actually have the flag - in Stash 0.31 that
+  // is scenes, galleries and images, but not groups. Flipping one entry here is all
+  // it takes if a later Stash adds it.
+  //
+  // The display name is `title` everywhere but groups, and `title` is *optional* on
+  // all three, so each carries its own fallback: a scene falls back to its file, a
+  // gallery to its file and then its folder (a gallery is a zip or a folder, and a
+  // folder gallery has no file at all), an image to `visual_files` - `Image.files`
+  // is deprecated in favour of a union, so the concrete types have to be named.
+  var TARGETS = {
+    scene: {
+      key: 'scene', label: 'Scene', plural: 'Scenes',
+      find: 'findScenes', one: 'findScene', node: 'scenes', filterArg: 'scene_filter',
+      bulk: 'bulkSceneUpdate', bulkInput: 'BulkSceneUpdateInput', single: 'sceneUpdate',
+      organized: true, pageSize: 500,
+      route: /^\/scenes\/(\d+)(?:\/|$)/,
+      fields: 'id title files { basename }',
+    },
+    gallery: {
+      key: 'gallery', label: 'Gallery', plural: 'Galleries',
+      find: 'findGalleries', one: 'findGallery', node: 'galleries', filterArg: 'gallery_filter',
+      bulk: 'bulkGalleryUpdate', bulkInput: 'BulkGalleryUpdateInput', single: 'galleryUpdate',
+      organized: true, pageSize: 500,
+      route: /^\/galleries\/(\d+)(?:\/|$)/,
+      fields: 'id title files { basename } folder { basename }',
+    },
+    image: {
+      key: 'image', label: 'Image', plural: 'Images',
+      find: 'findImages', one: 'findImage', node: 'images', filterArg: 'image_filter',
+      bulk: 'bulkImageUpdate', bulkInput: 'BulkImageUpdateInput', single: 'imageUpdate',
+      organized: true, pageSize: 500,
+      route: /^\/images\/(\d+)(?:\/|$)/,
+      fields: 'id title visual_files { ... on ImageFile { basename } ... on VideoFile { basename } }',
+    },
+    group: {
+      key: 'group', label: 'Group', plural: 'Groups',
+      find: 'findGroups', one: 'findGroup', node: 'groups', filterArg: 'group_filter',
+      bulk: 'bulkGroupUpdate', bulkInput: 'BulkGroupUpdateInput', single: 'groupUpdate',
+      organized: false, pageSize: 1000,
+      route: /^\/groups\/(\d+)(?:\/|$)/,
+      fields: 'id name',
+    },
+    // A target of one path only, `tags:scene>studio`: a studio has no field listing its
+    // scenes, so that path is a reverse one.
+    studio: {
+      key: 'studio', label: 'Studio', plural: 'Studios',
+      find: 'findStudios', one: 'findStudio', node: 'studios', filterArg: 'studio_filter',
+      bulk: 'bulkStudioUpdate', bulkInput: 'BulkStudioUpdateInput', single: 'studioUpdate',
+      organized: true, pageSize: 1000,
+      route: /^\/studios\/(\d+)(?:\/|$)/,
+      fields: 'id name',
+    },
+  };
+
+  // ── Paths ─────────────────────────────────────────────────────────────────
+  //
+  // The thirteen things this plugin can do, and the spine of everything below: the
+  // task, the auto-modes, the manual buttons and the cross-plugin declaration all
+  // read this one table rather than each carrying their own list.
+  //
+  // **Array order is the pipeline order and is semantics, not presentation.** Paths
+  // cascade - running markers into scenes before scenes into groups means the group
+  // transitively inherits marker tags, and the reverse order does not - so the order
+  // is fixed here, stated in the dialog, and must never be derived from the settings
+  // object's key order, which is not guaranteed.
+  //
+  // Six stages, and the reason for each boundary:
+  //
+  //   1  performer assignments first, because the tag paths *read* performers. A
+  //      scene that gains a performer in stage 1 has that performer's tags copied in
+  //      stage 2; the other order leaves them for the next run.
+  //   2  tags onto scenes.
+  //   3  tags onto galleries, and studios' common tags from their scenes - after scenes
+  //      have settled, and before stage 4 reads a studio's tags onto its groups.
+  //   4  tags onto groups - after scenes have settled, since three of the four
+  //      group paths read scenes (two of them through scenes to reach performers
+  //      and markers, which groups do not have of their own).
+  //   5  sub-groups into their containing group, after those groups have gathered.
+  //   6  the two reverses last, so they distribute what stages 1-5 gathered rather
+  //      than a stale set.
+  //
+  // Fields:
+  //   id        stable identifier, published to other plugins via the coop registry,
+  //             and the token the `b1Paths` setting names this path by
+  //   kind      what is copied: 'tags' or 'performers'
+  //   target    a TARGETS key - the entity written to
+  //   sourceType  what the walk lands on. Where it is itself a TARGETS key, an
+  //             earlier stage may have *planned* additions to it that this stage
+  //             must see - see `plannedFor` and the cascade note in AGENTS.md.
+  //   walk      field names from the target down to whatever carries the payload.
+  //             Steps may be objects or arrays (`studio` is one, `performers` is
+  //             many) and the walk handles both rather than annotating which.
+  //   markerTags  the leaf is a SceneMarker, whose primary_tag counts as one of its
+  //             tags and lives in its own required field
+  //   reverse   set instead of `walk` where Stash has no field for the traversal.
+  //             `backRef` is the field on the *source* that names the target -
+  //             `Image.galleries`, since `Gallery.images` does not exist - one or a
+  //             list; `filter` the source's filter for it where named otherwise. Such a
+  //             path's `sourceType` must be a target type, because the sweep that
+  //             gathers it is a paged query over that entity; see `sweepPass`.
+  //   common    the path offers "common tags only" as a third mode
+  //   commonOnly  the path copies only what every source carries, and has no other mode:
+  //             its On is Common
+  //   pair      the id of the path that reverses this one, where one exists
+  //   hops      1, or 2 where the payload is reached through an intermediate entity
+  var PATHS = [
+    // Stage 1 - performer assignments, before anything reads performers.
+    { id: 'performers:image>gallery', kind: 'performers', stage: 1, hops: 1,
+      target: 'gallery', sourceType: 'image',
+      source: 'Images', button: 'Add all Perfs from all Images',
+      reverse: { backRef: 'galleries' } },
+    { id: 'performers:gallery>scene', kind: 'performers', stage: 1, hops: 1,
+      target: 'scene', sourceType: 'gallery',
+      source: 'Galleries', button: 'Add all Perfs from all Galleries',
+      walk: ['galleries'] },
+
+    // Stage 2 - tags onto scenes.
+    { id: 'tags:marker>scene', kind: 'tags', stage: 2, hops: 1,
+      target: 'scene', sourceType: 'marker',
+      source: 'Markers', button: 'Add all Tags from all Markers',
+      walk: ['scene_markers'], markerTags: true },
+    { id: 'tags:performer>scene', kind: 'tags', stage: 2, hops: 1,
+      target: 'scene', sourceType: 'performer',
+      source: 'Performers', button: 'Add all Tags from all Performers',
+      walk: ['performers'] },
+    { id: 'tags:studio>scene', kind: 'tags', stage: 2, hops: 1,
+      target: 'scene', sourceType: 'studio',
+      source: 'Studio', button: 'Add Tags from Studio',
+      walk: ['studio'] },
+
+    // Stage 3 - tags onto galleries. Common is the tags that describe the whole set: a big
+    // gallery's union carries every image's tags, and with Galleries → Images on, every image
+    // then gets every other one's.
+    { id: 'tags:image>gallery', kind: 'tags', stage: 3, hops: 1,
+      target: 'gallery', sourceType: 'image',
+      source: 'Images', button: 'Add {mode} Tags from all Images',
+      common: true, pair: 'tags:gallery>image',
+      reverse: { backRef: 'galleries' } },
+    // Onto a studio, the tags every one of its scenes carries - Common only: with All, one
+    // scene's tag would reach the studio and, with Studio → Scenes on, every scene of it.
+    // A scene names its one studio (`Scene.studio`), filtered as `studios`.
+    { id: 'tags:scene>studio', kind: 'tags', stage: 3, hops: 1,
+      target: 'studio', sourceType: 'scene',
+      source: 'Scenes', button: 'Add common Tags from all Scenes',
+      commonOnly: true,
+      reverse: { backRef: 'studio', filter: 'studios' } },
+
+    // Stage 4 - tags onto groups. A Group has no performers and no markers of its
+    // own, so those two are two-hop traversals through its scenes.
+    { id: 'tags:scene>group', kind: 'tags', stage: 4, hops: 1,
+      target: 'group', sourceType: 'scene',
+      source: 'Scenes', button: 'Add {mode} Tags from all Scenes',
+      common: true, pair: 'tags:group>scene',
+      walk: ['scenes'] },
+    { id: 'tags:studio>group', kind: 'tags', stage: 4, hops: 1,
+      target: 'group', sourceType: 'studio',
+      source: 'Studio', button: 'Add Tags from Studio',
+      walk: ['studio'] },
+    { id: 'tags:performer>group', kind: 'tags', stage: 4, hops: 2,
+      target: 'group', sourceType: 'performer',
+      source: 'Performers', button: 'Add all Tags from all Performers',
+      walk: ['scenes', 'performers'] },
+    { id: 'tags:marker>group', kind: 'tags', stage: 4, hops: 2,
+      target: 'group', sourceType: 'marker',
+      source: 'Markers', button: 'Add all Tags from all Markers',
+      walk: ['scenes', 'scene_markers'], markerTags: true },
+
+    // Stage 5 - sub-groups roll up into their containing group. Group.sub_groups is
+    // a list of GroupDescription, not of Group, hence the `group` step.
+    { id: 'tags:subgroup>group', kind: 'tags', stage: 5, hops: 1,
+      target: 'group', sourceType: 'group',
+      source: 'Sub-groups', button: 'Add {mode} Tags from all Sub-groups',
+      common: true, walk: ['sub_groups', 'group'] },
+
+    // Stage 6 - the reverses, distributing what the stages above gathered. Both
+    // close a cycle with a path already in the table, which is why the per-entity
+    // cooldown above exists; see AGENTS.md.
+    { id: 'tags:group>scene', kind: 'tags', stage: 6, hops: 1,
+      target: 'scene', sourceType: 'group',
+      source: 'Groups', button: 'Add all Tags from all Groups',
+      pair: 'tags:scene>group',
+      walk: ['groups', 'group'] },
+    { id: 'tags:gallery>image', kind: 'tags', stage: 6, hops: 1,
+      target: 'image', sourceType: 'gallery',
+      source: 'Galleries', button: 'Add all Tags from all Galleries',
+      pair: 'tags:image>gallery',
+      walk: ['galleries'] },
+  ];
+
+  // How a source entity is named in the log, keyed by a path's `sourceType`.
+  //
+  // "from Performers" told the user which *path* was responsible; it did not tell them
+  // which performer, which is the thing they have to open to understand or undo a copy
+  // by hand. So each source carries the fields its own label needs.
+  //
+  // The four that are also targets reuse the target's field list rather than repeating
+  // it: two lists describing one entity are two lists that can drift, and the fallback
+  // chain reads whichever of them is present.
+  // `one` is the by-id query field, needed by the source-side button probe to read a
+  // source's own payload. The four that reuse a `TARGETS` entry get it from there;
+  // these three carry their own, since nothing else in the plugin ever fetches a
+  // Performer, a Studio or a SceneMarker by id on its own.
+  var SOURCES = {
+    performer: { label: 'Performer', fields: 'id name', one: 'findPerformer' },
+    // A marker's title is optional and usually blank. `sourceLabel` falls back to the
+    // primary tag, which is what Stash itself shows on the scene's marker list, and
+    // which every marker path already selects.
+    marker: { label: 'Marker', fields: 'id title', one: 'findSceneMarker' },
+    scene: TARGETS.scene,
+    gallery: TARGETS.gallery,
+    image: TARGETS.image,
+    group: TARGETS.group,
+    studio: TARGETS.studio,
+  };
+
+  // What a path reads off whatever its walk lands on.
+  //
+  // A marker keeps its primary tag in a required field of its own rather than in
+  // `tags`, and it counts - a marker whose primary tag is "Blonde" carries that tag
+  // as much as one that lists it.
+  //
+  // Performers carry `name` because nothing else in the run knows it: tags are named
+  // from the hierarchy query every run makes anyway, and fetching every performer in
+  // the library to name the handful a plan mentions would be a query for a log line.
+  function leafSelection(path) {
+    if (path.kind === 'performers') return 'performers { id name }';
+    return path.markerTags ? 'primary_tag { id } tags { id }' : 'tags { id }';
+  }
+
+  // The GraphQL selection that gathers a path's sources, built from `walk` rather
+  // than stored beside it: two fields describing one traversal are two fields that
+  // can disagree. Empty for a reverse path, which is a query of its own.
+  //
+  // The source entity's own `id` comes back with the payload, and it is not
+  // decoration: where the source is itself one of our targets, an earlier stage may
+  // have *planned* additions to it that this stage has to see, and the id is how
+  // those are looked up. See the cascade note on `plannedFor`. Its name comes back for
+  // a smaller reason - the log line naming what was responsible - and rides along with
+  // the traversal rather than costing a query of its own.
+  function pathSelection(path) {
+    if (!path.walk) return '';
+    var src = SOURCES[path.sourceType];
+    var sel = (src ? src.fields : 'id') + ' ' + leafSelection(path);
+    // A scene passed on the way to its performers is named by id, so `walk` can add the ones
+    // stage 1 plans onto it.
+    var ids = path.kind === 'tags' && path.walk.indexOf('performers') > 0;
+    for (var i = path.walk.length - 1; i >= 0; i--) {
+      sel = path.walk[i] + ' { ' + (ids && i < path.walk.length - 1 ? 'id ' : '') + sel + ' }';
+    }
+    return sel;
+  }
+
+  // What the target already has, which is what a copy is diffed against.
+  function targetSelection(path) {
+    return path.kind === 'performers' ? 'performers { id }' : 'tags { id }';
+  }
+
+  // The BulkUpdateIds field the write goes into.
+  function bulkField(path) {
+    return path.kind === 'performers' ? 'performer_ids' : 'tag_ids';
+  }
+
+  function pathById(id) {
+    for (var i = 0; i < PATHS.length; i++) if (PATHS[i].id === id) return PATHS[i];
+    return null;
+  }
+
+  // "Performers of a Gallery onto its Scenes", for the log and the dialog head.
+  function pathLabel(path) {
+    var kind = path.kind === 'performers' ? 'Performers' : 'Tags';
+    return kind + ': ' + path.source + ' → ' + TARGETS[path.target].plural;
+  }
+
+  // What a path's name says when hovered, built from the table rather than written
+  // out thirteen times: a row renamed or re-routed there cannot leave a tooltip
+  // describing what it used to do. The two sentences after the first are the two
+  // things `pathLabel` cannot fit - what the third mode means, and that a path has a
+  // reverse in the table which, run together, drives both sides to one set.
+  function pathTip(path) {
+    var t = TARGETS[path.target].label;
+    var what = path.kind === 'performers' ? 'performers' : 'tags';
+    var tip = 'Adds the ' + what + ' of each ' + t + '\u2019s ' + path.source.toLowerCase() +
+      (path.hops === 2 ? ', reached through its scenes,' : '') + ' onto the ' + t + '.';
+    if (path.common) {
+      tip += ' Common tags only adds a tag when every one of them carries it.';
+    }
+    if (path.commonOnly) {
+      tip += ' Only the tags every one of them carries: one ' + path.source.toLowerCase().replace(/s$/, '') +
+        '\u2019s tag would otherwise reach the ' + t + ', and through it every other.';
+    }
+    if (path.pair && pathById(path.pair)) {
+      tip += ' Runs opposite to ' + pathLabel(pathById(path.pair)) +
+        '; with both on, the two converge on one set of tags.';
+    }
+    return tip;
+  }
+
+  // How the paths are laid out wherever they are shown together - the dialog's three
+  // columns, and the settings row's listing. It is the user's own grouping, not
+  // pipeline order: performer-carrying paths, then the two-way image/studio ones,
+  // then the two aggregations into a Group that carry a mode.
+  //
+  // **Presentation only.** `PATHS` is still the order a run walks, the order
+  // `formatPaths` writes and the order the dialog's head says matters; this decides
+  // nothing but where a row sits. A path missing from here or named twice would be a
+  // path with no control, so `propagate-paths` pins the two lists against each other.
+  //
+  // A `null` is a gap: a blank row in the column, separating two groups of paths that
+  // are read as one. It exists only where the dialog draws rows, so `displayPaths`
+  // drops it - the settings row lists the paths that are on, where a gap between two
+  // groups that may both be absent would be a blank line with nothing either side.
+  var PATH_COLUMNS = [
+    ['tags:studio>group', 'tags:group>scene', 'tags:image>gallery', 'tags:gallery>image',
+     'tags:marker>group', 'tags:marker>scene'],
+    ['tags:studio>scene', 'tags:performer>group', 'tags:performer>scene', null,
+     'performers:image>gallery', 'performers:gallery>scene'],
+    ['tags:scene>group', 'tags:subgroup>group', 'tags:scene>studio'],
+  ];
+
+  function displayPaths() {
+    var out = [];
+    PATH_COLUMNS.forEach(function (col) {
+      col.forEach(function (id) { var p = id && pathById(id); if (p) out.push(p); });
+    });
+    return out;
+  }
+
+  // ── The same fourteen paths, as a diagram ─────────────────────────────────
+  //
+  // The list is a column of names; this is the graph those names describe - one box
+  // per entity-type, the tags and (where the type has them) the performers inside
+  // it, and one arrow per path leaving what it reads and entering what it writes.
+  //
+  // **Hand-placed boxes, everything else derived.** An arrow runs between the two
+  // chips it joins, clipped to the boxes, and its toggle sits on that curve. So a
+  // fourteenth path draws itself from `PATHS` alone, and only a
+  // new *entity-type* would need a coordinate - which is why `propagate-paths` pins
+  // the node table against the paths in both directions, the way it already pins
+  // `PATH_COLUMNS`.
+  //
+  // Left to right: the types that only ever give (Studio, Performer, Marker, and the
+  // Image/Gallery pair), then Scene, then Group and its sub-groups. That is roughly
+  // pipeline order, because the stages walk towards Group.
+  //
+  // The node id is the path id's own source segment, which is what makes `subgroup`
+  // a box of its own: the schema says Group, the path says sub-group, and a diagram
+  // that drew `tags:subgroup>group` as an arrow from Group to itself would be true
+  // and useless.
+  // The canvas is the size of what is on it plus `pad` all round - there is no fixed
+  // width here, because the arrangement is the user's and a fixed one would be either
+  // too small for theirs or full of empty space. A toggle is a point in the geometry,
+  // so `btnW`/`btnH` is the nominal button allowed around it when the extent is
+  // measured; it is deliberately wider than any real caption, since a shade too much
+  // padding beats a button clipped at the edge.
+  var DIA = { boxW: 160, boxH: 56, chipY: 30, chipH: 20, pad: 20, btnW: 160, btnH: 30 };
+  var DIAGRAM_NODES = [
+    { id: 'studio', label: 'Studio', x: 65, y: 20 },
+    { id: 'performer', label: 'Performer', x: 140, y: 95 },
+    { id: 'marker', label: 'Marker', x: 270, y: 160 },
+    { id: 'image', label: 'Image', x: 605, y: 415, perf: true },
+    { id: 'gallery', label: 'Gallery', x: 605, y: 270, perf: true },
+    { id: 'scene', label: 'Scene', x: 365, y: 270, perf: true },
+    { id: 'group', label: 'Group', x: 805, y: 20 },
+    { id: 'subgroup', label: 'Sub-group', x: 800, y: 155 },
+  ];
+
+  // Where a path's toggle sits, and with it the curve its arrow takes: `along` the
+  // straight line between the two chips as a fraction of it, and `off` at right angles
+  // to that line in pixels. The arrow is a quadratic bent so that its own halfway
+  // point is exactly there, which is what makes one dragged point set both - see
+  // `curveFrom`.
+  //
+  // The one thing here the geometry cannot work out for itself. Three arrows run
+  // between Image and Gallery and would otherwise be drawn on top of each other; the
+  // Scene/Group pair is close enough that a straight pair collides as well; and
+  // Group's left edge, where the three long arrows from Studio, Performer and Marker
+  // all arrive, is no place to park a button - one there reads as theirs.
+  //
+  // **A reverse pair takes the same `off`, not opposite ones.** The perpendicular is
+  // taken from each arrow's own direction, which is already reversed, so equal offsets
+  // put the two curves on opposite sides of the line - and opposite offsets put them
+  // on the same side, which is what the first draft of this did.
+  //
+  // Anything a layout stored in the browser says replaces the entry here; see
+  // `storedLayout`.
+  var DIAGRAM_CURVE = {
+    'performers:image>gallery': { along: 0.5, off: 42 },
+    'performers:gallery>scene': { along: 0.438, off: 0 },
+    'tags:marker>scene': { along: 0.452, off: -2 },
+    'tags:performer>scene': { along: 0.313, off: 28 },
+    'tags:studio>scene': { along: 0.354, off: 86 },
+    'tags:image>gallery': { along: 0.506, off: -58 },
+    'tags:scene>studio': { along: 0.676, off: -152 },
+    'tags:scene>group': { along: 0.476, off: 32 },
+    'tags:studio>group': { along: 0.362, off: 0 },
+    'tags:performer>group': { along: 0.436, off: -1 },
+    'tags:subgroup>group': { along: 0.49, off: 29 },
+    'tags:group>scene': { along: 0.634, off: 42 },
+    'tags:gallery>image': { along: 0.494, off: -52 },
+  };
+
+  // Where a chip sits inside its box. Both are anchors, not just labels: an arrow
+  // carrying performers leaves the Performers chip, so which of the two a path moves
+  // is legible from where its arrow starts before any color is read.
+  function diaChip(node, kind) {
+    var perf = kind === 'performers' && node.perf;
+    return {
+      kind: perf ? 'performers' : 'tags',
+      label: perf ? 'Performers' : 'Tags',
+      x: node.x + (perf ? 62 : 10),
+      y: node.y + DIA.chipY,
+      w: perf ? 88 : 46,
+      h: DIA.chipH,
+    };
+  }
+
+  // Where the ray from `p` towards `q` leaves `p`'s box. `p` is a chip centre, so it
+  // is inside the box by construction and the near side is whichever of the two
+  // slabs it reaches first.
+  function diaExit(p, q, box) {
+    var dx = q.x - p.x, dy = q.y - p.y, ts = [];
+    if (dx > 0) ts.push((box.x + box.w - p.x) / dx);
+    else if (dx < 0) ts.push((box.x - p.x) / dx);
+    if (dy > 0) ts.push((box.y + box.h - p.y) / dy);
+    else if (dy < 0) ts.push((box.y - p.y) / dy);
+    var t = ts.length ? Math.min.apply(Math, ts) : 0;
+    return { x: p.x + dx * t, y: p.y + dy * t };
+  }
+
+  // The chord's own axes: along it, and at right angles to it. Everything about a
+  // curve is stored in these rather than in canvas pixels, so moving a box carries
+  // its arrows' shapes with it instead of leaving them behind.
+  function diaAxes(s, e) {
+    var dx = e.x - s.x, dy = e.y - s.y, len = Math.sqrt(dx * dx + dy * dy) || 1;
+    return { len: len, ux: dx / len, uy: dy / len, nx: -dy / len, ny: dx / len };
+  }
+
+  // The toggle's point, and the control point of an arrow passing through it. A
+  // quadratic is at `(s + 2c + e) / 4` halfway along, so `c = 2p - (s + e) / 2` puts
+  // that halfway point exactly on `p` - which is why a dragged button lands where it
+  // was released rather than near it.
+  function curveFrom(s, e, curve) {
+    var a = diaAxes(s, e), along = curve ? curve.along : 0.5, off = curve ? curve.off : 0;
+    var p = {
+      x: s.x + a.ux * a.len * along + a.nx * off,
+      y: s.y + a.uy * a.len * along + a.ny * off,
+    };
+    return { p: p, c: { x: 2 * p.x - (s.x + e.x) / 2, y: 2 * p.y - (s.y + e.y) / 2 } };
+  }
+
+  // And back: a point on the canvas as a curve. What a drag produces.
+  function curveTo(s, e, x, y) {
+    var a = diaAxes(s, e), px = x - s.x, py = y - s.y;
+    return {
+      along: (px * a.ux + py * a.uy) / a.len,
+      off: px * a.nx + py * a.ny,
+    };
+  }
+
+  // The whole picture as numbers, with no DOM in sight - which is what lets the
+  // layout be checked, and drawn into a file, without a browser.
+  //
+  // `layout` is an arrangement to draw instead of the tables above: the dialog's own
+  // while a drag is in flight, whatever the browser has stored otherwise. Merged by
+  // id and one entry at a time, so a box this release has added and the stored layout
+  // has never heard of keeps its place here rather than the whole layout being
+  // discarded.
+  function diagramGeometry(layout, pad) {
+    if (pad == null) pad = DIA.pad;
+    var moved = (layout && layout.nodes) || {};
+    var curves = (layout && layout.curves) || {};
+    var boxes = {}, nodes = [];
+    DIAGRAM_NODES.forEach(function (n) {
+      var at = moved[n.id] || {};
+      var x = typeof at.x === 'number' ? at.x : n.x;
+      var y = typeof at.y === 'number' ? at.y : n.y;
+      var box = { id: n.id, label: n.label, x: x, y: y, w: DIA.boxW, h: DIA.boxH,
+        perf: !!n.perf, chips: [] };
+      box.chips.push(diaChip(box, 'tags'));
+      if (n.perf) box.chips.push(diaChip(box, 'performers'));
+      boxes[n.id] = box;
+      nodes.push(box);
+    });
+    var edges = PATHS.map(function (p) {
+      var m = /^[a-z]+:([a-z_]+)>([a-z]+)$/.exec(p.id);
+      var a = boxes[m[1]], b = boxes[m[2]];
+      if (!a || !b) return null;
+      var ca = diaChip(a, p.kind), cb = diaChip(b, p.kind);
+      var pa = { x: ca.x + ca.w / 2, y: ca.y + ca.h / 2 };
+      var pb = { x: cb.x + cb.w / 2, y: cb.y + cb.h / 2 };
+      var s = diaExit(pa, pb, a), e = diaExit(pb, pa, b);
+      var bent = curveFrom(s, e, curves[p.id] || DIAGRAM_CURVE[p.id]);
+      return {
+        id: p.id, kind: p.kind, hops: p.hops, from: a.id, to: b.id,
+        x1: s.x, y1: s.y, x2: e.x, y2: e.y,
+        cx: bent.c.x, cy: bent.c.y, bx: bent.p.x, by: bent.p.y,
+      };
+    }).filter(Boolean);
+    // What the picture actually occupies. `minX`/`minY` are how `centreLayout` knows
+    // what to subtract; the canvas takes the far side plus the same padding.
+    var b = { minX: Infinity, minY: Infinity, maxX: 0, maxY: 0 };
+    function span(x1, y1, x2, y2) {
+      b.minX = Math.min(b.minX, x1); b.minY = Math.min(b.minY, y1);
+      b.maxX = Math.max(b.maxX, x2); b.maxY = Math.max(b.maxY, y2);
+    }
+    nodes.forEach(function (n) { span(n.x, n.y, n.x + n.w, n.y + n.h); });
+    edges.forEach(function (e) {
+      span(e.bx - DIA.btnW / 2, e.by - DIA.btnH / 2,
+        e.bx + DIA.btnW / 2, e.by + DIA.btnH / 2);
+    });
+    return {
+      w: b.maxX + pad, h: b.maxY + pad,
+      minX: b.minX, minY: b.minY, nodes: nodes, edges: edges,
+    };
+  }
+
+  // Which paths another path's tags already reach without it being switched on.
+  // `tags:studio>group` and `tags:group>scene` together put a studio's tags on its
+  // groups and then on those groups' scenes, so `tags:studio>scene` is happening
+  // whether or not anybody enabled it - and a dialog that shows it as Off is telling
+  // the user something that is not true of their library.
+  //
+  // Composed **in pipeline order**, which is what makes the answer honest about one
+  // run rather than about eventually: a chain is only recorded when each link comes
+  // after the one feeding it, exactly as `plannedFor`'s cascade works. A chain that
+  // runs the other way round does land, one run later, and this deliberately does not
+  // claim it.
+  //
+  // Only `on` links count, never `common`: a link that copies just the tags all its
+  // sources share carries some of the payload, and claiming a path is covered would
+  // overstate what a user would get.
+  //
+  // Returns `{ kind: { sourceType: { target: [pathId, ...] } } }` - the witness chain
+  // rather than a flag, so the button can name the paths doing the work.
+  function pathChains(modes) {
+    var reach = {};
+    PATHS.forEach(function (p) {
+      if ((modes && modes[p.id]) !== PATH_ON) return;
+      var r = reach[p.kind] || (reach[p.kind] = {});
+      var grown = [], src;
+      for (src in r) {
+        if (hasOwn(r, src) && r[src][p.sourceType]) {
+          grown.push([src, r[src][p.sourceType].concat([p.id])]);
+        }
+      }
+      (r[p.sourceType] || (r[p.sourceType] = {}))[p.target] = [p.id];
+      grown.forEach(function (g) { r[g[0]][p.target] = g[1]; });
+    });
+    return reach;
+  }
+
+  // The chain covering a path that is itself off, or null. A chain of one is the path
+  // itself and can only turn up for a path that is on, which this never asks about.
+  function coveredBy(chains, path) {
+    var byKind = chains[path.kind] || {};
+    var chain = (byKind[path.sourceType] || {})[path.target];
+    return chain && chain.length > 1 ? chain : null;
+  }
+
+  function enabledPaths(s) {
+    return PATHS.filter(function (p) { return pathOn(s, p); });
+  }
+
+  // A manual button's caption: "Copy [all|common] [Tags|Perfs] [to|from] all
+  // <plural>". Only the two paths carrying a "common tags only" toggle (`e1`'s
+  // `tags:scene>group`, `e6`'s `tags:subgroup>group`) have a `{mode}` token to fill in
+  // - every other path's `button` is already the final string, same as it always was.
+  // Reads whichever mode is currently configured, so the two buttons whose meaning
+  // depends on it never show a caption the setting has moved past.
+  function buttonLabel(path, s) {
+    if (!path.common) return path.button;
+    return path.button.replace('{mode}', pathCommon(s, path) ? 'common' : 'all');
+  }
+
+  // Whether a target-side click has a form to stage into. Both the caption, the tooltip
+  // and the click itself read this one expression, so a button cannot promise a review
+  // this Stash - or this setting - is not going to give.
+  function savesImmediately(s) {
+    return !!(s && s.a2SaveImmediately) || !_selectPatchesInstalled;
+  }
+
+  // "..." marks a button that asks before it acts: the click opens the review dialog
+  // rather than writing. A staging button gets none - it puts the additions in the form
+  // in front of you and Stash's own Save is the next step.
+  function withEllipsis(label, opensDialog) {
+    return opensDialog ? label + '...' : label;
+  }
+
+  // Two plugins' buttons for one path have to match on text for the dedup below to see
+  // them as the same button, and each side appends "..." on its own conditions - a
+  // sibling staging where we save writes the same button with a different caption.
+  // Comparing without it keeps the dedup answering the question it is actually asking.
+  function sameButtonLabel(a, b) {
+    return stripEllipsis(a) === stripEllipsis(b);
+  }
+
+  // ── Settings ──────────────────────────────────────────────────────────────
+  //
+  // The manifest keys carry ordering prefixes because `settings:` is a YAML map:
+  // the declaration order is gone by the time Stash has parsed it, and the settings
+  // page renders the keys sorted alphabetically. The blocks are
+  //
+  //   a1-a3  what starts a run: the buttons, the staging flag (dialog-only, set
+  //          where the buttons are), then the two auto-modes as one line
+  //   b1-b5  paths into Scenes
+  //   c1-c2  paths into Galleries
+  //   d1     paths into Images
+  //   e1-e7  paths into Groups, each "common tags only" mode directly under the
+  //          path it modifies
+  //   f1-f4  the exclusion filters
+  //   g1     logging, last - it changes no behaviour
+  //
+  // The suffixes are kept recognisable against the two sibling plugins
+  // (`ExcludeTagWithIgnoreAutoTag` is the same words in all three); only the letter
+  // differs, because this plugin has five blocks of paths that they do not.
+  //
+  // A key is also the **storage key** Stash saves the value under, so renaming one
+  // silently resets it for every install and strands the old value in the config.
+  // New settings get a prefix in the block they belong to; if there is no gap left,
+  // renumber that whole block in one go rather than bolting on a `b5a`.
+  //
+  // Stash has no default value for a plugin setting and renders an unset BOOLEAN as
+  // unchecked, so every path toggle is off on a fresh install and a run with none
+  // enabled must say so rather than silently doing nothing. That is the right
+  // default here: these writes are library-wide and opting in per path is how the
+  // user says which relationships they have actually thought about.
+  var DEFAULTS = {
+    // The twenty-six manual buttons as one line - see the block under `pathCommon`.
+    // `a1ShowManualButtons`, the one switch this replaced, is read only by the
+    // migration in `settingsFrom` and retired by the buttons dialog's first Save.
+    a1ManualButtons: '',
+    // Inverted on purpose, the one setting here that is. The behaviour we want by
+    // default is staging, so it has to be what "off" selects - otherwise the box
+    // would read off while acting on, and the first click on it would send true
+    // rather than false. Any new boolean whose desired default is "on" needs the
+    // same treatment; a *destructive* default needs the opposite.
+    // Dialog-only: no row in the yml; set in Manual Buttons Settings, beside the
+    // buttons it is about, and stored under this key by that dialog's Save.
+    a2SaveImmediately: false,
+    // The two auto-modes as one line - see `parseAuto`. `a3AutoOnTargetUpdate`
+    // and `a4AutoOnSourceUpdate`, the two switches this replaced, are read only by
+    // the migration in `settingsFrom` and retired by the auto dialog's first Save.
+    a3AutoPropagation: '',
+
+    // The thirteen path toggles and the two "common tags only" modifiers, as one
+    // line. See the block below for why they are a string rather than fifteen rows.
+    b1Paths: '',
+
+    f1ExcludeTargetWithTagName: '',
+    f2ExcludeTargetOrganized: false,
+    f3ExcludeTagWithIgnoreAutoTag: false,
+    // **The one string setting here that has a default, and it is not empty.** Stash
+    // renders whatever is in `config.yml` and has no `default:` for a plugin setting, so
+    // a default has to be written in - see `seedExclusionField`. The name wears the
+    // plugins' own prefix for the reason every other name they put in a namespace the
+    // user shares does: a custom field lives in one flat map that anything can write to,
+    // and `Do_Not_Propagate_Tag` is a name anybody could have picked.
+    f4ExcludeTagWithCustomFieldName: 'ᱜ╦╦🞮_Do_Not_Propagate_Tag',
+    // The one filter here whose rule belongs to another plugin, which is why it is
+    // asked rather than copied. See `nptPruners`.
+    f5SkipTagsNormalizeWouldPrune: false,
+    f6ExcludeTagNameContains: '',
+    f7TagNameSeparator: '',
+    f8ExcludeTagSubtreeName: '',
+
+  };
+
+  // ── The path setting string ───────────────────────────────────────────────
+  //
+  // One STRING setting holds all fourteen paths: `tags:performer>scene=ON,
+  // tags:scene>group=COMMON`. It replaced thirteen "Tags - ... to ..." booleans plus
+  // the two "common tags only" modifiers that qualified two of them - fifteen rows,
+  // five alphabetical blocks deep, in which the pair a modifier belonged to could
+  // only be inferred from the wording of its name.
+  //
+  // A path is off, on, or - for the two that carry `common` - on for the tags every
+  // source shares. That is three states for two of them, and a Stash plugin setting
+  // is BOOLEAN, NUMBER or STRING with no tri-state and no repeated group, which is
+  // the same wall `NormalizeParentTags` hit with its seven per-type modes. The answer
+  // is the same too: one line, and the "Path Settings..." task is the editor for it.
+  // The field stays there to be *read* at a glance and edited by hand when someone
+  // wants to, not to be the only way in.
+  //
+  // **The token is the path id**, the string `coop().declares` already publishes and
+  // this plugin's own tables are keyed by - not a second vocabulary invented for the
+  // setting. A path renamed here would be a path renamed there, which is exactly the
+  // coupling wanted: they name the same thing.
+  //
+  // Parsing is forgiving and formatting is strict. Anything shaped like
+  // `<path id>=<mode>` is picked out wherever it sits, in any order, in any case,
+  // with any separators between the pairs; everything else is ignored, and a path
+  // nobody mentioned is off. What is written back is the enabled paths only, in
+  // `PATHS` order - unlike the sibling's seven pairs, thirteen `=OFF` entries would
+  // be a line nobody could read for the two that matter, and an absent path already
+  // means off.
+  var PATH_OFF = 'off', PATH_ON = 'on', PATH_COMMON = 'common';
+  var PATH_TOKEN = { on: 'ON', common: 'COMMON' };
+  // The same modes as words, for the selectors and the settings row. `All` rather
+  // than `On` wherever a path has a second enabled mode to be told apart from.
+  var PATH_LABEL = { off: 'Off', on: 'On', common: 'Common only' };
+  var PATH_LABEL_COMMON = { off: 'Off', on: 'All tags', common: 'Common tags only' };
+
+  var PATH_LABEL_COMMON_ONLY = { off: 'Off', on: 'Common tags only' };
+  function pathLabels(path) { return path.common ? PATH_LABEL_COMMON : path.commonOnly ? PATH_LABEL_COMMON_ONLY : PATH_LABEL; }
+
+  // The order the dialog's button cycles through, which is also the order they are
+  // listed in its title. Off first, so a press from the resting state turns a path on.
+  function pathStates(path) {
+    return path.common ? [PATH_OFF, PATH_ON, PATH_COMMON] : [PATH_OFF, PATH_ON];
+  }
+
+  // ALL is accepted as a synonym of ON because that is the word the two mode-carrying
+  // paths' own selector shows, and someone typing the line by hand reads it there.
+  // COMMON on a path that has no common mode is just "on": the path is enabled, and
+  // the qualifier it does not have is dropped rather than the pair being ignored.
+  var PATH_PAIR = /([A-Za-z]+:[A-Za-z]+>[A-Za-z]+)\s*=\s*(OFF|ON|ALL|COMMON)/gi;
+
+  function parsePaths(raw) {
+    var modes = {};
+    PATHS.forEach(function (p) { modes[p.id] = PATH_OFF; });
+    var text = String(raw == null ? '' : raw), m;
+    PATH_PAIR.lastIndex = 0;
+    while ((m = PATH_PAIR.exec(text)) !== null) {
+      var p = pathById(m[1].toLowerCase());
+      if (!p) continue;
+      var word = m[2].toUpperCase();
+      // A path named twice takes its last mention: the string is edited by appending
+      // far more often than by rewriting, so the last word is the newest intent.
+      modes[p.id] = word === 'OFF' ? PATH_OFF
+        : (word === 'COMMON' && p.common ? PATH_COMMON : PATH_ON);
+    }
+    return modes;
+  }
+
+  // How many `<something>=<something>` pairs the string holds that this script did
+  // *not* recognise. Neither a path id nor a mode contains an `=`, so the count of
+  // `=` is how many pairs were meant, and anything left over is a pair this copy
+  // cannot read - a hand edit, or a path id a newer release knows and this one does
+  // not. It is what stands between "rewrite this in canonical form" and "delete the
+  // half I did not understand".
+  // Counting what was *applied*, not what the regex matched: a well-shaped id this
+  // release does not have - `tags:everything>everywhere=ON`, the exact case a newer
+  // sibling release produces - matches the pattern and is then dropped by `pathById`.
+  // Counting matches called that fully understood and deleted it on the next tick.
+  function unrecognisedPairs(raw) {
+    var text = String(raw == null ? '' : raw), applied = 0, m;
+    PATH_PAIR.lastIndex = 0;
+    while ((m = PATH_PAIR.exec(text)) !== null) {
+      if (pathById(m[1].toLowerCase())) applied++;
+    }
+    return (text.split('=').length - 1) - applied;
+  }
+
+  function formatPaths(modes) {
+    return PATHS.filter(function (p) {
+      return modes && modes[p.id] && modes[p.id] !== PATH_OFF;
+    }).map(function (p) {
+      return p.id + '=' + PATH_TOKEN[modes[p.id]];
+    }).join(', ');
+  }
+
+  // What one path is set to, off `settings.paths`. Everything in the plugin that used
+  // to read `s[path.setting]` or `s[path.mode]` asks these three instead, so a
+  // repartitioning of the setting - a fourth mode, a mode per target - costs one
+  // function rather than a search for every boolean read.
+  function pathMode(s, path) {
+    var modes = (s && s.paths) || {};
+    return modes[path.id] || PATH_OFF;
+  }
+
+  function pathOn(s, path) { return pathMode(s, path) !== PATH_OFF; }
+
+  function pathCommon(s, path) { return pathMode(s, path) === PATH_COMMON; }
+
+  // ── The manual buttons setting ────────────────────────────────────────────
+  //
+  // Twenty-six buttons - one on the Edit tab of a target for each of the fourteen
+  // paths into it, one on the source's own page for each of the twelve paths that
+  // have one - and a switch each, as one line for the reason `b1Paths` is one: a
+  // Stash setting has no repeated group, and twenty-six BOOLEAN rows would bury the
+  // page. The token is the side and the path id, `target:tags:performer>scene`, so
+  // the vocabulary is the one `PATHS` already has. Read forgivingly, written back
+  // as only the buttons that are on, in page order; a button nobody names is off.
+  var BUTTON_PAIR = /\b(target|source)\s*:\s*([A-Za-z]+:[A-Za-z]+>[A-Za-z]+)/gi;
+  var BUTTON_PAGES = ['scene', 'gallery', 'image', 'group', 'performer', 'studio'];
+
+  // Page by page rather than in pipeline order: what the dialog lists and the row
+  // shows is "which buttons are on which page", and the run order means nothing to
+  // a button.
+  function manualButtons() {
+    var out = [];
+    BUTTON_PAGES.forEach(function (page) {
+      PATHS.forEach(function (p) {
+        if (p.target === page) out.push({ key: 'target:' + p.id, side: 'target', path: p });
+      });
+    });
+    BUTTON_PAGES.forEach(function (page) {
+      PATHS.forEach(function (p) {
+        if (p.sourceType === page && hasOwn(SOURCE_BUTTON_LABELS, p.id)) {
+          out.push({ key: 'source:' + p.id, side: 'source', path: p });
+        }
+      });
+    });
+    return out;
+  }
+
+  function parseButtons(raw) {
+    var on = {}, text = String(raw == null ? '' : raw), m;
+    BUTTON_PAIR.lastIndex = 0;
+    while ((m = BUTTON_PAIR.exec(text)) !== null) {
+      var p = pathById(m[2].toLowerCase()), side = m[1].toLowerCase();
+      if (!p || (side === 'source' && !hasOwn(SOURCE_BUTTON_LABELS, p.id))) continue;
+      on[side + ':' + p.id] = true;
+    }
+    return on;
+  }
+
+  function formatButtons(on) {
+    return manualButtons().filter(function (b) { return on && on[b.key]; })
+      .map(function (b) { return b.key; }).join(', ');
+  }
+
+  // The only readers, like `pathOn` for the paths.
+  function buttonOn(s, side, path) {
+    return !!((s && s.buttons) || {})[side + ':' + path.id];
+  }
+
+  function anyButtonOn(s) {
+    var on = (s && s.buttons) || {};
+    for (var k in on) if (hasOwn(on, k) && on[k]) return true;
+    return false;
+  }
+
+  // Where a button lives, in words - `Scene Edit tab`, `Performer page` - and the
+  // caption it wears there, the same strings the button itself is drawn with. Two
+  // functions rather than one joined string: the dialog and the settings row group
+  // by the first and list the second, and a caption carrying its page six times
+  // over was what made both unreadable.
+  function buttonView(b) {
+    return b.side === 'target'
+      ? TARGETS[b.path.target].label + ' Edit tab'
+      : SOURCES[b.path.sourceType].label + ' page';
+  }
+
+  function buttonCaption(b, s) {
+    return b.side === 'target' ? buttonLabel(b.path, s) : sourceButtonLabel(b.path, s);
+  }
+
+  // The buttons grouped by where they live, in `manualButtons()` order: one entry
+  // per side and page, carrying its buttons.
+  function buttonViews() {
+    var out = [], byView = {};
+    manualButtons().forEach(function (b) {
+      var view = buttonView(b);
+      if (!byView[view]) {
+        byView[view] = { side: b.side, view: view, buttons: [] };
+        out.push(byView[view]);
+      }
+      byView[view].buttons.push(b);
+    });
+    return out;
+  }
+
+  // ── The two auto-modes as one setting ────────────────────────────────
+  //
+  // `target` and `source`, the two reactions `reactToTargets` and `reactToSources`
+  // gate on, as one line in the same shape as the buttons: read forgivingly,
+  // written back as only the modes that are on. Each had a BOOLEAN row of its own
+  // on Stash's settings page; the pair is edited in the Auto-Propagation and Depropagate Assist
+  // dialog now, and the old keys are read by the migration in `settingsFrom` only.
+  var AUTO_MODES = ['target', 'source', 'silent', 'depropagate'];
+  // Each row: its mode, label, help, and Core's level (`levelOf`) - the two reactions write on
+  // their own, Silent writes with no dialog at all, Depropagate assist decides what a save
+  // offers to take back.
+  var AUTO_ROWS = [
+    ['target', 'Auto-Propagate when the Target is Saved',
+      'Whenever Stash saves a scene, gallery, image or group, every enabled path that ' +
+      'copies into it runs on that one entity. One small read per save, so it is the ' +
+      'cheaper of the two.', true],
+    ['source', 'Auto-Propagate when the Source is Saved',
+      'Whenever Stash saves an entity, its tags or performers are pushed into every ' +
+      'entity an enabled path copies them to. This one fans out: saving a popular ' +
+      'performer can rewrite every scene they appear in.', true],
+    // The two options below qualify the two modes above. `silent` is the one that
+    // makes a reaction write with no plan in front of it, which is why it is off
+    // until asked for and grayed out while there is no reaction for it to silence.
+    ['silent', 'Silent Auto-propagation',
+      'On: a reaction writes the moment Stash saves. Off: a dialog lists what the ' +
+      'save would add - every line ticked - and nothing is written until you press OK.', 'strong'],
+    ['depropagate', 'Suggest Tag Auto-removal - Depropagate assist',
+      'When a save takes away something tags came from along an active path - a scene\'s ' +
+      'performer, studio or group, an image\'s gallery, a group\'s studio or sub-group, or a ' +
+      'scene, image, group or marker leaving what it belonged to - offer to remove the tags it ' +
+      'brought that nothing still related carries. Listed unticked; only what you tick is ' +
+      'removed, and only on OK.', 'semi'],
+  ];
+
+  function parseAuto(raw) {
+    var on = {}, text = String(raw == null ? '' : raw).toLowerCase();
+    AUTO_MODES.forEach(function (m) {
+      if (new RegExp('\\b' + m + '\\b').test(text)) on[m] = true;
+    });
+    return on;
+  }
+
+  function formatAuto(on) {
+    return AUTO_MODES.filter(function (m) { return on && on[m]; }).join(', ');
+  }
+
+  // The setting in words rather than in tokens, for the settings row: `Tags:
+  // Performers → Scenes (Common tags only)`, one entry per enabled path and every one
+  // of them highlighted - a path that is on is one this plugin writes along. Nothing is
+  // listed for a path that is off; thirteen grayed-out entries would bury the two
+  // that are not.
+  //
+  // **Three columns, filled top to bottom, in `PATH_COLUMNS` order** - the same
+  // order and the same grouping the dialog lays out, so a path is in the same place
+  // wherever it is shown. Thirteen stacked lines was a column of text taller than
+  // every other row on the settings page put together, and the grouping is what keeps
+  // three columns cheap: the two entries carrying a mode are half as long again as
+  // the rest and share the last column, so the other two stay narrow.
+  //
+  // Not pipeline order, and that is deliberate on both sides now: what a run walks is
+  // `PATHS`, which is what `formatPaths` writes and what the dialog's head describes.
+  // This lists which paths are on.
+  //
+  // Elements rather than `textContent`, so the list can be a list.
+  function renderPathString(box, modes, raw) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var text = String(raw == null ? '' : raw).replace(/^\s+|\s+$/g, '');
+    var on = displayPaths().filter(function (p) { return modes && modes[p.id] !== PATH_OFF; });
+    // The three columns live on a list inside the row rather than on the row itself,
+    // so the warning below can sit beside them rather than in a cell of the grid.
+    var list = el('div', 'ptp2re-pathstring-list');
+    // "Nothing enabled" and "I could not read what is stored" look identical from the
+    // paths alone and are not the same thing at all: the first is a choice, the second
+    // is a value still sitting in the config that this script is declining to touch.
+    // Saying the first over the second is what would make the loss look deliberate.
+    if (!on.length && !text) {
+      box.appendChild(el('div', null, 'No paths enabled - nothing is copied anywhere.'));
+      return;
+    }
+    // A partly-read value gets both: the paths that *are* in force, and a line saying
+    // the rest is not. Without it the row is a short list with nothing to explain why.
+    // `!on.length` is the other half of the same question: a stored value that yields
+    // no paths at all is unread whether or not it contains anything pair-shaped, and
+    // a string with no `=` in it counts no unrecognised pairs by construction.
+    if (text && (unrecognisedPairs(raw) > 0 || !on.length)) {
+      box.appendChild(el('div', 'ptp2re-pathstring-warn', '\u26a0 Part of the stored ' +
+        'value is not something this script understands, so it is left exactly as it ' +
+        'is - and whatever it could not read is not in force. Open Path Settings to ' +
+        'set the paths again, or check whether the script running here is older than ' +
+        'the plugin installed.'));
+    }
+    if (!on.length) return;
+    box.appendChild(list);
+    // The row count is what turns `grid-auto-flow: column` into three columns; the
+    // stylesheet cannot know how many entries there are. Fewer than three enabled
+    // means one row and one column each, which is the right shape for a short list.
+    list.style.gridTemplateRows = 'repeat(' + Math.ceil(on.length / 3) + ', auto)';
+    on.forEach(function (p) {
+      var line = C.markLevel(el('div', 'ptp2re-pathstring-on'), 'semi');
+      // The label is a span rather than the div's own text: a mode is appended after
+      // it, and text plus an element in one node is the shape that loses the text.
+      line.appendChild(el('span', null, pathLabel(p)));
+      if (p.common) {
+        line.appendChild(el('span', 'ptp2re-pathstring-mode',
+          '  (' + pathLabels(p)[modes[p.id]] + ')'));
+      }
+      list.appendChild(line);
+    });
+  }
+
+  // ── Migrating the fifteen booleans this setting replaced ──────────────────
+  //
+  // Each path used to have a boolean of its own, and two of them a second
+  // boolean for "common tags only". The mapping is exact, which is the whole reason
+  // the replacement can be silent: an enabled path becomes ON, or COMMON where its
+  // modifier was also set.
+  //
+  // Renaming a key orphans what the user had; this is the one thing that stops the
+  // replacement from being a reset. It runs once per page, only when the new setting
+  // is empty and at least one old key is set, and it writes the result back so the
+  // settings page shows it.
+  // COMPAT: the fifteen per-path booleans (`b1TagsPerformersToScenes` ...) before `b1Paths`
+  // (since PropagateTagsAndPerformers 3.0.0); remove when never on its own: an install may
+  // skip releases, and this is what keeps its paths.
+  var LEGACY_PATH = {
+    'tags:performer>scene': 'b1TagsPerformersToScenes',
+    'tags:studio>scene': 'b2TagsStudioToScenes',
+    'tags:marker>scene': 'b3TagsMarkersToScenes',
+    'tags:group>scene': 'b4TagsGroupsToScenes',
+    'performers:gallery>scene': 'b5PerformersGalleriesToScenes',
+    'tags:image>gallery': 'c1TagsImagesToGalleries',
+    'performers:image>gallery': 'c2PerformersImagesToGalleries',
+    'tags:gallery>image': 'd1TagsGalleriesToImages',
+    'tags:scene>group': 'e1TagsScenesToGroups',
+    'tags:studio>group': 'e3TagsStudioToGroups',
+    'tags:performer>group': 'e4TagsPerformersToGroups',
+    'tags:marker>group': 'e5TagsMarkersToGroups',
+    'tags:subgroup>group': 'e6TagsSubGroupsToGroups',
+  };
+  var LEGACY_COMMON = {
+    'tags:scene>group': 'e2TagsScenesToGroupsCommonOnly',
+    'tags:subgroup>group': 'e7TagsSubGroupsToGroupsCommonOnly',
+  };
+
+  function hasLegacyPaths(raw) {
+    for (var id in LEGACY_PATH) {
+      if (hasOwn(LEGACY_PATH, id) && raw[LEGACY_PATH[id]]) return true;
+    }
+    return false;
+  }
+
+  function legacyPaths(raw) {
+    var modes = {};
+    PATHS.forEach(function (p) {
+      var on = !!raw[LEGACY_PATH[p.id]];
+      modes[p.id] = !on ? PATH_OFF
+        : (p.common && raw[LEGACY_COMMON[p.id]] ? PATH_COMMON : PATH_ON);
+    });
+    return modes;
+  }
+
+  // ── Writing one of our own settings ───────────────────────────────────────
+  //
+  // **`configurePlugin` REPLACES `plugins.<id>`; it does not merge into it.** Stash's
+  // `ConfigureUI` merges explicitly (`utils.MergeMaps`) and `ConfigurePlugin` does
+  // not, so the difference is deliberate on both sides and there is nothing to fix
+  // upstream. A mutation naming only the keys it changes therefore **deletes every
+  // other setting this plugin has**.
+  //
+  // That is not a hypothetical: it is what took a user's thirteen enabled paths, their
+  // manual-button toggle and their console toggle, twice - once when the path
+  // migration wrote `b1Paths` on its own, and again when the exclusion import
+  // wrote two keys and left a config holding exactly those two. `CustomFieldsBulkEditor`
+  // had already found this and says so beside `followHideRename`; the knowledge stayed
+  // in one plugin while two others copied the broken shape.
+  //
+  // So: read the stored map, apply the patch to a copy, send the whole thing - Core's
+  // `writePluginSettings`, which reads per write rather than off the settings cache: a
+  // value another tab changed is a value we would otherwise write back over.
+  function writeOwnSettings(patch) {
+    return writePluginSettings(PLUGIN_ID, patch, 'PTP');
+  }
+
+  var _savingPaths = false;
+
+  // Stash's own settings page sends the same mutation, and the fetch hook already
+  // notices it and drops the settings cache - so a save made here reaches the
+  // auto-modes and the manual buttons exactly as one made by hand does.
+  // `extra` is for the settings the Path Settings dialog owns outright - ones with no
+  // row on Stash's settings page, so this write is the only thing that ever sets them.
+  // One mutation rather than two: they are saved by one press, and a second write
+  // racing the first would re-read a map the first had not landed in yet.
+  function savePaths(text, extra) {
+    _savingPaths = true;
+    var patch = { b1Paths: text }, k;
+    // COMPAT: the per-path booleans left in the stored map after a migration (since
+    // PropagateTagsAndPerformers 6.4.2); remove when `LEGACY_PATH` goes. Any `b1Paths` write
+    // deletes them, or an empty `b1Paths` - All Off - would be read from them again next page.
+    for (k in LEGACY_PATH) if (hasOwn(LEGACY_PATH, k)) patch[LEGACY_PATH[k]] = undefined;
+    for (k in LEGACY_COMMON) if (hasOwn(LEGACY_COMMON, k)) patch[LEGACY_COMMON[k]] = undefined;
+    for (k in extra || {}) if (hasOwn(extra, k)) patch[k] = extra[k];
+    return writeOwnSettings(patch).then(function (r) {
+      _savingPaths = false;
+      invalidateAutoSettings();
+      return r;
+    }, function (e) {
+      _savingPaths = false;
+      throw e;
+    });
+  }
+
+  // COMPAT: writes back the per-path booleans' reading as `b1Paths` (since
+  // PropagateTagsAndPerformers 3.0.0); remove when `LEGACY_PATH` goes.
+  var _migrated = false;
+
+  // Behind the page's initial write when there is one: both send the whole map, and the
+  // seed's is built from the read that still holds the old booleans, so whichever landed
+  // second would drop the other's keys.
+  function migrateLegacyPaths(text) {
+    if (_migrated) return;
+    _migrated = true;
+    console.info('[ptp2re] migrating the legacy per-path settings to "' + text + '".');
+    (_initialWrite || Promise.resolve()).then(function () {
+      return savePaths(text);
+    }).then(null, function (e) {
+      console.info('[ptp2re] the migrated path setting could not be saved (' +
+        (e && e.message ? e.message : e) + '). It is being used for this page all the ' +
+        'same; set it by hand from the Path Settings task if this keeps happening.');
+    });
+  }
+
+  // ── Cross-plugin cooperation ──────────────────────────────────────────────
+  //
+  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root AGENTS.md.
+  // A lease asks reactive plugins in this tab to stand down while we write. It is
+  // advisory and always expires, so a crash cannot disable anyone permanently.
+  //
+  // This plugin is on both sides of the protocol, like both of its siblings and for
+  // the same reason: the roles are per *run*, not per plugin. The library-wide task
+  // is bulk; the two auto-modes are reactive. The lease itself is Core's `lease`.
+
+  // ── Button gating diagnostics ────────────────────────────────────────────
+  //
+  // Off unless `__GTTx__.StashPluginCoop.logButtonVisInfo = true` (or Dev Mods' Log Button Visibility switch), which is typed into the browser console: no setting, no reload, no file edit, and the flag is read at call time so
+  // it takes effect on the next tick. On the shared object rather than a global of our
+  // own because both plugins that draw buttons into these rows answer to it, and "why
+  // is this button missing" is rarely a question about only one of them.
+  //
+  // Core's `gate` channel, in two shapes, and the difference is what each is for:
+  //
+  //   `gate.log` fires every time. Its callers are the probe resolutions, which happen
+  //   once per entity and again after every save that invalidates them - seeing the
+  //   same answer twice there is the *point*, since it says the re-check ran.
+  //
+  //   `gate.once` is deduplicated per channel, for the tick-driven states.
+  //   `manualButtonsTick` runs every second and on every DOM mutation burst, so an
+  //   undeduplicated line there would emit forever on a page nobody is touching. What
+  //   is worth seeing is the moment an outcome changes. Turning the flag off clears the
+  //   channels, so switching it back on restates the current position rather than
+  //   staying silent until something moves.
+  var gate = C.gate('ptp2re');
+
+  // Registered at load, unconditionally rather than only while an auto-mode is
+  // enabled: the flag says this copy honours the protocol, which is true whatever
+  // the settings happen to be. It is what lets another plugin's bulk run tell "will
+  // stand down" apart from "too old to know about leases".
+  coop().respecters[PLUGIN_ID] = true;
+
+  // A fixed, agreed priority for the deterministic-ordering protocol below
+  // (`insertOrdered`) - not a capability like `respecters`, but a number both sides
+  // have to pick once and keep consistent, the same way the two plugins pin their
+  // overlapping CSS byte-identical. Lower sits further from Save/Delete;
+  // MergePerformerTagsToScenes registers 20, so this plugin's own buttons land to its
+  // left rather than racing it for the position next to the anchor. Gaps of 10 leave
+  // room for a third plugin to slot in without renumbering either existing value.
+  coop().order[PLUGIN_ID] = 10;
+
+  // The N-way declaration registry (D3 of the design plan): unlike `respecters`,
+  // which is a fixed capability, this is refreshed on every settings load - task or
+  // auto-mode alike, see `Run.prototype.begin` and `autoSettings` - because a path
+  // whose setting is off is not one this plugin is actually covering, and another
+  // plugin scanning `coop().declares` for overlap needs to see that as soon as this
+  // plugin's own settings do, not only while its dialog happens to be open.
+  function publishDeclares(settings) {
+    coop().declares[PLUGIN_ID] = enabledPaths(settings).map(function (p) { return p.id; });
+  }
+
+  var _standDownAnnounced = false;
+  function autoSuppressed() {
+    var c = coop();
+    var now = Date.now();
+    // Expired leases are dropped rather than honoured: a tab that crashed mid-run
+    // must not disable auto-mode until the next page reload.
+    for (var i = c.leases.length - 1; i >= 0; i--) {
+      if (!c.leases[i] || !(c.leases[i].until > now)) c.leases.splice(i, 1);
+    }
+    if (!c.leases.length) { _standDownAnnounced = false; return false; }
+    if (!_standDownAnnounced) {
+      _standDownAnnounced = true;
+      console.info('[ptp2re] auto-mode is standing down while ' + c.leases[0].owner +
+        ' applies bulk changes (' + c.leases[0].label + ')');
+    }
+    return true;
+  }
+
+  // Depth of write work in flight. A counter rather than a boolean because flows
+  // overlap - a task apply racing an auto reaction, two auto reactions from one
+  // bulk edit - and the first to finish must not re-open interception while the
+  // others are still writing. Strictly internal: suppressing *other* plugins is
+  // what the lease is for.
+  var _writeDepth = 0;
+
+  function guarded(fn) {
+    _writeDepth++;
+    var p;
+    try {
+      p = fn();
+    } catch (e) {
+      _writeDepth--;
+      throw e;
+    }
+    return p.then(
+      function (v) { _writeDepth--; return v; },
+      function (e) { _writeDepth--; throw e; }
+    );
+  }
+
+  // Core's one shared read (`pluginConfig`) brings the other ᝯㄝₓ plugins' settings in
+  // the same response - which is what the sibling checks read, for free.
+
+  // ── Adopting MergePerformerTagsToScenes' exclusion filters ────────────────
+  //
+  // The four exclusion settings here are the same four that plugin has, worded for a
+  // wider set of entities - `ExcludeTagWithIgnoreAutoTag` is the same words in both,
+  // and the repo's own settings convention is that only the letter differs. Somebody
+  // running both has already answered these four questions once, and answering them
+  // again in the same words is the kind of setup step that gets half done.
+  //
+  // So each one this plugin has **never been set to anything** takes the sibling's
+  // value, once, and is written back so the settings page shows it as ours.
+  //
+  // **"Never set" is the key's presence in the stored config, not its value.** A
+  // BOOLEAN the user has turned on and off again is `false`, which is also its
+  // default - comparing values would re-adopt it on every page load, and a setting
+  // that comes back after you switch it off is worse than one you have to set twice.
+  // `configurePlugin` stores what it is sent, so the key exists from the first time
+  // the user touches the row. This is the one thing here that would be wrong if Stash
+  // ever stripped default-valued keys from a plugin's config map.
+  //
+  // **Written back rather than used in memory.** An import nobody can see is a
+  // settings page saying "no exclusions" over runs that exclude; writing it makes the
+  // value ours, editable, and - because the key now exists - never adopted again.
+  //
+  // A name lookup, unlike the `declares` overlap check beside it, because there is
+  // nothing generic to key this on: two plugins having the same *settings shape* is
+  // not a capability either of them publishes.
+  var SIBLING_EXCLUSIONS = {
+    f1ExcludeTargetWithTagName: 'b1ExcludeSceneWithTagName',
+    f2ExcludeTargetOrganized: 'b2ExcludeSceneOrganized',
+    f3ExcludeTagWithIgnoreAutoTag: 'c1ExcludeTagWithIgnoreAutoTag',
+    f4ExcludeTagWithCustomFieldName: 'c2ExcludeTagWithCustomFieldName',
+  };
+
+  // Fills `s` in place and returns what should be written back, or null.
+  function importSiblingExclusions(s, raw, sibling) {
+    if (!sibling) return null;
+    var input = null;
+    for (var key in SIBLING_EXCLUSIONS) {
+      if (!hasOwn(SIBLING_EXCLUSIONS, key)) continue;
+      if (hasOwn(raw, key)) continue;                       // ours, already answered
+      var theirs = sibling[SIBLING_EXCLUSIONS[key]];
+      var value = typeof DEFAULTS[key] === 'boolean'
+        ? !!theirs : String(theirs == null ? '' : theirs);
+      // Nothing to adopt is not an import: writing their default into our config
+      // would set the key and so spend the one chance this has to run. **An empty
+      // string is nothing to adopt whatever our own default is** - which stopped being
+      // the same test the moment `f4` gained a non-empty one, and would otherwise have
+      // adopted a sibling's unset filter as a deliberate "off".
+      if (value === DEFAULTS[key] || value === '') continue;
+      s[key] = value;
+      if (!input) input = {};
+      input[key] = value;
+    }
+    return input;
+  }
+
+  // ── The exclusion field's own default, and its documentation ──────────────
+  //
+  // Stash has no `default:` for a plugin setting - the panel renders whatever is in
+  // `config.yml`, which is nothing until the user types in a box - so a default that is
+  // meant to be *visible* has to be written in once. `CustomFieldsBulkEditor` learnt
+  // this the same way and `seedDefaults` is the same shape; the difference is that this
+  // plugin has exactly one setting with a non-empty default, so this seeds that one.
+  //
+  // Three rules, and the first two are the ones that were got wrong first:
+  //
+  //  - **Absent is seeded; empty is left empty.** A box the user has cleared is a filter
+  //    they have switched off, which is the reading every other string setting here
+  //    already has and the one a user expects. Putting the default back on a clear
+  //    leaves no way to switch the filter off at all - and the whitespace that was left
+  //    to mean "off" was a rule nobody would guess.
+  //  - **Seeded before the import, and replaced by it.** A value adopted from
+  //    `MergePerformerTagsToScenes` is the user having answered this question already,
+  //    in the other plugin, so it wins. The seeded name is then a description filed
+  //    against a field nothing reads - an orphan, which is exactly what "Manage Custom
+  //    Field Descriptions..." lists and offers to prune.
+  //  - **The description is written through `CustomFieldsBulkEditor`, never beside it.**
+  //    That plugin owns the store - its JSON shape, the sentence in front of it, the
+  //    version gate, the marker tag - and a copy of any of that here is the thing
+  //    `coop().api` exists to stop. Absent sibling, older sibling, no store yet: all
+  //    three are silence, because a tag exclusion filter works perfectly well with no
+  //    sentence explaining it.
+  var F1_KEY = 'f1ExcludeTargetWithTagName';
+  var F8_KEY = 'f8ExcludeTagSubtreeName';
+  var F4_KEY = 'f4ExcludeTagWithCustomFieldName';
+  var F4_DEFAULT = DEFAULTS[F4_KEY];
+  var F4_DESCRIPTION = 'Never propagate a tag marked via this Custom Field. Used by the ' +
+    PLUGIN_NAME + ' plugin.';
+  var CFBE_ID = 'CustomFieldsBulkEditor';
+
+  var _wroteInitial = false;
+
+  // Fills `s` in place and returns what should be written back, or null - the same shape
+  // as `importSiblingExclusions`, so the caller can merge the two.
+  function seedExclusionField(raw, s) {
+    if (hasOwn(raw, F4_KEY)) return null;      // set, or deliberately cleared: not ours
+    s[F4_KEY] = F4_DEFAULT;
+    var out = {};
+    out[F4_KEY] = F4_DEFAULT;
+    return out;
+  }
+
+  // One `configurePlugin` for both, once per page. The whole stored map goes back, not
+  // the keys named: `configurePlugin` replaces `plugins.<id>` rather than merging into
+  // it. Built from the `raw` this same read produced rather than through
+  // `writeOwnSettings`, which re-reads first - right for a write the user asks for
+  // minutes later, and asking the same question twice inside the read that answered it.
+  var _initialWrite = null;
+
+  function saveInitialSettings(raw, seeded, adopted, s) {
+    if (_wroteInitial || (!seeded && !adopted)) return;
+    _wroteInitial = true;
+    var input = {}, k;
+    for (k in raw) if (hasOwn(raw, k)) input[k] = raw[k];
+    for (k in seeded || {}) if (hasOwn(seeded, k)) input[k] = seeded[k];
+    for (k in adopted || {}) if (hasOwn(adopted, k)) input[k] = adopted[k];   // the import wins
+    if (adopted) {
+      var names = [];
+      for (k in adopted) if (hasOwn(adopted, k)) names.push(k);
+      console.info('[ptp2re] adopting ' + plural(names.length, 'exclusion setting') + ' from ' +
+        MPTTS_NAME + ' (' + names.join(', ') + '): this plugin had never been set to ' +
+        'anything for ' + (names.length === 1 ? 'it' : 'them') + '. Change them here from now on.');
+    }
+    // An operation name of its own, which is what the fetch wrapper below tells it apart
+    // by: an ordinary settings save has to drop every cache this plugin holds, and this
+    // one must not, because what it writes is what `settingsFrom` has already returned.
+    // Unmarked, a fresh install pays for a wasted read of the whole tag library on its
+    // first page. A name we choose beats anything inferred from the body, and
+    // `CustomFieldsBulkEditor`'s `CFBE_SeedSettings` is the same idea.
+    _initialWrite = gqlRequest(
+      'mutation PTPSeedSettings($plugin_id: ID!, $input: Map!) {' +
+      '  configurePlugin(plugin_id: $plugin_id, input: $input)' +
+      '}',
+      { plugin_id: PLUGIN_ID, input: input }
+    ).then(null, function (e) {
+      _wroteInitial = false;
+      console.info('[ptp2re] the initial settings could not be saved (' +
+        (e && e.message ? e.message : e) + '). They are in force for this page all the same.');
+    });
+    // Described only where the field in force is the one this plugin named. An imported
+    // field is the sibling's, and documenting ours while theirs is configured would file
+    // a sentence against a field nothing here reads.
+    if (s[F4_KEY] === F4_DEFAULT) describeExclusionField();
+  }
+
+  // Shown on Stash's settings page from its first paint, by the same rule (Core's
+  // `showDefaults`); `saveInitialSettings` is what writes them. The sibling's exclusion filters win, as they do there.
+  showDefaults(PLUGIN_ID, function (raw, all) {
+    var out = {}, k;
+    out[F4_KEY] = F4_DEFAULT;
+    var adopted = importSiblingExclusions({}, raw, all[MPTTS_ID]) || {};
+    for (k in adopted) if (hasOwn(adopted, k)) out[k] = adopted[k];
+    return out;
+  });
+
+  // Feature-detected, never version-checked: the number on the entry is for a log line,
+  // and what decides whether to call is whether the function is there. The answer is a
+  // word - added, kept, queued - and none of them is worth interrupting anyone over, so
+  // it goes to the console under the plugin's own prefix and nowhere else.
+  function describeExclusionField() {
+    var api = coop().api && coop().api[CFBE_ID];
+    // COMPAT: a CustomFieldsBulkEditor with no `describeField`, before its 2.7.0 (since
+    // PropagateTagsAndPerformers 3.13.0); remove when never on its own: the sibling is
+    // optional, and an install may keep an old one.
+    if (!api || typeof api.describeField !== 'function') return;
+    api.describeField(F4_DEFAULT, F4_DESCRIPTION).then(function (outcome) {
+      if (outcome === 'added') {
+        console.info('[ptp2re] described the custom field "' + F4_DEFAULT + '" in ' + CFBE_ID +
+          '\u2019s description store.');
+      } else if (outcome === 'queued') {
+        console.info('[ptp2re] a description for "' + F4_DEFAULT + '" is waiting for ' + CFBE_ID +
+          '\u2019s description store - open "Manage Custom Field Descriptions and Locks..." and ' +
+          'press Apply to file it.');
+      }
+    }, function () { /* a sentence is not worth an error */ });
+  }
+
+  // One raw settings map, filled in from the defaults, migrated if this install
+  // predates the path string, given the sibling's exclusion filters where it has
+  // never had its own, with the parsed modes hung off the result so nothing
+  // downstream parses it twice.
+  function settingsFrom(raw, sibling) {
+    var s = {};
+    for (var k in DEFAULTS) {
+      if (!hasOwn(DEFAULTS, k)) continue;
+      s[k] = typeof DEFAULTS[k] === 'boolean' ? !!raw[k] : (raw[k] || '');
+    }
+    // COMPAT: the per-path booleans before `b1Paths` (since PropagateTagsAndPerformers 3.0.0);
+    // remove when `LEGACY_PATH` goes. Written back after the initial write is sent.
+    var migrate = false;
+    if (!String(s.b1Paths).replace(/^\s+|\s+$/g, '') && hasLegacyPaths(raw)) {
+      s.b1Paths = formatPaths(legacyPaths(raw));
+      migrate = true;
+    }
+    s.paths = parsePaths(s.b1Paths);
+    // COMPAT: `a1ShowManualButtons`, the one switch for every button before `a1ManualButtons`
+    // (since PropagateTagsAndPerformers 5.0.0); remove when never on its own: an install may
+    // skip releases. On, every button starts on. Read-side only - the dialog's first Save writes the old key false in the same
+    // write, which is what stops a saved "none" coming back as "all".
+    if (!String(s.a1ManualButtons).replace(/^\s+|\s+$/g, '') && raw.a1ShowManualButtons) {
+      var every = {};
+      manualButtons().forEach(function (b) { every[b.key] = true; });
+      s.a1ManualButtons = formatButtons(every);
+    }
+    s.buttons = parseButtons(s.a1ManualButtons);
+    // COMPAT: `a3AutoOnTargetUpdate` / `a4AutoOnSourceUpdate`, a switch per auto-mode before
+    // `a3AutoPropagation` (since PropagateTagsAndPerformers 5.0.1); remove when never on its
+    // own: an install may skip releases. On, that mode starts on. Read-side only, and
+    // retired by the auto dialog's first Save, for the reason above.
+    if (!String(s.a3AutoPropagation).replace(/^\s+|\s+$/g, '')) {
+      var was = {};
+      if (raw.a3AutoOnTargetUpdate) was.target = true;
+      if (raw.a4AutoOnSourceUpdate) was.source = true;
+      s.a3AutoPropagation = formatAuto(was);
+    }
+    s.auto = parseAuto(s.a3AutoPropagation);
+    // The seed goes first and the import may then replace what it seeded - which is
+    // what makes a sibling's own field name win while the default still lands for
+    // everyone else. Both write the same key, so they are merged into **one**
+    // `configurePlugin`: two writes racing would have the second re-read a map the
+    // first had not landed in yet, and drop it.
+    var seeded = seedExclusionField(raw, s);
+    var adopted = importSiblingExclusions(s, raw, sibling);
+    saveInitialSettings(raw, seeded, adopted, s);
+    if (migrate) migrateLegacyPaths(s.b1Paths);
+    return s;
+  }
+
+  // `fresh`: past the answer every plugin shares - a task or dialog opening, which must
+  // see a change another tab saved a moment ago.
+  function loadSettings(fresh) {
+    return pluginConfig(fresh).then(function (data) {
+      var all = (data.configuration || {}).plugins || {};
+      return { settings: settingsFrom(all[PLUGIN_ID] || {}, all[MPTTS_ID]), all: all };
+    });
+  }
+
+  // ── Styles ────────────────────────────────────────────────────────────────
+
+  var CSS =
+    // Kept literally identical to NormalizeParentTags' CSS and
+    // MergePerformerTagsToScenes' TASK_CSS wherever the three dialogs overlap, down
+    // to the hex values. They are separate strings because the plugins share no
+    // module, not because they are meant to look different - and two of them did
+    // drift, from #202b33 to #30404d, because nothing compared them. `style` pins
+    // the overlap now, across all three. #202b33 is Blueprint's dark-gray2, the step
+    // Stash's own page uses; every dim gray in these dialogs was chosen against it -
+    // the log's #a7b6c2 and #7d8f9c - and they separate better on it than on the
+    // lighter #30404d.
+    '.ptp2re-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
+    'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
+    '.ptp2re-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
+    'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
+    // A plugin-local modifier beside the pinned shared `.modal` rule, the pattern
+    // `CustomFieldsBulkEditor`'s `.cfbe-tall` set: the shared width is sized for log
+    // lines naming an entity, an id and two values, and the path dialog holds two
+    // columns of short labels instead. Widening past what they need only pushes each
+    // select further from the label it belongs to.
+    '.ptp2re-modal.ptp2re-narrow{width:min(58rem,94vw);}' +
+    '.ptp2re-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
+    '.ptp2re-title{font-size:1.1rem;font-weight:600;}' +
+    '.ptp2re-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.ptp2re-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.ptp2re-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.ptp2re-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
+    'white-space:pre-wrap;}' +
+    '.ptp2re-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;' +
+    'font-size:.8rem;line-height:1.35;min-height:14rem;}' +
+    '.ptp2re-line{white-space:pre-wrap;word-break:break-word;}' +
+    // An entity named in the log is a link to it. The same blue the siblings' result
+    // lines use, underlined only on hover so a log full of them does not read as a
+    // page of underlines.
+    '.ptp2re-elink{text-decoration:none;}' +
+    '.ptp2re-elink:hover{text-decoration:underline;}' +
+    // A tag or performer named in the log opens a card on hover. The shared `.tipbox`
+    // rule cannot do this job: it is absolutely positioned inside its trigger, and the
+    // log is an `overflow:auto` box that would clip it against its own top edge. This
+    // one is `position:fixed` and placed from the pointer, so it is never clipped -
+    // and it holds an image, which a `title` cannot.
+    // A name in the log that opens a card says so with the cursor. The card itself is
+    // the shared `.gttx-tipbox`, which is why nothing else about it is styled here.
+    '.ptp2re-hover{cursor:help;}' +
+    // The path toggles: the whole body of the settings dialog, in three columns of
+    // label-and-button. Each column is a grid of its own rather than the whole panel
+    // being one six-column grid, because a shared grid sizes every label column to
+    // the widest label in any of them - and the rows are `display:contents` so each
+    // row's two cells are its own column's.
+    //
+    // `max-content` on both, not `1fr auto`: a flexing label column stretches to the
+    // panel and leaves the select stranded at the far side of the modal, which is
+    // exactly what the first version of this did.
+    '.ptp2re-paths{display:flex;flex-wrap:wrap;gap:0 2rem;margin:.5rem 0;}' +
+    // The three bulk buttons, at the far end of the footer from Save and Cancel.
+    // `margin-left:auto` in a flex row is what puts them there, so the shared `.foot`
+    // rule is untouched; the inner `margin-right` is the same rule's spacing, which
+    // would otherwise hang off the last button past the modal's padding.
+    '.ptp2re-paths-bulk{display:flex;flex-wrap:wrap;gap:.4rem;margin-left:auto;}' +
+    '.ptp2re-paths-bulk button{margin-right:0;}' +
+    '.ptp2re-paths-col{display:grid;grid-template-columns:max-content max-content;' +
+    'gap:.3rem .6rem;align-items:center;align-content:start;}' +
+    '.ptp2re-path-row{display:contents;}' +
+    // A `null` in a column: a blank row separating two groups of paths. It spans both
+    // of the column's tracks, since a row here is two cells and half a gap would sit
+    // under the labels only.
+    '.ptp2re-path-gap{grid-column:1/-1;height:.6rem;}' +
+    // The buttons dialog: two equal columns side by side with a bar between, never
+    // one under the other - `1fr 1fr` rather than the paths dialog's wrapping flex,
+    // because two `max-content` columns of captions wrapped in the narrow modal and
+    // the second landed under the first, past the fold. Inside each, a box per page
+    // under a head of its own, with a rule between boxes.
+    '.ptp2re-btncols{display:grid;grid-template-columns:1fr 1fr;gap:0 1rem;margin:.5rem 0;}' +
+    '.ptp2re-btncol{min-width:0;}' +
+    '.ptp2re-btncol+.ptp2re-btncol{border-left:1px solid var(--gttx-border,#394b59);padding-left:1rem;}' +
+    '.ptp2re-btncol-head{color:var(--gttx-fg2,#d6dee4);font-size:1rem;font-weight:600;margin-bottom:.5rem;' +
+    'text-align:center;}' +
+    '.ptp2re-btngroup{border-top:1px solid var(--gttx-border,#394b59);padding:.4rem 0 .5rem;}' +
+    '.ptp2re-btngroup-head{color:var(--gttx-fg2,#c9d3db);font-size:.95rem;font-weight:600;margin-bottom:.3rem;}' +
+    // Inside a box the caption column takes what is left and wraps - the longest
+    // caption is two lines in the narrow modal - and the toggle column is at the
+    // column's right edge, so every On/Off lines up down the column rather than
+    // sitting wherever its caption ends. Indented a little under the head, so the
+    // head reads as the head and the rows as its rows.
+    '.ptp2re-btngroup .ptp2re-paths-col{grid-template-columns:minmax(0,1fr) max-content;' +
+    'padding-left:.6rem;}' +
+    '.ptp2re-path-name{color:var(--gttx-fg2,#d6dee4);font-size:.9rem;}' +
+    // The per-path toggle. Everything visual comes from Bootstrap's own `btn btn-sm`
+    // plus the variant the paint swaps, so this rule only has to stop thirteen buttons
+    // of five different caption widths from looking ragged: the grid column is already
+    // `max-content`, and stretching each button across it lines their edges up.
+    '.ptp2re-toggle{justify-self:stretch;white-space:nowrap;}' +
+    // The two paths that can be `common` are the only ones whose caption changes
+    // width with its state, and a `max-content` column resizes under the pointer when
+    // one does. A floor wide enough for the longest of the three captions holds them
+    // still. A floor rather than a fixed width: it can only stop the button shrinking,
+    // so a theme whose font is wider than this grows the button instead of clipping it.
+    '.ptp2re-toggle-wide{min-width:9.5rem;}' +
+    // A path nothing switched on that other enabled paths already carry end to end:
+    // the resting background, and the highlight as letters. `!important` because it is
+    // overriding `btn-secondary`'s own color, which is what the button still is.
+    '.ptp2re-toggle-auto{color:var(--gttx-highlight,#ffc107) !important;}' +
+    '.ptp2re-pathsbody{padding:.5rem 1rem;overflow:auto;}' +
+    // The one exclusion filter with no row on Stash's settings page, because the
+    // dialog is where it belongs: it is the only filter whose rule another plugin
+    // owns, and the only one whose answer changes with what that plugin is set to
+    // right now. Highlighted on the box for the reason the row it replaced was highlighted -
+    // marking a control as ours, not as one that writes.
+    '.ptp2re-opt{display:flex;align-items:flex-start;gap:.45rem;margin:.75rem 0 .25rem;' +
+    'color:var(--gttx-fg2,#d6dee4);font-size:.9rem;cursor:pointer;}' +
+    '.ptp2re-opt input{margin-top:.2rem;flex:0 0 auto;}' +
+    '.ptp2re-opt-off{opacity:.6;cursor:default;}' +
+    '.ptp2re-optnote{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;margin:0 0 .25rem 1.4rem;}' +
+    // The pick dialog's lines: a box and a plan line, the line in the log's own face.
+    // Between the settings dialogs' width and the run dialog's: a line here names an
+    // entity, a tag and where it came from, and a few of them should not wrap.
+    '.ptp2re-modal.ptp2re-mid{width:min(76rem,94vw);}' +
+    '.ptp2re-pick{display:flex;flex-direction:column;gap:2px;min-height:8rem;}' +
+    '.ptp2re-pick-row{display:flex;align-items:flex-start;gap:7px;margin:0;' +
+    'font-family:monospace;font-size:.8rem;line-height:18px;cursor:pointer;}' +
+    '.ptp2re-pick-row input{accent-color:var(--gttx-highlight,#ffc107);width:13px;height:13px;margin:3px 0 0;flex:0 0 auto;}' +
+    // ── The diagram view ────────────────────────────────────────────────────
+    //
+    // Everything on the canvas is absolutely placed from `diagramGeometry`, in the
+    // canvas' own pixels: the boxes, the chips inside them and the slots the toggles
+    // sit in. So this rule set carries no positions of its own - only what the pieces
+    // look like - and a coordinate can never be half here and half there.
+    //
+    // The canvas does not reflow. It is a graph, not a column, and there is nothing
+    // for it to wrap into; `.ptp2re-pathsbody` already scrolls, which is what a window
+    // too narrow for it gets.
+    '.ptp2re-dia{margin:.5rem 0;}' +
+    '.ptp2re-dia-legend{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;margin:0 0 .6rem;}' +
+    // Centred: the canvas is exactly as big as the picture on it, so `auto` margins
+    // put it in the middle of a dialog wider than that. While arranging too, with room
+    // all round (`DIA_EDIT_ROOM`); the canvas holds its size through a drag, since a
+    // centred canvas that grew would move everything by half the growth, under the
+    // pointer, and settles when the drag ends. The SVG draws past its edge meanwhile.
+    '.ptp2re-dia-canvas{position:relative;margin:0 auto;}' +
+    '.ptp2re-dia-canvas svg{overflow:visible;}' +
+    // A box is styled as one of Stash's own secondary buttons, by wearing the same
+    // two classes rather than by naming colors here: the theme is the user's, and
+    // `btn-secondary` is what every neutral control in these dialogs already is. Only
+    // what a button does that a box must not is overridden.
+    '.ptp2re-dia-box{position:absolute;box-sizing:border-box;padding:0;' +
+    'text-align:left;cursor:default;pointer-events:none;}' +
+    // What the box is doing: orange written into, blue read out of, black neither. The
+    // repo's two colors - the one that means "this plugin writes" and the one that
+    // means it only reads - used for exactly what they mean elsewhere. `!important`
+    // because all three override `btn-secondary`'s own border, which is what the box
+    // still is.
+    '.ptp2re-dia-live{border-color:#ffb648 !important;}' +
+    '.ptp2re-dia-gives{border-color:#48aff0 !important;}' +
+    '.ptp2re-dia-idle{border-color:#000 !important;}' +
+    '.ptp2re-dia-name{padding:.25rem .55rem;font-weight:600;font-size:.9rem;}' +
+    // The two chips are the arrows' anchors as well as the box's contents, so they
+    // carry the arrow colors: what a line moves is readable at both ends of it.
+    '.ptp2re-dia-chip{position:absolute;box-sizing:border-box;pointer-events:none;' +
+    'border:1px solid;' +
+    'border-radius:10px;background:var(--gttx-bg,#202b33);font-size:.75rem;line-height:18px;' +
+    'text-align:center;}' +
+    '.ptp2re-dia-tags{color:#84d68a;border-color:#84d68a;}' +
+    '.ptp2re-dia-performers{color:var(--gttx-accent,#7cc4ff);border-color:var(--gttx-accent,#7cc4ff);}' +
+    // The point the geometry returns is the middle of the button, not its corner:
+    // where a toggle sits on its curve is a fact about the curve, and its width is a
+    // fact about its caption.
+    '.ptp2re-dia-slot{position:absolute;transform:translate(-50%,-50%);' +
+    'white-space:nowrap;}' +
+    '.ptp2re-dia-slot button{margin:0;}' +
+    // Arranging mode, on only while the console flag is set. `touch-action:none` is
+    // what stops a drag on a touch screen scrolling the dialog instead of moving a
+    // box; `pointer-events:none` on the button is what lets the slot under it take
+    // the drag, and is why nothing has to swallow the click a drag would otherwise
+    // end in. A chip is part of the box behind it for the same reason.
+    '.ptp2re-dia-editing .ptp2re-dia-box,.ptp2re-dia-editing .ptp2re-dia-slot' +
+    '{cursor:move;touch-action:none;pointer-events:auto;}' +
+    '.ptp2re-dia-editing .ptp2re-dia-box{border-style:dashed;}' +
+    '.ptp2re-dia-editing .ptp2re-dia-slot>button{pointer-events:none;}' +
+    '.ptp2re-dia-edit{display:flex;flex-wrap:wrap;gap:.4rem;align-items:center;' +
+    'margin:0 0 .6rem;}' +
+    '.ptp2re-dia-edit button{margin-right:0;}' +
+    '.ptp2re-dia-edithint{color:var(--gttx-highlight,#ffc107);font-size:.8rem;margin-right:.4rem;}' +
+    '.ptp2re-dia-edit .ptp2re-hidden{display:none;}' +
+    // The enabled paths as the settings row shows them. Prose rather than the
+    // sibling's monospace: what is rendered here is `pathLabel`, the same sentence
+    // the log uses, not the tokens the setting stores.
+    //
+    // Three columns, filled top to bottom - `grid-auto-flow: column` over a row count
+    // `renderPathString` sets, since the stylesheet cannot know how many paths are on.
+    // `max-content` columns and `justify-content: start` so the block is only as wide
+    // as the entries in it: with equal columns the longest entry would set all three.
+    '.ptp2re-pathstring{font-family:var(--font-family-sans-serif,var(--bs-font-sans-serif,sans-serif));font-size:.85rem;color:var(--gttx-muted,#a7b6c2);margin:.25rem 0 .5rem;}' +
+    '.ptp2re-pathstring-list{display:grid;grid-auto-flow:column;' +
+    'grid-auto-columns:max-content;justify-content:start;gap:.1rem 1.5rem;}' +
+    // Highlighted for the same reason the selectors are: a path that is on is one this
+    // plugin writes along. The mode in brackets stays gray - it qualifies the line
+    // rather than being a second thing that is on.
+
+    // The buttons row: a column per side, each a line per page, wrapping rather than
+    // growing - the three-column list overflowed the row with twenty-four captions, as it would with twenty-six.
+    '.ptp2re-btnstring{display:grid;grid-template-columns:1fr 1fr;gap:.1rem 1.5rem;}' +
+    '.ptp2re-btnstring>div{min-width:0;}' +
+    '.ptp2re-btnstring-head{color:var(--gttx-dim,#7d8f9c);font-size:.8rem;}' +
+    '.ptp2re-pathstring-mode{color:var(--gttx-muted,#a7b6c2);font-size:.8rem;}' +
+    // The row's own "I could not read this" line. The stale banner's red, because it
+    // is the same kind of message: something is configured and not in force.
+    '.ptp2re-pathstring-warn{color:#ff7373;}' +
+    '.ptp2re-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
+    'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
+    'font-weight:600;}' +
+    // The log's own line kinds, which the siblings do not share: this plugin adds
+    // both tags and performers, so ADD alone would not say which.
+    '.ptp2re-ERROR{color:#ff7373;} .ptp2re-WARN{color:var(--gttx-highlight,#ffc107);} .ptp2re-TAG{color:#84d68a;}' +
+    '.ptp2re-PERF{color:var(--gttx-accent,#7cc4ff);} .ptp2re-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.ptp2re-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
+    'flex-wrap:wrap;align-items:center;}' +
+    '.ptp2re-foot button{margin-right:.5rem;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.ptp2re-hidden{display:none !important;}' +
+    // Our own source-button row, under the tab strip on the pages that render no
+    // detail action row (Scene, Gallery, and Image if it is the same). This is the one
+    // container in the plugin Stash puts nothing into, so there is no neighbour to
+    // measure a gap off and none of `applyButtonSpacing`'s branches apply - the row
+    // spaces its own children instead, which is the `column-gap` case that helper
+    // already knows to keep its hands off. `.5rem` top separates it from the tabs it
+    // sits under; `flex-wrap` because Scene can offer several at once.
+    '.ptp2re-src-row{display:flex;flex-wrap:wrap;column-gap:.5rem;row-gap:.25rem;' +
+    'margin:.5rem 0;}' +
+    // Stash's own .sub-heading is white-space: normal, so the newlines in this
+    // plugin's description would collapse into one paragraph. Scoped to the group we
+    // marked, never to .sub-heading at large: another plugin's description is not
+    // ours to reflow, and it may well have been written for the collapse.
+    // pre-wrap is the fallback for a description we have not split yet - a blank
+    // line renders as a blank line. Once split, the paragraphs are divs and the gap
+    // is this margin instead: roughly a third of a line, not a whole one.
+    '.ptp2re-own-group .sub-heading{white-space:pre-wrap;}' +
+    '.ptp2re-own-group .sub-heading .ptp2re-p{margin:0 0 .35em;}' +
+    '.ptp2re-own-group .sub-heading .ptp2re-p:last-child{margin-bottom:0;}' +
+    // A per-setting description shows its first paragraph and hides the rest in a
+    // tooltip. The mark is the only thing saying there is one - a hover that opens
+    // with no invitation is a hover nobody makes.
+    //
+    // Built rather than borrowed: a native `title` is the browser's, and its font
+    // size, its position and its delay cannot be reached from CSS. It opens
+    // *below-right* of the pointer, which is exactly where the arrow sits, so the
+    // first line arrives half covered. This one opens above the row in a readable
+    // size, and - the part `title` could never do - on keyboard focus as well.
+    //
+    // These rules are shared with both sibling plugins and `.tests/style.test.js`
+    // compares them with the prefix stripped: keep them byte-identical, or change
+    // all three together.
+    '.ptp2re-tipped{position:relative;}' +
+    '.ptp2re-tip{margin-left:.35rem;cursor:pointer;opacity:.65;font-style:normal;' +
+    'font-size:1.05em;}' +
+    '.ptp2re-tip:hover,.ptp2re-tip:focus{opacity:1;outline:none;}' +
+    // pointer-events:none is load-bearing, not tidiness. Opened from the setting's
+    // name the box lands over the h3, so a box that took the pointer would fire
+    // mouseleave on the name, close, hand the pointer back to the name, and reopen -
+    // a flicker loop for as long as it is hovered.
+    '.ptp2re-tipbox{display:none;position:absolute;left:0;bottom:calc(100% + .35rem);' +
+    'z-index:1500;width:max-content;max-width:100%;padding:.5rem .65rem;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
+    'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.ptp2re-tipped.ptp2re-tip-open .ptp2re-tipbox{display:block;}' +
+    // The group description sits in the group header, outside the <Collapse>, so it
+    // is on screen at whatever size whether the group is expanded or not. Hiding all
+    // but the first paragraph is the only thing that shortens it.
+    '.ptp2re-desc-collapsed .ptp2re-p:not(:first-child){display:none;}' +
+    '.ptp2re-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
+    'text-decoration:underline;}' +
+    // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
+    // picture. Fixed to the viewport and placed from the node, because the logs these
+    // open over are `overflow:auto` boxes that would clip a positioned child against
+    // their own top edge. `pointer-events:none` is load-bearing: a box that took the
+    // pointer would fire mouseleave on the node, close, hand the pointer back and
+    // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
+    // box and it belongs to none of them.
+    '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.gttx-tipbox.gttx-tip-open{display:block;}' +
+    '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
+    // The exclusion tag's own row, when the name in it names something. A link, so
+    // the tag is one click away and the name beside it can be selected; the same blue
+    // the dialog's own entity links use, which is the only other place this plugin
+    // links out of.
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
+    // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
+    // unprefixed class in this repo besides the Reload UI button's id, and for the
+    // same reason - five plugins draw the identical mark.
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
+    // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
+    // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
+    // so the first line arrived half covered, and nothing in CSS can move a tooltip the
+    // browser owns.
+    //
+    // **`position:fixed`, placed from the mark's own rect** - which is the second answer,
+    // not the first. It was `position:absolute` against the wrapper, and that failed in
+    // both of the ways an absolutely positioned box can: an inline `<span>` is a poor
+    // containing block, and Stash's settings card clips what overflows it, so the box
+    // landed in the corner of the page and was cut off by the section edge. Fixed to the
+    // viewport is the one position nothing on the page can clip, and it is the same
+    // conclusion - and the same `tipPlace` arithmetic - the shared entity card reached
+    // about a scrolling log.
+    //
+    // `pointer-events:none` is load-bearing, not tidiness: a box that took the pointer
+    // would fire mouseleave on the mark, close, hand the pointer back and reopen.
+    '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
+    'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
+    'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
+    'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
+    '.ptp2re-tagicon{margin-left:.9rem;text-decoration:none;}' +
+    '.ptp2re-tagicon:hover{text-decoration:underline;}' +
+    '.ptp2re-choices{display:flex;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.75rem 1rem;}';
+
+  function injectStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    var style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = CSS;
+    (document.head || document.body || document.documentElement).appendChild(style);
+  }
+
+  function button(label, className) {
+    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
+    b.type = 'button';
+    return b;
+  }
+
+  // ── The dialog shell ──────────────────────────────────────────────────────
+  //
+  // Every dialog here: a backdrop, the modal (`size` is its width modifier, or null)
+  // and a head carrying the title. The head is returned for the lines each dialog puts
+  // under its title; `dialogOpen` goes last, once the footer is in.
+  function dialogShell(dlg, size, title) {
+    injectStyle();
+    dlg.backdrop = el('div', 'ptp2re-backdrop');
+    dlg.modal = el('div', 'ptp2re-modal' + (size ? ' ' + size : ''));
+    dlg.backdrop.appendChild(dlg.modal);
+    var head = el('div', 'ptp2re-head');
+    head.appendChild(el('div', 'ptp2re-title', PLUGIN_SHORT_NAME + ' - ' + stripEllipsis(title)));
+    dlg.modal.appendChild(head);
+    return head;
+  }
+
+  // Escape acts through whichever of Close/Cancel the footer is showing (Core's
+  // `wireEscape`), never by calling `close()` itself: mid-write, where both are hidden,
+  // the key does nothing. Two dialogs can be up at once - Path Settings over the run, a
+  // pick over either - and only the topmost answers. On `document`, since the modal is
+  // not focusable; removed in `dialogClose`.
+  function dialogOpen(dlg) {
+    wireEscape(dlg, 'ptp2re');
+    document.body.appendChild(dlg.backdrop);
+  }
+
+  function dialogClose(dlg) {
+    unwireEscape(dlg);
+    if (dlg.backdrop && dlg.backdrop.parentNode) dlg.backdrop.parentNode.removeChild(dlg.backdrop);
+  }
+
+  // The three settings dialogs (Path Settings, Manual Buttons Settings, Auto-Propagation):
+  // the head's warning and legend, a note that reads the setting, an empty body, and a
+  // footer of Save - orange, the button that writes, held until something moved - and
+  // Cancel. Returns the footer, for the dialog's own buttons.
+  function settingsShell(dlg, warn, legend) {
+    var head = dialogShell(dlg, 'ptp2re-narrow', dlg.taskName);
+    head.appendChild(el('div', 'ptp2re-warn', warn));
+    head.appendChild(el('div', 'ptp2re-legend', legend));
+    dlg.noteEl = el('div', 'ptp2re-note', 'Reading the current setting...');
+    head.appendChild(dlg.noteEl);
+    dlg.body = el('div', 'ptp2re-pathsbody');
+    dlg.modal.appendChild(dlg.body);
+    var foot = el('div', 'ptp2re-foot');
+    dlg.saveBtn = button('Save', 'ptp2re-proceed');
+    dlg.saveBtn.className = dlg.saveBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    dlg.cancelBtn = button('Cancel', 'ptp2re-cancel');
+    dlg.saveBtn.disabled = true;
+    dlg.saveBtn.addEventListener('click', function () { dlg.save(); });
+    dlg.cancelBtn.addEventListener('click', function () { dlg.close(); });
+    foot.appendChild(dlg.saveBtn);
+    foot.appendChild(dlg.cancelBtn);
+    dlg.modal.appendChild(foot);
+    return foot;
+  }
+
+  // Their Save. Cancel goes with Save while the write is out, and Escape acts through
+  // Cancel: mid-write the honest answer is nothing, and a key that abandoned a save in
+  // flight would leave the user with no report of whether it landed. `write` starts the
+  // write; `live` says whether the dialog is still the open one when it answers.
+  function saveDialog(dlg, write, live, onSaved) {
+    if (dlg.saving || dlg.saveBtn.disabled) return;
+    dlg.saving = true;
+    dlg.saveBtn.disabled = true;
+    dlg.cancelBtn.disabled = true;
+    dlg.enable(false);
+    dlg.noteEl.textContent = 'Saving...';
+    write().then(function () {
+      if (!live()) return;
+      if (onSaved) onSaved();
+      dlg.close();
+    }, function (e) {
+      dlg.saving = false;
+      if (!live()) return;
+      dlg.refreshSave();
+      dlg.cancelBtn.disabled = false;
+      dlg.enable(true);
+      dlg.noteEl.textContent = 'The setting could not be saved: ' +
+        (e && e.message ? e.message : e);
+    });
+  }
+
+  // ── Is this script the one Stash has installed? ───────────────────────────
+  //
+  // "Reload plugins" re-reads the plugin folder on the server; it cannot replace a
+  // script this page already fetched and executed. So the manifest can say one
+  // version while the browser is still running the one before it, and every surface
+  // Stash renders - the
+  // version beside the plugin name included - shows the new number, because they all
+  // come from the manifest over GraphQL. Comparing the two is the only way the
+  // script can notice it is the stale one.
+  //
+  // Resolves to null wherever the answer is unknown: a Stash too old for the field,
+  // a plugin it cannot see, a failed request. Unknown is not a mismatch, and a run
+  // must never be blocked because one more query failed.
+  //
+  // It catches only what a version bump makes visible. Editing the file without
+  // bumping it leaves both numbers equal and this check blind - which is the
+  // practical reason the repo bumps a digit on every change. The question itself is
+  // Core's `installedVersion`.
+  //
+  // The two quiet outcomes are settled here, on the console next to the load banner:
+  // a matching version is the boring case and the dialog's log is about the library,
+  // not about itself.
+  function checkInstalledVersion(onMismatch) {
+    return installedVersion(PLUGIN_ID, 'PTP2REPluginVersion').then(function (installed) {
+      if (!installed) {
+        console.info('[ptp2re] version check: Stash reported no installed version; running ' +
+          PLUGIN_VERSION + '.');
+        return;
+      }
+      if (installed === PLUGIN_VERSION) {
+        console.info('[ptp2re] version check: running ' + PLUGIN_VERSION + ', which is what is installed.');
+        return;
+      }
+      onMismatch(installed);
+    });
+  }
+
+  // ── Describing the configuration ──────────────────────────────────────────
+
+  // The exclusion filters in force, named in the dialog before anything is planned.
+  // A run whose filters are not what the user thinks they are is a run whose plan
+  // cannot be read.
+  function describeFilters(s) {
+    var out = [];
+    var tag = (s.f1ExcludeTargetWithTagName || '').trim();
+    if (tag) out.push('entities tagged "' + tag + '" are skipped');
+    if (s.f2ExcludeTargetOrganized) out.push('entities marked Organized are skipped');
+    if (s.f3ExcludeTagWithIgnoreAutoTag) out.push('tags set to Ignore Auto Tag are never copied');
+    var field = (s.f4ExcludeTagWithCustomFieldName || '').trim();
+    if (field) out.push('tags carrying the custom field "' + field + '" are never copied');
+    var terms = splitTerms(s.f6ExcludeTagNameContains, (s.f7TagNameSeparator || '').trim());
+    if (terms.length) out.push('tags whose name contains "' + terms.join('", "') + '" are never copied');
+    var under = (s.f8ExcludeTagSubtreeName || '').trim();
+    if (under) out.push('"' + under + '" and every tag under it are never copied');
+    return out;
+  }
+
+  // Both halves of a reversible pair enabled at once. Under the task this is
+  // harmless - each direction is applied once, in a fixed order - but the *result*
+  // is that every member of the pair converges on the same set, and a user who
+  // enabled each half because it looked reasonable alone will not expect that. So it
+  // is said out loud rather than prevented.
+  function pairedBoth(enabled) {
+    var on = {};
+    enabled.forEach(function (p) { on[p.id] = true; });
+    var seen = {}, out = [];
+    enabled.forEach(function (p) {
+      if (!p.pair || !on[p.pair] || seen[p.pair]) return;
+      seen[p.id] = true;
+      out.push(p);
+    });
+    return out;
+  }
+
+  // ── Tags: the one query every run makes ───────────────────────────────────
+  //
+  // Tags are named from here rather than from the entity queries: a run's log names
+  // tens of tags out of a walk that reads tens of thousands of entities, and
+  // carrying `name` on every tag of every source would be a payload nothing reads.
+  // The same query answers the two tag-level filters.
+  //
+  // `custom_fields` is requested only when that filter is configured - it is a free
+  // JSON map per tag and dead weight otherwise.
+  function tagQuery(s) {
+    var fields = 'id name sort_name ignore_auto_tag';
+    // Only when the exclusion box holds something: `aliases` is a list per tag, and
+    // asking for it across the whole library to answer a question nobody has posed
+    // is the same dead weight `custom_fields` is below.
+    var under = (s.f8ExcludeTagSubtreeName || '').trim();
+    if ((s.f1ExcludeTargetWithTagName || '').trim() || under) fields += ' aliases';
+    if ((s.f4ExcludeTagWithCustomFieldName || '').trim()) fields += ' custom_fields';
+    // The subtree filter walks the hierarchy, and only it does.
+    if (under) fields += ' parents { id }';
+    return 'query PTPTags { findTags(filter: { per_page: -1 }) { tags { ' + fields + ' } } }';
+  }
+
+  function buildTagMap(tags) {
+    var byId = {};
+    tags.forEach(function (t) { byId[String(t.id)] = t; });
+    return byId;
+  }
+
+  // ── Naming things in the log ──────────────────────────────────────────────
+  //
+  // `title` is optional on scenes, galleries and images, so Core's `displayName` falls
+  // back to whichever of the file fields the query asked for - read off what is present
+  // rather than switched on the target type.
+  function entityLabel(target, ent) {
+    return TARGETS[target].label + ' "' + (displayName(ent) || 'untitled') + '" (' + ent.id + ')';
+  }
+
+  // Where an entity of each type lives in Stash's UI. `TARGETS[].route` is a regex for
+  // reading an id *out* of a path and cannot be run backwards, so this is a table of its
+  // own. A Marker is deliberately absent: it has no page to open, which is the same fact
+  // that gives it no source button.
+  var ROUTES = {
+    scene: '/scenes/', gallery: '/galleries/', image: '/images/', group: '/groups/',
+    performer: '/performers/', studio: '/studios/', tag: '/tags/',
+  };
+
+  function entityHref(type, id) {
+    return ROUTES[type] ? ROUTES[type] + id : null;
+  }
+
+  // The shared card is keyed by the plural Stash puts in a URL; every table in this
+  // plugin is singular, so the plural is read off the route (`galleries`, not a singular
+  // plus an `s`). Said once here rather than at each call site - and answering null for a
+  // Marker, which has no page and no by-id query to ask about it either.
+  function tipType(type) { return ROUTES[type] ? ROUTES[type].slice(1, -1) : null; }
+
+  // The entity a copy came *from*, for the log line. Same shape as a target's label so
+  // the two read as one sentence, and same fallback chain, since four of the seven
+  // source types are targets.
+  function sourceLabel(tagMap, src, path) {
+    var s = SOURCES[path.sourceType];
+    var name = displayName(src);
+    // Stash shows a titleless marker by its primary tag, which is the name the user
+    // will recognise on the scene. Only the marker paths select it.
+    if (!name && src.primary_tag && src.primary_tag.id != null) {
+      name = tagName(tagMap, src.primary_tag.id);
+    }
+    return (s ? s.label : 'Source') + ' "' + (name || 'untitled') + '" (' + src.id + ')';
+  }
+
+  // What a scoped run's title calls the entity the click was made on. `entityLabel`'s
+  // shape, keyed off whichever table knows the type - three source types are not
+  // targets, and the four that are share one entry, so `SOURCES` first covers all
+  // seven without a branch.
+  //
+  // A query for a title, and it earns it: the dialog used to say "Group 57", which
+  // names the one thing about that group the user cannot recognise and would have to
+  // navigate away to look up. It is the same by-id lookup the source probe already
+  // makes, and it is asked while a dialog opens on a scan that will make dozens.
+  //
+  // Falls back to the bare label and id on a failure, rather than rejecting: a dialog
+  // that cannot name its scope should still open. It is a title.
+  // One entity by id. Every type has a single-entity query but a scene marker: Stash names
+  // that one `findSceneMarkers`, a list filtered by `ids` - there is no `findSceneMarker`.
+  // So the query is written, and its answer read back, in one place.
+  function byIdQuery(opName, one, sel) {
+    if (one === 'findSceneMarker') {
+      return 'query ' + opName + '($id: ID!) { findSceneMarkers(ids: [$id]) { scene_markers { ' +
+        sel + ' } } }';
+    }
+    return 'query ' + opName + '($id: ID!) { ' + one + '(id: $id) { ' + sel + ' } }';
+  }
+
+  function byIdResult(data, one) {
+    if (one === 'findSceneMarker') {
+      return ((((data || {}).findSceneMarkers) || {}).scene_markers || [])[0] || null;
+    }
+    return (data || {})[one] || null;
+  }
+
+  function scopeLabel(type, id) {
+    var d = SOURCES[type] || TARGETS[type];
+    if (!d) return Promise.resolve(type + ' ' + id);
+    return gqlRequest(byIdQuery('PTP_scopename', d.one, d.fields), { id: String(id) }
+    ).then(function (data) {
+      var ent = byIdResult(data, d.one);
+      return d.label + ' "' + ((ent && displayName(ent)) || 'untitled') + '" (' + id + ')';
+    }, function () {
+      return d.label + ' ' + id;
+    });
+  }
+
+  // How many entities beyond the named one carried the same thing. The count is over
+  // the sources of the path that supplied it first, not over every path: a tag on a
+  // scene from both its studio and a performer is one addition, attributed to whichever
+  // path reached it, and counting across paths would mean holding attribution for
+  // additions that were never made.
+  //
+  // Three fields rather than the one string this was, because the log links the named
+  // entity: the link covers `label`, and `more` stays outside it - ", +2 more" names no
+  // page, and a link that swallowed it would promise one. `href` is null for a Marker,
+  // which has no page at all, and the line then reads as plain text with nothing else
+  // changed.
+  function fromLabel(src, sources) {
+    return {
+      label: src.label,
+      href: src.href,
+      ent: src.ent,
+      more: sources > 1 ? ', +' + (sources - 1) + ' more' : '',
+    };
+  }
+
+  // The whole attribution as text, for a console line and for Copy log.
+  function fromText(from) { return from.label + from.more; }
+
+  function tagName(tagMap, id) {
+    var t = tagMap[String(id)];
+    return t ? t.name : null;
+  }
+
+  function tagLabel(tagMap, id) {
+    return 'Tag "' + (tagName(tagMap, id) || 'unknown') + '" (' + id + ')';
+  }
+
+  function performerLabel(names, id) {
+    return 'Performer "' + (names[String(id)] || 'unknown') + '" (' + id + ')';
+  }
+
+  // Stash orders tags by COALESCE(sort_name, name) under NATURAL_CI, so the recap
+  // reads straight against the tag list in the UI: sort_name wins where it is set
+  // (it is nullable and exists only to override the name for sorting, so a blank one
+  // is no override), compared case-insensitively with numeric runs as numbers -
+  // hence "Volume 2" before "Volume 10". The id is the final tie-break, because two
+  // tags in different parts of the hierarchy may share a name.
+  var _collator = null;
+  function collator() {
+    if (_collator) return _collator;
+    try {
+      _collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'accent' });
+    } catch (e) {
+      // Without Intl this degrades to a case-insensitive compare rather than
+      // throwing: a recap in the wrong order beats no recap.
+      _collator = { compare: function (a, b) {
+        var x = String(a).toLowerCase(), y = String(b).toLowerCase();
+        return x < y ? -1 : (x > y ? 1 : 0);
+      } };
+    }
+    return _collator;
+  }
+
+  function sortKey(tagMap, id) {
+    var t = tagMap[String(id)];
+    if (!t) return String(id);
+    return (t.sort_name && String(t.sort_name).trim()) || t.name || String(id);
+  }
+
+  function numericId(a, b) {
+    var x = parseInt(a, 10), y = parseInt(b, 10);
+    if (!isNaN(x) && !isNaN(y) && x !== y) return x - y;
+    return String(a) < String(b) ? -1 : (String(a) > String(b) ? 1 : 0);
+  }
+
+  // ── The exclusion filters ─────────────────────────────────────────────────
+  //
+  // Two levels, and they answer different questions. Entity-level skips a whole
+  // target; tag-level refuses one tag wherever it would land.
+  //
+  // Note what tag-level filters cannot do: a *performer* has no "Ignore Auto Tag"
+  // and no custom fields on the relationship, so the two performer paths are
+  // governed by the entity-level filters alone. The settings say "tags" for that
+  // reason.
+  function makeFilters(s, tagMap, excludeTagId, under) {
+    var wantCustom = (s.f4ExcludeTagWithCustomFieldName || '').trim();
+    var ignoreAuto = !!s.f3ExcludeTagWithIgnoreAutoTag;
+    var terms = splitTerms(s.f6ExcludeTagNameContains, (s.f7TagNameSeparator || '').trim());
+    return {
+      excludeTagId: excludeTagId,
+      // Why a tag was refused, or null. A reason rather than a boolean so the log
+      // can say which filter did it - and so nothing has to re-implement the rules
+      // to explain them.
+      tagBlocked: function (id) {
+        if (excludeTagId && String(id) === String(excludeTagId)) {
+          // Copying the "skip this entity" tag onto things would permanently exclude
+          // whatever received it, and nothing here ever removes a tag.
+          return 'it is the exclusion tag';
+        }
+        var t = tagMap[String(id)];
+        if (!t) return null;
+        if (ignoreAuto && t.ignore_auto_tag) return 'Ignore Auto Tag is set';
+        if (wantCustom && t.custom_fields && hasOwn(t.custom_fields, wantCustom)) {
+          return 'it carries the custom field "' + wantCustom + '"';
+        }
+        var term = terms.length ? nameMatchesAny(t.name || '', terms) : null;
+        if (term) return 'its name contains "' + term + '"';
+        if (under && under.ids[String(id)]) {
+          return 'it is "' + tagName(tagMap, under.rootId) + '" or a tag under it';
+        }
+        return null;
+      },
+      // Whole target skipped, or null.
+      entityBlocked: function (target, ent) {
+        if (s.f2ExcludeTargetOrganized && TARGETS[target].organized && ent.organized) {
+          return 'it is marked Organized';
+        }
+        if (excludeTagId) {
+          var tags = ent.tags || [];
+          for (var i = 0; i < tags.length; i++) {
+            if (String(tags[i].id) === String(excludeTagId)) return 'it carries the exclusion tag';
+          }
+        }
+        return null;
+      },
+    };
+  }
+
+  // The id of the "skip entities carrying this" tag, or null when none is configured.
+  //
+  // Throws when the name is set and no such tag exists, and both callers - the task's
+  // scan and an auto-mode reaction - let it stop them. Running unfiltered would copy
+  // onto the very entities the user asked to protect, and nothing here ever removes
+  // anything, so refusing is the safe direction. The sibling does the same.
+  // **The one rule two callers resolve by**, written once: the run resolves against the
+  // tag list it already has in hand, and the settings row against a query - two sources
+  // of tags, and the same question asked of both. A second copy of the rule is exactly
+  // the drift that would let a link promise a tag the run then refuses.
+  //
+  // Exact and case-sensitive, with none of the SQL LIKE wildcard trouble a name query
+  // brings (Stash compiles EQUALS to LIKE, where _ and % are wildcards). **Every name
+  // is tried before any alias**: a tag called X and a different tag carrying X as an
+  // alias is a library the user can build, and the one they named is the one they
+  // meant. Two passes rather than one loop with a remembered fallback, because the
+  // loop's answer would depend on the order the list happens to arrive in.
+  //
+  // Aliases are matched on the same terms as the name because Stash shows them beside
+  // it and refuses to let two tags share one, so a box holding an alias names exactly
+  // one tag - and refusing it would send the user to look up a spelling nothing else in
+  // Stash made them use. The raw `aliases`, not `aliasList`: that one collapses
+  // whitespace for display, and a match here has to be the comparison the name gets.
+  function pickTagByNameOrAlias(tags, wanted) {
+    var i;
+    for (i = 0; i < tags.length; i++) if (tags[i] && tags[i].name === wanted) return tags[i];
+    for (i = 0; i < tags.length; i++) {
+      if (tags[i] && ((tags[i].aliases || []).indexOf(wanted) !== -1)) return tags[i];
+    }
+    return null;
+  }
+
+  function resolveExclusionTagId(settings, tagMap) {
+    var wanted = (settings.f1ExcludeTargetWithTagName || '').trim();
+    if (!wanted) return null;
+    var hit = tagIdByNameOrAlias(tagMap, wanted);
+    if (hit) return hit;
+    throw new Error('The exclusion tag "' + wanted + '" does not exist, by name or by ' +
+      'alias. Nothing was planned: running without it would write to the entities it ' +
+      'is there to protect. Create the tag, or clear that setting.');
+  }
+
+  function tagIdByNameOrAlias(tagMap, wanted) {
+    var list = [];
+    for (var id in tagMap) if (hasOwn(tagMap, id)) list.push(tagMap[id]);
+    var hit = pickTagByNameOrAlias(list, wanted);
+    return hit ? String(hit.id) : null;
+  }
+
+  // The "never copy this tag or anything under it" filter: the root's id and the set of
+  // ids it covers, itself included, or null when the box is empty. Resolved like the
+  // exclusion tag above and, like it, a name matching nothing stops the run: copying
+  // the very tags the filter keeps out is the direction nothing here can undo.
+  //
+  // The subtree is walked *upward*, from every tag's `parents` - Stash gives a tag its
+  // parents on the same list query that gives its name, where `children` would be a
+  // second list per tag. It repeats until nothing joins, which is what makes a cycle
+  // in the hierarchy safe.
+  function subtreeFilter(settings, tagMap) {
+    var wanted = (settings.f8ExcludeTagSubtreeName || '').trim();
+    if (!wanted) return null;
+    var rootId = tagIdByNameOrAlias(tagMap, wanted);
+    if (!rootId) {
+      throw new Error('The subtree tag "' + wanted + '" does not exist, by name or by ' +
+        'alias. Nothing was planned: running without it would copy the tags it is there ' +
+        'to keep out. Create the tag, or clear that setting.');
+    }
+    var ids = {};
+    ids[rootId] = true;
+    var grew = true;
+    while (grew) {
+      grew = false;
+      for (var id in tagMap) {
+        if (!hasOwn(tagMap, id) || ids[id]) continue;
+        var parents = tagMap[id].parents || [];
+        for (var i = 0; i < parents.length; i++) {
+          if (parents[i] && ids[String(parents[i].id)]) { ids[id] = true; grew = true; break; }
+        }
+      }
+    }
+    return { rootId: rootId, ids: ids };
+  }
+
+  // ── Planning ──────────────────────────────────────────────────────────────
+  //
+  // Passes, in pipeline order: paths are grouped by stage and then by target, so
+  // every path writing onto scenes in stage 2 is planned from **one** query rather
+  // than three. Grouping across stages would be cheaper still and is wrong - the
+  // stage boundary is what makes the cascade work.
+  function buildPasses(paths) {
+    var out = [], index = {};
+    paths.forEach(function (p) {
+      var key = p.stage + ':' + p.target;
+      if (!index[key]) {
+        index[key] = { key: key, stage: p.stage, target: p.target, paths: [],
+                       scanned: 0, total: 0, started: false, sweep: null, gathered: null };
+        out.push(index[key]);
+      }
+      index[key].paths.push(p);
+      // A pass containing a reverse path has to gather that path's sources before it
+      // can read a single target, so the sweep is recorded on the pass rather than
+      // discovered halfway through it. Every reverse path in one pass sweeps the same
+      // entity-type - they are one query, not one each.
+      if (p.reverse && !index[key].sweep) {
+        index[key].sweep = { type: p.sourceType, scanned: 0, total: 0, started: false };
+      }
+    });
+    return out;
+  }
+
+  function reversePaths(pass) {
+    return pass.paths.filter(function (p) { return p.reverse; });
+  }
+
+  // The sweep query: one page of *sources*, carrying what each contributes and the
+  // back-reference that says which targets it belongs to.
+  //
+  // This exists because `Gallery` has no `images` field. The obvious alternative -
+  // `findImages` filtered to one gallery, per gallery - is the shape the design
+  // sketched, and it is worse in the two ways that matter here: it costs a request per
+  // gallery, and `per_page: -1` on a gallery holding twenty thousand images returns
+  // twenty thousand images in one response. Sweeping every image once pages uniformly,
+  // never builds an unbounded response, and costs requests in proportion to the
+  // library rather than to the number of galleries.
+  function sweepQuery(pass) {
+    var paths = reversePaths(pass);
+    var t = TARGETS[paths[0].sourceType];
+    var parts = [SOURCES[paths[0].sourceType].fields];
+    paths.forEach(function (p) { parts.push(leafSelection(p)); });
+    // How a source names its targets. The same field for every reverse path in a
+    // pass, since they all sweep one entity-type into one target type.
+    parts.push(paths[0].reverse.backRef + ' { id }');
+    // Named apart from the target query over the same entity - `findImages` is both
+    // the sweep here and the target pass of stage 6 - so a log, a network tab or a
+    // test can tell which of the two is running.
+    return 'query PTP_sweep_' + t.find + '($page: Int!, $per_page: Int!) {' +
+      ' ' + t.find + '(filter: { page: $page, per_page: $per_page, sort: "id", direction: ASC }) {' +
+      ' count ' + t.node + ' { ' + parts.join(' ') + ' } } }';
+  }
+
+  // One query per page of targets, carrying the target's own state and every
+  // enabled path's traversal at once. Repeating a field is legal GraphQL and the
+  // server merges the selections, so two paths sharing a walk prefix cost nothing.
+  // What a pass reads off one target, independent of how the targets were found.
+  // Extracted so the library walk and auto-mode's single-entity fetch cannot come to
+  // disagree about it: a field missing from one of two copies is a path that silently
+  // plans nothing, and the diff it feeds is what decides "already has this".
+  function targetParts(pass) {
+    var t = TARGETS[pass.target];
+    var parts = [t.fields];
+    // Always requested, not only when the exclusion-tag filter is on: it is also
+    // what a tag copy is diffed against, and the branch that omitted it would have
+    // to be right about both uses.
+    parts.push('tags { id }');
+    if (t.organized) parts.push('organized');
+    if (pass.paths.some(function (p) { return p.kind === 'performers'; })) {
+      parts.push('performers { id }');
+    }
+    // A reverse path contributes nothing here - its sources are gathered separately
+    // - so it drops out rather than splicing an empty string into the selection.
+    pass.paths.forEach(function (p) {
+      var sel = pathSelection(p);
+      if (sel) parts.push(sel);
+    });
+    return parts;
+  }
+
+  function passQuery(pass) {
+    var t = TARGETS[pass.target];
+    var parts = targetParts(pass);
+    return 'query PTP_' + t.find + '($page: Int!, $per_page: Int!) {' +
+      ' ' + t.find + '(filter: { page: $page, per_page: $per_page, sort: "id", direction: ASC }) {' +
+      ' count ' + t.node + ' { ' + parts.join(' ') + ' } } }';
+  }
+
+  // One named target, for auto-mode. The task walks the library and never needs this;
+  // a reaction knows exactly which entity was saved and must not page past everything
+  // else to reach it.
+  function oneQuery(pass) {
+    var t = TARGETS[pass.target];
+    return 'query PTP_one_' + t.one + '($id: ID!) {' +
+      ' ' + t.one + '(id: $id) { ' + targetParts(pass).join(' ') + ' } }';
+  }
+
+  // A reverse path's sources for **one** target, filtered server-side.
+  //
+  // This is the per-target query step 5 rejected for the task, and it is right here for
+  // the opposite reason. There it meant a request per gallery across the whole library,
+  // to gather what one sweep gathers in one pass. Here there is exactly one gallery -
+  // the one that was just saved - and sweeping every image in the library to find its
+  // images would be absurd. The hazard step 5 actually named was the *unbounded
+  // response* of `per_page: -1`, and this pages like everything else, so it is not
+  // reintroduced.
+  //
+  // `reverse.backRef` names the field on the source that points at the target
+  // (`Image.galleries`), and Stash's filter for the same relation carries the same
+  // name, so one entry in the table serves both. That is a convenience of Stash's
+  // naming, not a rule it promises - a relation whose filter is named differently
+  // would need its own field here.
+  function reverseQuery(path) {
+    var t = TARGETS[path.sourceType];
+    return 'query PTP_rev_' + t.find + '($id: ID!, $page: Int!, $per_page: Int!) {' +
+      ' ' + t.find + '(' + t.filterArg + ': { ' + (path.reverse.filter || path.reverse.backRef) +
+      ': { value: [$id], modifier: INCLUDES } },' +
+      ' filter: { page: $page, per_page: $per_page, sort: "id", direction: ASC }) {' +
+      ' count ' + t.node + ' { ' + SOURCES[path.sourceType].fields + ' ' +
+      leafSelection(path) + ' } } }';
+  }
+
+  // Follows a path's walk from one target, returning the source entities it lands
+  // on. A step may be a single object (`studio`) or a list (`performers`); handling
+  // both here is why the table does not have to annotate which is which.
+  // `more(node, step)`, where given, lists what an earlier stage planned onto a node there.
+  function walkSources(entity, path, more) {
+    var nodes = [entity];
+    for (var i = 0; i < path.walk.length; i++) {
+      var next = [];
+      for (var j = 0; j < nodes.length; j++) {
+        var v = nodes[j] ? nodes[j][path.walk[i]] : null;
+        if (more && nodes[j]) {
+          var extra = more(nodes[j], path.walk[i]);
+          if (extra.length) v = (Array.isArray(v) ? v : v == null ? [] : [v]).concat(extra);
+        }
+        if (v == null) continue;
+        if (Array.isArray(v)) {
+          for (var k = 0; k < v.length; k++) if (v[k] != null) next.push(v[k]);
+        } else {
+          next.push(v);
+        }
+      }
+      nodes = next;
+    }
+    return nodes;
+  }
+
+  // What one source entity contributes. Ids as strings throughout: Stash's ids are
+  // `ID!`, which serialises as a string, but a hand-built fixture or a future schema
+  // change could hand back a number, and a Set keyed on both would hold duplicates.
+  function payloadOf(src, path) {
+    var out = [];
+    if (path.kind === 'performers') {
+      (src.performers || []).forEach(function (p) { if (p && p.id != null) out.push(String(p.id)); });
+      return out;
+    }
+    if (path.markerTags && src.primary_tag && src.primary_tag.id != null) {
+      out.push(String(src.primary_tag.id));
+    }
+    (src.tags || []).forEach(function (t) { if (t && t.id != null) out.push(String(t.id)); });
+    return out;
+  }
+
+  // ── Applying ──────────────────────────────────────────────────────────────
+  //
+  // Entities needing the same addition are written together: the same studio tag
+  // turns up on thousands of scenes, so grouping by delta turns tens of thousands of
+  // mutations into a few hundred. Grouping is per target and per kind, since each
+  // pair has its own mutation and its own BulkUpdateIds field anyway.
+  //
+  // Every write is an **ADD delta**, never a rewritten list. Two reasons, and the
+  // second is the one that matters: a delta is what the server applies against the
+  // entity as it is *now*, so a tag someone added from another tab between the scan
+  // and the apply is not silently reverted - which a full list built from phase-1
+  // data would do.
+  function buildBatches(plan) {
+    var groups = {}, order = [];
+    plan.forEach(function (entry) {
+      if (!entry.add.length) return;
+      var ids = entry.add.slice().sort();
+      var key = entry.target + '|' + entry.kind + '|' + ids.join(',');
+      if (!hasOwn(groups, key)) {
+        groups[key] = { target: entry.target, kind: entry.kind, ids: ids, entries: [] };
+        order.push(key);
+      }
+      groups[key].entries.push(entry);
+    });
+
+    var batches = [];
+    order.forEach(function (key) {
+      var g = groups[key];
+      for (var i = 0; i < g.entries.length; i += CHUNK_SIZE) {
+        batches.push({
+          target: g.target, kind: g.kind, ids: g.ids,
+          entries: g.entries.slice(i, i + CHUNK_SIZE),
+        });
+      }
+    });
+    return batches;
+  }
+
+  function bulkMutation(target) {
+    var t = TARGETS[target];
+    return 'mutation PTP_' + t.bulk + '($input: ' + t.bulkInput + '!) {' +
+      ' ' + t.bulk + '(input: $input) { id } }';
+  }
+
+  function batchInput(batch, mode) {
+    var input = { ids: batch.entries.map(function (e) { return e.id; }) };
+    input[batch.kind === 'performers' ? 'performer_ids' : 'tag_ids'] =
+      { ids: batch.ids, mode: mode };
+    return input;
+  }
+
+  // Undo History, which ᝯㄝₓ Core keeps: a batch landed is, per entity, the tags or
+  // performers it added (or, undone, took away) - recorded as that delta, which an undo
+  // checks is still true and reverses, whatever else the entity gained since.
+  function journalPass(label, libraryWide) {
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide });
+  }
+
+  function journalBatch(pass, batch, mode) {
+    if (!pass) return;
+    var type = TARGETS[batch.target].plural.toLowerCase();
+    var field = batch.kind === 'performers' ? 'performer_ids' : 'tag_ids';
+    pass.entries(batch.entries.map(function (entry) {
+      // The label is `Scene "name" (id)`; the history names the type and id itself.
+      var m = /"(.*)" \(\d+\)$/.exec(String(entry.label || ''));
+      return { type: type, id: String(entry.id), name: m ? m[1] : '', field: field,
+        before: mode === 'ADD' ? [] : batch.ids.slice(), after: mode === 'ADD' ? batch.ids.slice() : [] };
+    }));
+  }
+
+  function batchCount(batches) {
+    var n = 0;
+    batches.forEach(function (b) { n += b.entries.length; });
+    return n;
+  }
+
+  var _active = null;
+  // The path editor gets a slot of its own rather than sharing `_active`, because it
+  // is now opened from *inside* the run dialog's footer: a run holding `_active` must
+  // not stop the editor opening over it, and the editor closing must not clear the run.
+  var _paths = null;
+  // The buttons dialog and the auto dialog get one each, for the same reason.
+  var _buttons = null;
+  var _auto = null;
+  // The pick dialog a reaction opens - the review with Silent off, or the removal
+  // offer - one at a time, queued: one save can raise both, and a source save can
+  // raise one per target type.
+  var _pick = null;
+  var _pickQueue = Promise.resolve();
+
+  // `scope` is what a manual button's dialog adds: `{ pathId, target, ids }` for a
+  // target-side button (this one entity) or `{ pathId, sourceIds }` for a source-side
+  // one (whatever that source reaches, resolved once the settings are in) - several
+  // entities either way from a list's selection menu. Absent for
+  // the library-wide task, which is every enabled path over everything.
+  function startRun(taskName, scope) {
+    // The path editor writes a setting and has no plan, so it is a different object
+    // rather than a second mode threaded through the run - and it opens over one.
+    if (taskName === TASK_PATHS) {
+      if (_paths) { _paths.focus(); return; }
+      _paths = new PathsDialog(taskName);
+      _paths.build();
+      return;
+    }
+    if (taskName === TASK_BUTTONS) {
+      if (_buttons) { _buttons.focus(); return; }
+      _buttons = new ButtonsDialog(taskName);
+      _buttons.build();
+      return;
+    }
+    if (taskName === TASK_AUTO) {
+      if (_auto) { _auto.focus(); return; }
+      _auto = new AutoDialog(taskName);
+      _auto.build();
+      return;
+    }
+    if (_active) { _active.focus(); return; }
+    _active = new Run(taskName, scope);
+    _active.begin();
+  }
+
+  function Run(taskName, scope) {
+    this.taskName = taskName;
+    // Held on the run rather than passed to begin(), because Rescan calls begin()
+    // again and a rescan of a scoped run has to stay scoped.
+    this.scope = scope || null;
+    this.reset();
+    this.build();
+  }
+
+  Run.prototype.reset = function () {
+    this.plan = [];
+    // The same entries, keyed by target/kind/id. Two views of one list: `plan` is
+    // the order things were found in and what the apply walks, `planIndex` is how a
+    // later stage asks what an earlier one already decided.
+    this.planIndex = {};
+    this.passes = [];
+    this.tagMap = {};
+    this.performerNames = {};
+    // Set by checkVersion when the running script is not the installed one. Per
+    // pass, because a rescan re-checks - the user may have reloaded plugins since.
+    this.stale = false;
+    // Counts the passes, so anything still in flight when Rescan is pressed can be
+    // dropped rather than landing in the middle of the next pass's log.
+    this.pass = (this.pass || 0) + 1;
+    this.scanned = {};
+    this.total = {};
+    this.errors = 0;
+    this.applied = 0;
+    this.failed = 0;
+    // Accumulated from the writes the server accepted, never from the plan, so the
+    // closing recap cannot summarise a failed batch or a Stop as though it landed.
+    this.appliedCounts = emptyCounts();
+    this.undoneCounts = emptyCounts();
+    // What this dialog has written and can still take back: the batches the server
+    // accepted, newest last. Session-scoped like `lines` rather than pass-scoped -
+    // rescan() saves it across this call - because a rescan is how a run converges,
+    // and losing the ability to undo at that point would be the moment the button
+    // was most wanted.
+    this.undoable = [];
+    this.undone = 0;
+    this.undoFailed = 0;
+    this.undoTotal = 0;
+    // Entities the server has accepted a write for, `{ target: { id: true } }`, so the
+    // dialog can drop them from Apollo's cache when it finishes. Cleared per pass:
+    // what an earlier pass evicted is already gone.
+    this.wrote = {};
+    this.cancelled = false;
+    this.stopped = false;
+    // The plan on screen no longer describes what a Proceed would do - either the scan
+    // that built it was stopped half way, or the paths it was built from have since
+    // been changed. Proceed is withheld and Rescan is what settles it.
+    this.planStale = false;
+    this.prunedSkipped = 0;
+    this.lines = [];
+    this.pending = [];
+    // `lines` is the export buffer and survives a Rescan, because Copy log is meant
+    // to hand over the whole session. The rendered log survives a Rescan too, so
+    // `lines.length` is also what the progress line counts; a separate pass-scoped
+    // counter existed only while a rescan emptied the view under it.
+    this.state = 'scanning';
+  };
+
+  Run.prototype.build = function () {
+    var self = this;
+    // The title is a plain block, so a title too long for one line wraps rather than
+    // being clipped - which a scoped run's does, naming a plugin, a path and an entity.
+    // Nothing to set: it is the default, and the only reason it holds is that no rule
+    // in `CSS` makes this a flex child or sets `white-space`.
+    var head = dialogShell(this, null, this.taskName);
+    // The stale-script warning gets a box of its own, in the same red the settings
+    // banner uses, rather than a sentence appended to `noteEl` among the run's other
+    // warnings. Every other note here is about the library or another plugin; this one
+    // is about the dialog itself running code the user has already replaced, and it is
+    // the only one that disables Proceed. It reads as a different kind of thing because
+    // it is one.
+    this.staleEl = el('div', 'ptp2re-stale ptp2re-hidden', '');
+    head.appendChild(this.staleEl);
+    // The Undo button reverses this dialog's own writes while it is open. That is
+    // not a restore and must never be allowed to read as one, so the backup
+    // instruction leads and the limits are stated beside it rather than left to be
+    // discovered.
+    head.appendChild(el('div', 'ptp2re-warn',
+      'Backing up your database before proceeding is strongly recommended. This only ever adds tags and performers, but ' +
+      'Undo only reverses what this dialog wrote, while it stays open, and cannot account ' +
+      'for changes made elsewhere in the meantime.'));
+    // Every name in this log carries a number in brackets and it is always a Stash
+    // id, never a count - the counts are written as `x250` or spelled out. Nothing
+    // else in the dialog says so, and an id read as "250 of these" is the kind of
+    // misreading that gets a library-wide write approved for the wrong reason.
+    head.appendChild(el('div', 'ptp2re-legend',
+      'Reading the log: the number in brackets after a name is that entity\'s, tag\'s or ' +
+      'performer\'s id - Scene "My Scene" (123) is the scene with id 123. Counts are ' +
+      'written as x250, never in brackets.'));
+    this.noteEl = el('div', 'ptp2re-note', '');
+    head.appendChild(this.noteEl);
+
+    this.progressEl = el('div', 'ptp2re-progress', 'Starting...');
+    // The counters name a *pass*, and a pass is "<entity-type> <stage>", so the same
+    // type appears more than once in one line and the bare number is the only thing
+    // telling two of them apart. Nothing on the page says what it is, hence the title.
+    this.progressEl.title = PROGRESS_TIP;
+    this.modal.appendChild(this.progressEl);
+
+    this.logEl = el('div', 'ptp2re-log');
+    this.modal.appendChild(this.logEl);
+
+    var foot = el('div', 'ptp2re-foot');
+    // Orange: the two buttons that write. See "one color for a plugin wrote this".
+    this.proceedBtn = button('Proceed', 'ptp2re-proceed');
+    this.cancelBtn  = button('Cancel', 'ptp2re-cancel');
+    this.stopBtn    = button('Stop', 'ptp2re-stop ptp2re-hidden');
+    this.copyBtn    = button('Copy log', 'ptp2re-copy');
+    this.undoBtn    = button('Undo', 'ptp2re-undo ptp2re-hidden');
+    [this.proceedBtn, this.undoBtn].forEach(function (b) {
+      b.className = b.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    });
+    this.rescanBtn  = button('Rescan', 'ptp2re-rescan ptp2re-hidden');
+    this.closeBtn   = button('Close', 'ptp2re-close ptp2re-hidden');
+    // Blue: it edits a setting of ours and never the library. It is here rather than in
+    // Settings - Tasks because this dialog is where a user finds out that a path they
+    // wanted is off - the head lists what is enabled, and the plan is empty without it -
+    // so the editor belongs a press away from that, not a page away.
+    this.pathsBtn   = button(TASK_PATHS, 'ptp2re-paths-open');
+    this.pathsBtn.className = this.pathsBtn.className.replace('btn-secondary', READONLY_BTN_VARIANT);
+    this.pathsBtn.title = PATHS_BTN_TIP;
+    this.proceedBtn.disabled = true;
+    this.undoBtn.title = 'Reverse every change this dialog has written, as an add/remove delta. ' +
+      'Only what this dialog wrote, and only while it stays open.';
+    this.rescanBtn.title = 'Review again and replace the plan with whatever is left to copy. ' +
+      'The log is kept, and so is what Undo can still reverse.';
+
+    this.proceedBtn.addEventListener('click', function () { self.proceed(); });
+    this.cancelBtn.addEventListener('click', function () { self.cancel(); });
+    this.stopBtn.addEventListener('click', function () { self.stop(); });
+    this.copyBtn.addEventListener('click', function () { self.copy(); });
+    this.undoBtn.addEventListener('click', function () { self.undo(); });
+    this.rescanBtn.addEventListener('click', function () { self.rescan(); });
+    this.closeBtn.addEventListener('click', function () { self.close(); });
+    this.pathsBtn.addEventListener('click', function () { startRun(TASK_PATHS); });
+
+    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.undoBtn,
+      this.rescanBtn, this.closeBtn, this.pathsBtn].forEach(function (b) { foot.appendChild(b); });
+    this.modal.appendChild(foot);
+    dialogOpen(this);
+  };
+
+  // Empty hides it. `begin()` clears it on every pass for the same reason it clears
+  // the note: a rescan after a reload must not go on claiming the script is stale.
+  Run.prototype.showStale = function (msg) {
+    this.staleEl.textContent = msg || '';
+    if (msg) staleReloadButton(this.staleEl);
+    this.show(this.staleEl, !!msg);
+  };
+
+  Run.prototype.show = function (node, visible) {
+    node.className = node.className.replace(/\s*ptp2re-hidden/g, '') + (visible ? '' : ' ptp2re-hidden');
+  };
+
+  Run.prototype.setState = function (state) {
+    this.state = state;
+    var scanning = state === 'scanning', ready = state === 'ready';
+    var applying = state === 'applying', done = state === 'done';
+    // Undoing is a write like applying, so it offers Stop and nothing else: Rescan
+    // would plan against a library being changed underneath it, and Close would
+    // abandon the reversal halfway with no way back to it.
+    var undoing = state === 'undoing';
+    // Nothing to proceed on: the dialog has scanned and found no work, so there is
+    // nothing to abandon and "Cancel" would be answering a question nobody asked.
+    // Close is the same act with the honest word on it.
+    var nothingToDo = ready && !this.plan.length;
+    this.show(this.proceedBtn, scanning || ready);
+    this.show(this.cancelBtn, (scanning || ready) && !nothingToDo);
+    // Offered during the scan too: it is the longer phase, and stopping it is how a
+    // user gets back to Path Settings without abandoning the dialog the way Cancel does.
+    this.show(this.stopBtn, scanning || applying || undoing);
+    this.stopBtn.textContent = scanning ? 'Stop Scanning' : 'Stop';
+    // Offered in ready as well as done: a rescan leaves the dialog holding a fresh
+    // plan over a library an earlier pass already changed, and that is exactly when
+    // the user is deciding between applying more and taking back what is there.
+    this.show(this.undoBtn, (ready || done) && this.undoable.length > 0);
+    // Offered in ready as well, but only once the plan has stopped matching what it
+    // was built from: a stopped scan or a path setting changed underneath it.
+    this.show(this.rescanBtn, done || (ready && this.planStale));
+    this.show(this.closeBtn, done || nothingToDo);
+    // Unavailable while anything is in flight: the paths it edits are the ones the pass
+    // in flight is *using* - a save behind a running scan produces a plan built half
+    // from each setting, and behind a write it describes something the batches are not
+    // doing. Disabled rather than hidden, which is the correction: it was hidden
+    // mid-write and left live through the scan, which is the longer phase and the one
+    // a user sits through. A grayed button beside Stop says why; a vanished one says
+    // nothing, and this is the button whose whole reason for being here is that the
+    // dialog is where you find out a path you wanted is off.
+    this.pathsBtn.disabled = scanning || applying || undoing;
+    this.pathsBtn.title = this.pathsBtn.disabled
+      ? 'Not while this dialog is working - the paths it edits are the ones the pass in ' +
+        'flight is using. Let it finish, stop it, or Cancel it, and press this again.'
+      : PATHS_BTN_TIP;
+    // Undo is deliberately not gated on `stale`: it reverses writes this dialog has
+    // already made, and stranding the user with changes they cannot take back would
+    // be a worse outcome than the mismatch it is protecting them from.
+    this.proceedBtn.disabled = !ready || !this.plan.length || this.stale || this.planStale;
+    // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
+    // does not take the green away - it is an offer, not something waiting on the user.
+    // Errors, a stopped pass, a plan the paths have moved under and a stale script stay
+    // gray: those say "something is wrong", not "nothing to do".
+    paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
+      !this.stale && !this.planStale ? 'btn-success' : 'btn-secondary');
+    this.spin(scanning || applying || undoing);
+  };
+
+  // The log - its cursor, lines and the Undo button's disarm - is Core's `runLog`. `flush`
+  // is this plugin's own: it redraws the progress line even with no line waiting, and
+  // draws a line's parts through `appendParts`, as the pick dialogs do.
+  runLog(Run.prototype, 'ptp2re', ['flush']);
+
+  // A run-level warning: into the log, where Copy log will carry it, and into the
+  // dialog head, where it stays visible after the log has scrolled past it. Appends
+  // rather than assigns, so a second warning cannot silently replace the first;
+  // begin() blanks the head on every pass, so a rescan re-derives both.
+  Run.prototype.note = function (msg) {
+    this.log('WARN', msg);
+    this.noteEl.textContent = this.noteEl.textContent
+      ? this.noteEl.textContent + ' ' + msg : msg;
+  };
+
+  // Only the tail is rendered: a first run on a large library can plan six figures
+  // of changes, and one node per change is a page that stops responding. The full
+  // log stays in `lines`, which is what Copy log exports.
+  // A plan line's parts as nodes: a link where the part names a page, and the shared
+  // card on every name - the entity a change lands on, the tag or performer, and the
+  // entity it came from. Shared by the run log and the pick dialogs, so a line reads
+  // the same wherever it is shown.
+  function appendParts(node, parts) {
+    parts.forEach(function (seg) {
+      var span;
+      if (seg.href) {
+        span = el('a', 'ptp2re-elink', seg.text);
+        span.href = seg.href;
+        span.target = linkTarget();
+        span.rel = 'noopener noreferrer';
+      } else {
+        span = el('span', seg.ent ? 'ptp2re-hover' : null, seg.text);
+      }
+      if (seg.title) span.title = seg.title;
+      if (seg.ent) entityTip(span, seg.ent.type, seg.ent.id);
+      node.appendChild(span);
+    });
+  }
+
+  // The progress line is redrawn even with no line waiting: a state change is written
+  // with a flush behind it, and the recap before it has usually flushed the lines already.
+  Run.prototype.flush = function () {
+    if (!this.pending.length) { this.renderProgress(); return; }
+    var pending = this.pending;
+    this.pending = [];
+    // Out of the way while the lines land, so the cursor is neither counted against
+    // the render cap nor left in the middle of the log.
+    if (this.spinEl && this.spinEl.parentNode) this.logEl.removeChild(this.spinEl);
+    pending.forEach(function (p) {
+      var node = el('div', 'ptp2re-line ptp2re-' + p.kind, p.parts ? null : p.line);
+      // The line looks exactly like every other one: the spans exist to hang a title
+      // on and carry no styling of their own, the same call the sibling settled on
+      // after an underline and a help cursor read as decoration on a log that has
+      // none anywhere else.
+      if (p.parts) {
+        node.appendChild(el('span', null, '[' + p.kind + '] '));
+        appendParts(node, p.parts);
+      }
+      this.logEl.appendChild(node);
+    }, this);
+    while (this.logEl.childNodes && this.logEl.childNodes.length > linesDrawn()) {
+      this.logEl.removeChild(this.logEl.firstChild);
+    }
+    if (this.spinEl) this.logEl.appendChild(this.spinEl);
+    if (typeof this.logEl.scrollHeight === 'number') this.logEl.scrollTop = this.logEl.scrollHeight;
+    this.renderProgress();
+  };
+
+  Run.prototype.renderProgress = function () {
+    // One figure per *pass*, not per target: several stages can walk scenes, and
+    // adding those together would report a library several times its real size.
+    // Only passes that have started are shown, so the line grows as the run does
+    // rather than opening with a wall of zeroes.
+    // A pass with a sweep reports it as a segment of its own, because it is the part
+    // that takes the time: reading every image in the library to find each gallery's
+    // is otherwise a silent minute before the target count starts moving at all.
+    var parts = [];
+    (this.passes || []).forEach(function (p) {
+      if (p.sweep && p.sweep.started) {
+        parts.push(TARGETS[p.sweep.type].plural + ' ' + p.stage + ': ' +
+          p.sweep.scanned + ' / ' + p.sweep.total);
+      }
+      if (p.started) {
+        parts.push(TARGETS[p.target].plural + ' ' + p.stage + ': ' + p.scanned + ' / ' + p.total);
+      }
+    });
+
+    var summary;
+    if (this.state === 'scanning') {
+      summary = 'Scanning. ' + plural(this.plan.length, 'change') + ' found';
+    } else if (this.state === 'ready') {
+      summary = 'Review complete. ' + plural(this.plan.length, 'entity change') +
+        ' planned, ' + plural(this.logged || 0, 'log line');
+    } else if (this.state === 'applying') {
+      summary = 'Applying. ' + this.applied + ' of ' + this.plan.length + ' entities updated';
+    } else if (this.state === 'undoing') {
+      summary = 'Undoing. ' + this.undone + ' of ' + plural(this.undoTotal, 'change') + ' reversed';
+    } else {
+      summary = 'Finished. ' + plural(this.applied, 'entity change') + ' applied' +
+        (this.failed ? ', ' + this.failed + ' failed' : '') +
+        (this.undone ? ', ' + this.undone + ' reversed by Undo' : '');
+    }
+    if (this.errors) summary += ', ' + plural(this.errors, 'error');
+    if ((this.logged || 0) > linesDrawn()) {
+      summary += ' - showing the last ' + linesDrawn() + ' of ' + this.logged + ' lines';
+    }
+    this.progressEl.textContent = parts.length ? summary + '\n' + parts.join('   ') : summary;
+  };
+
+  // ── Phase 1: review ───────────────────────────────────────────────────────
+
+  Run.prototype.begin = function () {
+    var self = this;
+    this.setState('scanning');
+    // Every pass re-derives the note from freshly loaded settings, so it has to
+    // start empty: a warning that told the user to change something and rescan must
+    // not still be up after they have done exactly that.
+    this.noteEl.textContent = '';
+    this.showStale('');
+    this.renderProgress();
+    this.log('INFO', PLUGIN_SHORT_NAME + ' - ' + this.taskName + ' - reviewing, nothing will be ' +
+      'written yet.');
+
+    // Someone else's lease, held right now. Ours is taken in proceed(), so nothing
+    // here can be looking at its own. It is advisory and this is a manual action, so
+    // it does not block - but two plugins rewriting the same entities at once is
+    // worth saying out loud.
+    if (coop().leases.length) {
+      this.note('Another plugin is applying bulk changes right now (' +
+        coop().leases[0].owner + ' - ' + coop().leases[0].label + '). Running both at once ' +
+        'means each may undo part of the other; let it finish first.');
+    }
+
+    // Not chained ahead of the scan: it is one small query against a pass that reads
+    // the whole library, and holding the scan up for it would buy nothing. It lands
+    // long before Proceed is reachable, and setState is re-applied when it does.
+    this.checkVersion();
+
+    loadSettings(true).then(function (loaded) {
+      self.settings = loaded.settings;
+
+      // A scoped run reviews the one path its button names, and re-reads the setting
+      // rather than trusting the tick that drew the button: a path can be switched off
+      // between the two.
+      var paths = self.scope ? scopedPaths(self.scope, self.settings) : enabledPaths(self.settings);
+      // Published whether or not there is anything to scan: another plugin's own
+      // overlap check must see "nothing enabled" as promptly as it sees anything
+      // else, and the early return below must not skip it.
+      publishDeclares(self.settings);
+      if (!paths.length) {
+        self.log('WARN', self.scope
+          ? 'That path is no longer enabled. Turn it back on with ' + TASK_PATHS +
+            ', then press the button again.'
+          : 'No paths are enabled. Turn on at least one with ' + TASK_PATHS +
+            ', then run the task again.');
+        self.finishScan();
+        return;
+      }
+
+      // Stated because it is not a presentation choice: the paths cascade, so the
+      // order decides what a single run reaches. A user who expects marker tags to
+      // arrive on a group in one pass needs to see that markers run before groups.
+      // A scoped run has exactly one path and no order to explain, so it names the
+      // path instead.
+      self.log('INFO', self.scope
+        ? 'Reviewing one path: ' + pathLabel(paths[0]) + '.'
+        : 'Enabled, in the order they run: ' +
+          paths.map(function (p) { return pathLabel(p); }).join('; ') + '.');
+
+      // One note however many pairs are on, because only the names differ between
+      // them: a second copy of the same three sentences is a paragraph the user has
+      // already read, and with both pairs enabled it put ~300 identical characters
+      // on screen twice.
+      var both = pairedBoth(paths);
+      if (both.length) {
+        self.note('Both directions of ' +
+          (both.length === 1 ? 'a reversible pair are' : both.length + ' reversible pairs are') +
+          ' enabled (' + both.map(function (p) {
+            return pathLabel(p) + ' and ' + pathLabel(pathById(p.pair));
+          }).join(', ') + '). Applied together they drive every member to the same set of ' +
+          'tags. That is what running both directions means, not a fault - but disable one, ' +
+          'or turn on "common tags only", if it is not what you want.');
+      }
+
+      self.checkDeclaredOverlap(paths);
+      self.checkHierarchySibling(loaded.all[NPT_ID]);
+
+      var filters = describeFilters(self.settings);
+      self.log('INFO', filters.length
+        ? 'Exclusion filters in force: ' + filters.join('; ') + '.'
+        : 'No exclusion filters are configured; nothing is skipped.');
+
+      return self.scope ? self.scanScoped(paths) : self.scan(paths);
+    }).then(function () {
+      self.finishScan();
+    }, function (e) {
+      self.log('ERROR', 'Review failed: ' + (e && e.message ? e.message : String(e)));
+      self.errors++;
+      self.finishScan();
+    });
+  };
+
+  // ── Phase 1: the walk over the library ────────────────────────────────────
+
+  // The plan is keyed by **the entity being written, and what is being written to
+  // it** - never by the path that asked. A scene wanting tags from its performers,
+  // its studio and its markers is one entry carrying the union, because the write is
+  // one delta on one entity. Several entries for one entity is the shape that
+  // silently loses data, and it is the one thing here that must not be rearranged.
+  function planKey(target, kind, id) { return target + ':' + kind + ':' + id; }
+
+  // `from` is a list in step with `add` - `from[i]` names where `add[i]` came from -
+  // never a map keyed by id: V8 holds integer-like keys as an array as long as the
+  // largest id, several KB an entry, and a library-wide plan holds a quarter of a
+  // million entries. `fromOf` reads it; whatever cuts `add` down cuts `from` with it.
+  Run.prototype.planEntry = function (target, kind, ent) {
+    var key = planKey(target, kind, ent.id);
+    var entry = this.planIndex[key];
+    if (!entry) {
+      entry = this.planIndex[key] = {
+        target: target, kind: kind, id: String(ent.id),
+        label: entityLabel(target, ent), add: [], from: [],
+      };
+      this.plan.push(entry);
+    }
+    return entry;
+  };
+
+  // What an earlier stage has already decided to put on this entity. This is what
+  // makes the cascade work inside one run: stage 2 plans marker tags onto a scene,
+  // stage 4 copies that scene's tags onto its group, and without this the group would
+  // gain them only on the *next* run - silently, since nothing errors.
+  //
+  // It reads the plan rather than a second structure, so there is one answer to "what
+  // will this entity end up with" and no way for the two to disagree.
+  function fromOf(entry, id) { return entry.from[entry.add.indexOf(id)]; }
+
+  Run.prototype.plannedFor = function (target, kind, id) {
+    var entry = this.planIndex[planKey(target, kind, id)];
+    return entry ? entry.add : null;
+  };
+
+  // The tag hierarchy and the filters, which every pass reads and neither kind of run
+  // can start without. Held apart from `scan` so the scoped run below reaches it
+  // without reaching the library walk it sits in front of.
+  Run.prototype.prepare = function () {
+    var self = this;
+    return gqlRequest(tagQuery(this.settings), null).then(function (data) {
+      self.tagMap = buildTagMap(((data.findTags || {}).tags) || []);
+
+      var excludeTagId = resolveExclusionTagId(self.settings, self.tagMap);
+      if (excludeTagId) {
+        // Linked like every other tag the dialog names: this is the line a user reads
+        // to check the box holds what they think it does, and "which tag is that"
+        // is the whole question it exists to answer.
+        var ex = [{ text: 'Exclusion tag resolved: ' },
+          { text: tagLabel(self.tagMap, excludeTagId), href: entityHref('tag', excludeTagId),
+            ent: { type: 'tags', id: excludeTagId } },
+          { text: '.' }];
+        self.log('INFO', partsText(ex), ex);
+      }
+      var under = subtreeFilter(self.settings, self.tagMap);
+      if (under) {
+        var n = 0;
+        for (var k in under.ids) if (hasOwn(under.ids, k)) n++;
+        var un = [{ text: 'Excluded subtree resolved: ' },
+          { text: tagLabel(self.tagMap, under.rootId), href: entityHref('tag', under.rootId),
+            ent: { type: 'tags', id: under.rootId } },
+          { text: ', ' + plural(n, 'tag') + ' including itself.' }];
+        self.log('INFO', partsText(un), un);
+      }
+      self.filters = makeFilters(self.settings, self.tagMap, excludeTagId, under);
+      return nptPruners(self.settings).then(function (npt) {
+        self.npt = npt;
+        self.logPruneFilter(npt);
+      });
+    });
+  };
+
+  // What the filter is actually doing this run, said once. Three outcomes and they
+  // are different facts: it is on and the sibling is pruning some types, it is on and
+  // there is nobody to ask, or it is off - in which case nothing is said, like every
+  // other filter that is not configured.
+  Run.prototype.logPruneFilter = function (npt) {
+    if (!this.settings.f5SkipTagsNormalizeWouldPrune) return;
+    var types = [];
+    Object.keys(npt || {}).forEach(function (k) { types.push(TARGETS[k].plural.toLowerCase()); });
+    if (types.length) {
+      this.log('INFO', 'Skipping tags ' + NPT_NAME + ' would prune again, on ' +
+        types.join(', ') + '.');
+      return;
+    }
+    var api = nptApi();
+    this.log('INFO', api
+      ? 'Skipping tags ' + NPT_NAME + ' would prune again is on, but it has no entity-type set ' +
+        'to Auto-Prune, so nothing is skipped.'
+      : 'Skipping tags ' + NPT_NAME + ' would prune again is on, but that plugin is not ' +
+        'answering: it is absent, disabled, or not ' + NPT_API_MIN + ' or newer, which is the ' +
+        'release that lets another plugin ask it. Nothing is skipped.');
+  };
+
+  Run.prototype.scan = function (paths) {
+    var self = this;
+    this.passes = buildPasses(paths);
+    return this.prepare().then(function () {
+      // Passes run one after another rather than in parallel, because a later stage
+      // reads what an earlier one planned.
+      var chain = Promise.resolve();
+      self.passes.forEach(function (pass) {
+        chain = chain.then(function () {
+          if (self.cancelled) return null;
+          return self.plannedPerformers(pass).then(function () { return self.scanPass(pass); });
+        });
+      });
+      return chain;
+    });
+  };
+
+  // Which path a scoped run reviews, or nothing if its setting has since been turned
+  // off. One path, never "everything enabled into this entity": the button names one
+  // source, and widening it in `runManual` would do more than the button promised.
+  function scopedPaths(scope, s) {
+    var p = pathById(scope.pathId);
+    return p && pathOn(s, p) ? [p] : [];
+  }
+
+  // The entities a scoped run plans over: the one the target-side button is sitting on,
+  // or - for a source-side button - whatever that source reaches, resolved through the
+  // very lookup the click used to perform.
+  Run.prototype.scopeIds = function (path) {
+    if (this.scope.ids) {
+      return Promise.resolve(this.scope.ids.map(function (id) { return String(id); }));
+    }
+    return resolveSourceTargets(path, this.scope.sourceIds.map(String));
+  };
+
+  // A manual button's review. Same planner as everything else - `planPass` is the one
+  // auto-mode uses, borrowed back below - so what this dialog lists is by construction
+  // what the click used to write without asking. The only difference from `scan` is
+  // where the entities come from: named, rather than paged out of the library.
+  Run.prototype.scanScoped = function (paths) {
+    var self = this;
+    var path = paths[0];
+    return this.prepare().then(function () {
+      return self.scopeIds(path);
+    }).then(function (ids) {
+      self.passes = buildPasses(paths);
+      var t = TARGETS[path.target], from = self.scope.sourceIds || [];
+      var srcLabel = ((SOURCES[path.sourceType] || TARGETS[path.sourceType] || {}).label || path.source).toLowerCase();
+      // Ticked targets are named as ticked; targets reached are said with what reaches them.
+      self.log('INFO', self.scope.ids
+        ? (ids.length === 1 ? 'Reviewing one ' + t.label.toLowerCase() + '.'
+          : 'Reviewing the ' + ids.length + ' ticked ' + t.plural.toLowerCase() + '.')
+        : 'Reviewing ' + (ids.length === 1 ? 'one ' + t.label.toLowerCase() : ids.length + ' ' + t.plural.toLowerCase()) +
+          (from.length === 1 ? ' this ' + srcLabel + ' reaches.'
+            : ' the ' + from.length + ' ticked ' + path.source.toLowerCase() + ' reach.'));
+      if (!ids.length) return null;
+      var chain = Promise.resolve();
+      self.passes.forEach(function (pass) {
+        chain = chain.then(function () {
+          if (self.cancelled) return null;
+          // Set here rather than counted per entity: `planPass` fetches them one at a
+          // time and the progress line wants the whole scope, not the last id read.
+          pass.started = true;
+          pass.total = ids.length;
+          return self.planPass(pass, ids).then(function () {
+            pass.scanned = ids.length;
+            self.flush();
+          });
+        });
+      });
+      return chain;
+    });
+  };
+
+  // Gathers a reverse path's sources for the whole library before a single target is
+  // read, keyed by the targets each source names.
+  //
+  // It runs at the start of its own pass, not once for the run, and that is the point:
+  // it reads the plan exactly where a walk would, so the cascade means the same thing
+  // both ways. Sweeping once and sharing it between the two reverse paths would halve
+  // the requests and put the correctness argument in a comment - it would hold only
+  // while nothing between the two stages plans onto images, which is true today and is
+  // not a property the table promises.
+  Run.prototype.sweepPass = function (pass) {
+    var self = this;
+    var paths = reversePaths(pass);
+    var t = TARGETS[pass.sweep.type];
+    var query = sweepQuery(pass);
+    var backRef = paths[0].reverse.backRef;
+
+    pass.gathered = {};
+    paths.forEach(function (p) { pass.gathered[p.id] = {}; });
+    pass.sweep.started = true;
+    this.log('INFO', 'Stage ' + pass.stage + ': no field leads from a ' +
+      TARGETS[pass.target].label + ' to its ' + t.plural + ', so every ' +
+      t.label.toLowerCase() + ' in the library is read once to gather them. On a large ' +
+      'library this is the slowest part of the run.');
+
+    function page(n) {
+      if (self.cancelled) return Promise.resolve();
+      return gqlRequest(query, { page: n, per_page: t.pageSize || PAGE_SIZE })
+        .then(function (data) {
+          var res = data[t.find] || {};
+          var list = res[t.node] || [];
+          pass.sweep.total = res.count || pass.sweep.total;
+          pass.sweep.scanned += list.length;
+          list.forEach(function (src) {
+            // One source can name several targets - an image in two galleries counts
+            // for both - so it is added once per target rather than once.
+            [].concat(src[backRef] || []).forEach(function (ref) {
+              if (!ref || ref.id == null) return;
+              var key = String(ref.id);
+              paths.forEach(function (p) {
+                var index = pass.gathered[p.id];
+                if (!hasOwn(index, key)) index[key] = emptyAggregate();
+                self.addSource(index[key], src, p);
+              });
+            });
+          });
+          self.flush();
+          if (!list.length || pass.sweep.scanned >= pass.sweep.total) return null;
+          return page(n + 1);
+        }, function (e) {
+          // Same rule as a target page: logged, and the pass carries on with what it
+          // has. The plan is then short rather than wrong - every target it does reach
+          // is planned from every source that was read.
+          self.log('ERROR', t.plural + ' sweep page ' + n + ' failed: ' +
+            (e && e.message ? e.message : String(e)));
+          self.errors++;
+          return null;
+        });
+    }
+    return page(1).then(function () {
+      var gathered = 0, index = pass.gathered[paths[0].id];
+      for (var k in index) if (hasOwn(index, k)) gathered++;
+      self.log('INFO', 'Stage ' + pass.stage + ': read ' + pass.sweep.scanned + ' ' +
+        t.plural.toLowerCase() + ', covering ' + gathered + ' ' +
+        TARGETS[pass.target].plural.toLowerCase() + '.');
+    });
+  };
+
+  Run.prototype.scanPass = function (pass) {
+    var self = this;
+    var t = TARGETS[pass.target];
+    var query = passQuery(pass);
+    this.log('INFO', 'Stage ' + pass.stage + ': ' + t.plural + ' ← ' +
+      pass.paths.map(function (p) { return p.source; }).join(', ') + '.');
+
+    function page(n) {
+      // Marked started here rather than at the top of the pass, so a sweep does not
+      // sit next to a target count of 0 / 0 for as long as it runs.
+      pass.started = true;
+      if (self.cancelled) return Promise.resolve();
+      return gqlRequest(query, { page: n, per_page: t.pageSize || PAGE_SIZE })
+        .then(function (data) {
+          var res = data[t.find] || {};
+          var list = res[t.node] || [];
+          pass.total = res.count || pass.total;
+          pass.scanned += list.length;
+          list.forEach(function (ent) { self.planTarget(pass, ent); });
+          self.flush();
+          // A page shorter than asked for is the last one. Trusting `count` alone
+          // would loop forever against a server that reports it differently.
+          if (!list.length || pass.scanned >= pass.total) return null;
+          return page(n + 1);
+        }, function (e) {
+          // A failed page is logged and the pass moves on: one bad page must not
+          // cancel a library-wide review, and the plan is honest about being partial.
+          self.log('ERROR', t.plural + ' page ' + n + ' failed: ' +
+            (e && e.message ? e.message : String(e)));
+          self.errors++;
+          return null;
+        });
+    }
+    // The sweep first, and the targets only once it has finished: a target read before
+    // its sources were gathered would be planned from an empty set and never revisited.
+    if (!pass.sweep) return page(1);
+    // What the sweep gathered is read by this pass's targets alone, and a library's worth
+    // of it would otherwise stay held through the review and the writes.
+    function release() { pass.gathered = null; }
+    return this.sweepPass(pass).then(function () {
+      if (self.cancelled) return null;
+      return page(1);
+    }).then(release, function (e) { release(); throw e; });
+  };
+
+  // What a set of sources contributes to one target, along one path. Held apart from
+  // where the sources came from, because they arrive two ways: a walk lands on them
+  // one target at a time, and a sweep accumulates them across a whole library scan.
+  // One aggregation for both, or the two would be free to disagree about the cascade,
+  // about counting and about which source gets named.
+  //
+  //   n       how many sources were seen, which "common tags only" counts against
+  //   counts  how many of them carry each id
+  //   order   the ids, in the order they were first seen
+  //   first   the earliest source carrying each id: its label, and its href where the
+  //           type has a page
+  function emptyAggregate() { return { n: 0, counts: {}, order: [], first: {} }; }
+
+  Run.prototype.addSource = function (agg, src, path) {
+    var self = this;
+    agg.n++;
+    // Performer names ride along with the traversal, so the log can name one without a
+    // query of its own. Recorded from every source seen, not only from the ones that
+    // end up in the plan: the cost is a string per performer and the alternative is a
+    // name missing from exactly the line that needed it.
+    if (path.kind === 'performers') {
+      (src.performers || []).forEach(function (p) {
+        if (p && p.id != null && p.name) self.performerNames[String(p.id)] = p.name;
+      });
+    }
+    var ids = payloadOf(src, path);
+    // The cascade: where the source is one of our own targets, whatever an earlier
+    // stage planned for it counts as already there.
+    if (hasOwn(TARGETS, path.sourceType) && src.id != null) {
+      var planned = this.plannedFor(path.sourceType, path.kind, String(src.id));
+      if (planned) ids = ids.concat(planned);
+    }
+    var seen = {}, origin = null;
+    ids.forEach(function (id) {
+      if (seen[id]) return;             // one source counts once, however it lists it
+      seen[id] = true;
+      if (!hasOwn(agg.counts, id)) {
+        agg.counts[id] = 0;
+        agg.order.push(id);
+        // One per source, shared by every id it is the first to carry.
+        if (!origin) {
+          origin = {
+            label: sourceLabel(self.tagMap, src, path),
+            href: entityHref(path.sourceType, src.id),
+            // The source end of a line names an entity as much as the target end does,
+            // and "which studio is that" is the same question at both ends.
+            ent: { type: tipType(path.sourceType), id: String(src.id) },
+          };
+        }
+        agg.first[id] = origin;
+      }
+      agg.counts[id]++;
+    });
+  };
+
+  Run.prototype.aggregate = function (sources, path) {
+    var agg = emptyAggregate(), self = this;
+    sources.forEach(function (src) { self.addSource(agg, src, path); });
+    return agg;
+  };
+
+  // Which of `ids` the sibling's Auto-Prune would take straight back off this
+  // entity. Asked against the tags the entity will actually be carrying - its own,
+  // whatever an earlier path in this plan already decided to add, and the ones under
+  // consideration - because a tag is pruned for being implied by *any* of them, and
+  // most often by one that was already there before this run started.
+  //
+  // The ceiling, stated because it is not a bug: a later path adding a *descendant*
+  // of a tag accepted earlier leaves that earlier one prunable. It is the same
+  // ordering the cascade already has, one run of the sibling tidies it, and a Rescan
+  // sees the plan the second time round. Filtering at the end of the scan instead
+  // would answer it - and would mean logging additions and then withdrawing them,
+  // which is worse in the place a user actually reads.
+  Run.prototype.prunedAway = function (pruner, existing, already, ids) {
+    var all = {}, k;
+    for (k in existing) if (hasOwn(existing, k)) all[k] = true;
+    (already || []).forEach(function (id) { all[String(id)] = true; });
+    ids.forEach(function (id) { all[String(id)] = true; });
+    var list = [];
+    for (k in all) if (hasOwn(all, k)) list.push(k);
+    var res = null;
+    // A sibling that throws is a sibling that is not asked again for this entity;
+    // this decides what to skip, never what to write, so failing open is right.
+    try { res = pruner.plan({ mode: 'prune', tagIds: list }); } catch (e) { return null; }
+    if (!res || !res.remove) return null;
+    var out = {};
+    res.remove.forEach(function (id) { out[String(id)] = true; });
+    return out;
+  };
+
+  // A tag path walking a scene's performers walks the ones stage 1 plans onto it too - from
+  // its galleries - so their tags land in the same run: the stage order is there for that.
+  // `plannedPerformers` read them first; one the scene already has is walked once.
+  Run.prototype.walk = function (ent, path) {
+    var self = this, known = this.plannedPerf;
+    if (!known || path.kind !== 'tags' || path.walk.indexOf('performers') === -1) return walkSources(ent, path);
+    return walkSources(ent, path, function (node, step) {
+      if (step !== 'performers' || node.id == null) return [];
+      var have = {};
+      (node.performers || []).forEach(function (p) { if (p) have[String(p.id)] = true; });
+      return (self.plannedFor('scene', 'performers', String(node.id)) || []).filter(function (id) {
+        return !have[id] && hasOwn(known, id);
+      }).map(function (id) { return known[id]; });
+    });
+  };
+
+  // The performers an earlier stage planned onto scenes, with their tags, read once each by id
+  // ahead of a pass whose tag path walks performers - `walk` adds them where they were planned.
+  var PLANNED_PERF_CHUNK = 500;
+  Run.prototype.plannedPerformers = function (pass) {
+    var self = this;
+    if (!pass.paths.some(function (p) { return p.kind === 'tags' && p.walk && p.walk.indexOf('performers') !== -1; })) {
+      return Promise.resolve();
+    }
+    var known = this.plannedPerf = this.plannedPerf || {}, want = [], seen = {};
+    this.plan.forEach(function (e) {
+      if (e.target !== 'scene' || e.kind !== 'performers') return;
+      e.add.forEach(function (id) { if (!hasOwn(known, id) && !seen[id]) { seen[id] = true; want.push(id); } });
+    });
+    var chain = Promise.resolve();
+    for (var i = 0; i < want.length; i += PLANNED_PERF_CHUNK) {
+      (function (ids) {
+        chain = chain.then(function () {
+          return gqlRequest('query PTP_PlannedPerformers($ids: [ID!]) { findPerformers(ids: $ids, ' +
+            'filter: { per_page: -1 }) { performers { ' + SOURCES.performer.fields + ' tags { id } } } }', { ids: ids })
+            .then(function (data) {
+              (((data.findPerformers || {}).performers) || []).forEach(function (p) { known[String(p.id)] = p; });
+            }, function (e) {
+              // Their tags then come on the next run, as before; the rest of the plan stands.
+              self.log('WARN', 'The tags of ' + plural(ids.length, 'performer') + ' this run adds to scenes could not ' +
+                'be read, so they are left for the next run: ' + (e && e.message ? e.message : String(e)));
+            });
+        });
+      })(want.slice(i, i + PLANNED_PERF_CHUNK));
+    }
+    return chain;
+  };
+
+  Run.prototype.planTarget = function (pass, ent) {
+    var self = this;
+    var blocked = this.filters.entityBlocked(pass.target, ent);
+    if (blocked) return;
+
+    pass.paths.forEach(function (path) {
+      // A reverse path's sources were gathered by the sweep, keyed by target; a walk
+      // finds them from the target in hand.
+      var agg = path.reverse
+        ? (pass.gathered && pass.gathered[path.id] || {})[String(ent.id)]
+        : self.aggregate(self.walk(ent, path), path);
+      // A hook the manual-button probe uses: whether this path found any sources at
+      // all, independent of whether there is anything left to add below. No-op for the
+      // task and for a normal auto-mode reaction, neither of which sets it - only
+      // `probeButtons` does. Its partner `recordAddable` fires below, once per id this
+      // path would actually contribute.
+      if (self.recordExistence) self.recordExistence(path.id, !!(agg && agg.n));
+      // Nothing to aggregate. Under either mode this is "add nothing" - the
+      // intersection of no sets is not everything here, it is emptiness, because a
+      // group with no scenes has no scenes agreeing on anything.
+      if (!agg || !agg.n) return;
+      var counts = agg.counts, first = agg.first;
+
+      // Union, or only what every source carries. One source makes the two the same
+      // answer, which is the behaviour the setting's description promises.
+      var common = pathCommon(self.settings, path) || !!path.commonOnly;
+      var wanted = agg.order.filter(function (id) {
+        return common ? counts[id] === agg.n : true;
+      });
+      if (!wanted.length) return;
+
+      var existing = {};
+      (path.kind === 'performers' ? (ent.performers || []) : (ent.tags || []))
+        .forEach(function (x) { if (x && x.id != null) existing[String(x.id)] = true; });
+
+      // Asked once per entity per path rather than per tag: the question is about the
+      // whole set the entity will carry, so a tag cannot be answered for on its own.
+      var pruned = path.kind === 'tags' && self.npt && self.npt[pass.target]
+        ? self.prunedAway(self.npt[pass.target], existing,
+            self.plannedFor(pass.target, path.kind, String(ent.id)), wanted)
+        : null;
+
+      var entry = null;
+      wanted.forEach(function (id) {
+        if (existing[id]) return;
+        if (path.kind === 'tags') {
+          var why = self.filters.tagBlocked(id);
+          if (why) return;
+        }
+        // Ahead of `recordAddable`, unlike the dedup below: an addition the sibling
+        // would take straight back off is not one this path would make, so a button
+        // whose only additions are these hides rather than offering a click that
+        // writes something and loses it on the same save.
+        if (pruned && pruned[id]) {
+          self.prunedSkipped = (self.prunedSkipped || 0) + 1;
+          return;
+        }
+        // Eligibility, for the manual-button probe: this id survived the target's own
+        // list and the tag filter, so *this path alone* would add it. Deliberately
+        // ahead of the dedup below - that answers "did anyone already ask
+        // for this id in this plan", which is the right question for the plan and the
+        // wrong one for a button. Two paths that would each add the same tag are two
+        // buttons that would each do something, and only the first would be counted
+        // from the far side of the dedup.
+        if (self.recordAddable) self.recordAddable(path.id);
+        // The entry is created lazily, so a target with nothing to add never enters
+        // the plan and never appears in the count Proceed is enabled on.
+        if (!entry) entry = self.planEntry(pass.target, path.kind, ent);
+        if (entry.add.indexOf(id) !== -1) return;   // another path already asked for it
+        entry.add.push(id);
+        // Held on the entry, not recomputed: phase 2 and Undo log the same attribution
+        // for the same addition, and by then the sources are long out of scope.
+        entry.from.push(fromLabel(first[id], counts[id]));
+        var parts = self.changeParts(entry, path.kind, id);
+        self.log(path.kind === 'performers' ? 'PERF' : 'TAG', partsText(parts), parts);
+      });
+    });
+  };
+
+  // The N-way counterpart to `checkHierarchySibling` below: this one needs no name
+  // of its own, because any plugin - present or future - that declares one of our
+  // enabled path ids in `coop().declares` is doing that exact same relationship
+  // copy. That is redundant work and doubled log lines, never wrong data, since
+  // every plugin that could collide here only ever adds. `MergePerformerTagsToScenes`
+  // is the first such plugin, declaring `'tags:performer>scene'` unconditionally at
+  // its own load; nothing here names it, so a second one needs no edit here either.
+  Run.prototype.checkDeclaredOverlap = function (paths) {
+    var declares = coop().declares, byOther = {};
+    paths.forEach(function (p) {
+      for (var id in declares) {
+        if (!hasOwn(declares, id) || id === PLUGIN_ID) continue;
+        if ((declares[id] || []).indexOf(p.id) === -1) continue;
+        if (!byOther[id]) byOther[id] = [];
+        byOther[id].push(pathLabel(p));
+      }
+    });
+    var self = this;
+    Object.keys(byOther).forEach(function (id) {
+      self.log('INFO', id + ' also performs: ' + byOther[id].join('; ') + '. Running both is ' +
+        'redundant work and doubled log lines, never wrong data - both only ever add.');
+    });
+  };
+
+  // NormalizeParentTags' auto-modes, as its settings actually spell them.
+  // Today that is one string carrying a mode per entity-type ("SCENES=PRUNE,
+  // IMAGES=ROLLUP"), so both directions can be on at once for different types; the
+  // pair of booleans it replaced covered every type it was enabled for, where both at
+  // once was that plugin's own documented no-op.
+  //
+  // Read by name rather than through its `coop().api`, like the rest of this check:
+  // the API answers for one entity-type at a time and needs the plugin to be running
+  // in this page, and what this warning is about is a setting that may be set while
+  // the plugin is disabled. It renamed every key it had at once, which is why the old
+  // pair is still read - an install that has not been touched since then still
+  // carries them, and this check has to keep working against it.
+  function nptAutoModes(ps) {
+    var modes = String((ps && ps.a1AutoModes) || '');
+    if (modes) {
+      return {
+        prune: /=\s*prune\b/i.test(modes),
+        rollup: /=\s*roll[\s_-]*up\b/i.test(modes),
+      };
+    }
+    // COMPAT: NormalizeParentTags' `a8AutoPruneOnUpdate` / `a9AutoRollUpOnUpdate`, the pair
+    // before its `a1AutoModes` (since NormalizeParentTags 4.0.0); remove when never on its
+    // own: an install untouched since then still carries them.
+    var prune = !!(ps && ps.a8AutoPruneOnUpdate), rollup = !!(ps && ps.a9AutoRollUpOnUpdate);
+    if (prune === rollup) return { prune: false, rollup: false };
+    return { prune: prune, rollup: rollup };
+  }
+
+  // The mirror of `MergePerformerTagsToScenes`' own check against the same sibling.
+  // Unlike the overlap above, this is not "the same path" - it is prune/roll-up
+  // along the tag *hierarchy* colliding with an addition along an entity
+  // *relationship*, which applies equally to any of this plugin's eleven tag paths
+  // regardless of which one added the tag. That is why it stays a name-based check
+  // reading NormalizeParentTags' own settings, rather than folding into `declares`:
+  // there is no path id on either side for a generic scan to match.
+  Run.prototype.checkHierarchySibling = function (ps) {
+    if (!ps) return;
+    var auto = nptAutoModes(ps);
+    if (!auto.prune && !auto.rollup) return;
+
+    // Both, where its settings set one type to prune and another to roll up - a state
+    // the pair of booleans it used to keep could not express, and which this once read
+    // as "no mode is running".
+    var mode = auto.prune && auto.rollup
+      ? 'Auto-Prune and Auto-Roll-Up'
+      : (auto.prune ? 'Auto-Prune' : 'Auto-Roll-Up');
+    var effect = auto.prune && auto.rollup
+      ? 'it will rewrite the tags this run adds - removing the ones a more specific tag on ' +
+        'the same entity implies, or adding every ancestor, depending on the entity-type'
+      : (auto.prune
+        ? 'it will remove the tags this run adds, wherever a more specific tag on the same ' +
+          'entity already implies them'
+        : 'it will add every ancestor of the tags this run adds');
+
+    if (coop().respecters[NPT_ID]) {
+      this.log('INFO', NPT_NAME + ' has ' + mode + ' enabled; it will stand down while this ' +
+        'task writes.');
+      return;
+    }
+    // Not registered means one of two things and there is no way to tell them apart
+    // from here: the plugin is disabled in Stash (so its settings linger in the
+    // config but nothing is running), or the installed copy predates the lease
+    // protocol. Say both rather than assert the alarming one.
+    this.note(NPT_NAME + ' has ' + mode + ' enabled in its settings but has not registered as ' +
+      'honoring bulk-edit leases - either it is disabled in Stash, or the installed copy is ' +
+      'older than the protocol. If it is running, ' + effect + '. Turn it off for the duration, ' +
+      'or check the result afterwards.');
+  };
+
+  Run.prototype.checkVersion = function () {
+    var self = this;
+    // The plan below would be computed by code that is not what is installed, so
+    // Proceed is held back until the page is reloaded. This is the one warning in
+    // this dialog that blocks, and the reason is that every other warning is about
+    // the library or another plugin, where the user knows more than the dialog does -
+    // here the dialog knows something the user cannot see.
+    return checkInstalledVersion(function (installed) {
+      self.stale = true;
+      var msg = '\u26a0 This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
+        ', but ' + installed + ' is installed. Reload the page (F5) and run the task again; ' +
+        'if this warning comes back, hard-refresh with Ctrl+Shift+R (\u2318+Shift+R on a Mac). ' +
+        'Proceed stays disabled until the script matches, since the plan would be computed by ' +
+        'the older code.';
+      // Into the log as well as the box: Copy log is how a user reports this, and a
+      // warning that only exists as chrome is one they cannot paste.
+      self.log('WARN', msg);
+      self.showStale(msg);
+      self.setState(self.state);
+    });
+  };
+
+  function emptyCounts() { return { tags: {}, performers: {} }; }
+
+  function countsFromPlan(plan) {
+    var out = emptyCounts();
+    plan.forEach(function (entry) {
+      entry.add.forEach(function (id) {
+        out[entry.kind][id] = (hasOwn(out[entry.kind], id) ? out[entry.kind][id] : 0) + 1;
+      });
+    });
+    return out;
+  }
+
+  // Every distinct tag and performer the run moves, and how many entities each lands
+  // on. The per-entity lines answer "what happens to this scene"; this answers "which
+  // tags does this run touch, and how widely" - which is the question actually asked
+  // before trusting a library-wide write, and the one a six-figure log cannot be read
+  // for.
+  //
+  // Counted per **entity**, not per path: a scene is written once whichever of its
+  // paths asked for the tag.
+  //
+  // Phase 2 passes counts accumulated from the **writes the server accepted**, not
+  // from the plan, so a failed batch or a Stop is never summarised as though it had
+  // landed. The two lines differing is meaningful rather than a fault.
+  //
+  // The tag half hovers. `tagMap` carries names and sort names for every tag in the
+  // library, because the filters need them; aliases and descriptions are fetched here
+  // instead, for the handful of ids a recap actually mentions. A description can run
+  // to paragraphs, and putting that text on `tagQuery` would carry it for the whole
+  // library to name tens of tags. The performer half stays plain text: performers have
+  // no equivalent detail on the traversal, and fetching it would be a query for a
+  // tooltip.
+  Run.prototype.recap = function (source, verb) {
+    var ids = {};
+    ['tags', 'performers'].forEach(function (kind) {
+      var counts = source[kind] || {};
+      var list = [];
+      for (var id in counts) if (hasOwn(counts, id)) list.push(id);
+      ids[kind] = list;
+    });
+    this.recapLines(source, verb, ids);
+    this.flush();
+    return Promise.resolve();
+  };
+
+  Run.prototype.recapLines = function (source, verb, ids) {
+    var self = this;
+    ['tags', 'performers'].forEach(function (kind) {
+      var counts = source[kind] || {};
+      var list = ids[kind];
+      if (!list.length) return;
+      if (kind === 'tags') {
+        list.sort(function (a, b) {
+          var c = collator().compare(sortKey(self.tagMap, a), sortKey(self.tagMap, b));
+          return c !== 0 ? c : numericId(a, b);
+        });
+      } else {
+        list.sort(function (a, b) {
+          var c = collator().compare(self.performerNames[a] || a, self.performerNames[b] || b);
+          return c !== 0 ? c : numericId(a, b);
+        });
+      }
+      var label = kind === 'tags' ? 'tag' : 'performer';
+      var parts = [{ text: plural(list.length, label) + ' ' + verb + ': ' }];
+      list.forEach(function (id, i) {
+        var name = kind === 'tags' ? tagLabel(self.tagMap, id) : performerLabel(self.performerNames, id);
+        // The name is the link and the count is not: `x250` is this run's arithmetic,
+        // not part of what the tag is called, and underlining it would say otherwise.
+        parts.push({
+          text: name.replace(/^(Tag|Performer) /, ''),
+          href: entityHref(kind === 'tags' ? 'tag' : 'performer', id),
+          // The recap hovers to the same card the change lines do. It had a tooltip of
+          // its own once: a second, poorer answer to the question the card answers,
+          // bought with a query per recap.
+          ent: { type: kind === 'tags' ? 'tags' : 'performers', id: id },
+        });
+        // The count is written x250 and never in brackets - the head legend says
+        // so, and a count in brackets on this line would make it false.
+        parts.push({ text: ' x' + counts[id] });
+        if (i < list.length - 1) parts.push({ text: ', ' });
+      });
+      self.log('INFO', partsText(parts), parts);
+    });
+  };
+
+  Run.prototype.finishScan = function () {
+    this.flush();
+    if (this.cancelled) {
+      // Cancel took the dialog away with it; Stop left it open on a partial plan.
+      if (!this.stopped) return;
+      this.log('WARN', 'Review stopped. The plan above is incomplete, so Proceed stays ' +
+        'disabled - change Path Settings if you need to, then press Rescan.');
+      this.setState('ready');
+      this.flush();
+      return;
+    }
+    if (this.prunedSkipped) {
+      this.log('INFO', plural(this.prunedSkipped, 'addition') + ' skipped: ' + NPT_NAME +
+        ' would prune ' + (this.prunedSkipped === 1 ? 'it' : 'them') + ' straight back off.');
+    }
+    if (!this.plan.length) {
+      this.log('INFO', 'Nothing to change.');
+    } else {
+      var adds = 0;
+      this.plan.forEach(function (e) { adds += e.add.length; });
+      this.log('INFO', 'Review complete: ' + plural(adds, 'addition') + ' across ' + plural(this.plan.length, 'entity change') +
+        ' in ' + plural(buildBatches(this.plan).length, 'request') + '. Nothing has been ' +
+        'written. Press Proceed to apply.');
+      this.recap(countsFromPlan(this.plan), 'to add');
+    }
+    this.setState('ready');
+    this.flush();
+  };
+
+  // ── Phase 2: apply ────────────────────────────────────────────────────────
+
+  // The name each line reports. Batches group entities by an identical addition, but
+  // each entity carries its own attribution - the same tag is rarely wanted for the
+  // same reason twice - so the line is built per entry, not per batch.
+  //
+  // As `parts` rather than one string: the entity is a link to its own page and the tag
+  // or performer opens a hover card, and both are things a user reads a plan to decide
+  // about. `partsText` is what goes into `lines`, so Copy log is unchanged - a link and
+  // a card are not text.
+  Run.prototype.changeParts = function (entry, kind, id, prefix) {
+    var parts = [];
+    if (prefix) parts.push({ text: prefix });
+    parts.push({ text: entry.label, href: entityHref(entry.target, entry.id),
+      ent: { type: tipType(entry.target), id: String(entry.id) } });
+    parts.push({ text: ' - ' });
+    // A link *and* a card: the card answers "which tag is that" without leaving the
+    // dialog, and the link is for when the answer is "go and look". The two do not
+    // compete - `flush` hangs the card on whatever element it built, link or span -
+    // and a link is also what makes the name selectable, which a plan being read
+    // against another window is worth.
+    parts.push(kind === 'performers'
+      ? { text: performerLabel(this.performerNames, id), href: entityHref('performer', id),
+          ent: { type: 'performers', id: id } }
+      : { text: tagLabel(this.tagMap, id), href: entityHref('tag', id),
+          ent: { type: 'tags', id: id } });
+    // The source is a link on the same terms as the target above: its own page in a new
+    // tab, or plain text where the type has none. A plan is read to decide whether an
+    // addition is right, and "which studio is that" is the same question about the
+    // source as about the entity being written.
+    var from = fromOf(entry, id);
+    if (from) {
+      parts.push({ text: ' - from ' });
+      parts.push({ text: from.label, href: from.href, ent: from.ent });
+      if (from.more) parts.push({ text: from.more });
+    }
+    return parts;
+  };
+
+  // Called from both directions - an undo moves an entity as surely as an apply does,
+  // so a cache entry left over from either is equally stale.
+  Run.prototype.noteWritten = function (batch) {
+    if (!this.wrote[batch.target]) this.wrote[batch.target] = {};
+    var into = this.wrote[batch.target];
+    batch.entries.forEach(function (entry) { into[String(entry.id)] = true; });
+  };
+
+  Run.prototype.batchFailed = function (batch, verb, e) {
+    var ids = batch.entries.map(function (x) { return x.id; });
+    // Sampled rather than listed: a failed chunk of a hundred should not put a
+    // hundred ids on one log line.
+    this.log('ERROR', TARGETS[batch.target].plural + ' - ' + verb + ' ' +
+      TARGETS[batch.target].bulk + ' failed for ' + ids.length + ' entities (ids ' +
+      ids.slice(0, 5).join(', ') + (ids.length > 5 ? ', ...' : '') + '): ' +
+      (e && e.message ? e.message : String(e)));
+    this.errors++;
+  };
+
+  Run.prototype.applyBatch = function (batch) {
+    var self = this;
+    return gqlRequest(bulkMutation(batch.target), { input: batchInput(batch, 'ADD') })
+      .then(function () {
+        // Recorded only once the server has taken it, so Undo can never try to
+        // reverse a write that never landed.
+        self.undoable.push(batch);
+        self.noteWritten(batch);
+        journalBatch(self.journalRun, batch, 'ADD');
+        batch.entries.forEach(function (entry) {
+          batch.ids.forEach(function (id) {
+            var line = self.changeParts(entry, batch.kind, id);
+            self.log(batch.kind === 'performers' ? 'PERF' : 'TAG', partsText(line), line);
+            var c = self.appliedCounts[batch.kind];
+            c[id] = (hasOwn(c, id) ? c[id] : 0) + 1;
+          });
+          self.applied++;
+        });
+      }, function (e) {
+        // The whole batch failed, so none of its entities changed and none of them
+        // are logged as changed.
+        self.batchFailed(batch, 'apply', e);
+        self.failed += batch.entries.length;
+      });
+  };
+
+  // Apply and Undo drive their batches identically, and the reasoning is the same for
+  // both - which is why it is written once here rather than twice.
+  //
+  // The lease is renewed per batch rather than taken once for the whole run, because a
+  // library-wide pass can outlast any sane fixed expiry, and it is released in every
+  // outcome - success, failure, Stop - so a reactive plugin is never left standing
+  // down. The expiry is the backstop for the one outcome neither can catch: the tab
+  // going away mid-run.
+  //
+  // guarded() is the other half of that, pointed inwards: every batch here is a
+  // bulk*Update, which is exactly what this plugin's own auto-mode watches for, so
+  // without it a run with an auto-mode enabled would re-plan each batch it had just
+  // written - and an Undo would have its reversal put straight back. The lease cannot
+  // do that job: it is advisory, and we honour our own leases no more than anyone
+  // else's.
+  Run.prototype.runBatches = function (batches, leaseLabel, step, verb, finish) {
+    var self = this;
+    var lease = C.lease(PLUGIN_ID, leaseLabel);
+    var i = 0;
+    var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, !self.scope);
+    var recorded = function () {
+      self.journalRun = null;
+      pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+    };
+
+    function nextBatch() {
+      if (self.stopped || i >= batches.length) return Promise.resolve();
+      lease.renew();
+      return step(batches[i++]).then(function () {
+        self.renderProgress();
+        return nextBatch();
+      });
+    }
+
+    guarded(nextBatch).then(function () {
+      lease.release();
+      finish.call(self);
+      recorded();
+    }, function (e) {
+      lease.release();
+      self.log('ERROR', verb + ' aborted: ' + (e && e.message ? e.message : e));
+      self.errors++;
+      finish.call(self);
+      recorded();
+    });
+  };
+
+  Run.prototype.proceed = function () {
+    // `setState` already disables Proceed on an empty plan and on a stale script;
+    // this is the second half of that, because a keyboard activation or a stale
+    // reference must not reach a write.
+    if (this.state !== 'ready' || !this.plan.length || this.stale) return;
+    var self = this;
+    this.disarmUndo();   // any other button takes back an armed Undo, as Rescan and Close do
+    this.setState('applying');
+    this.applied = 0;
+    this.failed = 0;
+    this.appliedCounts = emptyCounts();
+    this.stopped = false;
+    this.log('INFO', 'Applying ' + plural(this.plan.length, 'entity change') + ' - ' +
+      new Date().toISOString());
+
+    this.runBatches(buildBatches(this.plan), this.taskName,
+      function (b) { return self.applyBatch(b); },
+      'Apply', Run.prototype.finishApply);
+  };
+
+  Run.prototype.finishApply = function () {
+    this.log('INFO', 'Finished. ' + plural(this.applied, 'entity change') + ' applied' +
+      (this.failed ? ', ' + this.failed + ' failed' : '') +
+      (this.stopped ? ' (stopped early; changes already applied stay applied)' : '') +
+      // A finished run is not the same thing as a settled library: the plan was
+      // computed before the first write, so anything that changed during phase 2 -
+      // another tab, a scan, a sibling plugin - is invisible to it. Rescanning until
+      // the plan comes back empty is how a run converges.
+      '. Press Rescan to review what is left.');
+    this.recap(this.appliedCounts, 'added');
+    this.setState('done');
+    this.flush();
+    // Evicted here rather than per batch: the dialog covers the page, so nothing
+    // behind it is being read until it closes, and one eviction at the end beats one
+    // per hundred entities. Eviction only, never `location.reload()` - that would tear
+    // this dialog down at the moment the user wants to read or copy its log.
+    evictWritten(this.wrote);
+    this.wrote = {};
+  };
+
+  // ── Undo ──────────────────────────────────────────────────────────────────
+  //
+  // Reverses what this dialog has written, newest batch first, by replaying each
+  // accepted mutation with REMOVE in place of ADD. What it is *not* is a restore: it
+  // reaches this dialog's own writes and nothing else, it cannot see a change made in
+  // between, and it dies with the tab. The head of the dialog says so and the backup
+  // instruction stays exactly where it is.
+  //
+  // A delta rather than a rewritten list, for the same reason the apply is one: it
+  // takes back precisely the assignments this run added and touches nothing else,
+  // which is what lets it run over a library that has moved on - and equally what
+  // stops it being a substitute for a backup.
+  //
+  // **This is the only code in the plugin that removes anything.** §1's "copy, never
+  // move" is written around this exception rather than despite it.
+  Run.prototype.undoBatch = function (batch) {
+    var self = this;
+    return gqlRequest(bulkMutation(batch.target), { input: batchInput(batch, 'REMOVE') })
+      .then(function () {
+        // Dropped from the record as it is reversed, so a Stop halfway leaves behind
+        // exactly the batches that are still applied.
+        var at = self.undoable.indexOf(batch);
+        if (at !== -1) self.undoable.splice(at, 1);
+        self.noteWritten(batch);
+        journalBatch(self.journalRun, batch, 'REMOVE');
+        batch.entries.forEach(function (entry) {
+          batch.ids.forEach(function (id) {
+            var back = self.changeParts(entry, batch.kind, id, 'Undo - ');
+            self.log(batch.kind === 'performers' ? 'PERF' : 'TAG', partsText(back), back);
+            var c = self.undoneCounts[batch.kind];
+            c[id] = (hasOwn(c, id) ? c[id] : 0) + 1;
+          });
+          self.undone++;
+        });
+      }, function (e) {
+        self.batchFailed(batch, 'undo', e);
+        self.undoFailed += batch.entries.length;
+      });
+  };
+
+  Run.prototype.undo = function () {
+    // Offered in `ready` as well as `done`, because a rescan leaves the dialog
+    // holding a fresh plan over a library an earlier pass already changed - which is
+    // exactly when the user is choosing between applying more and taking back what is
+    // there. Never while the dialog is itself mid-write.
+    if ((this.state !== 'ready' && this.state !== 'done') || !this.undoable.length) return;
+    var self = this;
+
+    // One click here starts a library-wide write, in the state where the user is most
+    // likely to be clicking around - Copy log, Rescan and Close are its neighbours -
+    // so it arms and asks. The count is what makes the prompt worth reading: it
+    // states the scope rather than asking a generic "are you sure".
+    if (!this.undoArmed) {
+      this.undoArmed = true;
+      this.undoBtn.textContent = 'Undo ' + plural(batchCount(this.undoable), 'change') + '?';
+      this.undoTimer = setTimeout(function () { self.disarmUndo(); }, UNDO_ARM_MS);
+      return;
+    }
+    this.disarmUndo();
+
+    this.setState('undoing');
+    this.stopped = false;
+    this.undone = 0;
+    this.undoFailed = 0;
+    this.undoneCounts = emptyCounts();
+    this.undoTotal = batchCount(this.undoable);
+    this.log('INFO', 'Undoing ' + plural(this.undoTotal, 'entity change') + ' - ' +
+      new Date().toISOString());
+
+    // Newest first, because that is the order that composes: a rescan-and-apply cycle
+    // can write to one entity twice, and taking the second write back before the
+    // first is the only sequence that lands where the run started. An undo is a bulk
+    // write like any other, so it announces itself the same way - see runBatches, and
+    // note that guarded() matters more sharply here: an undo writes the inverse delta,
+    // so an auto-mode reacting to it would put back exactly what the user just asked
+    // to have taken away.
+    this.runBatches(this.undoable.slice().reverse(), this.taskName + ' (undo)',
+      function (b) { return self.undoBatch(b); },
+      'Undo', Run.prototype.finishUndo);
+  };
+
+  Run.prototype.finishUndo = function () {
+    this.log('INFO', 'Undo finished. ' + plural(this.undone, 'entity change') + ' reversed' +
+      (this.undoFailed ? ', ' + this.undoFailed + ' could not be' : '') +
+      (this.stopped ? ' (stopped early; what was reversed stays reversed)' : '') +
+      (this.undoable.length
+        ? '. ' + plural(batchCount(this.undoable), 'change') + ' are still applied.'
+        : '. Everything this dialog wrote has been taken back.'));
+    this.recap(this.undoneCounts, 'removed again');
+    // Always finishes in `done`, even when it started from `ready`: a plan reviewed
+    // against the library as it was no longer describes it, so Rescan is the honest
+    // next step rather than a Proceed left armed over ground that has moved.
+    this.setState('done');
+    this.flush();
+    // Same reasoning as finishApply: an undo moved these entities too.
+    evictWritten(this.wrote);
+    this.wrote = {};
+  };
+
+  // ── The footer ────────────────────────────────────────────────────────────
+
+  Run.prototype.stop = function () {
+    // A scan stops through `cancelled`, which is the flag every page and every pass
+    // already checks. Unlike Cancel it leaves the dialog standing on whatever was
+    // planned so far - which is half a plan, so Proceed is withheld and Rescan is what
+    // the user presses once Path Settings say what they want them to say.
+    if (this.state === 'scanning') {
+      this.cancelled = true;
+      this.stopped = true;
+      this.planStale = true;
+      this.log('WARN', 'Stopping the review after the current request...');
+      return;
+    }
+    if (this.state !== 'applying' && this.state !== 'undoing') return;
+    this.stopped = true;
+    this.log('WARN', 'Stopping after the current request...');
+  };
+
+  Run.prototype.cancel = function () {
+    this.cancelled = true;
+    this.log('INFO', 'Canceled. Nothing was written.');
+    this.close();
+  };
+
+  // Rescan exists because the whole plan is computed before the first write, so
+  // anything that changes the library during phase 2 is invisible to the plan being
+  // applied. Rescanning until the plan comes back empty is how a run converges.
+  //
+  // The rendered log is kept rather than emptied: the "--- Rescan ---" marker
+  // separates the passes, and a log that stays until the dialog closes is the whole
+  // session on screen - the same thing Copy log has always handed over.
+  Run.prototype.rescan = function () {
+    this.disarmUndo();
+    var lines = this.lines.slice();
+    // Carried across the reset for the same reason `lines` is: both are the record
+    // of what this dialog has already done, and a rescan starts a pass rather than a
+    // session. Converging on an empty plan must not cost the ability to undo the
+    // passes that got there.
+    var undoable = this.undoable;
+    this.reset();
+    this.lines = lines;
+    this.undoable = undoable;
+    this.log('INFO', '--- Rescan ---');
+    this.begin();
+  };
+
+  // Says what happened on the button that was pressed, and puts its caption back.
+  function copyFeedback(btn, label) {
+    return function (ok) {
+      holdWidth(btn);
+      btn.textContent = ok ? 'Copied' : 'Failed';
+      setTimeout(function () { btn.textContent = label; }, 2000);
+    };
+  }
+
+  Run.prototype.copy = function () {
+    this.disarmUndo();
+    copyToClipboard([droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n'),
+      copyFeedback(this.copyBtn, 'Copy log'));
+  };
+
+  Run.prototype.close = function () {
+    dialogClose(this);
+    this.disarmUndo();
+    this.spin(false);
+    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
+    if (_active === this) _active = null;
+    // Whatever this dialog wrote may have made a manual button on the page behind it
+    // eligible or not, and the buttons were unreachable while it was open, so this is
+    // the first moment a re-probe is worth anything. On a page with no manual buttons
+    // the tick returns before it queries anything.
+    invalidateButtonProbes();
+  };
+
+  // ── The path settings dialog ──────────────────────────────────────────────
+  //
+  // The editor for the one setting this plugin's `b` block now holds. It exists
+  // because a tri-state is not something Stash's settings page can render - a plugin
+  // setting is BOOLEAN, NUMBER or STRING and nothing else - and because thirteen
+  // paths spread over five alphabetical blocks were a list nobody could see the shape
+  // of. Here they are in pipeline order, grouped by what they write into, which is
+  // how the task's own log is ordered too.
+  //
+  // It writes a setting, not the library, so it carries no backup instruction: there
+  // is nothing here for an Undo to reverse. What it does carry is what a path being
+  // on actually means - the task covers it, the buttons appear for it, and the
+  // auto-modes, if they are on, write along it with no dialog at all.
+  // Which of the two views the dialog opens on, kept across close and reopen. In
+  // localStorage rather than in the plugin settings, for the same reason
+  // `NormalizeParentTags` keeps its run selection there: it is one browser's
+  // convenience, not a configuration every tab and every user of that Stash shares -
+  // and unlike every setting this plugin has, it changes nothing about what a run
+  // does. Anything but the one word this writes reads as the list, so a hand-edited
+  // or truncated value can only ever fall back.
+  var VIEW_KEY = '__GTTx__.ptp2rePathsView';
+
+  function viewStore() {
+    try {
+      return window.localStorage || null;
+    } catch (e) {
+      return null;                         // storage disabled: it opens on the list
+    }
+  }
+
+  function storedVisual() {
+    try {
+      var store = viewStore();
+      return !!store && store.getItem(VIEW_KEY) === 'visual';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Separately guarded from the read: a private window can hand out a store that
+  // reads fine and throws on the first write, which would otherwise take the click
+  // that switched the view down with it.
+  function rememberView(visual) {
+    try {
+      var store = viewStore();
+      if (store) store.setItem(VIEW_KEY, visual ? 'visual' : 'list');
+    } catch (e) {
+      // Full, or refused. The view still switched; it just will not be remembered.
+    }
+  }
+
+  // ── Dragging, and the layout a drag produces ──────────────────────────────
+  //
+  // `dragXY` knows nothing about this plugin and is meant to be copied into the next
+  // one that needs it, like `plural` and `coopObject`: give it an element and a
+  // callback, and it reports how far the pointer has moved from where it went down.
+  //
+  // Pointer events rather than mouse ones - a pen and a touch work, and
+  // `setPointerCapture` keeps the moves coming when the pointer leaves the element,
+  // which a drag by definition does. `onMove` is called with the offset from the
+  // start, never with an absolute position: the caller knows what it was dragging
+  // from and this does not.
+  function dragXY(node, onMove, onDrop, when) {
+    node.addEventListener('pointerdown', function (ev) {
+      if (ev.button) return;                       // a right or middle click is not a drag
+      if (when && !when()) return;                 // not draggable now: the click goes on
+      if (ev.preventDefault) ev.preventDefault();
+      var x0 = ev.clientX, y0 = ev.clientY, moved = false;
+      if (node.setPointerCapture && ev.pointerId != null) {
+        try { node.setPointerCapture(ev.pointerId); } catch (e) { /* not captured */ }
+      }
+      function move(e) {
+        moved = true;
+        onMove(e.clientX - x0, e.clientY - y0);
+      }
+      function up() {
+        node.removeEventListener('pointermove', move);
+        node.removeEventListener('pointerup', up);
+        node.removeEventListener('pointercancel', up);
+        if (moved && onDrop) onDrop();
+      }
+      node.addEventListener('pointermove', move);
+      node.addEventListener('pointerup', up);
+      node.addEventListener('pointercancel', up);
+    });
+  }
+
+  // A rearranged diagram, kept per browser like the view choice and for the same
+  // reason - it is one person's picture of their own library, not a configuration
+  // every tab shares. `{ nodes: { <id>: {x, y} }, curves: { <pathId>: {along, off} } }`,
+  // merged into the shipped tables by id, so a release that adds a box or a path
+  // keeps its own placement for it rather than the whole layout being thrown away.
+  var LAYOUT_KEY = '__GTTx__.ptp2reDiagramLayout';
+
+  function storedLayout() {
+    try {
+      var store = viewStore();
+      if (!store) return null;
+      var v = JSON.parse(store.getItem(LAYOUT_KEY) || 'null');
+      return v && typeof v === 'object' ? v : null;
+    } catch (e) {
+      return null;                         // absent, disabled, or not JSON at all
+    }
+  }
+
+  function saveLayout(layout) {
+    try {
+      var store = viewStore();
+      if (!store) return;
+      if (layout) store.setItem(LAYOUT_KEY, JSON.stringify(layout));
+      else store.removeItem(LAYOUT_KEY);
+    } catch (e) {
+      // Full, or refused. The drag still happened; it is this page's picture only.
+    }
+  }
+
+  // Whether the diagram can be rearranged, read at the moment the dialog is built.
+  // A console flag on the shared object rather than a setting or a permanent button,
+  // for the reasons `logButtonVisInfo` is one: it is aimed at whoever is deliberately
+  // authoring a layout, its natural lifetime is that session, and a stray drag on a
+  // dialog everyone else opens to set thirteen toggles would be a bug, not a feature.
+  function layoutEditing() {
+    return !!coop().layoutEdit;
+  }
+
+  function PathsDialog(taskName) {
+    this.taskName = taskName;
+    this.modes = {};
+    PATHS.forEach(function (p) { this.modes[p.id] = PATH_OFF; }, this);
+    this.saving = false;
+    this.stale = false;
+    this.stored = null;   // the paths as read, formatted; null until they have been
+    this.unread = false;  // ... and whether part of the stored string was not understood
+    this.skip = false;        // the one filter this dialog owns, and what was stored
+    this.storedSkip = false;  // ... so Save can tell whether it has moved
+  }
+
+  // Save is offered only once a toggle has actually moved. A write button that is
+  // live before anything has been touched invites a press that stores back exactly
+  // what it read - and on a stale tab that press is the one thing this dialog blocks.
+  //
+  // The one press worth offering with nothing moved is the one the note above the
+  // panel promises: part of the stored string is not something this script could read,
+  // and Save is what replaces the whole of it with what is shown.
+  PathsDialog.prototype.refreshSave = function () {
+    if (!this.saveBtn) return;
+    this.saveBtn.disabled = this.saving || this.stale || this.stored === null ||
+      (!this.unread && this.stored === formatPaths(this.modes) &&
+        this.skip === this.storedSkip);
+  };
+
+  // ── One button per path, and it *is* the control ──────────────────────────
+  //
+  // A `<select>` costs two clicks to change anything: one to open the list, one to
+  // pick. Thirteen of them is twenty-six clicks to set up a library, for a control
+  // whose options are two thirds of the time just Off and On. A button that carries
+  // the current state and takes the next one on click is one click.
+  //
+  // **There is no tri-state button in HTML**, so the two paths that offer "common tags
+  // only" get a *cycling* button - Off → All tags → Common tags only → Off - which is
+  // never worse than the select it replaces (that cost two clicks for every change)
+  // and is one click for the common case of turning a path on. The alternative, a
+  // segmented group of three, is one click to *any* state and self-documenting, and
+  // was not taken: it is a second widget shape in a column of thirteen, three times
+  // the markup for two rows, and it widens the column for every other row with it.
+  // The cycle is named in the button's title instead, which is what a select's open
+  // list was doing for discoverability.
+  //
+  // A checkbox's `indeterminate` is the other thing that gets called tri-state and is
+  // not one: a user cannot set it, only script can, and its third state means "unknown"
+  // rather than a third choice.
+  //
+  // Bootstrap variants rather than colors of our own, so hover, focus and active come
+  // from Stash's theme - and the orange is the repo's "this plugin writes" color, which
+  // is what a path being on means. Off is `btn-secondary`, both on-states are orange;
+  // which of the two an orange button is in is what its caption says.
+  //
+  // In three columns filled top to bottom. The first two hold the eleven two-state
+  // paths in pipeline order - which the head states is semantics here, not
+  // presentation - and the third holds the two paths that can be `common`, together.
+  // They are the only buttons whose caption changes width as it changes state, and a
+  // column that resizes under the pointer is what pulled them out of the sequence;
+  // `.ptp2re-toggle-wide` then holds them at the width of their longest caption so
+  // even their own column stops moving. Pipeline order still reads down each column,
+  // which is what the order is for. The label is `pathLabel`, the same string the
+  // log and the dialog heads use, so there is no second naming of a path anywhere.
+  //
+  // Deliberately *not* grouped under an "Into <plural>" heading, which is what this
+  // shipped with and got wrong: pipeline order visits a target, leaves it and comes
+  // back, so a heading emitted at a target's first path collects later paths into
+  // whichever heading happened to precede them. The label already names the target,
+  // and the order is what the grouping would have had to break.
+  PathsDialog.prototype.panel = function () {
+    var self = this;
+    var wrap = el('div', 'ptp2re-paths');
+    var cols = PATH_COLUMNS.map(function () { return el('div', 'ptp2re-paths-col'); });
+    cols.forEach(function (c) { wrap.appendChild(c); });
+    this.toggles = {};
+    // Where a button goes home to when the diagram gives it back. A row is
+    // `display:contents`, so re-appending puts the button back in its own grid cell.
+    this.rows = {};
+    PATH_COLUMNS.forEach(function (ids, i) {
+      ids.forEach(function (id) {
+        if (!id) { cols[i].appendChild(el('div', 'ptp2re-path-gap')); return; }
+        var p = pathById(id);
+        if (!p) return;
+        var row = el('div', 'ptp2re-path-row');
+        var name = C.markLevel(el('span', 'ptp2re-path-name', pathLabel(p)), 'semi');
+        name.title = pathTip(p);
+        row.appendChild(name);
+        var labels = pathLabels(p), states = pathStates(p);
+        var cycle = 'Click to cycle: ' +
+          states.map(function (m) { return labels[m]; }).join(' \u2192 ');
+        var btn = el('button', null);
+        btn.type = 'button';
+        // The third appearance a button here has, and the only one no click produces:
+        // a path that is off while other enabled paths already carry its tags end to
+        // end. It reads On because that is what the library does, and it wears the
+        // highlight as *letters on the resting background* rather than as a filled button,
+        // because nothing was switched on - turning it on would add a direct copy,
+        // which is a different thing from what is already happening.
+        function paint() {
+          var mode = self.modes[p.id] || PATH_OFF;
+          var chain = mode === PATH_OFF ? coveredBy(self.chains || {}, p) : null;
+          btn.textContent = chain ? PATH_LABEL[PATH_ON] : labels[mode];
+          btn.className = 'btn btn-sm ptp2re-toggle' +
+            (p.common || p.commonOnly ? ' ptp2re-toggle-wide' : '') +
+            (chain ? ' ptp2re-toggle-auto' : '') +
+            ' ' + (mode === PATH_OFF ? 'btn-secondary' : PLUGIN_BTN_VARIANT);
+          btn.title = chain
+            ? 'Off, and already happening: ' + chain.map(function (cid) {
+                return pathLabel(pathById(cid));
+              }).join(', then ') + ' carries the same tags the whole way. ' + cycle
+            : cycle;
+        }
+        paint();
+        btn.addEventListener('click', function (e) {
+          if (e && e.preventDefault) e.preventDefault();
+          var at = states.indexOf(self.modes[p.id] || PATH_OFF);
+          self.modes[p.id] = states[(at + 1) % states.length];
+          // Every button, not this one: switching a path on can be the link that
+          // completes a chain covering some other path, and leaving that one showing
+          // Off would be the same lie as never computing it.
+          self.repaint();
+        });
+        row.appendChild(btn);
+        cols[i].appendChild(row);
+        self.rows[p.id] = row;
+        self.toggles[p.id] = { el: btn, paint: paint };
+      });
+    });
+    return wrap;
+  };
+
+  // What each box is doing under the current configuration, in its outline: orange
+  // where something is being written into it, blue where something is being read out
+  // of it, black where neither. Painted from `repaint` rather than at build, so it
+  // follows a toggle the moment it is pressed - which is what makes the diagram answer
+  // "what is this configuration actually doing" at a glance, the one question a column
+  // of thirteen names cannot answer at all.
+  //
+  // **Orange wins where a box does both**, which Scene and Gallery both do the moment
+  // more than a couple of paths are on. Being written into is the consequential half -
+  // it is the repo's color for "this plugin writes", and it is what a user is deciding
+  // about when they look at this dialog.
+  //
+  // The giving side is keyed on the path id's own source segment, the same string the
+  // node table uses, so `tags:subgroup>group` lights Sub-group rather than Group.
+  PathsDialog.prototype.paintDiagram = function () {
+    var self = this, live = {}, gives = {};
+    PATHS.forEach(function (p) {
+      if ((self.modes[p.id] || PATH_OFF) === PATH_OFF) return;
+      live[p.target] = true;
+      gives[/^[a-z]+:([a-z_]+)>/.exec(p.id)[1]] = true;
+    });
+    DIAGRAM_NODES.forEach(function (n) {
+      if (!self.diaBoxes[n.id]) return;
+      var state = live[n.id] ? ' ptp2re-dia-live'
+        : gives[n.id] ? ' ptp2re-dia-gives' : ' ptp2re-dia-idle';
+      self.diaBoxes[n.id].className = DIA_BOX_CLASS + state;
+    });
+  };
+
+  // One pass over the modes, then every button. The chains are computed once here
+  // rather than per button, which is also what keeps them consistent: thirteen
+  // buttons each deriving their own answer is thirteen chances to derive it from a
+  // half-updated map.
+  PathsDialog.prototype.repaint = function () {
+    var self = this;
+    this.chains = pathChains(this.modes);
+    PATHS.forEach(function (p) { self.toggles[p.id].paint(); });
+    if (this.diaBoxes) this.paintDiagram();
+    this.refreshSave();
+    this.refreshBulk();
+  };
+
+  // A bulk button that would change nothing is unavailable, and says why.
+  PathsDialog.prototype.refreshBulk = function () {
+    var self = this;
+    (this.bulkBtns || []).forEach(function (b) {
+      var idle = PATHS.every(function (p) {
+        return self.modes[p.id] === (pathStates(p).indexOf(b._mode) >= 0 ? b._mode : PATH_ON);
+      });
+      b.disabled = idle;
+      b.title = b._base + (idle ? ' Every path is already this way, so it has nothing to do.' : '');
+    });
+  };
+
+  // ── The diagram view ──────────────────────────────────────────────────────
+  //
+  // The same thirteen toggles, on the graph rather than in a column. `diagramGeometry`
+  // has already decided where everything goes; this turns those numbers into nodes -
+  // one absolutely-positioned div per box and per chip, one SVG curve per path, and
+  // one slot per path for the button to sit in - and keeps a reference to each, so a
+  // drag can move them without rebuilding anything. A rebuild would be simpler and
+  // cannot be used: it would destroy the element the pointer is captured on.
+  //
+  // **The buttons are the list's own, moved here and back.** A second set would be a
+  // second thing to paint, to enable and to keep in step with the modes, for a dialog
+  // that only ever shows one view at a time.
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  // Set as a style, not a fill or stroke attribute: an SVG attribute does not read var().
+  var DIA_COLOUR = { tags: '#84d68a', performers: 'var(--gttx-accent,#7cc4ff)' };
+  // What a drag rounds to. Small enough not to fight the pointer, large enough that
+  // two boxes nudged into line actually line up.
+  var DIA_SNAP = 5;
+  // A box borrows Stash's own secondary button, the same two classes the dialog's
+  // Cancel and Copy layout wear, so the diagram is themed by whatever the user's
+  // Stash is themed by rather than by four hex values here.
+  var DIA_BOX_CLASS = 'btn btn-secondary ptp2re-dia-box';
+
+  function svgEl(tag, attrs) {
+    var node = document.createElementNS(SVG_NS, tag);
+    for (var k in attrs) if (hasOwn(attrs, k)) node.setAttribute(k, attrs[k]);
+    return node;
+  }
+
+  function diaPlace(node, box) {
+    node.style.left = box.x + 'px';
+    node.style.top = box.y + 'px';
+    node.style.width = box.w + 'px';
+    node.style.height = box.h + 'px';
+  }
+
+  // The free space round the picture while arranging, on every side, so a box can be
+  // dragged out in any direction.
+  var DIA_EDIT_ROOM = 120;
+
+  function diaSnap(v) {
+    return Math.round(v / DIA_SNAP) * DIA_SNAP;
+  }
+
+  PathsDialog.prototype.diagram = function () {
+    var self = this;
+    // Dev Mods' Layout edit mode draws the Edit Layout switch; the switch, Off at every
+    // open, is what makes the picture draggable.
+    var editable = layoutEditing();
+    this.editing = false;
+    this.layout = storedLayout() || {};
+    if (!this.layout.nodes) this.layout.nodes = {};
+    if (!this.layout.curves) this.layout.curves = {};
+
+    this.centreLayout();
+
+    var wrap = el('div', 'ptp2re-dia');
+    wrap.appendChild(el('div', 'ptp2re-dia-legend',
+      'One box per entity-type, with what it holds inside it, and one arrow per path ' +
+      'from what that path reads to what it writes. Green carries tags, blue carries ' +
+      'performers, and a dashed arrow reaches its source through the target’s ' +
+      'scenes - a Group has no performers or markers of its own. Every button is the ' +
+      'same toggle the list view shows, on the arrow it belongs to.'));
+    if (editable) wrap.appendChild(this.editBar());
+
+    var canvas = this.canvas = el('div', 'ptp2re-dia-canvas');
+
+    // One arrowhead per kind. A single marker filled with `context-stroke` would take
+    // the line's own color, and it is newer than the oldest browser someone might be
+    // running Stash in - two markers cost four lines and cannot be too new.
+    var svg = this.svg = svgEl('svg', {});
+    var defs = svgEl('defs');
+    ['tags', 'performers'].forEach(function (kind) {
+      var marker = svgEl('marker', { id: 'ptp2re-head-' + kind, viewBox: '0 0 8 8',
+        refX: 8, refY: 4, markerWidth: 7, markerHeight: 7, orient: 'auto' });
+      marker.appendChild(svgEl('path', { d: 'M0,0 L8,4 L0,8 z', style: 'fill:' + DIA_COLOUR[kind] }));
+      defs.appendChild(marker);
+    });
+    svg.appendChild(defs);
+    canvas.appendChild(svg);
+
+    this.diaBoxes = {};
+    this.diaChips = {};
+    this.diaLines = {};
+    this.slots = {};
+
+    diagramGeometry(this.layout).nodes.forEach(function (n) {
+      var box = el('div', DIA_BOX_CLASS);
+      box.appendChild(el('div', 'ptp2re-dia-name', n.label));
+      canvas.appendChild(box);
+      self.diaBoxes[n.id] = box;
+      // Chips are positioned on the canvas rather than inside the box, because they
+      // are also the arrows' anchors: one coordinate system for both is one place for
+      // them to disagree.
+      self.diaChips[n.id] = n.chips.map(function (c) {
+        var chip = el('div', 'ptp2re-dia-chip ptp2re-dia-' + c.kind, c.label);
+        canvas.appendChild(chip);
+        return chip;
+      });
+      if (editable) self.dragNode(box, n.id);
+    });
+
+    PATHS.forEach(function (p) {
+      var line = svgEl('path', { style: 'fill:none;stroke:' + DIA_COLOUR[p.kind],
+        'stroke-width': '2', 'marker-end': 'url(#ptp2re-head-' + p.kind + ')' });
+      // Two hops: the payload is on something the target does not have, and is reached
+      // through its scenes. The list view says so in the name's tooltip; here the line
+      // itself can.
+      if (p.hops === 2) line.setAttribute('stroke-dasharray', '6 4');
+      // An SVG <title> is the only tooltip a line can carry, and it is the same
+      // sentence the list view's name carries.
+      var tip = svgEl('title');
+      tip.textContent = pathLabel(p) + '. ' + pathTip(p);
+      line.appendChild(tip);
+      svg.appendChild(line);
+      self.diaLines[p.id] = line;
+
+      var slot = el('div', 'ptp2re-dia-slot');
+      canvas.appendChild(slot);
+      self.slots[p.id] = slot;
+      if (editable) self.dragCurve(slot, p.id);
+    });
+
+    wrap.appendChild(canvas);
+    this.redrawDiagram();
+    return wrap;
+  };
+
+  // The picture, moved so it starts at the padding - which, with a canvas sized to
+  // its contents and `margin:0 auto`, is what centres it in a dialog wider than it is.
+  //
+  // **Once, when the dialog is built, and never during a drag.** Recentring on every
+  // redraw would mean dragging the leftmost box further left moved everything else
+  // right by the same amount, so the box would sit under the pointer without ever
+  // appearing to move. The picture settles the next time the dialog is opened, which
+  // is also when the arrangement stops changing.
+  //
+  // It writes into `this.layout` rather than into the tables, and does not save: an
+  // arrangement nobody has dragged is not one to store, and the next drop stores the
+  // centred coordinates anyway.
+  PathsDialog.prototype.diaPad = function () {
+    return DIA.pad + (this.editing ? DIA_EDIT_ROOM : 0);
+  };
+
+  PathsDialog.prototype.centreLayout = function () {
+    var self = this, pad = this.diaPad();
+    var g = diagramGeometry(this.layout, pad);
+    var dx = Math.round(pad - g.minX), dy = Math.round(pad - g.minY);
+    if (!dx && !dy) return;
+    DIAGRAM_NODES.forEach(function (n) {
+      var at = self.layout.nodes[n.id] || n;
+      self.layout.nodes[n.id] = { x: at.x + dx, y: at.y + dy };
+    });
+  };
+
+  // Every coordinate the diagram has, applied. Called once at build and again on
+  // every pointer move, which is why it writes into existing nodes rather than
+  // making new ones.
+  PathsDialog.prototype.redrawDiagram = function () {
+    var self = this;
+    var g = diagramGeometry(this.layout, this.diaPad());
+    this.geo = { nodes: {}, edges: {} };
+    if (!this.dragging) {
+      this.canvas.style.width = g.w + 'px';
+      this.canvas.style.height = g.h + 'px';
+      this.svg.setAttribute('width', g.w);
+      this.svg.setAttribute('height', g.h);
+      this.svg.setAttribute('viewBox', '0 0 ' + g.w + ' ' + g.h);
+    }
+    g.nodes.forEach(function (n) {
+      self.geo.nodes[n.id] = n;
+      diaPlace(self.diaBoxes[n.id], n);
+      n.chips.forEach(function (c, i) { diaPlace(self.diaChips[n.id][i], c); });
+    });
+    g.edges.forEach(function (e) {
+      self.geo.edges[e.id] = e;
+      self.diaLines[e.id].setAttribute('d',
+        'M' + e.x1 + ',' + e.y1 + ' Q' + e.cx + ',' + e.cy + ' ' + e.x2 + ',' + e.y2);
+      self.slots[e.id].style.left = e.bx + 'px';
+      self.slots[e.id].style.top = e.by + 'px';
+    });
+  };
+
+  // A box, moved. The position at the start of the drag is read on the first move,
+  // before anything has been applied - `dragXY` reports an offset and deliberately
+  // does not know where the thing it is dragging was.
+  PathsDialog.prototype.dragNode = function (node, id) {
+    var self = this, from = null;
+    dragXY(node, function (dx, dy) {
+      if (!from) from = { x: self.geo.nodes[id].x, y: self.geo.nodes[id].y };
+      self.dragging = true;
+      self.layout.nodes[id] = { x: diaSnap(from.x + dx), y: diaSnap(from.y + dy) };
+      self.redrawDiagram();
+    }, function () {
+      from = null;
+      self.settleDrag();
+    }, function () { return self.editing; });
+  };
+
+  // A drag ended: the picture re-centred in its room, the canvas sized to it, and kept.
+  PathsDialog.prototype.settleDrag = function () {
+    this.dragging = false;
+    this.centreLayout();
+    this.redrawDiagram();
+    saveLayout(this.layout);
+  };
+
+  // A toggle, moved - and its arrow with it, since the curve is defined to pass
+  // through the toggle. Stored in the chord's own axes rather than in canvas pixels,
+  // so moving either box afterwards carries the shape along instead of leaving it
+  // behind.
+  PathsDialog.prototype.dragCurve = function (node, id) {
+    var self = this, from = null;
+    dragXY(node, function (dx, dy) {
+      var e = self.geo.edges[id];
+      if (!from) from = { x: e.bx, y: e.by };
+      self.dragging = true;
+      self.layout.curves[id] = curveTo({ x: e.x1, y: e.y1 }, { x: e.x2, y: e.y2 },
+        diaSnap(from.x + dx), diaSnap(from.y + dy));
+      self.redrawDiagram();
+    }, function () {
+      from = null;
+      self.settleDrag();
+    }, function () { return self.editing; });
+  };
+
+  // The bar that only exists while `__GTTx__.StashPluginCoop.layoutEdit` is set: the Edit
+  // Layout switch, Off at every open, and - while it is On - the hint, Copy and Reset. Copy
+  // hands back the two tables as the source spells them, which is how a layout worth
+  // keeping stops being one browser's and becomes everyone's; Reset drops the stored
+  // one and goes back to those tables.
+  PathsDialog.prototype.editBar = function () {
+    var self = this;
+    var bar = el('div', 'ptp2re-dia-edit');
+    var sw = button('Edit Layout: Off', 'ptp2re-dia-editsw');
+    var hint = el('span', 'ptp2re-dia-edithint',
+      'Layout editing is on: drag a box or a toggle. Changes are kept in this browser ' +
+      'as you make them.');
+    var copy = button('Copy layout', 'ptp2re-dia-copy');
+    copy.title = 'Copy this arrangement as the two tables the plugin source holds, to paste in as its default.';
+    copy.addEventListener('click', function () {
+      copyToClipboard(self.layoutText(), copyFeedback(copy, 'Copy layout'));
+    });
+    var reset = button('Reset layout', 'ptp2re-dia-reset');
+    reset.title = 'Forget the arrangement kept in this browser and go back to the one the plugin ships.';
+    var set = function (on) {
+      self.editing = on;
+      sw.textContent = 'Edit Layout: ' + (on ? 'On' : 'Off');
+      sw.className = sw.className.replace(/\bbtn-(secondary|warning)\b/, on ? PLUGIN_BTN_VARIANT : 'btn-secondary');
+      sw.title = on
+        ? 'On: boxes and toggles can be dragged, with room all round. Click to stop arranging.'
+        : 'Off: the diagram is only for setting paths. Click to drag its boxes and toggles into a new arrangement.';
+      [hint, copy, reset].forEach(function (n) {
+        n.className = n.className.replace(/\s*ptp2re-hidden\b/g, '') + (on ? '' : ' ptp2re-hidden');
+      });
+      if (!self.canvas) return;
+      self.canvas.className = 'ptp2re-dia-canvas' + (on ? ' ptp2re-dia-editing' : '');
+      self.centreLayout();
+      self.redrawDiagram();
+    };
+    sw.addEventListener('click', function () { set(!self.editing); });
+    set(false);
+    bar.appendChild(sw);
+    bar.appendChild(hint);
+    reset.addEventListener('click', function () {
+      self.layout = { nodes: {}, curves: {} };
+      saveLayout(null);
+      // Re-centred here as well as at build: nothing is being dragged, so there is no
+      // pointer for a shift to surprise, and a Reset that left the picture hard against
+      // one edge would look like a second thing had gone wrong.
+      self.centreLayout();
+      self.redrawDiagram();
+    });
+    bar.appendChild(copy);
+    bar.appendChild(reset);
+    return bar;
+  };
+
+  // The layout as the source would spell it. Whole tables rather than the differences:
+  // what is pasted back replaces what is there, and a patch nobody can apply without
+  // reading both is worse than eight lines of coordinates.
+  // Centred at the plain padding, whatever room editing has round it: the source's
+  // tables are the picture as it opens.
+  PathsDialog.prototype.layoutText = function () {
+    var self = this, g = diagramGeometry(this.layout);
+    var dx = Math.round(DIA.pad - g.minX), dy = Math.round(DIA.pad - g.minY);
+    var out = ['  var DIAGRAM_NODES = ['];
+    DIAGRAM_NODES.forEach(function (n) {
+      var at = self.layout.nodes[n.id] || n;
+      out.push("    { id: '" + n.id + "', label: '" + n.label + "', x: " + (at.x + dx) +
+        ', y: ' + (at.y + dy) + (n.perf ? ', perf: true' : '') + ' },');
+    });
+    out.push('  ];', '  var DIAGRAM_CURVE = {');
+    PATHS.forEach(function (p) {
+      var c = self.layout.curves[p.id] || DIAGRAM_CURVE[p.id];
+      // A path with no entry is a straight line with its toggle halfway along, which
+      // is what an absent entry already means - printing it would be thirteen lines
+      // saying nothing.
+      if (!c) return;
+      out.push("    '" + p.id + "': { along: " + Math.round(c.along * 1000) / 1000 +
+        ', off: ' + Math.round(c.off) + ' },');
+    });
+    out.push('  };');
+    return out.join('\n');
+  };
+
+  // Which view is showing. The modal drops `narrow` for the diagram: the list is three
+  // columns of short labels and reads worse the wider it gets, and the diagram is
+  // 1100px of canvas that has nowhere to reflow to.
+  PathsDialog.prototype.showView = function (visual) {
+    var self = this;
+    this.visual = !!visual;
+    PATHS.forEach(function (p) {
+      var home = self.visual ? self.slots[p.id] : self.rows[p.id];
+      if (home) home.appendChild(self.toggles[p.id].el);
+    });
+    this.listPanel.className = 'ptp2re-paths' + (this.visual ? ' ptp2re-hidden' : '');
+    this.diaPanel.className = 'ptp2re-dia' + (this.visual ? '' : ' ptp2re-hidden');
+    this.modal.className = 'ptp2re-modal' + (this.visual ? '' : ' ptp2re-narrow');
+    this.viewBtn.textContent = this.visual ? 'List view' : 'System view';
+    this.viewBtn.title = this.visual
+      ? 'Show the paths as a list of names, which is narrower and easier to read down.'
+      : 'Show the paths as a diagram: a box per entity-type and an arrow per path.';
+    rememberView(this.visual);
+  };
+
+  // The three bulk buttons, in the footer opposite Save. Thirteen presses to turn everything on
+  // is what they save, and they are the only place `common` can be asked for across
+  // the board: a path that cannot take a mode takes the nearest one it can, which for
+  // both "All On" buttons is plain On. So "All On / Common Tags" is not a fourteenth
+  // state - it is "on everywhere, and common wherever common exists".
+  PathsDialog.prototype.bulkRow = function () {
+    var self = this;
+    var row = el('div', 'ptp2re-paths-bulk');
+    this.bulkBtns = [
+      [PATH_OFF, 'All Off',
+        'Switch every path off. Nothing is stored until you press Save.'],
+      [PATH_ON, 'All On / All Tags',
+        'Switch every path on, each copying every tag its sources carry.'],
+      [PATH_COMMON, 'All On / Common Tags Only',
+        'Switch every path on, and set the two that offer it to add a tag only when ' +
+        'every one of their sources carries it. The other eleven have no such mode ' +
+        'and are simply on.'],
+    ].map(function (pair) {
+      var b = el('button', 'btn btn-sm ' +
+        (pair[0] === PATH_OFF ? 'btn-secondary' : PLUGIN_BTN_VARIANT), pair[1]);
+      b.type = 'button';
+      b.title = pair[2];
+      b._base = pair[2];
+      b._mode = pair[0];
+      b.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        self.setAll(pair[0]);
+      });
+      row.appendChild(b);
+      return b;
+    });
+    return row;
+  };
+
+  // ── The one exclusion filter that lives here ──────────────────────────────
+  //
+  // `f5SkipTagsNormalizeWouldPrune` had a row on Stash's settings page beside the
+  // other seven filters, and it does not any more: it is declared in no `.yml`, so
+  // nothing renders it and this checkbox is the only editor it has. Two reasons, and
+  // the second is the one that made it worth moving:
+  //
+  //   - **Its rule is another plugin's.** The other seven are answered by this
+  //     plugin's own tables; this one is answered by asking `NormalizeParentTags`
+  //     what it would prune, which is a question with no answer at all when that
+  //     plugin is absent, disabled, or older than the release that publishes
+  //     `prepare`. A settings row cannot say so - it is rendered from a static
+  //     manifest - and a control drawn by us can, and does, on the line beneath it.
+  //   - **It decides what a path copies**, which is what every other control in this
+  //     dialog decides. The user is already here choosing that.
+  //
+  // The value still lives in the plugin's stored settings, written by Save along with
+  // the paths in one `configurePlugin`, so both auto-modes and every other tab
+  // read it exactly as they did when it had a row. Stash's own settings panel spreads
+  // the whole stored map when it writes a setting of its own, so a key it does not
+  // render is a key it does not drop.
+  PathsDialog.prototype.skipRow = function () {
+    var self = this;
+    var api = nptApi();
+    var label = el('label', 'ptp2re-opt' + (api ? '' : ' ptp2re-opt-off'));
+    var box = el('input', null);
+    box.type = 'checkbox';
+    box.disabled = !api;
+    box.addEventListener('change', function () {
+      self.skip = !!box.checked;
+      self.refreshSave();
+    });
+    label.appendChild(box);
+    label.appendChild(el('span', null,
+      'Skip tags ' + NPT_NAME + ' would prune again'));
+    C.markLevel(label, 'semi');
+    label.title = 'The Auto-Prune in ' + NPT_NAME + ' removes a tag from an entity when ' +
+      'a more specific tag on the same entity already implies it. Where it is set to Prune ' +
+      'an entity-type, a tag copied onto one of those is removed again on the very save ' +
+      'this plugin makes - work done, logged, and undone, every run. Ticked, such a tag is ' +
+      'never copied in the first place: the plan says how many were skipped, and the ' +
+      'buttons that would only have added those hide. It asks that plugin rather than ' +
+      'guessing, so its own tag exclusions are honored and a type it is not pruning ' +
+      'automatically is left alone. Roll-Up is never skipped - that mode adds ancestors, ' +
+      'so a tag copied here is one it would have added anyway.';
+    // Said on the page rather than left to the tooltip, because it is the difference
+    // between a filter that is doing something and one that cannot: a box ticked with
+    // nobody answering skips nothing, and the run log is the only other place that
+    // says so - after the user has already pressed a button.
+    var note = el('div', 'ptp2re-optnote', api
+      ? NPT_NAME + ' is answering. Which entity-types it would prune is its own setting, ' +
+        'and the run log names them.'
+      : NPT_NAME + ' is not answering: it is absent, disabled, or older than ' +
+        NPT_API_MIN + ', which is the release that lets another plugin ask it. Nothing ' +
+        'is skipped, and this stays as it is until that plugin is back.');
+    this.skipBox = box;
+    this.skipAvailable = !!api;
+    var wrap = el('div', null);
+    wrap.appendChild(label);
+    wrap.appendChild(note);
+    return wrap;
+  };
+
+  PathsDialog.prototype.setAll = function (mode) {
+    var self = this;
+    PATHS.forEach(function (p) {
+      self.modes[p.id] = pathStates(p).indexOf(mode) >= 0 ? mode : PATH_ON;
+    });
+    this.repaint();
+  };
+
+  // Sets the modes without going through a click: this is the dialog telling the
+  // buttons what it found, which is not the user pressing them.
+  PathsDialog.prototype.set = function (modes) {
+    var self = this;
+    PATHS.forEach(function (p) {
+      self.modes[p.id] = (modes && modes[p.id]) || PATH_OFF;
+    });
+    this.repaint();
+  };
+
+  PathsDialog.prototype.enable = function (on) {
+    var self = this;
+    PATHS.forEach(function (p) { self.toggles[p.id].el.disabled = !on; });
+    (this.bulkBtns || []).forEach(function (b) { b.disabled = !on; });
+    if (on) this.refreshBulk();
+    // Never re-enabled past the sibling being absent: `enable(true)` is "the settings
+    // have landed", not "everything here is answerable".
+    if (this.skipBox) this.skipBox.disabled = !on || !this.skipAvailable;
+  };
+
+  PathsDialog.prototype.build = function () {
+    var self = this;
+    var foot = settingsShell(this,
+      'A path switched on here is one the task covers, one a manual button appears ' +
+      'for, and - if either auto-mode is on - one that is written along whenever ' +
+      'Stash saves an entity, with no dialog if Silent Auto-propagation is on. Off is what a path does ' +
+      'until you say otherwise.',
+      'Every path only ever adds; nothing is removed from the source or the target. ' +
+      'The order below is the order a run walks them in, and it matters: what an ' +
+      'earlier path adds is what a later one reads. The exclusion filters apply to all ' +
+      'of them - seven in the plugin settings, and the eighth under the paths here.');
+
+    // Both views are built up front and one is hidden. The diagram is a hundred-odd
+    // nodes of static geometry - cheaper to build once than to keep a flag saying
+    // whether it has been built, and building it on the first switch would leave the
+    // buttons homeless until then.
+    this.listPanel = this.panel();
+    this.diaPanel = this.diagram();
+    this.body.appendChild(this.listPanel);
+    this.body.appendChild(this.diaPanel);
+    // Under both panels rather than inside either: it is not a path, and it applies to
+    // whichever view is showing.
+    this.body.appendChild(this.skipRow());
+
+    // Blue: it changes nothing but which of the two views is on screen. See "one
+    // color for a plugin wrote this".
+    this.viewBtn = button('System view', 'ptp2re-view');
+    this.viewBtn.className = this.viewBtn.className.replace('btn-secondary', READONLY_BTN_VARIANT);
+    this.viewBtn.addEventListener('click', function () { self.showView(!self.visual); });
+    foot.appendChild(this.viewBtn);
+    // The bulk buttons sit at the other end of the footer, pushed there by the row's
+    // own `margin-left:auto` rather than by anything in the shared `.foot` rule, which
+    // is pinned byte-identical across the plugins. They belong in a footer and not
+    // above the columns: they set the same thing Save then stores, and a row of
+    // buttons over the panel read as a second header.
+    foot.appendChild(this.bulkRow());
+    // After the footer, so the bulk buttons are disabled with the rest until the
+    // settings land: `enable` reaches every control the dialog owns.
+    this.enable(false);
+    // Last, because it moves the toggles into whichever view is showing and reads the
+    // footer's own button back.
+    this.showView(storedVisual());
+
+    dialogOpen(this);
+    this.checkVersion();
+
+    loadSettings(true).then(function (loaded) {
+      if (_paths !== self) return;
+      // Save rewrites the whole setting from these selectors, so a value this script
+      // could not read is about to be replaced by what it managed to make of it. That
+      // is a fair thing to do on a press, and not one to do without saying so - and it
+      // is the one press this dialog offers with nothing changed, so it is read before
+      // the toggles are set, which is what arms Save.
+      var raw = String(loaded.settings.b1Paths || '').replace(/^\s+|\s+$/g, '');
+      self.unread = !!raw && unrecognisedPairs(raw) > 0;
+      self.stored = formatPaths(loaded.settings.paths);
+      // Shown as stored even where the sibling is not answering: the box is disabled
+      // there, and a ticked one that rendered unticked would read as the setting
+      // having been lost rather than as the filter having nobody to ask.
+      self.storedSkip = !!loaded.settings.f5SkipTagsNormalizeWouldPrune;
+      self.skip = self.storedSkip;
+      self.skipBox.checked = self.skip;
+      self.set(loaded.settings.paths);
+      self.enable(true);
+      self.noteEl.textContent = self.unread
+        ? '\u26a0 Part of the stored setting is not something this script understands ' +
+          '("' + raw + '"). It is shown below as far as it could be read, and it is left ' +
+          'alone until you press Save - which replaces the whole of it with what is ' +
+          'selected here.'
+        : '';
+    }, function (e) {
+      if (_paths !== self) return;
+      self.noteEl.textContent = 'The current setting could not be read (' +
+        (e && e.message ? e.message : e) + '). Saving from here would replace it with ' +
+        'whatever is selected above, so Save stays disabled - close this and try again.';
+    });
+  };
+
+  // The same question the run dialog asks, and it blocks for a sharper reason. Save
+  // does not add to this setting, it rewrites the whole string from the paths *this*
+  // script knows - so a newer installed version that had grown a fourteenth path, or
+  // a third mode, would have it silently dropped by a stale tab. The run dialog at
+  // least shows the plan it would write; here the loss is invisible.
+  PathsDialog.prototype.checkVersion = function () {
+    var self = this;
+    return staleGate(this, function () { return _paths === self; }, 'paths');
+  };
+
+  PathsDialog.prototype.focus = function () {
+    if (this.modal && this.modal.scrollIntoView) this.modal.scrollIntoView();
+  };
+
+  PathsDialog.prototype.save = function () {
+    var self = this;
+    saveDialog(this, function () {
+      return savePaths(formatPaths(self.modes), { f5SkipTagsNormalizeWouldPrune: self.skip });
+    }, function () { return _paths === self; }, function () {
+      // A run dialog underneath is holding a plan built from the paths that were set a
+      // moment ago. Saying so beats letting the user read a plan that no longer matches
+      // the configuration the head above it lists.
+      if (_active && _active.log) {
+        _active.log('INFO', 'The path settings were changed while this dialog was open. The ' +
+          'plan above was built from the previous ones - press Rescan to plan again.');
+        // Saying it is not enough: the plan on screen was built from paths that no
+        // longer hold, so Proceed goes and Rescan appears. A scan still in flight picks
+        // this up when it reaches `ready`.
+        _active.planStale = true;
+        _active.setState(_active.state);
+        _active.flush();
+      }
+    });
+  };
+
+  PathsDialog.prototype.close = function () {
+    dialogClose(this);
+    if (_paths === this) _paths = null;
+    // Whatever was saved changes which manual buttons belong on the page behind this.
+    invalidateButtonProbes();
+  };
+
+  // ── The manual buttons dialog ─────────────────────────────────────────────
+  //
+  // One toggle per manual button, twenty-six in all, and the Save Immediately switch
+  // beside them: everything that decides what a page shows, in one place, where Show
+  // Manual Buttons used to be one switch for all of them and Save Immediately a row on
+  // its own. The toggles are the Path Settings toggles' shape - the button carries its
+  // state and takes the other one on a click - and the two columns are the two sides a
+  // button can be on: pulling in, on the target's Edit tab; pushing out, on the
+  // source's own page.
+  function ButtonsDialog(taskName) {
+    this.taskName = taskName;
+    this.on = {};
+    this.immediate = false;
+    this.settings = null;
+    this.saving = false;
+    this.stale = false;
+    this.stored = null;   // the buttons as read, formatted; null until they have been
+    this.storedImmediate = false;
+    this.toggles = [];
+    this.bulkBtns = [];
+  }
+
+  ButtonsDialog.prototype.refreshSave = function () {
+    if (!this.saveBtn) return;
+    this.saveBtn.disabled = this.saving || this.stale || this.stored === null ||
+      (this.stored === formatButtons(this.on) && this.immediate === this.storedImmediate);
+  };
+
+  ButtonsDialog.prototype.panel = function () {
+    var self = this, s = this.settings;
+    var wrap = el('div', 'ptp2re-btncols');
+    var cols = {};
+    [['target', 'On target entity Edit tabs',
+      'The Edit tab of a scene, gallery, image or group. A button there pulls tags or ' +
+      'performers into the entity in front of you - one per path that copies into it.'],
+     ['source', 'On source entity pages',
+      'The detail page of the entity a path reads from. A button there pushes its tags ' +
+      'or performers out to everything the path reaches, and always reviews first. The ' +
+      'two marker paths have none: a marker has no page of its own.']].forEach(function (c) {
+      var col = el('div', 'ptp2re-btncol');
+      var head = el('div', 'ptp2re-btncol-head', c[1]);
+      head.title = c[2];
+      col.appendChild(head);
+      wrap.appendChild(col);
+      cols[c[0]] = col;
+    });
+    this.toggles = [];
+    // A box per page, and a second box for the page where some of its paths are off:
+    // a button whose path is off is a switch that does nothing yet, and it says so in
+    // a box of its own rather than being hidden - hiding it would make the path
+    // setting look like a buttons setting. The caption alone names each button; the
+    // page is in the box's head, once.
+    buttonViews().forEach(function (v) {
+      [true, false].forEach(function (live) {
+        var here = v.buttons.filter(function (b) { return pathOn(s, b.path) === live; });
+        if (!here.length) return;
+        var group = el('div', 'ptp2re-btngroup' + (live ? '' : ' ptp2re-opt-off'));
+        var head = el('div', 'ptp2re-btngroup-head', v.view + ' (' +
+          (live ? 'Active' : 'Inactive') + (here.length === 1 ? ' path)' : ' paths)'));
+        head.title = live
+          ? 'On in Path Settings: each button here is drawn once it is switched on.'
+          : 'Off in Path Settings: a button here does not appear until its path is on.';
+        group.appendChild(head);
+        var grid = el('div', 'ptp2re-paths-col');
+        group.appendChild(grid);
+        here.forEach(function (b) {
+          var row = el('div', 'ptp2re-path-row');
+          var name = el('span', 'ptp2re-path-name', buttonCaption(b, s));
+          name.title = pathTip(b.path) + (live ? ''
+            : ' Its path is off in Path Settings, so this button does not appear until the path is on.');
+          row.appendChild(name);
+          var btn = el('button', null);
+          btn.type = 'button';
+          function paint() {
+            var on = !!self.on[b.key];
+            btn.textContent = on ? PATH_LABEL[PATH_ON] : PATH_LABEL[PATH_OFF];
+            btn.className = 'btn btn-sm ptp2re-toggle ' + (on ? PLUGIN_BTN_VARIANT : 'btn-secondary');
+            btn.title = 'Click to ' + (on ? 'hide' : 'show') + ' this button.';
+          }
+          paint();
+          btn.addEventListener('click', function (e) {
+            if (e && e.preventDefault) e.preventDefault();
+            self.on[b.key] = !self.on[b.key];
+            paint();
+            self.refreshSave();
+          });
+          row.appendChild(btn);
+          grid.appendChild(row);
+          self.toggles.push({ el: btn, paint: paint });
+        });
+        cols[v.side].appendChild(group);
+      });
+    });
+    return wrap;
+  };
+
+  ButtonsDialog.prototype.repaint = function () {
+    this.toggles.forEach(function (t) { t.paint(); });
+    this.refreshSave();
+    this.refreshBulk();
+  };
+
+  ButtonsDialog.prototype.refreshBulk = function () {
+    var self = this;
+    (this.bulkBtns || []).forEach(function (b) {
+      var idle = manualButtons().every(function (m) { return !!self.on[m.key] === b._on; });
+      b.disabled = idle;
+      b.title = b._base + (idle ? ' Every button is already this way, so it has nothing to do.' : '');
+    });
+  };
+
+  ButtonsDialog.prototype.setAll = function (on) {
+    var self = this;
+    manualButtons().forEach(function (b) { self.on[b.key] = on; });
+    this.repaint();
+  };
+
+  ButtonsDialog.prototype.enable = function (on) {
+    this.toggles.forEach(function (t) { t.el.disabled = !on; });
+    this.bulkBtns.forEach(function (b) { b.disabled = !on; });
+    if (on) this.refreshBulk();
+    if (this.immediateBox) this.immediateBox.disabled = !on;
+  };
+
+  ButtonsDialog.prototype.bulkRow = function () {
+    var self = this;
+    var row = el('div', 'ptp2re-paths-bulk');
+    this.bulkBtns = [
+      [false, 'Show None', 'Switch every button off. Nothing is stored until you press Save.'],
+      [true, 'Show All', 'Switch every button on. Nothing is stored until you press Save.'],
+    ].map(function (t) {
+      var b = el('button', 'btn btn-sm ' + (t[0] ? PLUGIN_BTN_VARIANT : 'btn-secondary'), t[1]);
+      b.type = 'button';
+      b.title = t[2];
+      b._base = t[2];
+      b._on = t[0];
+      b.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        self.setAll(t[0]);
+      });
+      row.appendChild(b);
+      return b;
+    });
+    return row;
+  };
+
+  // `a2SaveImmediately` had a row on Stash's settings page and does not any more: it
+  // is about the buttons and nothing else, so it is set where the buttons are. Stored
+  // under its old key, beside the buttons, in the one write Save makes.
+  ButtonsDialog.prototype.immediateRow = function () {
+    var self = this;
+    var label = el('label', 'ptp2re-opt');
+    var box = el('input', null);
+    box.type = 'checkbox';
+    box.addEventListener('change', function () {
+      self.immediate = !!box.checked;
+      self.refreshSave();
+    });
+    label.appendChild(box);
+    label.appendChild(el('span', null, 'Save Immediately'));
+    C.markLevel(label, true);             // skips the staging: writes on a click
+    label.title = 'Make the Edit-tab buttons review in a dialog instead of staging in the form. ' +
+      'Off: a click stages the tags or performers in the open edit form, so you can check ' +
+      'them and press Save yourself. On - or on a Stash that cannot stage - a click opens a ' +
+      'dialog listing every change first, and nothing is written until you press Proceed. ' +
+      'Only the Edit-tab buttons: a button on a source\'s own page always reviews, and the ' +
+      'auto-modes ask in a dialog of their own unless Silent Auto-propagation is on.';
+    var note = el('div', 'ptp2re-optnote', 'Off: an Edit-tab button stages what it would ' +
+      'add in the form for Stash\'s own Save; on, it opens the review dialog. A button on ' +
+      'the source\'s own page always opens the dialog.');
+    this.immediateBox = box;
+    var wrap = el('div', null);
+    wrap.appendChild(label);
+    wrap.appendChild(note);
+    return wrap;
+  };
+
+  ButtonsDialog.prototype.build = function () {
+    var self = this;
+    var foot = settingsShell(this,
+      'A button switched on here is drawn on its page whenever its path is on in Path ' +
+      'Settings and a click would add something. Off is what a button does until you say ' +
+      'otherwise.',
+      'A button on an Edit tab pulls tags or performers into the entity in front of you; ' +
+      'one on a source\'s own page pushes its tags or performers out to everything the path ' +
+      'reaches, and always reviews first. The two marker paths have no source button: a ' +
+      'marker has no page of its own.');
+    foot.appendChild(this.bulkRow());
+    this.enable(false);
+    dialogOpen(this);
+    this.checkVersion();
+
+    loadSettings(true).then(function (loaded) {
+      if (_buttons !== self) return;
+      var s = loaded.settings;
+      self.settings = s;
+      // Built once the settings are in: four captions name the aggregation their
+      // path is set to, and a row drawn before that is a row redrawn.
+      self.body.appendChild(self.panel());
+      self.body.appendChild(self.immediateRow());
+      manualButtons().forEach(function (b) { self.on[b.key] = !!s.buttons[b.key]; });
+      self.stored = formatButtons(self.on);
+      self.storedImmediate = !!s.a2SaveImmediately;
+      self.immediate = self.storedImmediate;
+      self.immediateBox.checked = self.immediate;
+      self.repaint();
+      self.enable(true);
+      self.noteEl.textContent = '';
+    }, function (e) {
+      if (_buttons !== self) return;
+      self.noteEl.textContent = 'The current setting could not be read (' +
+        (e && e.message ? e.message : e) + '). Saving from here would replace it with ' +
+        'whatever is selected, so Save stays disabled - close this and try again.';
+    });
+  };
+
+  // Blocks Save for the reason the path editor's does: Save rewrites the whole
+  // string from the `what` this script knows. All three settings dialogs; `live`
+  // says whether the dialog is still the open one when the answer lands.
+  function staleGate(dlg, live, what) {
+    return checkInstalledVersion(function (installed) {
+      if (!live()) return;
+      dlg.stale = true;
+      dlg.saveBtn.disabled = true;
+      dlg.noteEl.parentNode.insertBefore(el('div', 'ptp2re-stale',
+        '⚠ This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
+        ', but ' + installed + ' is installed. Reload the page (F5); if this warning ' +
+        'comes back, hard-refresh with Ctrl+Shift+R (⌘+Shift+R on a Mac). Save stays ' +
+        'disabled until the script matches: it would rewrite the whole setting from the ' +
+        what + ' this older script knows, dropping anything the installed one has added.'),
+        dlg.noteEl);
+    });
+  }
+
+  ButtonsDialog.prototype.checkVersion = function () {
+    var self = this;
+    return staleGate(this, function () { return _buttons === self; }, 'buttons');
+  };
+
+  ButtonsDialog.prototype.focus = PathsDialog.prototype.focus;
+
+  ButtonsDialog.prototype.save = function () {
+    var self = this;
+    saveDialog(this, function () {
+      return writeOwnSettings({
+        a1ManualButtons: formatButtons(self.on),
+        a2SaveImmediately: self.immediate,
+        // COMPAT: `a1ShowManualButtons`, the one switch for every button before the buttons
+        // became one string (since PropagateTagsAndPerformers 5.0.0); remove when the
+        // migration in `settingsFrom` goes. It goes false in the same write: the migration
+        // reads it while this setting is empty, and a Show None saved over it would
+        // otherwise come back as Show All on the next load.
+        a1ShowManualButtons: false,
+      }).then(invalidateAutoSettings);
+    }, function () { return _buttons === self; });
+  };
+
+  ButtonsDialog.prototype.close = function () {
+    dialogClose(this);
+    if (_buttons === this) _buttons = null;
+  };
+
+  // ── The Auto-Propagation and Depropagate Assist dialog ──────────────────────────────
+  //
+  // Two switches that were two rows on Stash's settings page. A dialog for two
+  // checkboxes is not about room: both make the plugin write the library with no
+  // plan in front of it, and a row between the buttons and the paths did not say
+  // so loudly enough. Here they sit under a head that does, and nothing is stored
+  // until Save.
+  function AutoDialog(taskName) {
+    this.taskName = taskName;
+    this.on = {};
+    this.stored = null;   // the modes as read, formatted; null until they have been
+    this.saving = false;
+    this.stale = false;
+    this.boxes = [];
+  }
+
+  AutoDialog.prototype.refreshSave = function () {
+    if (!this.saveBtn) return;
+    this.saveBtn.disabled = this.saving || this.stale || this.stored === null ||
+      this.stored === formatAuto(this.on);
+  };
+
+  AutoDialog.prototype.panel = function () {
+    var self = this;
+    var wrap = el('div', null);
+    this.boxes = AUTO_ROWS.map(function (r) {
+      var label = el('label', 'ptp2re-opt');
+      var box = el('input', null);
+      box.type = 'checkbox';
+      box.addEventListener('change', function () {
+        self.on[r[0]] = !!box.checked;
+        self.refreshSave();
+        self.enable(true);
+      });
+      label.appendChild(box);
+      label.appendChild(el('span', null, r[1]));
+      label.title = r[2];
+      C.markLevel(label, r[3]);
+      wrap.appendChild(label);
+      wrap.appendChild(el('div', 'ptp2re-optnote', r[2]));
+      return { key: r[0], el: box, label: label, level: r[3] };
+    });
+    return wrap;
+  };
+
+  // Silent is grayed out, not hidden, while neither mode is on: it qualifies a
+  // reaction, and with no reaction there is nothing for it to say.
+  AutoDialog.prototype.enable = function (on) {
+    var idle = !this.on.target && !this.on.source;
+    this.boxes.forEach(function (b) {
+      var off = !on || (b.key === 'silent' && idle);
+      b.el.disabled = off;
+      // The class is rewritten whole, so the level goes back on with it.
+      b.label.className = 'ptp2re-opt' + (b.key === 'silent' && idle ? ' ptp2re-opt-off' : '');
+      C.markLevel(b.label, b.level);
+    });
+  };
+
+  AutoDialog.prototype.build = function () {
+    var self = this;
+    settingsShell(this,
+      'Both modes react to Stash\'s own saves. Unless Silent Auto-propagation is on, a ' +
+      'reaction lists what it would add and writes only what you leave ticked; with Silent ' +
+      'on it writes the moment Stash saves, with no dialog. The Depropagate assist removes ' +
+      'only what you tick. Every write is recorded in ᝯㄝₓ Core\'s Undo History - but try ' +
+      'the task first.',
+      'Every enabled path is written along, and every exclusion filter applies. An ' +
+      'entity this plugin has just written to is left alone for a few seconds, which is ' +
+      'what stops a reversible pair of paths bouncing.');
+    dialogOpen(this);
+    this.checkVersion();
+
+    loadSettings(true).then(function (loaded) {
+      if (_auto !== self) return;
+      self.body.appendChild(self.panel());
+      AUTO_MODES.forEach(function (m) { self.on[m] = !!loaded.settings.auto[m]; });
+      self.stored = formatAuto(self.on);
+      self.boxes.forEach(function (b) { b.el.checked = !!self.on[b.key]; });
+      self.refreshSave();
+      self.enable(true);
+      self.noteEl.textContent = '';
+    }, function (e) {
+      if (_auto !== self) return;
+      self.noteEl.textContent = 'The current setting could not be read (' +
+        (e && e.message ? e.message : e) + '). Saving from here would replace it with ' +
+        'whatever is selected, so Save stays disabled - close this and try again.';
+    });
+  };
+
+  AutoDialog.prototype.checkVersion = function () {
+    var self = this;
+    return staleGate(this, function () { return _auto === self; }, 'modes');
+  };
+
+  AutoDialog.prototype.focus = PathsDialog.prototype.focus;
+
+  AutoDialog.prototype.save = function () {
+    var self = this;
+    saveDialog(this, function () {
+      return writeOwnSettings({
+        a3AutoPropagation: formatAuto(self.on),
+        // COMPAT: `a3AutoOnTargetUpdate` / `a4AutoOnSourceUpdate`, the two auto-mode switches
+        // before the modes became one string (since PropagateTagsAndPerformers 5.0.1);
+        // remove when the migration in `settingsFrom` goes. False in the same write, for
+        // the reason the buttons dialog retires its own.
+        a3AutoOnTargetUpdate: false,
+        a4AutoOnSourceUpdate: false,
+      }).then(invalidateAutoSettings);
+    }, function () { return _auto === self; });
+  };
+
+  AutoDialog.prototype.close = function () {
+    dialogClose(this);
+    if (_auto === this) _auto = null;
+  };
+
+  // ── The pick dialog ───────────────────────────────────────────────────────
+  //
+  // One line per change with a box in front of it, OK, Cancel, and the two bulk
+  // buttons. It is what an automatic reaction shows instead of writing blind, and
+  // what the removal offer shows; it plans nothing and writes nothing itself - the
+  // caller passes the lines and gets back the keys of the ticked ones, or null for
+  // Cancel and Escape. Deliberately not the run dialog: that one has a log, a
+  // progress line and an Undo for a run the user started, and this is a question
+  // about a save they made.
+  function PickDialog(title, warn, lines, ticked, held) {
+    this.title = title;
+    this.warn = warn;
+    this.lines = lines;       // [{ key, parts }]
+    this.ticked = ticked;     // every box starts this way
+    this.held = held || null; // [{ type, ids }] this dialog holds on Core's settling registry
+    this.boxes = [];
+  }
+
+  // Queued behind whatever pick is open: the second dialog opens when the first
+  // closes rather than on top of it.
+  function pick(title, warn, lines, ticked, held) {
+    var dlg = new PickDialog(title, warn, lines, ticked, held);
+    var turn = _pickQueue.then(function () { return dlg.open(); });
+    _pickQueue = turn.then(function () {}, function () {});
+    return turn;
+  }
+
+  PickDialog.prototype.open = function () {
+    var self = this;
+    return new Promise(function (resolve) {
+      self.resolve = resolve;
+      _pick = self;
+      self.build();
+    });
+  };
+
+  PickDialog.prototype.build = function () {
+    var self = this;
+    var head = dialogShell(this, 'ptp2re-mid', this.title);
+    head.appendChild(el('div', 'ptp2re-warn', this.warn));
+    this.waitEl = el('div', 'ptp2re-pick-wait hidden');
+    head.appendChild(this.waitEl);
+    if (this.held) {
+      this.tickWait();
+      (function arm() {
+        self.waitTimer = setTimeout(function () { self.tickWait(); arm(); }, 1000);
+      }());
+    }
+
+    var body = el('div', 'ptp2re-pathsbody');
+    var list = el('div', 'ptp2re-pick');
+    this.lines.forEach(function (line, i) {
+      // Past the cap a line has a box nobody sees, so Select All, Unselect All and OK
+      // still cover it.
+      if (i >= linesDrawn()) { self.boxes.push({ key: line.key, el: { checked: self.ticked } }); return; }
+      var row = el('label', 'ptp2re-pick-row');
+      var box = el('input', null);
+      box.type = 'checkbox';
+      box.checked = self.ticked;
+      box.addEventListener('change', function () { self.syncOk(); });
+      row.appendChild(box);
+      var text = el('span', null);
+      appendParts(text, line.parts);
+      row.appendChild(text);
+      list.appendChild(row);
+      self.boxes.push({ key: line.key, el: box });
+    });
+    if (this.lines.length > linesDrawn()) {
+      list.appendChild(el('div', 'ptp2re-note', '+' + (this.lines.length - linesDrawn()) +
+        ' more, not shown - ' + (this.ticked ? 'ticked' : 'unticked') +
+        ', and set by Select All and Unselect All with the rest.'));
+    }
+    body.appendChild(list);
+    this.modal.appendChild(body);
+
+    var foot = el('div', 'ptp2re-foot');
+    // Orange: OK is the button that writes.
+    this.okBtn = button('OK', 'ptp2re-proceed');
+    this.okBtn.className = this.okBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.closeBtn = button('Cancel', 'ptp2re-cancel');
+    this.okBtn.addEventListener('click', function () {
+      var keys = self.boxes.filter(function (b) { return b.el.checked; })
+        .map(function (b) { return b.key; });
+      if (!keys.length) return;   // guarded in the handler, not only at render
+      self.close(keys);
+    });
+    this.closeBtn.addEventListener('click', function () { self.close(null); });
+    foot.appendChild(this.okBtn);
+    foot.appendChild(this.closeBtn);
+    var bulk = el('div', 'ptp2re-paths-bulk');
+    // Select All is orange here, against the gray pair every other dialog draws: ticking
+    // every line is what this offer recommends, yet the lines start unticked, since the
+    // plugin will not make that choice for the user as a preset. The orange says which
+    // press is advised; the empty boxes keep it a press.
+    this.bulkBtns = [[false, 'Unselect All'], [true, 'Select All']].map(function (t) {
+      var b = el('button', 'btn btn-sm ' + (t[0] ? PLUGIN_BTN_VARIANT : 'btn-secondary'), t[1]);
+      b.type = 'button';
+      b._on = t[0];
+      b.addEventListener('click', function (e) {
+        if (e && e.preventDefault) e.preventDefault();
+        self.boxes.forEach(function (x) { x.el.checked = t[0]; });
+        self.syncOk();
+      });
+      bulk.appendChild(b);
+      return b;
+    });
+    foot.appendChild(bulk);
+    this.modal.appendChild(foot);
+    this.syncOk();
+    dialogOpen(this);
+    if (this.modal.scrollIntoView) this.modal.scrollIntoView();
+  };
+
+  // A sibling waiting on an entity this dialog holds is named with the time it has left, and
+  // the entity by its type; once it has stopped waiting, the answer here can no longer reach
+  // it, and the line says so. What it waits *for* is its own business - SceneVariants reads the
+  // scene for its propagate offer, NormalizeParentTags to prune it - so the line never says
+  // (it once gave every waiter SceneVariants' reason: "NPT ... for its own propagate offer").
+  PickDialog.prototype.tickWait = function () {
+    var w = null, type = null;
+    this.held.forEach(function (h) {
+      var x = waitingOn(h.type, h.ids);
+      if (x && (!w || x.until < w.until)) { w = x; type = h.type; }
+    });
+    if (w) { this.waiter = w; this.waitType = type; }
+    if (!this.waiter) return;
+    var left = w ? Math.max(0, Math.ceil((w.until - Date.now()) / 1000)) : 0;
+    var who = this.waiter.owner || 'A sibling plugin';
+    var what = 'the ' + SOURCES[this.waitType].label.toLowerCase();
+    if (left > 0) {
+      this.waitEl.className = 'ptp2re-pick-wait ptp2re-note';
+      this.waitEl.textContent = '[INFO] ' + who + ' is waiting for this answer before it reads ' +
+        what + ': ' +
+        (left >= 60 ? Math.floor(left / 60) + ' min ' + (left % 60) + ' s' : left + ' s') + ' left.';
+    } else {
+      this.waitEl.className = 'ptp2re-pick-wait ptp2re-warn';
+      this.waitEl.textContent = '[WARN] ' + who + ' stopped waiting and read ' + what + ' as it is ' +
+        'now: the changes made here were not part of what it read.';
+    }
+  };
+
+  // Orange means the button writes: with nothing ticked OK would write nothing, so it
+  // is unavailable, with the reason, and Cancel is the way out.
+  PickDialog.prototype.syncOk = function () {
+    var any = this.boxes.some(function (b) { return b.el.checked; });
+    this.okBtn.disabled = !any;
+    this.okBtn.title = any ? '' : 'Nothing is ticked - tick a line to write it, or Cancel.';
+    // And the two bulk buttons: one that would change no box has nothing to do.
+    this.bulkBtns.forEach(function (b) {
+      var idle = this.boxes.every(function (x) { return x.el.checked === b._on; });
+      b.disabled = idle;
+      b.title = idle ? 'Every line is already ' + (b._on ? 'ticked.' : 'unticked.') : '';
+    }, this);
+  };
+
+  PickDialog.prototype.close = function (keys) {
+    dialogClose(this);
+    if (this.waitTimer) clearTimeout(this.waitTimer);
+    if (_pick === this) _pick = null;
+    this.resolve(keys);
+  };
+
+  // ── Auto-mode ─────────────────────────────────────────────────────────────
+  //
+  // A reaction to a save Stash made, reviewed in a pick dialog unless Silent is on. It shares the task's
+  // planner rather than carrying a second one - see `AutoRun` below - so what a
+  // reaction decides to add is by construction what the task would have decided.
+  //
+  // Three things separate it from the task, and each has a reason:
+  //
+  //   * it is scoped to the entities that were saved, so it fetches them by id rather
+  //     than paging the library;
+  //   * it holds a lease measured in seconds rather than minutes, because that is how
+  //     long one reaction lasts and a crashed tab must not stand a sibling down for
+  //     five minutes over one scene save;
+  //   * it refuses to touch an entity it has itself written to in the last
+  //     AUTO_COOLDOWN_MS - the cooldown, below.
+
+  // Settings, cached. Every mutation Stash makes reaches the fetch wrapper, so reading
+  // them per mutation would put a settings query behind every save in the UI.
+  var _autoSettings = null, _autoSettingsAt = 0, _autoSettingsWait = null;
+
+  function autoSettings() {
+    var now = Date.now();
+    if (_autoSettings && now - _autoSettingsAt < AUTO_SETTINGS_TTL_MS) {
+      return Promise.resolve(_autoSettings);
+    }
+    // One in-flight load is shared: a bulk edit of forty scenes arrives as one
+    // mutation, but two saves in quick succession must not become two settings loads.
+    if (!_autoSettingsWait) {
+      _autoSettingsWait = loadSettings().then(function (r) {
+        _autoSettings = r.settings;
+        _autoSettingsAt = Date.now();
+        _autoSettingsWait = null;
+        publishDeclares(_autoSettings);
+        return _autoSettings;
+      }, function (e) {
+        _autoSettingsWait = null;
+        throw e;
+      });
+    }
+    // Stale while it revalidates. Awaiting a lapsed TTL means one tick in ten blocks on
+    // a settings query before it can even look at the DOM, and
+    // the button ticks run every second - so on any given navigation there is a real
+    // chance the tick that would have drawn the button is the one paying for the
+    // reload. `MergePerformerTagsToScenes` never has this problem because it reads a
+    // plain settings object synchronously and refreshes it on its own timer, off the
+    // path that draws the button; this is the same shape without a second copy of the
+    // settings. The staleness window is the one the TTL already opened - every caller
+    // was always working from settings up to ten seconds old - and our own save calls
+    // `invalidateAutoSettings`, which clears the value rather than ageing it, so a
+    // setting the user just changed is never served stale.
+    if (_autoSettings) {
+      _autoSettingsWait.then(null, function () {}); // the refresh is nobody's to await
+      return Promise.resolve(_autoSettings);
+    }
+    return _autoSettingsWait;
+  }
+
+  // Our own settings being saved invalidates the cache rather than waiting out the
+  // TTL, so switching a mode off takes effect on the next save and not ten seconds
+  // later.
+  // The button probes go with them: a path's own toggle changes `pathIdsKey` and
+  // re-arms on its own, but a "common tags only" toggle changes what a path would add
+  // without changing either the entity or the path set, so nothing else would notice.
+  // Same for a filter setting. `invalidateButtonProbes` is a hoisted declaration
+  // further down, beside the slots it clears.
+  function invalidateAutoSettings() {
+    _autoSettings = null; _autoSettingsAt = 0; _probeCtx = null;
+    invalidateButtonProbes();
+  }
+
+  // ── The per-entity cooldown ───────────────────────────────────────────────
+  //
+  // `guarded()` suppresses our own writes *within* one reaction. This suppresses the
+  // reaction *after* that one: two of the fourteen paths are exact reverses of another
+  // (scenes ⇄ their group, images ⇄ their gallery), so with both halves of a pair on,
+  // a write to a group is a group save, which propagates back to every scene in it,
+  // which are scene saves. Union reaches a fixed point, so it terminates - but not
+  // before a burst of writes across a whole group, and every one of them is a real
+  // mutation against the user's library.
+  //
+  // Keyed per entity rather than globally, because the answer to "have I just written
+  // this?" is per entity: a save of scene 7 must not be ignored because scene 9 was
+  // written a second ago.
+  var _written = {}, _writtenCount = 0;
+
+  function coolKey(target, id) { return target + ':' + id; }
+
+  function markWritten(target, id) {
+    if (!hasOwn(_written, coolKey(target, id))) _writtenCount++;
+    _written[coolKey(target, id)] = Date.now();
+    // Swept on insert rather than on a timer: a tab left open on a large library must
+    // not accumulate an entry per entity written, and a timer would keep the tab awake
+    // to tidy a map nobody is reading.
+    if (_writtenCount > AUTO_COOLDOWN_MAX) sweepWritten();
+  }
+
+  function sweepWritten() {
+    var now = Date.now(), kept = {}, n = 0;
+    for (var k in _written) {
+      if (hasOwn(_written, k) && now - _written[k] < AUTO_COOLDOWN_MS) { kept[k] = _written[k]; n++; }
+    }
+    _written = kept;
+    _writtenCount = n;
+  }
+
+  function cooledDown(target, id) {
+    var at = _written[coolKey(target, id)];
+    return at != null && Date.now() - at < AUTO_COOLDOWN_MS;
+  }
+
+  // ── Did the save actually land? ───────────────────────────────────────────
+  //
+  // `fetch` resolves for an HTTP 500 and for a GraphQL error returned with HTTP 200,
+  // so "the request came back" is not "the edit was saved". Reacting to a save Stash
+  // rejected would copy tags onto an entity on the strength of an edit that never
+  // happened.
+  //
+  // Core's `mutationSucceeded` reads a clone, safe because this handler is attached
+  // before Apollo's, so the body is still unread; a clone that fails falls back to
+  // assuming success rather than dropping the reaction.
+
+  // ── The source side: from a saved source to the targets that read it ───────
+  //
+  // The target side answers "this scene was saved, refresh it from its sources". This
+  // answers the other question: "this performer was saved, which scenes named it and
+  // now need refreshing" - the fan-out `AutoRun.reverseSources` cannot help with,
+  // because that gathers a *known* target's sources, not a source's targets.
+  //
+  // Once the affected target ids are known, this rejoins the target-side machinery -
+  // `runAutoTargets` below is shared by both - so a source reaction plans and writes
+  // exactly as a target reaction would. The only new thing here is finding those ids,
+  // and it is per path because Stash's schema gives each relationship its own shape:
+  //
+  //   - most paths have a plain field back to whatever refers to their source -
+  //     `Image.galleries`, `Gallery.scenes`, `Scene.groups`, `Group.scenes`,
+  //     `Group.containing_groups`, `SceneMarker.scene` - and cost one query per saved
+  //     entity, no filter guessing involved. `kind: 'field'`.
+  //   - three do not: a Performer and a Studio carry no back-reference to the Scenes
+  //     or Groups that use them, and a Gallery has no `images` field for the same
+  //     reason the sweep exists. Those go through a filter on the *target's* own
+  //     filter type - `scene_filter: { performers: { value: [$id], modifier: INCLUDES
+  //     } }` - the same shape `reverseQuery` already trusts Stash to have, and no more
+  //     verified than the rest of it. `kind: 'filter'`.
+  //
+  // `tags:performer>group` and `tags:marker>group` are two hops (performer/marker to
+  // scene to group) but need no second round trip: the query for the first hop simply
+  // selects the second hop's field too (`groups { group { id } }` alongside the scene
+  // match, or nested under `scene` for a marker's single scene), so `pick` reads the
+  // final ids straight out of the one response.
+  function notNull(v) { return v != null; }
+
+  var SOURCE_REVERSE = {
+    'performers:image>gallery': { kind: 'field', one: 'findImage', sel: 'galleries { id }',
+      pick: function (e) { return (e.galleries || []).map(function (g) { return g.id; }); } },
+    'tags:image>gallery': { kind: 'field', one: 'findImage', sel: 'galleries { id }',
+      pick: function (e) { return (e.galleries || []).map(function (g) { return g.id; }); } },
+    'performers:gallery>scene': { kind: 'field', one: 'findGallery', sel: 'scenes { id }',
+      pick: function (e) { return (e.scenes || []).map(function (s) { return s.id; }); } },
+    'tags:group>scene': { kind: 'field', one: 'findGroup', sel: 'scenes { id }',
+      pick: function (e) { return (e.scenes || []).map(function (s) { return s.id; }); } },
+    'tags:marker>scene': { kind: 'field', one: 'findSceneMarker', sel: 'scene { id }',
+      pick: function (e) { return e.scene && e.scene.id != null ? [e.scene.id] : []; } },
+    'tags:scene>group': { kind: 'field', one: 'findScene', sel: 'groups { group { id } }',
+      pick: function (e) {
+        return (e.groups || []).map(function (g) { return g.group && g.group.id; }).filter(notNull);
+      } },
+    'tags:subgroup>group': { kind: 'field', one: 'findGroup', sel: 'containing_groups { group { id } }',
+      pick: function (e) {
+        return (e.containing_groups || []).map(function (g) { return g.group && g.group.id; }).filter(notNull);
+      } },
+    'tags:marker>group': { kind: 'field', one: 'findSceneMarker', sel: 'scene { groups { group { id } } }',
+      pick: function (e) {
+        var groups = (e.scene && e.scene.groups) || [];
+        return groups.map(function (g) { return g.group && g.group.id; }).filter(notNull);
+      } },
+    'tags:performer>scene': { kind: 'filter', on: 'scene', field: 'performers', modifier: 'INCLUDES',
+      pick: function (n) { return [n.id]; } },
+    'tags:studio>scene': { kind: 'filter', on: 'scene', field: 'studios', modifier: 'INCLUDES',
+      pick: function (n) { return [n.id]; } },
+    'tags:studio>group': { kind: 'filter', on: 'group', field: 'studios', modifier: 'INCLUDES',
+      pick: function (n) { return [n.id]; } },
+    'tags:performer>group': { kind: 'filter', on: 'scene', field: 'performers', modifier: 'INCLUDES',
+      sel: 'groups { group { id } }',
+      pick: function (n) {
+        return (n.groups || []).map(function (g) { return g.group && g.group.id; }).filter(notNull);
+      } },
+    'tags:gallery>image': { kind: 'filter', on: 'image', field: 'galleries', modifier: 'INCLUDES',
+      pick: function (n) { return [n.id]; } },
+    'tags:scene>studio': { kind: 'field', one: 'findScene', sel: 'studio { id }',
+      pick: function (e) { return e.studio && e.studio.id != null ? [e.studio.id] : []; } },
+  };
+
+  // A `field`-kind lookup: one source entity by id, drilling straight to the
+  // back-reference. Named apart from the task's own single-entity query
+  // (`PTP_one_`) so a log or a test can tell a reaction's target refresh from its
+  // source fan-out.
+  function sourceFieldQuery(entry) {
+    return byIdQuery('PTP_sfield_' + entry.one, entry.one, entry.sel);
+  }
+
+  function resolveFieldReverse(entry, id) {
+    return gqlRequest(sourceFieldQuery(entry), { id: String(id) }).then(function (data) {
+      var ent = byIdResult(data, entry.one);
+      return ent ? entry.pick(ent) : [];
+    });
+  }
+
+  // A `filter`-kind lookup: paged, like every other query here - a performer with a
+  // six-figure scene count is exactly the case an unbounded response would break on.
+  function sourceFilterQuery(entry) {
+    var t = TARGETS[entry.on];
+    var sel = 'id' + (entry.sel ? ' ' + entry.sel : '');
+    return 'query PTP_sfilter_' + t.find + '_' + entry.field +
+      '($id: ID!, $page: Int!, $per_page: Int!) {' +
+      ' ' + t.find + '(' + t.filterArg + ': { ' + entry.field +
+      ': { value: [$id], modifier: ' + entry.modifier + ' } },' +
+      ' filter: { page: $page, per_page: $per_page, sort: "id", direction: ASC }) {' +
+      ' count ' + t.node + ' { ' + sel + ' } } }';
+  }
+
+  // `anyIsEnough` is the button existence probe, which asks only whether the list comes
+  // back empty. It stops at the first page that has yielded *something*, never at an
+  // empty one - so the answer is identical to a full walk for both entry shapes,
+  // including a two-hop pick where page 1 can legitimately produce nothing while page 2
+  // does. What it saves is the common case: a studio with five thousand scenes paged
+  // through in full to decide whether to draw one button.
+  function resolveFilterReverse(entry, id, anyIsEnough) {
+    var t = TARGETS[entry.on];
+    var out = [], fetched = 0;
+    function page(n) {
+      return gqlRequest(sourceFilterQuery(entry), { id: String(id), page: n, per_page: t.pageSize })
+        .then(function (data) {
+          var res = data[t.find] || {};
+          var list = res[t.node] || [];
+          fetched += list.length;
+          list.forEach(function (node) { out = out.concat(entry.pick(node)); });
+          if (anyIsEnough && out.length) return out;
+          if (list.length && fetched < (res.count || 0)) return page(n + 1);
+          return out;
+        });
+    }
+    return page(1);
+  }
+
+  // Every id a saved source (one path, one or more ids - a bulk save) puts in play,
+  // deduplicated. Sequential per id, like `AutoRun.reverseSources`, rather than one
+  // combined query: it is what every other reverse lookup in this plugin already
+  // does, and a bulk save of sources is the uncommon case, not the one worth a second
+  // query shape for.
+  function resolveSourceTargets(path, ids, anyIsEnough) {
+    var entry = SOURCE_REVERSE[path.id];
+    if (!entry) return Promise.resolve([]);
+    var out = {};
+    var chain = Promise.resolve();
+    ids.forEach(function (id) {
+      chain = chain.then(function () {
+        var got = entry.kind === 'filter' ? resolveFilterReverse(entry, id, anyIsEnough) : resolveFieldReverse(entry, id);
+        return got.then(function (tids) {
+          tids.forEach(function (tid) { if (tid != null) out[String(tid)] = true; });
+        });
+      });
+    });
+    return chain.then(function () { return Object.keys(out); });
+  }
+
+  // Every entity-type that appears as a `PATHS` `sourceType`. Four of the seven are
+  // also `TARGETS` and reuse its mutation names; the other three - Performer, Studio,
+  // SceneMarker - are only ever a source in this plugin and are named here instead.
+  var SOURCE_ENTITIES = {
+    performer: { single: 'performerUpdate', bulk: 'bulkPerformerUpdate' },
+    studio: { single: 'studioUpdate', bulk: 'bulkStudioUpdate' },
+    marker: { single: 'sceneMarkerUpdate', bulk: 'bulkSceneMarkerUpdate' },
+  };
+
+  function mutationNamesFor(sourceType) {
+    return hasOwn(TARGETS, sourceType) ? TARGETS[sourceType] : SOURCE_ENTITIES[sourceType];
+  }
+
+  // Same shape as `targetOfMutation`, over the wider set of types this plugin ever
+  // reads from rather than only the four it ever writes to.
+  function sourceOfMutation(q) {
+    var seen = {};
+    for (var i = 0; i < PATHS.length; i++) {
+      var st = PATHS[i].sourceType;
+      if (hasOwn(seen, st)) continue;
+      seen[st] = true;
+      var names = mutationNamesFor(st);
+      if (!names) continue;
+      if (new RegExp('\\b' + names.single + '\\b').test(q)) return { sourceType: st, bulk: false };
+      if (new RegExp('\\b' + names.bulk + '\\b').test(q)) return { sourceType: st, bulk: true };
+    }
+    return null;
+  }
+
+  // ── The headless run ──────────────────────────────────────────────────────
+  //
+  // Everything that decides *what* to add is `Run`'s, borrowed rather than copied: the
+  // walk, the aggregation, the union/intersection fold, the filters, the attribution,
+  // the cascade through `plannedFor`. A second planner is the thing this must not
+  // become - it would be free to drift from the one the review dialog shows, and the
+  // user's only evidence about auto-mode is that the task agrees with it.
+  //
+  // What differs is the driver: no dialog, no Proceed, entities named rather than
+  // paged, and the log going to the console.
+  function AutoRun(settings, tagMap, filters, npt) {
+    this.settings = settings;
+    this.tagMap = tagMap;
+    this.filters = filters;
+    // Read by the borrowed `planTarget`, so a reaction and a manual button skip
+    // exactly what the task's dialog would have skipped.
+    this.npt = npt || {};
+    this.performerNames = {};
+    this.plan = [];
+    this.planIndex = {};
+    this.cancelled = false;
+    this.written = 0;
+  }
+
+  // `changeParts` comes along with `planTarget`, which builds every plan line through
+  // it. Nothing here renders the parts - `AutoRun.log` takes the text and drops the
+  // rest - but the line has to be built the same way in both, or the console line a
+  // reaction prints would say something different from the one the dialog shows.
+  ['planEntry', 'plannedFor', 'addSource', 'aggregate', 'planTarget', 'prunedAway',
+    'changeParts', 'walk', 'plannedPerformers'].forEach(function (m) {
+    AutoRun.prototype[m] = Run.prototype[m];
+  });
+
+  AutoRun.prototype.log = function (kind, message) {
+    if (kind === 'INFO') return;             // the dialog's progress narration; no dialog here
+    if (logsToConsole(PLUGIN_ID)) console.info('[' + PLUGIN_NAME + '] ' + message);
+  };
+
+  // Gathers a reverse path's sources for one target. Paged, like every other query in
+  // the plugin - a gallery holding twenty thousand images is exactly the case
+  // `per_page: -1` would break on.
+  AutoRun.prototype.reverseSources = function (path, id) {
+    var self = this, out = [], t = TARGETS[path.sourceType];
+    function page(n) {
+      return gqlRequest(reverseQuery(path), { id: String(id), page: n, per_page: t.pageSize })
+        .then(function (data) {
+          var res = data[t.find] || {};
+          var list = res[t.node] || [];
+          out = out.concat(list);
+          if (list.length && out.length < (res.count || 0)) return page(n + 1);
+          return out;
+        });
+    }
+    return page(1);
+  };
+
+  // Plans a fixed set of targets, one pass at a time. Passes run in order for the same
+  // reason the task's do: a later stage reads what an earlier one planned.
+  AutoRun.prototype.planEntities = function (target, paths, ids) {
+    var self = this;
+    var passes = buildPasses(paths);
+    var chain = Promise.resolve();
+    passes.forEach(function (pass) {
+      chain = chain.then(function () { return self.plannedPerformers(pass); })
+        .then(function () { return self.planPass(pass, ids); });
+    });
+    return chain;
+  };
+
+  AutoRun.prototype.planPass = function (pass, ids) {
+    var self = this;
+    var t = TARGETS[pass.target];
+    var revs = reversePaths(pass);
+    var chain = Promise.resolve();
+    ids.forEach(function (id) {
+      chain = chain.then(function () {
+        // Cancel and Stop end a scoped scan between two ids, as they end a sweep between pages.
+        if (self.cancelled) return null;
+        return gqlRequest(oneQuery(pass), { id: String(id) }).then(function (data) {
+          var ent = data[t.one];
+          if (!ent) return null;             // deleted between the save and the reaction
+          if (!revs.length) { self.planTarget(pass, ent); return null; }
+          // A reverse path's sources have to be in hand before the target is planned,
+          // and they are per target here rather than per library, so they are gathered
+          // into the same `gathered` shape `planTarget` reads from the sweep.
+          pass.gathered = {};
+          var sub = Promise.resolve();
+          revs.forEach(function (p) {
+            sub = sub.then(function () {
+              return self.reverseSources(p, ent.id).then(function (sources) {
+                var agg = self.aggregate(sources, p);
+                pass.gathered[p.id] = {};
+                pass.gathered[p.id][String(ent.id)] = agg;
+              });
+            });
+          });
+          return sub.then(function () { self.planTarget(pass, ent); });
+        });
+      });
+    });
+    return chain;
+  };
+
+  // Borrowed back the other way, for the same reason `AutoRun` borrows the planner:
+  // a manual button's dialog plans a named set of entities, which is exactly what a
+  // reaction does. Assigned after the definitions above rather than in `AutoRun`'s own
+  // borrow list, which runs before them.
+  ['reverseSources', 'planPass'].forEach(function (m) {
+    Run.prototype[m] = AutoRun.prototype[m];
+  });
+
+  // Writes the plan. One lease for the whole reaction, renewed per batch, released
+  // whatever happens - an error here must not latch a sibling into standing down.
+  //
+  // Apollo eviction happens here rather than in a caller, because every headless write
+  // this plugin makes goes through this one function - the two manual buttons and both
+  // auto-modes. It shipped in `runManualSource` alone, so an auto reaction rewrote the
+  // page the user was looking at and left it showing what it read before the save;
+  // `MergePerformerTagsToScenes` refreshes after every one of its own auto-merges.
+  // Evicting from the caller means remembering to, once per write path.
+  AutoRun.prototype.apply = function (label) {
+    var self = this;
+    var batches = buildBatches(this.plan);
+    if (!batches.length) return Promise.resolve(0);
+    var lease = C.lease(PLUGIN_ID, label, AUTO_LEASE_TTL_MS);
+    // One run in Undo History per save that set it off.
+    var pass = journalPass(label, false);
+    // Only what the server accepted, so a failed batch does not drop a cache entry
+    // that still matches the library.
+    var wrote = {};
+    var chain = Promise.resolve();
+    batches.forEach(function (batch) {
+      chain = chain.then(function () {
+        lease.renew();
+        return gqlRequest(bulkMutation(batch.target), { input: batchInput(batch, 'ADD') })
+          .then(function () {
+            journalBatch(pass, batch, 'ADD');
+            if (!wrote[batch.target]) wrote[batch.target] = {};
+            batch.entries.forEach(function (entry) {
+              wrote[batch.target][String(entry.id)] = true;
+              // Marked only once the server has taken it: an entity we failed to write
+              // has not been written, and must not be shielded from the next save.
+              markWritten(batch.target, entry.id);
+              self.written++;
+              batch.ids.forEach(function (id) {
+                self.log(batch.kind === 'performers' ? 'PERF' : 'TAG',
+                  entry.label + ' - ' +
+                  (batch.kind === 'performers'
+                    ? performerLabel(self.performerNames, id)
+                    : tagLabel(self.tagMap, id)) +
+                  ' - from ' + (fromOf(entry, id) ? fromText(fromOf(entry, id)) : 'a related entity'));
+              });
+            });
+          }, function (e) {
+            // One failed batch does not cancel the rest, and says so where the user
+            // will look: there is no dialog to carry an [ERROR] line.
+            console.error('[ptp2re] auto-mode: a batch of ' +
+              plural(batch.entries.length, batch.target) + ' failed:', e);
+          });
+      });
+    });
+    return chain.then(function () {
+      lease.release();
+      evictWritten(wrote);
+      pass.finish();
+      return self.written;
+    }, function (e) {
+      lease.release();
+      evictWritten(wrote);
+      pass.finish();
+      throw e;
+    });
+  };
+
+  // The tag hierarchy and the filters, per reaction. Not cached with the settings: the
+  // exclusion tag can be created or renamed at any time, and a stale answer here would
+  // either write to protected entities or refuse to write at all.
+  function autoContext(settings) {
+    return gqlRequest(tagQuery(settings), null).then(function (data) {
+      var tagMap = buildTagMap(((data.findTags || {}).tags) || []);
+      var filters = makeFilters(settings, tagMap, resolveExclusionTagId(settings, tagMap),
+        subtreeFilter(settings, tagMap));
+      // The sibling's answer is a snapshot of its settings, taken here with the tag
+      // map and the filters because it has the same lifetime as both.
+      return nptPruners(settings).then(function (npt) {
+        return { tagMap: tagMap, filters: filters, npt: npt };
+      });
+    });
+  }
+
+  // The same context, cached, *for the button existence probe only*. Safe here and
+  // nowhere else, for exactly the reason the comment above gives: a probe decides whether
+  // to *show* a button, never what to write, so a stale answer costs at most one button
+  // shown or hidden. Dropped by `invalidateAutoSettings`, so changing a filter setting
+  // re-probes at once rather than waiting the TTL out.
+  //
+  // The TTL is its own, and long. Measured on a live library: `tagQuery` took **766 ms**
+  // of the 1230 ms a Scene Edit button took to appear, and it is the single largest cost
+  // in the whole path. Caching it on the settings TTL, ten seconds, is not enough: that
+  // is shorter than the gap between two visits to an edit tab, so in practice it was paid
+  // again every time and the delay stayed exactly where it was. What the value has to be
+  // sized against is not how fresh the answer needs to be for a *write* (this answer is
+  // never used for one) but how long a button may go on being shown or hidden after the
+  // tag library changed underneath it.
+  var PROBE_CTX_TTL_MS = 300000; // 5 minutes
+  var _probeCtx = null; // { at, promise }
+  function probeContext(s) {
+    var now = Date.now();
+    if (_probeCtx && now - _probeCtx.at < PROBE_CTX_TTL_MS) return _probeCtx.promise;
+    var p = autoContext(s);
+    _probeCtx = { at: now, promise: p };
+    // A failed probe must not be cached, or one hiccup mis-draws the buttons for the
+    // whole TTL - which now matters a great deal more than it did at ten seconds.
+    p.then(null, function () { if (_probeCtx && _probeCtx.promise === p) _probeCtx = null; });
+    return p;
+  }
+
+  // Plans and writes into a fixed set of targets - shared by both auto-modes, so a
+  // source reaction and a target reaction end up going through the identical write
+  // path once the target ids are known. `label` is the only thing that tells them
+  // apart in a log.
+  function runAutoTargets(target, ids, s, label) {
+    var paths = enabledPaths(s).filter(function (p) { return p.target === target; });
+    if (!paths.length) return Promise.resolve(0);
+    var fresh = ids.map(String).filter(function (id) { return !cooledDown(target, id); });
+    if (!fresh.length) return Promise.resolve(0);
+    // `guarded()` around the whole reaction, reads included. Its job is the write:
+    // a `bulkSceneUpdate` of ours is exactly what the branches below watch for, so
+    // without it every reaction would react to itself. The cooldown would stop the
+    // recursion at one round, but it is the backstop for the *next* save, not the
+    // guard for this one - relying on it would make every reaction cost a second
+    // pointless pass.
+    return guarded(function () {
+      return autoContext(s).then(function (ctx) {
+        var run = new AutoRun(s, ctx.tagMap, ctx.filters, ctx.npt);
+        return run.planEntities(target, paths, fresh).then(function () { return run; });
+      });
+    }).then(function (run) {
+      // The plan is shown before it is written unless Silent is on. Outside
+      // `guarded()`: the user's own saves while the dialog waits must still be seen.
+      return s.auto.silent ? run : reviewAutoRun(run, [{ type: target, ids: fresh }]);
+    }).then(function (run) {
+      return run ? guarded(function () { return run.apply(label); }) : 0;
+    }).then(function (n) {
+      // The reaction has changed what a button would add, and it ran after the save
+      // that triggered it - so the wrapper's own invalidation has already been spent
+      // on a library this write then moved again.
+      if (n) invalidateButtonProbes();
+      return n;
+    });
+  }
+
+  // With Silent off: the plan, a line per addition with every box ticked, and the
+  // plan cut down to what stayed ticked. Null for Cancel, and the run untouched where
+  // there is nothing to ask about.
+  function reviewAutoRun(run, held) {
+    var lines = [];
+    run.plan.forEach(function (entry) {
+      entry.add.forEach(function (id) {
+        lines.push({ key: planKey(entry.target, entry.kind, entry.id) + ':' + id,
+          parts: run.changeParts(entry, entry.kind, id) });
+      });
+    });
+    if (!lines.length) return Promise.resolve(run);
+    return pick('Auto-Propagation - review',
+      'These additions follow the save you just made. Untick any you do not want; ' +
+      'nothing is written until you press OK.', lines, true, held).then(function (keys) {
+      if (!keys) return null;
+      run.plan.forEach(function (entry) {
+        var prefix = planKey(entry.target, entry.kind, entry.id) + ':';
+        var add = [], from = [];
+        entry.add.forEach(function (id, i) {
+          if (keys.indexOf(prefix + id) === -1) return;
+          add.push(id);
+          from.push(entry.from[i]);
+        });
+        entry.add = add;
+        entry.from = from;
+      });
+      return run;
+    });
+  }
+
+  // ── Depropagate assist ────────────────────────────────────────────────────
+  //
+  // The reverse question, asked of a save that takes a source away from a target: which
+  // of the target's tags came in along an active path from what was just removed, and
+  // no source the target still has carries? Those are offered for removal, unticked. It
+  // needs the saved entity as it was *before* the save, since the save's input carries
+  // only the new list, so the read goes out ahead of the mutation and the mutation waits
+  // for it - one small query on a save that names one of these relations, and nothing at
+  // all otherwise.
+  //
+  // A source goes away in one of two saves, and each row below is one relation a save
+  // carries whole:
+  // - **the target's own** (`path`): a scene dropping a performer, its studio or a group,
+  //   an image leaving a gallery, a group dropping its studio or a sub-group. The saved
+  //   entity is the target, and the removed sources are read off it.
+  // - **the source's** (`leaves`): a scene leaving a group, an image leaving a gallery, a
+  //   group leaving the group that contains it, a marker deleted or moved to another
+  //   scene. The targets are what the saved entity left (`rel`, the walk from it to
+  //   them), and what it brought them is every active path into that type through it:
+  //   the paths whose walk starts with `back`, the rest of the walk read off the saved
+  //   entity. A gallery has no images field (`back: null`): its path is the reverse one.
+  // One save can be both - a scene leaving a group loses the group's tags, and the
+  // group the scene's - and both are offered in one dialog.
+  // ponytail: single saves only (a bulk edit is not a removal made by hand); a source's own
+  // tags changing (a performer losing a tag) and two-hop leavings (a deleted marker's tags
+  // on its scene's groups) are not asked about. Add a row when one is wanted.
+  var studioAfter = function (i) {
+    return i.studio_id === undefined ? undefined : (i.studio_id == null ? [] : [i.studio_id]);
+  };
+  var groupsAfter = function (i) {
+    var g = i.groups || i.movies;
+    return g && g.map(function (x) { return x.group_id != null ? x.group_id : x.movie_id; });
+  };
+  var descAfter = function (key) {
+    return function (i) { return i[key] && i[key].map(function (x) { return x.group_id; }); };
+  };
+  var DEPROP = [
+    { save: 'scene', path: 'tags:performer>scene', after: function (i) { return i.performer_ids; } },
+    { save: 'scene', path: 'tags:studio>scene', after: studioAfter },
+    { save: 'scene', path: 'tags:group>scene', after: groupsAfter },
+    { save: 'image', path: 'tags:gallery>image', after: function (i) { return i.gallery_ids; } },
+    { save: 'group', path: 'tags:studio>group', after: studioAfter },
+    { save: 'group', path: 'tags:subgroup>group', after: descAfter('sub_groups') },
+    { save: 'scene', leaves: 'group', rel: ['groups', 'group'], back: ['scenes'], after: groupsAfter },
+    { save: 'image', leaves: 'gallery', rel: ['galleries'], back: null, after: function (i) { return i.gallery_ids; } },
+    { save: 'group', leaves: 'group', rel: ['containing_groups', 'group'], back: ['sub_groups', 'group'],
+      after: descAfter('containing_groups') },
+    // Deleted, it has left its scene; moved, it has left the one it was on.
+    { save: 'marker', leaves: 'scene', rel: ['scene'], back: ['scene_markers'], after: function (i, destroy) {
+      return destroy ? [] : i.scene_id === undefined ? undefined : [i.scene_id];
+    } },
+  ];
+
+  // The save, if it is one the assist reads, with the ids it saves: a single save of a
+  // target, or a marker's update or delete - which are not target saves, a marker being
+  // nobody's target. Stash's own removals from a list name what leaves rather than what
+  // stays - images taken out of a gallery (its Images tab), sub-groups out of a group (its
+  // Sub-groups tab) - and are read as the saves that carry the same relation: `gone` is
+  // what each saved entity lost, `rows` the `DEPROP` rows (by `path` or `leaves`) it answers.
+  function depropSave(q, hit, input) {
+    var one = input && input.id != null ? [input.id] : [];
+    if (hit) return hit.bulk ? null : { type: hit.target, ids: one };
+    if (/\bsceneMarkersDestroy\b|\bsceneMarkerDestroy\b/.test(q)) {
+      return { type: 'marker', destroy: true, ids: input && input.ids ? input.ids : one };
+    }
+    if (/\bsceneMarkerUpdate\b/.test(q)) return { type: 'marker', ids: one };
+    if (/\bremoveGalleryImages\b/.test(q)) {
+      return { type: 'image', ids: (input && input.image_ids) || [], gone: [input.gallery_id],
+        rows: ['tags:gallery>image', 'gallery'] };
+    }
+    if (/\bremoveGroupSubGroups\b/.test(q)) {
+      return { type: 'group', ids: input && input.containing_group_id != null ? [input.containing_group_id] : [],
+        gone: input.sub_group_ids || [], rows: ['tags:subgroup>group'] };
+    }
+    return null;
+  }
+
+  function walkSel(walk, leaf) {
+    var sel = leaf;
+    for (var i = walk.length - 1; i >= 0; i--) sel = walk[i] + ' { ' + sel + ' }';
+    return sel;
+  }
+  // A source as the offer names it, with what it carries.
+  function sourceSel(p) {
+    return SOURCES[p.sourceType].fields + (p.markerTags ? ' primary_tag { id }' : '') + ' tags { id name }';
+  }
+  function uniq(list) { return list.filter(function (x, i) { return list.indexOf(x) === i; }); }
+
+  // Every active tag path into a type its walk can read; a gallery's one path is reverse.
+  function intoPaths(s, type) {
+    return enabledPaths(s).filter(function (p) { return p.target === type && p.kind === 'tags' && p.walk; });
+  }
+  // The active paths into what a `leaves` row's save left, through the saved entity.
+  function throughPaths(s, d) {
+    return enabledPaths(s).filter(function (p) {
+      if (p.target !== d.leaves || p.kind !== 'tags') return false;
+      if (!d.back) return !!p.reverse && p.sourceType === d.save;
+      return !!p.walk && d.back.every(function (step, i) { return p.walk[i] === step; });
+    });
+  }
+
+  // A target as it is now: its tags, and every active path's sources with theirs - named,
+  // since the offer says where a tag came from.
+  function depropQuery(type, paths) {
+    var t = TARGETS[type];
+    var parts = [t.fields, 'tags { id name }'];
+    if (t.organized) parts.push('organized');   // `entityBlocked`
+    paths.forEach(function (p) { parts.push(walkSel(p.walk, sourceSel(p))); });
+    return byIdQuery('PTP_deprop_' + t.one, t.one, uniq(parts).join(' '));
+  }
+
+  // The saved entity as it is before the save: what its own rows remove, the targets its
+  // `leaves` rows could take it from, and what it brings them.
+  function depropBeforeQuery(save, own, leaving) {
+    var info = TARGETS[save] || SOURCES[save];
+    var parts = [info.fields, 'tags { id name }'];
+    if (save === 'marker') parts.push('primary_tag { id name }');
+    own.forEach(function (o) { parts.push(walkSel(o.p.walk, sourceSel(o.p))); });
+    leaving.forEach(function (l) {
+      parts.push(walkSel(l.d.rel, 'id'));
+      l.paths.forEach(function (p) {
+        var rest = l.d.back ? p.walk.slice(l.d.back.length) : [];
+        if (rest.length) parts.push(walkSel(rest, sourceSel(p)));
+      });
+    });
+    return byIdQuery('PTP_deprop_' + info.one, info.one, uniq(parts).join(' '));
+  }
+
+  // Null at once where the assist has nothing to do with this save; otherwise a promise
+  // for what the save takes away - `{ save, ids, settings, affected }`, each affected
+  // target `{ type, id, cands: [{ path, src }] }` - or null, which the wrapper waits on
+  // before forwarding. Never rejects: a failed read forwards the save.
+  function depropBefore(dsave, input) {
+    var save = dsave.type, ids = dsave.ids;
+    if (!ids.length) return null;
+    var rows = DEPROP.filter(function (d) {
+      if (d.save !== save) return false;
+      return dsave.rows ? dsave.rows.indexOf(d.path || d.leaves) !== -1 : d.after(input, dsave.destroy) !== undefined;
+    });
+    if (!rows.length) return null;
+    // Whether a related id survives the save: in the list it puts, or not among what it removes.
+    var stays = function (d) {
+      var list = (dsave.gone || d.after(input, dsave.destroy)).map(String), kept = !dsave.gone;
+      return function (id) { return (list.indexOf(String(id)) !== -1) === kept; };
+    };
+    // The settings cache, synchronously where it is warm - which is every save but the
+    // first - so a save with the assist off is forwarded with no wait at all.
+    if (_autoSettings && !_autoSettings.auto.depropagate) return null;
+    return autoSettings().then(function (s) {
+      if (!s.auto.depropagate) return null;
+      var own = [], leaving = [];
+      rows.forEach(function (d) {
+        if (d.path) {
+          var p = pathById(d.path);
+          if (pathOn(s, p)) own.push({ d: d, p: p });
+        } else {
+          var through = throughPaths(s, d);
+          if (through.length) leaving.push({ d: d, paths: through });
+        }
+      });
+      if (!own.length && !leaving.length) return null;
+      var info = TARGETS[save] || SOURCES[save], query = depropBeforeQuery(save, own, leaving);
+      return Promise.all(ids.map(function (id) {
+        return gqlRequest(query, { id: String(id) }).then(function (data) { return byIdResult(data, info.one); });
+      })).then(function (ents) {
+        var affected = [], at = {};
+        var add = function (type, id, cand) {
+          var k = type + ':' + id;
+          if (!at[k]) affected.push(at[k] = { type: type, id: String(id), cands: [] });
+          at[k].cands.push(cand);
+        };
+        ents.forEach(function (ent) {
+          if (!ent) return;
+          own.forEach(function (o) {
+            var kept = stays(o.d);
+            walkSources(ent, o.p).forEach(function (src) {
+              if (!kept(src.id)) add(save, ent.id, { path: o.p, src: src });
+            });
+          });
+          leaving.forEach(function (l) {
+            var kept = stays(l.d);
+            walkSources(ent, { walk: l.d.rel }).forEach(function (left) {
+              if (kept(left.id)) return;
+              l.paths.forEach(function (p) {
+                walkSources(ent, { walk: l.d.back ? p.walk.slice(l.d.back.length) : [] }).forEach(function (src) {
+                  // `up`: carried up from the saved entity, which `flowedDown` weighs.
+                  add(l.d.leaves, left.id, { path: p, src: src, up: true });
+                });
+              });
+            });
+          });
+        });
+        return affected.length ? { save: save, ids: ids.map(String), settings: s, affected: affected } : null;
+      });
+    }).then(null, function (e) {
+      console.error('[ptp2re] depropagate assist could not read the ' + save + ' before the save:', e);
+      return null;
+    });
+  }
+
+  // Every tag an image still in the gallery carries - in Common mode, every image - and how
+  // many images are left: a gallery has no images field, so its one tag path is read as the
+  // run reads it, by images naming the gallery, a page at a time.
+  var DEPROP_PAGE = 1000;
+  function galleryBacking(id, backed, common) {
+    var counts = {}, n = 0;
+    function page(p) {
+      return gqlRequest('query PTP_deprop_galleryImages($f: FindFilterType, $i: ImageFilterType) {' +
+        ' findImages(filter: $f, image_filter: $i) { images { id tags { id } } } }',
+      { f: { page: p, per_page: DEPROP_PAGE, sort: 'id', direction: 'ASC' },
+        i: { galleries: { value: [String(id)], modifier: 'INCLUDES' } } }).then(function (data) {
+        var images = ((data.findImages || {}).images) || [];
+        n += images.length;
+        images.forEach(function (img) {
+          uniq((img.tags || []).map(function (t) { return String(t.id); })).forEach(function (t) {
+            counts[t] = (counts[t] || 0) + 1;
+          });
+        });
+        if (images.length === DEPROP_PAGE) return page(p + 1);
+        Object.keys(counts).forEach(function (t) { if (!common || counts[t] === n) backed[t] = true; });
+        return n;
+      });
+    }
+    return page(1);
+  }
+
+  // A target as it is after the save, and every tag still backed on it. Read after the save
+  // rather than from the before-state, so a source added in the same save counts as
+  // backing. Backed means carried by any source the target still has - on a path in Common
+  // mode, by every one of them, the rule that copied it. `left` counts the sources still
+  // on each path, by id.
+  function depropNow(s, a) {
+    var paths = intoPaths(s, a.type);
+    return gqlRequest(depropQuery(a.type, paths), { id: a.id }).then(function (data) {
+      var ent = byIdResult(data, TARGETS[a.type].one);
+      if (!ent) return null;
+      var backed = {}, left = {};
+      paths.forEach(function (p) {
+        var srcs = walkSources(ent, p), counts = {};
+        left[p.id] = srcs.length;
+        srcs.forEach(function (src) {
+          uniq(payloadOf(src, p)).forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
+        });
+        Object.keys(counts).forEach(function (id) {
+          if (!pathCommon(s, p) || counts[id] === srcs.length) backed[id] = true;
+        });
+      });
+      var reverse = enabledPaths(s).filter(function (p) { return p.target === a.type && p.kind === 'tags' && p.reverse; })[0];
+      return (reverse ? galleryBacking(a.id, backed, pathCommon(s, reverse)) : Promise.resolve(0)).then(function (n) {
+        if (reverse) left[reverse.id] = n;
+        return { ent: ent, backed: backed, left: left };
+      });
+    });
+  }
+
+  // Whether a tag on a removed source is the target's own, carried up to that source: true
+  // where a path from the target's type into the source's runs in Common mode and every
+  // source still on it carries the tag - a scene that left its group was one of the scenes
+  // the group took its common tags from, so a tag the rest all carry tells nothing about
+  // the group. With none left, the source's every tag is explained by the one that left.
+  // A promise of a function of a tag id, always false where no such path is on - and for a source of
+  // the target's own type, a sub-group: nothing flows from a group down into its sub-groups, and
+  // Sub-groups -> Groups itself only matches by having the same type at both ends.
+  function commonBack(s, srcType, srcId, fromType) {
+    var p = srcType === fromType ? null : PATHS.filter(function (q) {
+      return q.kind === 'tags' && q.target === srcType && q.sourceType === fromType &&
+        (pathCommon(s, q) || (!!q.commonOnly && pathOn(s, q)));
+    })[0];
+    if (!p) return Promise.resolve(function () { return false; });
+    var got = p.walk
+      ? gqlRequest(depropQuery(srcType, [p]), { id: String(srcId) }).then(function (data) {
+        var ent = byIdResult(data, TARGETS[srcType].one);
+        return ent ? walkSources(ent, p) : [];
+      })
+      : AutoRun.prototype.reverseSources(p, srcId);
+    return got.then(function (srcs) {
+      var counts = {};
+      srcs.forEach(function (src) {
+        uniq(payloadOf(src, p)).forEach(function (id) { counts[id] = (counts[id] || 0) + 1; });
+      });
+      return function (id) { return (counts[id] || 0) === srcs.length; };
+    });
+  }
+
+  // After the save landed: each affected target as it is now, and one offer for them all.
+  // A tag is offered when a removed source carried it, the target still has it, and no
+  // source the target still has - along any active path - carries it. Offered only where
+  // the copy could have put the tag there: a target the exclusion filters keep out of
+  // propagation, or a tag they would refuse to copy, is never the plugin's doing. On a path
+  // in Common mode the removed source's tag was copied only if every source carried it,
+  // so it is offered only once no source is left on that path. And where a reversible pair
+  // is on and a tag sat on both ends of the removed link, it flowed down to the saved
+  // entity (`flowedDown`): that end is offered it, the other end keeps its own - unless
+  // the removed source took it from its own sources in Common mode (`commonBack`).
+  function offerDepropagate(b) {
+    var s = b.settings, filters = null, lines = [], found = {}, down = {}, backs = {};
+    var linkKey = function (pathId, target, src, tag) { return pathId + ':' + target + ':' + src + ':' + tag; };
+    b.affected.forEach(function (a) {
+      a.cands.forEach(function (r) {
+        if (r.up || !r.path.pair) return;
+        payloadOf(r.src, r.path).forEach(function (id) { down[linkKey(r.path.pair, r.src.id, a.id, id)] = true; });
+      });
+    });
+    var flowedDown = function (a, r, id) { return r.up && down[linkKey(r.path.id, a.id, r.src.id, id)]; };
+    return autoContext(s).then(function (ctx) {
+      filters = ctx.filters;
+      // ponytail: one read per affected entity, one after another, before the offer shows - seconds for
+      // a thousand images taken off a gallery at once; read them by ids in batches if that shows up.
+      return b.affected.reduce(function (chain, a) {
+        var back = function (r) { return backs[r.path.sourceType + ':' + r.src.id + ':' + a.type]; };
+        return chain.then(function () { return depropNow(s, a); }).then(function (now) {
+          return Promise.all(a.cands.map(function (r) {
+            var k = r.path.sourceType + ':' + r.src.id + ':' + a.type;
+            if (r.up || backs[k]) return null;
+            return commonBack(s, r.path.sourceType, r.src.id, a.type).then(function (f) { backs[k] = f; });
+          })).then(function () { return now; });
+        }).then(function (now) {
+          if (!now || filters.entityBlocked(a.type, now.ent)) return;
+          var has = {}, seen = {};
+          (now.ent.tags || []).forEach(function (t) { has[String(t.id)] = t; });
+          a.cands.forEach(function (r) {
+            if (pathCommon(s, r.path) && now.left[r.path.id]) return;
+            payloadOf(r.src, r.path).forEach(function (id) {
+              if (!has[id] || now.backed[id] || seen[id] || filters.tagBlocked(id) || flowedDown(a, r, id) ||
+                (!r.up && back(r)(id))) return;
+              seen[id] = true;
+              var key = a.type + ':' + a.id + ':' + id, st = r.path.sourceType;
+              found[key] = { type: a.type, id: a.id, ent: now.ent, tag: id };
+              lines.push({ key: key, parts: [
+                { text: entityLabel(a.type, now.ent), href: entityHref(a.type, now.ent.id),
+                  ent: { type: tipType(a.type), id: String(now.ent.id) } },
+                { text: ' - ' },
+                { text: 'Tag "' + (has[id].name || 'unknown') + '" (' + id + ')',
+                  href: entityHref('tag', id), ent: { type: 'tags', id: id } },
+                { text: ' - was likely from ' },
+                { text: SOURCES[st].label + ' "' + (displayName(r.src) || 'untitled') + '" (' + r.src.id + ')',
+                  href: entityHref(st, r.src.id), ent: { type: tipType(st), id: String(r.src.id) } },
+              ] });
+            });
+          });
+        });
+      }, Promise.resolve());
+    }).then(function () {
+      if (!lines.length) return 0;
+      return pick('Depropagate assist',
+        'Tags that came from a related entity the save removed, and that no other related ' +
+        'entity still carries. Tick the ones to remove; nothing is written until you press OK.',
+        lines, false, [{ type: b.save, ids: b.ids }].concat(b.affected.map(function (a) {
+          return { type: a.type, ids: [a.id] };
+        }))).then(function (keys) {
+        if (!keys || !keys.length) return 0;
+        // One write per target, in the order the offer listed them.
+        var order = [], per = {};
+        keys.forEach(function (k) {
+          var f = found[k], at = f.type + ':' + f.id;
+          if (!per[at]) { order.push(at); per[at] = { type: f.type, id: f.id, ent: f.ent, tags: [] }; }
+          per[at].tags.push(f.tag);
+        });
+        return guarded(function () {
+          var lease = C.lease(PLUGIN_ID, 'depropagate assist', AUTO_LEASE_TTL_MS);
+          var pass = journalPass('Depropagate assist', false), wrote = {};
+          var done = function () { lease.release(); pass.finish(); evictWritten(wrote); invalidateButtonProbes(); };
+          return order.reduce(function (chain, at) {
+            var e = per[at];
+            return chain.then(function () {
+              return gqlRequest(bulkMutation(e.type), { input: { ids: [e.id], tag_ids: { ids: e.tags, mode: 'REMOVE' } } });
+            }).then(function () {
+              pass.entries([{ type: TARGETS[e.type].plural.toLowerCase(), id: e.id, name: displayName(e.ent) || '',
+                field: 'tag_ids', before: e.tags.slice().sort(), after: [] }]);
+              markWritten(e.type, e.id);
+              (wrote[e.type] = wrote[e.type] || {})[e.id] = true;
+            });
+          }, Promise.resolve()).then(function () {
+            done();
+            if (logsToConsole(PLUGIN_ID)) {
+              console.info('[' + PLUGIN_NAME + '] depropagate assist removed ' + plural(keys.length, 'tag', 'tags') +
+                ' from ' + order.join(', '));
+            }
+            return keys.length;
+          }, function (e) { done(); throw e; });
+        });
+      });
+    }).then(null, function (e) {
+      console.error('[ptp2re] depropagate assist:', e);
+      return 0;
+    });
+  }
+
+  // A save of one or more entities of one type: copy into them whatever the enabled
+  // paths say belongs there.
+  function reactToTargets(target, ids) {
+    return autoSettings().then(function (s) {
+      if (!s.auto.target) return 0;
+      return runAutoTargets(target, ids, s, 'auto: into ' + TARGETS[target].plural.toLowerCase());
+    }).catch(function (e) {
+      // Never rethrown into Stash's own fetch chain: the user's save succeeded, and a
+      // failed reaction to it must not look like a failed save.
+      console.error('[ptp2re] auto-mode (' + target + '):', e);
+      return 0;
+    });
+  }
+
+  // The reverse: one or more *sources* were saved. Every enabled path reading that
+  // source type is resolved to the target ids it names, grouped by target type - a
+  // studio names both scenes and groups - and each group is written through
+  // `runAutoTargets`, exactly as if those targets had been saved themselves. That is
+  // deliberate: once the ids are known, a source reaction is a target reaction, and
+  // carrying a second write path here would be the second planner `AutoRun` was
+  // built to avoid.
+  function reactToSources(sourceType, ids, resolve) {
+    return autoSettings().then(function (s) {
+      if (!s.auto.source) return 0;
+      var paths = enabledPaths(s).filter(function (p) { return p.sourceType === sourceType; });
+      if (!paths.length) return 0;
+      var byTarget = {};
+      var chain = Promise.resolve();
+      paths.forEach(function (p) {
+        chain = chain.then(function () {
+          return (resolve || resolveSourceTargets)(p, ids).then(function (tids) {
+            if (!byTarget[p.target]) byTarget[p.target] = {};
+            tids.forEach(function (tid) { byTarget[p.target][tid] = true; });
+          });
+        });
+      });
+      return chain.then(function () {
+        var total = Promise.resolve(0);
+        Object.keys(byTarget).forEach(function (target) {
+          var tids = Object.keys(byTarget[target]);
+          if (!tids.length) return;
+          total = total.then(function (sum) {
+            return runAutoTargets(target, tids, s, 'auto: from a ' + sourceType + ' save')
+              .then(function (n) { return sum + n; });
+          });
+        });
+        return total;
+      });
+    }).catch(function (e) {
+      console.error('[ptp2re] auto-mode (source: ' + sourceType + '):', e);
+      return 0;
+    });
+  }
+
+  // ── A marker that does not exist yet ──────────────────────────────────────
+  //
+  // A SceneMarker is the only source here that comes into existence *already attached
+  // to a target and already carrying tags* - `scene_id` and `primary_tag_id` are both
+  // required by `SceneMarkerCreateInput`. Every other source is created bare and only
+  // relates to anything through a later save of the target, which the branches above
+  // already watch. So `sceneMarkerCreate` is the one create this plugin reacts to, and
+  // it is the reason a tag put on a brand new marker never reached its scene: the
+  // matcher only ever knew `sceneMarkerUpdate`, so editing a marker propagated and
+  // making one did not.
+  //
+  // The mutation names no marker - there is no id until it returns, and reading one
+  // out of the response is what the repo's "re-read from the server" rule exists to
+  // avoid - so the fan-out starts one hop in, from the `scene_id` the input does
+  // carry. That is exactly what both marker paths resolve to anyway:
+  // `tags:marker>scene` lands on that scene, and the second hop of
+  // `tags:marker>group` is the lookup `tags:scene>group` already makes.
+  function newMarkerTargets(path, sceneIds) {
+    if (path.target === 'scene') {
+      return Promise.resolve(sceneIds.map(function (id) { return String(id); }));
+    }
+    return resolveSourceTargets(pathById('tags:scene>group'), sceneIds);
+  }
+
+  // The scene a `sceneMarkerCreate` is putting a marker on, or null for anything else.
+  function newMarkerScene(q, v) {
+    if (!/\bsceneMarkerCreate\b/.test(q)) return null;
+    // Stash's page sends its fields as separate variables, not as `$input`.
+    var input = v.input || v || {};
+    return input.scene_id == null ? null : String(input.scene_id);
+  }
+
+  // ── Skipping what NormalizeParentTags would prune straight back off ───────
+  //
+  // The two plugins pull in opposite directions on the same tags. This one copies a
+  // tag onto an entity along a relationship; the sibling's Auto-Prune removes a
+  // tag from an entity when a more specific tag on it already implies that one. So a
+  // scene carrying "Platinum" that gains "Hair Colour" from its studio loses it again
+  // on the very save this plugin makes - work done, logged, and undone, every run.
+  //
+  // The answer is to ask, never to reimplement. `coop().api[NormalizeParentTags]`
+  // publishes `prepare({entityType})`, resolving to a worker whose `plan` is
+  // synchronous - which is what makes it usable from inside the walk, where a round
+  // trip per entity would be absurd. Copying the ancestor rules and the sibling's
+  // exclusion filters over here is exactly the drift that API exists to end: a filter
+  // added there would be silently not applied here, and the copy could not know.
+  //
+  // Three things it deliberately does not do:
+  //
+  //   - **It never asks about Roll-Up.** That mode *adds* ancestors, so a tag this
+  //     plugin copies is one the sibling would have added anyway - there is nothing
+  //     to skip, and skipping would mean second-guessing an addition both plugins
+  //     want.
+  //   - **It reads `autoMode`, not a setting.** A type the sibling is not pruning
+  //     automatically is a type where nothing will take the tag off, so the filter
+  //     stands down for it - per type, because that is how the sibling is configured.
+  //   - **It is off unless asked for.** A user who wants both plugins' behaviour and
+  //     is content to let the sibling tidy up afterwards is not wrong, and this
+  //     changes what a run writes.
+  var NPT_API_MIN = '3.2.0';   // the release that publishes `prepare`, for the log line
+
+  function nptApi() {
+    var api = coop().api && coop().api[NPT_ID];
+    // COMPAT: a NormalizeParentTags with no `prepare`, before its 3.2.0 (since
+    // PropagateTagsAndPerformers 3.17.0); remove when never on its own: the sibling is
+    // optional, and an install may keep an old one.
+    return api && typeof api.prepare === 'function' ? api : null;
+  }
+
+  // A bound pruner per target type, `{}` where the filter is off or nothing is
+  // pruning. Resolved once per run and read synchronously from `planTarget`, which is
+  // the whole reason the sibling's `plan` is not a promise.
+  function nptPruners(settings) {
+    if (!settings.f5SkipTagsNormalizeWouldPrune) return Promise.resolve({});
+    var api = nptApi();
+    if (!api) return Promise.resolve({});
+    var out = {}, chain = Promise.resolve();
+    Object.keys(TARGETS).forEach(function (target) {
+      chain = chain.then(function () {
+        return api.prepare({ entityType: target }).then(function (w) {
+          // Feature-detected rather than version-gated: the number is for a log line.
+          if (w && w.autoMode === 'prune' && typeof w.plan === 'function') out[target] = w;
+        }, function () { /* a sibling that cannot answer is a sibling that is not asked */ });
+      });
+    });
+    return chain.then(function () { return out; });
+  }
+
+  // Which target a mutation names, and the ids it names. Single and bulk are separate
+  // regexes on purpose: /\bsceneUpdate\b/ does not match `bulkSceneUpdate` - the
+  // capital S breaks the word boundary - and the two read their ids from different
+  // places.
+  function targetOfMutation(q) {
+    for (var k in TARGETS) {
+      if (!hasOwn(TARGETS, k)) continue;
+      var t = TARGETS[k];
+      if (new RegExp('\\b' + t.single + '\\b').test(q)) return { target: k, bulk: false };
+      if (new RegExp('\\b' + t.bulk + '\\b').test(q)) return { target: k, bulk: true };
+    }
+    return null;
+  }
+
+  // ── The settings page ─────────────────────────────────────────────────────
+  //
+  // Core's `settingsPage`: the group found by `plugin-<id>-<key>` ids over every
+  // `DEFAULTS` key, the heading as fallback, and Settings - Tasks, headed the same, told
+  // apart by this plugin's task captions; the description split into paragraphs behind
+  // Show more, each multi-paragraph setting reduced to its summary with the rest in a
+  // hover box, the stale-script banner and the README link. `settingsTick` re-adds it
+  // all per tick - React re-renders this panel on any settings change - and keeps what
+  // is this plugin's own: the rows it takes over, the tag links and the task buttons.
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'ptp2re', keys: Object.keys(DEFAULTS), tasks: TASKS, readmeUrl: README_URL,
+    readmeLabel: 'GTTx-PropagateTagsAndPerformers/README.md', injectStyle: injectStyle,
+  });
+
+  // ── Plugin Task buttons ───────────────────────────────────────────────────
+  //
+  // Settings - Tasks - Plugin Tasks renders every task of every plugin with the same
+  // `btn-secondary`, so nothing on that page says which buttons rewrite the library.
+  // Core's `paintTaskButtons` repaints ours orange, re-applied every tick because React
+  // hands back a button with Stash's own classes; `ownTaskName` decides what is ours,
+  // the same rule the click interception keys on.
+
+  // ── The path setting's own row ────────────────────────────────────────────
+  //
+  // Stash renders a STRING setting as a value span and an Edit button that opens its
+  // own one-line text modal. For thirteen `<path id>=<mode>` pairs that modal is a
+  // place to make a typo in, so the row is taken over: the value is replaced by the
+  // enabled paths in words, and Edit by a button opening the dialog that owns them.
+  //
+  // Four things worth knowing, all of them learnt in `NormalizeParentTags`:
+  //
+  //  - **Stash's own nodes are hidden, never removed.** React owns them and puts them
+  //    back on the next re-render; removing one leaves the setting with no editor at
+  //    all if this script ever stops running.
+  //  - **Both are re-applied per tick**, because a re-render hands back Stash's own
+  //    elements - the same reason `paintTaskButtons` repaints every tick.
+  //  - **The value comes from the settings cache, not from the row.** The dialog saves
+  //    with `configurePlugin` straight from `fetch`, which Stash's React state never
+  //    hears about, so its own span would still show the old string. The cache is
+  //    dropped by our fetch hook the moment that mutation lands, and the same hook
+  //    calls this tick.
+  //  - **The button is blue like its twin in Settings - Tasks.** Orange is for a control
+  //    that rewrites the library; this one edits a setting, and what that setting says
+  //    is already in the highlight underneath it.
+  //
+  // The canonical rewrite is here rather than in the dialog because a config file can
+  // hold anything and Stash's own modal is still reachable if ours never builds. It
+  // runs from the settings rather than from the row, and only once per distinct
+  // string, so a save that fails cannot become a loop.
+  var FIELD_LINE_ID = 'ptp2re-paths-line';
+  var FIELD_BTN_ID  = 'ptp2re-paths-button';
+  var _normalizedFrom = null;
+
+  // The first button in a subtree that is not one of ours. Stash's row has exactly
+  // one; ours carries `_ptp2reOwn`, so a second tick finds theirs rather than ours.
+  function foreignButton(node) {
+    if (!node) return null;
+    if (node.tagName === 'BUTTON') return node._ptp2reOwn ? null : node;
+    var kids = node.childNodes || [];
+    for (var i = 0; i < kids.length; i++) {
+      var found = foreignButton(kids[i]);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  function hide(node) {
+    if (node && node.style) node.style.display = 'none';
+  }
+
+  // The takeover itself, shared by the two string settings a dialog edits: the
+  // line that replaces Stash's value, and the button that replaces its Edit.
+  // Returns the line, or null where the row is not on the page.
+  function takeOverRow(key, lineId, btnId, taskName, level) {
+    var row = settingRow(PLUGIN_ID, key);
+    if (!row) return null;
+
+    var line = document.getElementById(lineId);
+    if (!line) {
+      line = el('div', 'ptp2re-pathstring');
+      line.id = lineId;
+    }
+    // Beside Stash's own value rather than inside it: React owns that subtree and
+    // reconciles it on every re-render, and a node of ours in the middle of one is
+    // the kind of thing that survives until it does not. After the description, where
+    // every row says what its settings are (Core's `afterDescription`).
+    var slot = byClass(row, 'value');
+    C.afterDescription(row, line);
+    hide(slot);
+
+    var btn = document.getElementById(btnId);
+    if (!btn) {
+      btn = C.settingButton(taskName, null, PLUGIN_ID);
+      btn.id = btnId;
+      btn._ptp2reOwn = true;
+      btn.addEventListener('click', function (e) {
+        if (e.preventDefault) e.preventDefault();
+        startRun(taskName);
+      });
+    }
+    var edit = foreignButton(row);
+    var btnHost = edit ? edit.parentNode : row;
+    if (btn.parentNode !== btnHost) btnHost.appendChild(btn);
+    hide(edit);
+    C.levelRow(row, level, btn);
+    return line;
+  }
+
+  function pathFieldTick() {
+    var line = takeOverRow('b1Paths', FIELD_LINE_ID, FIELD_BTN_ID, TASK_PATHS, 'semi');
+    if (!line) return;
+
+    var s = settingsOr(pathFieldTick);
+    if (!s) return;
+
+    var modes = s.paths, canon = formatPaths(modes);
+    // Redrawn only when the value moves: this runs every second, and rebuilding the
+    // list under the user's pointer for an unchanged value is churn.
+    var raw = String(s.b1Paths || '');
+    if (line._ptp2reText !== canon + '\u0000' + raw) {
+      line._ptp2reText = canon + '\u0000' + raw;
+      renderPathString(line, modes, raw);
+    }
+    if (_savingPaths || !raw.replace(/^\s+|\s+$/g, '')) return;
+    if (raw === canon || raw === _normalizedFrom) return;
+    // **Never write nothing over something, and never write away a pair this script
+    // could not read.** The rewrite is a convenience for a hand-typed value; a value
+    // it does not fully understand is one where "canonical form" means "the half I
+    // recognised", and writing that deletes the rest with no way back. A newer
+    // release's path id is exactly that case, and so is a typo - the difference is
+    // invisible from here, and only one of the two is safe to act on.
+    if (!canon || unrecognisedPairs(raw) > 0) {
+      _normalizedFrom = raw;
+      console.info('[ptp2re] the stored path setting is not one this script fully understands ' +
+        '("' + raw + '"), so it is left exactly as it is. Nothing is copied along a path ' +
+        'it could not read; open Path Settings to set them again, or check whether the ' +
+        'script running here is older than the plugin installed.');
+      return;
+    }
+    _normalizedFrom = raw;
+    savePaths(canon).then(null, function () {});
+  }
+
+  // The manual buttons row, the same way: the buttons that are on, in words, and
+  // the button opening the dialog that owns them. No canonical rewrite here - a
+  // hand-typed value is read forgivingly and shown as read, and the dialog's Save
+  // is what writes it back in form.
+  var BTN_LINE_ID = 'ptp2re-buttons-line';
+  var BTN_BTN_ID  = 'ptp2re-buttons-button';
+
+  function renderButtonString(box, s) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    if (!anyButtonOn(s)) {
+      box.appendChild(el('div', null, 'No manual buttons - none is shown anywhere.'));
+      return;
+    }
+    // A column per side and a line per page, the grouping the dialog has. A page
+    // with every button on says so in two words rather than listing five captions;
+    // a caption whose path is off is gray, since that button is not drawn anywhere.
+    var list = el('div', 'ptp2re-btnstring');
+    var cols = {};
+    [['target', 'On target entity Edit tabs'], ['source', 'On source entity pages']]
+      .forEach(function (c) {
+        cols[c[0]] = el('div', null);
+        cols[c[0]].appendChild(el('div', 'ptp2re-btnstring-head', c[1]));
+        cols[c[0]].lines = 0;
+        list.appendChild(cols[c[0]]);
+      });
+    buttonViews().forEach(function (v) {
+      var on = v.buttons.filter(function (b) { return s.buttons[b.key]; });
+      if (!on.length) return;
+      var off = on.filter(function (b) { return !pathOn(s, b.path); }).length;
+      var line = el('div', null);
+      line.appendChild(el('span', 'ptp2re-pathstring-on', v.view + ': '));
+      if (on.length === v.buttons.length) {
+        line.appendChild(el('span', off ? 'ptp2re-pathstring-mode' : 'ptp2re-pathstring-on',
+          'all buttons' + (off ? ' (' + plural(off, 'inactive path', 'inactive paths') + ')' : '')));
+      } else {
+        on.forEach(function (b, i) {
+          line.appendChild(el('span', pathOn(s, b.path) ? 'ptp2re-pathstring-on'
+            : 'ptp2re-pathstring-mode', (i ? ', ' : '') + buttonCaption(b, s)));
+        });
+      }
+      cols[v.side].appendChild(line);
+      cols[v.side].lines++;
+    });
+    ['target', 'source'].forEach(function (side) {
+      if (!cols[side].lines) cols[side].appendChild(el('div', 'ptp2re-pathstring-mode', 'none'));
+    });
+
+    box.appendChild(list);
+    // The one switch here that writes on a click, under the buttons, in its level while on.
+    if (s.a2SaveImmediately) box.appendChild(C.markLevel(el('div', 'ptp2re-btnstring-now', 'Save Immediately'), true));
+  }
+
+  // The settings cache, or null with a redraw of `tick` queued for when it lands:
+  // drawn then rather than on the next tick, since the re-entry is bounded by the
+  // cache it just filled, and a second of an empty line where the value used to be
+  // is exactly the flicker a takeover must not have.
+  function settingsOr(tick) {
+    if (_autoSettings) return _autoSettings;
+    if (!_autoSettingsWait) autoSettings().then(function () { tick(); }, function () {});
+    return null;
+  }
+
+  function buttonsFieldTick() {
+    var line = takeOverRow('a1ManualButtons', BTN_LINE_ID, BTN_BTN_ID, TASK_BUTTONS, true);
+    var s = line && settingsOr(buttonsFieldTick);
+    if (!s) return;
+    var canon = formatButtons(s.buttons) + '\u0000' + formatPaths(s.paths) + '\u0000' + !!s.a2SaveImmediately;
+    if (line._ptp2reText === canon) return;
+    line._ptp2reText = canon;
+    renderButtonString(line, s);
+  }
+
+  // The auto-modes row, the same way.
+  var AUTO_LINE_ID = 'ptp2re-auto-line';
+  var AUTO_BTN_ID  = 'ptp2re-auto-button';
+
+  function renderAutoString(box, s) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var on = AUTO_ROWS.filter(function (r) { return s.auto[r[0]]; });
+    if (!on.length) {
+      box.appendChild(el('div', null, 'Off - nothing is written when Stash saves an entity.'));
+      return;
+    }
+    on.forEach(function (r) { box.appendChild(C.markLevel(el('div', 'ptp2re-pathstring-on', r[1]), r[3])); });
+  }
+
+  function autoFieldTick() {
+    var line = takeOverRow('a3AutoPropagation', AUTO_LINE_ID, AUTO_BTN_ID, TASK_AUTO, 'strong');
+    var s = line && settingsOr(autoFieldTick);
+    if (!s) return;
+    var canon = formatAuto(s.auto);
+    if (line._ptp2reText === canon) return;
+    line._ptp2reText = canon;
+    renderAutoString(line, s);
+  }
+
+  // ── The exclusion filters, one row and a dialog ───────────────────────────
+  //
+  // Seven settings about what a propagation leaves alone were seven rows of the group, and
+  // with the three rows above them the page read as a wall. They are one row now, opened
+  // into a dialog of Core's (`settingsDialog`): stored under the same keys, so nothing
+  // already set moves and config.yml still edits them; each keeps its whole description on
+  // hover. The eighth filter stays in Path Settings, beside the paths it is about.
+  //
+  // The two boxes that name a tag each get a link to the tag it resolves to, and the one
+  // naming a custom field its ⓕ, beside the box - where the rows used to carry them. A name
+  // typed into a box says nothing about whether it names anything, and getting it wrong does
+  // not make the filter do less: it stops the run, because writing to the entities the filter
+  // protects is the one direction nothing here can undo. Nothing, rather than a warning, when
+  // a name resolves to nothing: a box being typed into is empty, then wrong, then right.
+  var TAG_ROWS = [
+    { key: F1_KEY, linkId: 'ptp2re-exclusion-tag' },
+    { key: F8_KEY, linkId: 'ptp2re-exclusion-subtree' },
+  ];
+  var EXCL_MARK = '🔗';      // link symbol
+  var EXCL_TTL_MS = 15000;             // so a tag created just now is found without a reload
+  var _excl = {};                      // per box: { name, at, wait }
+
+  function lookupExclusionTag(row, name) {
+    var st = _excl[row.key] || (_excl[row.key] = { name: null, at: 0, wait: null });
+    if (name === st.name && Date.now() - st.at < EXCL_TTL_MS) return st.wait;
+    st.name = name;
+    st.at = Date.now();
+    // One query for both halves, through the filter's own OR. `per_page: -1` for the
+    // reason the sibling's lookup gives: Stash compiles EQUALS to SQL LIKE, where _
+    // and % are wildcards, so a name carrying either can match far more tags than one
+    // page holds - and the exact match falling off page 1 would silently say the tag
+    // does not exist.
+    st.wait = gqlRequest(
+      'query PTPExclusionTag($filter: FindFilterType, $tag_filter: TagFilterType) {' +
+      '  findTags(filter: $filter, tag_filter: $tag_filter) { tags { id name aliases ' +
+      'description parents { name } children { name } } }' +
+      '}',
+      {
+        filter: { per_page: -1 },
+        tag_filter: {
+          name: { value: name, modifier: 'EQUALS' },
+          OR: { aliases: { value: name, modifier: 'EQUALS' } },
+        },
+      }
+    ).then(function (data) {
+      // EQUALS is case-insensitive on the server, so the exact re-check is here - and
+      // it is `pickTagByNameOrAlias`, the same call the run resolves through, rather
+      // than a second copy of the rule.
+      return pickTagByNameOrAlias(((data.findTags || {}).tags) || [], name);
+    }, function () { return null; });   // a link is not worth an error
+    return st.wait;
+  }
+
+  // The link to the tag `name` resolves to, or null: what the dialog draws beside the box.
+  function exclusionMark(tagRow, name) {
+    if (!name) return null;
+    return lookupExclusionTag(tagRow, name).then(function (tag) {
+      if (!tag) return null;
+      var node = el('a', 'ptp2re-tagicon', EXCL_MARK);
+      node.id = tagRow.linkId;
+      node.target = linkTarget();
+      node.rel = 'noopener noreferrer';
+      node.href = entityHref('tag', tag.id);
+      // The tooltip goes through `tagTip`, which draws it as a `title` and reopens it as a
+      // box with the tag's picture above it wherever the tag has one.
+      tagTip(node, tag.id, tagLinkTitle(tag,
+        tag.name === name ? null : 'Matched on "' + name + '", one of its aliases.'));
+      return node;
+    });
+  }
+
+  var EXCL_FIELDS = [
+    { key: 'f1ExcludeTargetWithTagName', label: 'Exclude Target Entities Carrying This Tag', warn: 'semi', text: true, wide: true, tag: true,
+      mark: function (v) { return exclusionMark(TAG_ROWS[0], v); },
+      tip: 'Enter one tag name. Nothing is ever copied onto an entity carrying that tag.\n\nMatched by ' +
+        'exact name, case-sensitive; a tag one of whose aliases is that exact string counts too, with ' +
+        'the name winning where both match. A link to the tag appears beside the box once it resolves - ' +
+        'if it does not, nothing here names anything, and a run will stop rather than write to the ' +
+        'entities this is meant to protect. The tag must be carried directly - a parent of it does not ' +
+        'count. It is also never copied onto anything itself, since that would permanently exclude ' +
+        'whatever received it.\n\nIf you also run ᝯㄝₓ Merge Performer Tags To Scenes and have never set ' +
+        'this one, its equivalent is adopted the first time this plugin loads, and saved here as yours. ' +
+        'It is asked once: change it here from then on, and a value you set - including switching a ' +
+        'toggle back off - is never replaced.' },
+    { key: 'f2ExcludeTargetOrganized', label: 'Exclude Target Entities Marked as Organized', warn: 'semi',
+      tip: 'Skip any entity whose Organized flag is set.\n\nIn Stash 0.31 only scenes, images and galleries ' +
+        'have that flag among this plugin\'s targets; groups have none, so this setting cannot skip ' +
+        'them.\n\nIf you also run ᝯㄝₓ Merge Performer Tags To Scenes and have never set this one, its ' +
+        'equivalent is adopted the first time this plugin loads, and saved here as yours. It is asked ' +
+        'once: change it here from then on, and a value you set - including switching a toggle back off ' +
+        '- is never replaced.' },
+    { key: 'f3ExcludeTagWithIgnoreAutoTag', label: 'Never Copy Tags Set to Ignore Auto Tag', warn: 'semi',
+      tip: 'Tags with "Ignore Auto Tag" enabled are never copied onto anything.\n\nIf you also run ᝯㄝₓ ' +
+        'Merge Performer Tags To Scenes and have never set this one, its equivalent is adopted the first ' +
+        'time this plugin loads, and saved here as yours. It is asked once: change it here from then on, ' +
+        'and a value you set - including switching a toggle back off - is never replaced.' },
+    { key: 'f4ExcludeTagWithCustomFieldName', label: 'Never Copy Tags Marked via This Custom Field', warn: 'semi', text: true, wide: true,
+      mark: function (v) { return v ? cfTipMark(v) : null; },
+      tip: 'Enter a custom field name. A tag carrying this custom field is never copied onto ' +
+        'anything.\n\nOnly the presence of the field matters - its value is ignored, so any value at all ' +
+        'excludes the tag. Remove the field from a tag to have it copied again.\n\nThis one has a ' +
+        'default, unlike every other box here: ᱜ╦╦🞮_Do_Not_Propagate_Tag, written in the first time the ' +
+        'plugin loads so that you can see the name to mark tags with. Clearing the box switches the ' +
+        'filter off, and it stays off - the default is written once and never again. If you also run ᝯㄝₓ ' +
+        'Custom Fields Bulk Editor, a description of the field is filed there the first time too.\n\nIf ' +
+        'you also run ᝯㄝₓ Merge Performer Tags To Scenes and have never set this one, its equivalent is ' +
+        'adopted the first time this plugin loads and saved here as yours, in place of the default - ' +
+        'which then leaves a description filed against a field nothing reads, listed as an orphan in ᝯㄝₓ ' +
+        'Custom Fields Bulk Editor\'s descriptions dialog and cleared with its Prune button. It is asked ' +
+        'once: change it here from then on, and a value you set - including switching a toggle back off ' +
+        '- is never replaced.' },
+    { key: 'f6ExcludeTagNameContains', label: 'Exclude Tags Whose Name Contains', warn: 'semi', text: true, wide: true,
+      tip: 'Enter one or more substrings separated by spaces. A tag whose name contains any of them is ' +
+        'never copied onto anything.\n\nMatched anywhere in the name, case-sensitive, and any Unicode ' +
+        'character can be used - handy for namespace-markers. A substring cannot itself contain a space ' +
+        'unless you set a separator below.' },
+    { key: 'f7TagNameSeparator', label: 'Separator for "Name Contains"', warn: 'semi', text: true,
+      tip: 'Leave this empty to separate those substrings on spaces.\n\nEnter any character - a comma, a ' +
+        'pipe, or any Unicode character you do not use in tag names - to separate on that instead, which ' +
+        'is how a substring can then contain a space. It is matched literally, so punctuation needs no ' +
+        'escaping, and surrounding whitespace is trimmed from each substring.' },
+    { key: 'f8ExcludeTagSubtreeName', label: 'Exclude This Tag and All Its Child Tags', warn: 'semi', text: true, wide: true, tag: true,
+      mark: function (v) { return exclusionMark(TAG_ROWS[1], v); },
+      tip: 'Enter one tag name. That tag, and every tag anywhere under it in the hierarchy, is never copied ' +
+        'onto anything.\n\nMatched by exact name, case-sensitive; a tag one of whose aliases is that ' +
+        'exact string counts too, with the name winning where both match. A link to the tag appears ' +
+        'beside the box once it resolves - if it does not, nothing here names anything, and a run will ' +
+        'stop rather than copy the tags this is meant to keep out. Descendants are found through each ' +
+        'tag\'s parents, however deep, so a tag reached through two different parents is excluded once ' +
+        'either of them is.' },
+  ];
+
+  // What the filters say now, in one line: each one that does something, or that none does.
+  // Each tag with its 🔗 and the field with its ⓕ after them, as the dialog draws them: a
+  // summary's own link ids, beside the dialog's, and the same lookup cache.
+  function exclusionSummary(s) {
+    var q = function (k) { return String(s[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var link = function (n, name) {
+      var row = { key: TAG_ROWS[n].key, linkId: TAG_ROWS[n].linkId + '-sum' };
+      return { text: '"' + name + '"', tag: true, mark: function () { return exclusionMark(row, name); } };
+    };
+    var on = [], field = q(F4_KEY);
+    if (q(F1_KEY)) on.push(['targets tagged ', link(0, q(F1_KEY))]);
+    if (s.f2ExcludeTargetOrganized) on.push(['Organized targets']);
+    if (s.f3ExcludeTagWithIgnoreAutoTag) on.push(['tags set to Ignore Auto Tag']);
+    if (field) on.push(['tags carrying the custom field ', { cf: field }]);
+    if (q('f6ExcludeTagNameContains')) on.push(['tags whose name contains ' +
+      splitTerms(q('f6ExcludeTagNameContains'), q('f7TagNameSeparator')).map(function (t) { return '"' + t + '"'; }).join(' or ')]);
+    if (q(F8_KEY)) on.push([link(1, q(F8_KEY)), ' and every tag under it']);
+    if (!on.length) return 'Nothing is excluded.';
+    // Each exclusion in force in the semi level, as the dialog names them.
+    var parts = ['Leaving alone: '];
+    on.forEach(function (c, i) { parts = parts.concat(i ? ['; '] : [], C.atLevel(c, 'semi')); });
+    return parts.concat('.');
+  }
+
+  var exclusionDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'ptp2re', key: 'exclusions', title: 'Exclusion Filters',
+    line: 'Which targets and which tags a propagation leaves alone: a tag or Organized on the target, ' +
+      'Ignore Auto Tag, a custom field, words in a tag\'s name, and a tag with everything under it. ' +
+      'Seven settings, in a dialog; the eighth is in Path Settings.',
+    fields: EXCL_FIELDS,
+    summary: exclusionSummary,
+    settings: function () { return _autoSettings || DEFAULTS; },
+    load: function () { return loadSettings(true).then(function (r) { return r.settings; }); },
+    saved: function () { invalidateAutoSettings(); return autoSettings(); },
+  });
+
+  function settingsTick() {
+    var group = page.group();
+    page.decorate(group);
+    paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
+    pathFieldTick();
+    buttonsFieldTick();
+    autoFieldTick();
+    // The summary reads the cache; asking for it here fills it the first time.
+    settingsOr(settingsTick);
+    exclusionDialog.tick(group);
+  }
+
+  // No MutationObserver here, unlike a button injection: this is decoration in a
+  // settings panel, not something that has to land before the user can click it, and
+  // a second of delay after a re-render costs nothing. The timer plus the navigation
+  // hooks are enough, and they cannot fight a React re-render.
+  if (window.addEventListener) {
+    window.addEventListener('load', settingsTick);
+    window.addEventListener('popstate', function () { setTimeout(settingsTick, 300); });
+  }
+  document.addEventListener('click', function () {
+    setTimeout(settingsTick, 0);
+    setTimeout(settingsTick, 300);
+  }, true);
+  setInterval(settingsTick, 1000);
+  settingsTick();
+
+  // ── Manual buttons: one per enabled path, on the target's edit page ────────
+  //
+  // D8 of the design plan. One button per enabled path whose target is the page
+  // being viewed - `Tags: Performers → Scenes` shows "Add Perf Tags" on a scene's
+  // Edit tab, and a scene with five enabled paths shows five small buttons rather
+  // than one that tries to name all of them. `path.button` is already the label;
+  // nothing here invents a second copy of it.
+  //
+  // Placement could not be settled from notes alone (see D8's own caveat) and needs
+  // exercising in a real Stash: `.edit-buttons` is the one container name this repo
+  // has actually confirmed, on the scene page (MergePerformerTagsToScenes' own
+  // "Add Perf Tags" button uses it), and this reuses it unverified for the other
+  // three pages, on the working assumption that Stash builds every entity's edit
+  // panel from the same button-row component. If a page does not in fact have one,
+  // this plugin's buttons simply do not appear there - the same failure mode as a
+  // missing route.
+  //
+  // Reuses the auto-mode machinery wholesale rather than a third planner: `AutoRun`
+  // already plans a *named* set of ids without paging the library, which is exactly
+  // what one entity is. The only thing a click adds is where the result goes -
+  // `run.apply()` unchanged for "save immediately", or pushed into a captured form
+  // control for staging.
+
+  // Which of the five target pages is showing, from the route alone - reusing each
+  // TARGETS entry's own `route` regex rather than a second copy of the patterns.
+  function currentRouteTarget() {
+    for (var key in TARGETS) {
+      if (!hasOwn(TARGETS, key)) continue;
+      var m = TARGETS[key].route.exec(location.pathname);
+      if (m) return { target: key, id: m[1] };
+    }
+    return null;
+  }
+
+  // ── Staging: capturing TagSelect and PerformerSelect ────────────────────────
+  //
+  // Same trick as MergePerformerTagsToScenes' own TagSelect capture, generalised to
+  // a second component and keyed by the route's (target, id) rather than a scene id,
+  // since this plugin's targets are four pages, not one.
+  var _tagCaptures = [], _perfCaptures = [];
+  var SELECT_CAPTURE_LIMIT = 10;
+
+  function captureSelect(list, props) {
+    if (!props || !props.isMulti || typeof props.onSelect !== 'function') return;
+    var rt = currentRouteTarget();
+    list.push({ props: props, target: rt && rt.target, id: rt && rt.id, values: props.values || [] });
+    if (list.length > SELECT_CAPTURE_LIMIT) list.shift();
+  }
+
+  // Patches have to be registered before the components they target first render,
+  // so this runs at script load; the load-event retry only covers Stash setting
+  // window.PluginApi later than usual.
+  // Whether staging is possible at all on this Stash. Read by `runManual`, which saves
+  // rather than staging when it is false.
+  // COMPAT: a Stash with no PluginApi component patching, older than the 0.31.0 this plugin
+  // requires (since PropagateTagsAndPerformers 0.16.0); remove when never on its own: Stash
+  // does not enforce the floor.
+  var _selectPatchesInstalled = false;
+
+  function installSelectPatches() {
+    var api = window.PluginApi;
+    if (!api || !api.patch || typeof api.patch.before !== 'function') return false;
+    try {
+      api.patch.before('TagSelect', function (props) { captureSelect(_tagCaptures, props); return [props]; });
+      api.patch.before('PerformerSelect', function (props) { captureSelect(_perfCaptures, props); return [props]; });
+      _selectPatchesInstalled = true;
+      return true;
+    } catch (e) {
+      console.warn('[ptp2re] could not patch TagSelect/PerformerSelect:', e);
+      return false;
+    }
+  }
+
+  // Said once, and again if the user turns "save immediately" off and back on. Without
+  // it the only symptom is a button that saves when the setting says it should stage,
+  // which reads as the setting not working.
+  var _warnedNoStaging = false;
+  function warnNoStagingOnce(s) {
+    if (s.a2SaveImmediately || _selectPatchesInstalled) { _warnedNoStaging = false; return; }
+    if (_warnedNoStaging) return;
+    _warnedNoStaging = true;
+    console.warn('[ptp2re] staging is unavailable - this Stash does not expose PluginApi ' +
+      'component patching, so the manual buttons will copy and save directly.');
+  }
+
+  // Which capture is the control in front of the user: ᝯㄝₓ Core's rule, because getting
+  // it wrong is silent in both directions - the wrong control is written to, or the right
+  // one is read stale after a hand edit. See `pickControl`.
+  function findControl(list, target, id, expectedIds) {
+    return pickControl(list, function (c) {
+      return c.target === target && c.id === id;
+    }, expectedIds);
+  }
+
+  // What each control is expected to be holding, one per kind since a page can
+  // stage tags and performers in the same click (a scene has both).
+  var _stagedTags = { target: null, id: null, ids: null };
+  var _stagedPerfs = { target: null, id: null, ids: null };
+
+  // Pushes one plan entry's additions into its control, diffed against the form
+  // rather than the server so a hand-added or hand-removed item survives and a
+  // second click without saving reports nothing added. Throws if the control was
+  // never captured, which reads to the user as "open the Edit tab first".
+  function stageEntry(list, staged, setStaged, target, id, addIds, makeItem) {
+    var expected = (staged.target === target && staged.id === id) ? staged.ids : null;
+    var control = findControl(list, target, id, expected);
+    if (!control) throw new Error('could not find the form control - open the Edit tab first');
+    var current = control.values || [];
+    var have = {};
+    current.forEach(function (t) { have[String(t.id)] = true; });
+    var added = addIds.filter(function (aid) { return !have[aid]; }).map(makeItem);
+    if (!added.length) return 0;
+    var next = current.concat(added);
+    control.props.onSelect(next);
+    control.values = next;
+    setStaged({ target: target, id: id, ids: next.map(function (t) { return String(t.id); }) });
+    return added.length;
+  }
+
+  // Every plan entry for this one entity, staged into whichever control its kind
+  // uses. Names come from what `AutoRun` already gathered while planning - the tag
+  // hierarchy's `tagMap` and the performer names carried on any performers-kind
+  // path's payload - so staging costs no query of its own.
+  function applyPlanToForm(target, id, plan, tagMap, performerNames) {
+    var total = 0;
+    plan.forEach(function (entry) {
+      if (entry.target !== target || entry.id !== id || !entry.add.length) return;
+      if (entry.kind === 'tags') {
+        total += stageEntry(_tagCaptures, _stagedTags, function (v) { _stagedTags = v; },
+          target, id, entry.add, function (tid) {
+            return { id: tid, name: tagName(tagMap, tid) || ('tag ' + tid), aliases: [], image_path: null };
+          });
+      } else {
+        total += stageEntry(_perfCaptures, _stagedPerfs, function (v) { _stagedPerfs = v; },
+          target, id, entry.add, function (pid) {
+            return { id: pid, name: (performerNames && performerNames[pid]) || ('performer ' + pid) };
+          });
+      }
+    });
+    return total;
+  }
+
+  // ── The click: stage one entity, or open the review dialog on it ────────────
+  //
+  // **Just the path whose button was clicked**, never every enabled path into this
+  // target. That is what the button says it does - `manualButtonTitle` names one path,
+  // the caption names one source, and the setting description promises "one button per
+  // path". `runManualSource` had this right from the start and carries the same note;
+  // this side did not, so on a scene with both the performer and studio paths enabled,
+  // "Add all Tags from all Performers" also copied the studio's tags. It also made
+  // this plugin's button silently wider than `MergePerformerTagsToScenes`' identically
+  // labelled one, which copies performer tags and nothing else.
+  //
+  // **Nothing here writes.** The "save immediately" branch used to call
+  // `run.apply()` on the spot, which was the one thing in this plugin a user could
+  // trigger with no plan in front of them - the task has a dialog, the auto-modes are
+  // opted into per path, and this had neither. It now opens the same dialog the task
+  // does, scoped to the one entity and the one path (`Run`'s `scope`), so every write
+  // this plugin makes on purpose is either reviewed or staged.
+  function runManual(path, target, id, label) {
+    return autoSettings().then(function (s) {
+      // Re-read rather than trusted: a path can be switched off between the tick that
+      // drew the button and the click on it.
+      if (!pathOn(s, path)) throw new Error('that path is no longer enabled');
+      // Staging needs PluginApi's component patching. Where that is missing the click
+      // reviews instead, because the user never opted into a blind write - they opted
+      // into the button, and this is the closest thing their Stash can support. The
+      // sibling has made the same trade since it grew staging; without it the click
+      // ends in an alert about a form control on a Stash that was never going to have
+      // one.
+      warnNoStagingOnce(s);
+      if (savesImmediately(s)) {
+        // Nothing to stage into, so the review moves into the dialog: it plans this one
+        // entity along this one path, lists every change, and writes nothing until
+        // Proceed - with Copy log, Rescan and Undo where the task has them. This is
+        // what the "..." on the caption promises.
+        return scopeLabel(target, id).then(function (what) {
+          startRun(stripEllipsis(label) + ' - for ' + what,
+            { pathId: path.id, target: target, ids: [String(id)] });
+          return { mode: 'dialog', count: 0 };
+        });
+      }
+      // `guarded()` around the staging path for the same reason auto-mode needs it -
+      // it is only the writing branch that matters, and the dialog guards its own.
+      return guarded(function () {
+        return autoContext(s).then(function (ctx) {
+          var run = new AutoRun(s, ctx.tagMap, ctx.filters, ctx.npt);
+          return run.planEntities(target, [path], [String(id)]).then(function () {
+            var count = applyPlanToForm(target, String(id), run.plan, run.tagMap, run.performerNames);
+            return { mode: 'staged', count: count };
+          });
+        });
+      });
+    });
+  }
+
+  // ── The buttons themselves ───────────────────────────────────────────────────
+
+  var MANUAL_BTN_CLASS = 'ptp2re-manual-btn';
+  var FLASH_MS = 1500;
+
+  function manualButtonId(path) {
+    return 'ptp2re-mbtn-' + path.id.replace(/[^a-zA-Z0-9]+/g, '-');
+  }
+
+  function clearManualButtons() {
+    (document.querySelectorAll('.' + MANUAL_BTN_CLASS) || []).forEach(function (b) {
+      if (b.parentNode) b.parentNode.removeChild(b);
+    });
+  }
+
+  function manualButtonTitle(path, immediate) {
+    return pathLabel(path) + (immediate
+      ? ' - opens a dialog listing every change first; nothing is written until you press Proceed.'
+      : ' - stages into the form for review; you still press Save.');
+  }
+
+  function buildManualButton(path, label, target, id, immediate) {
+    // Deliberately not the shared `button()` helper: that carries `btn-sm`, sized for
+    // the dialog's own footer. Stash's own Save/Delete and MergePerformerTagsToScenes'
+    // on-page buttons all carry plain `btn btn-secondary` with no size modifier, so a
+    // `btn-sm` button beside them reads smaller in both height and font-size - not the
+    // row-dependent stretch below, a flat difference present on every row.
+    // No vertical margin here on purpose - see `ensureRowSpacing` below for why a
+    // wrapped row's spacing comes from the container, not this button's own margin box.
+    // No horizontal one either: `applyButtonSpacing` copies the
+    // row's own margins inline, and a Bootstrap `mx-*` class is `!important`, so a
+    // spacing class here would outrank them. It adds `mx-1` back itself when there is
+    // nothing to copy.
+    var btn = el('button', 'btn ' + PLUGIN_BTN_VARIANT + ' ' + MANUAL_BTN_CLASS, label);
+    btn.type = 'button';
+    btn.id = manualButtonId(path);
+    btn._coopOwner = PLUGIN_ID; // read by `insertOrdered`'s cross-plugin priority scan
+    btn._ptp2reEntityId = id;
+    // The resolved label, held apart from `textContent` because the click handler
+    // below overwrites that with "Working..."/"+N" while a click is in flight -
+    // comparing live `textContent` against a freshly resolved label would catch the
+    // button mid-flash and rebuild it, cutting the flash short.
+    btn._ptp2reLabel = label;
+    btn.title = manualButtonTitle(path, immediate);
+    // The container is a flex row, and its default `align-items: stretch` makes any
+    // child sitting beside a taller sibling stretch to match it. A button that wraps
+    // to its own row, with nothing tall beside it, keeps its natural height instead -
+    // the same button rendering two different heights purely by which row it landed
+    // on. `align-self` opts every one of ours out of that per-row inheritance, so they
+    // are consistently sized regardless of what else is sharing the row.
+    btn.style = 'align-self:flex-start;';
+    btn.addEventListener('click', function (event) {
+      if (event && event.preventDefault) event.preventDefault();
+      var orig = btn.textContent;
+      btn.disabled = true;
+      holdWidth(btn);
+      btn.textContent = 'Working\u2026';
+      runManual(path, target, id, label).then(function (result) {
+        btn.disabled = false;
+        // The dialog is now the feedback, and it is on top of this button - a flash
+        // underneath it would be a caption nobody can see, restored two seconds into a
+        // review that may take minutes.
+        if (result.mode === 'dialog') { btn.textContent = orig; return; }
+        btn.textContent = result.count ? ('+' + result.count) : 'No change';
+        // Only the staging branch reaches here, and it changes nothing on
+        // the server - so the caption is restored and nothing is re-probed. A dialog's
+        // writes invalidate from `Run.close`, where the eligibility they changed is
+        // finally settled.
+        setTimeout(function () { btn.textContent = orig; }, FLASH_MS);
+      }, function (err) {
+        btn.disabled = false;
+        btn.textContent = orig;
+        console.error('[ptp2re]', err);
+        alert('Error: ' + (err && err.message ? err.message : err));
+      });
+    });
+    return btn;
+  }
+
+  // Where the buttons go. `.edit-buttons` is Scene's own row, confirmed live - both
+  // MergePerformerTagsToScenes' own scene button and this plugin's use it. Every
+  // other page checked so far (Group, confirmed live; Performer, per
+  // MergePerformerTagsToScenes' own container-finding code) renders its edit form
+  // inside `.details-edit` instead, a container Stash swaps between two states: a
+  // detail-view navbar carrying a Delete button, and the edit form itself carrying
+  // Cancel/Save in its place. We want the edit-form instance, so - the opposite
+  // filter from MergePerformerTagsToScenes' performer button, which wants the
+  // *other* one - skip any `.details-edit` that carries a Delete button. That is
+  // Core's `findEditContainer`.
+
+  // Whether some *other* loaded plugin declares this same path - the `declares`
+  // registry from step 7, read here for the first time by anything other than the
+  // task dialog's log line.
+  function otherPluginDeclaresPath(pathId) {
+    var declares = coop().declares;
+    for (var id in declares) {
+      if (!hasOwn(declares, id) || id === PLUGIN_ID) continue;
+      if ((declares[id] || []).indexOf(pathId) !== -1) return true;
+    }
+    return false;
+  }
+
+  // Whether a button for that path is already sitting in the container, placed by
+  // someone else. `declares` alone is not enough to act on: it says another plugin
+  // *can* cover this path, not that its button is showing right now - that plugin's
+  // own manual-button setting could just as easily be off, in which case deferring
+  // to it would leave neither button on the page. Matching on the exact label text
+  // is the ground truth instead, and it needs no knowledge of the other plugin's
+  // class names or settings: `path.button` is the same string a user would
+  // recognise as "this one" regardless of which plugin put it there, which is what
+  // makes two plugins doing the identical path call it the same thing worth relying
+  // on. A match on any button of *ours* does not count, so this never mistakes one
+  // we added on an earlier tick for someone else's.
+  //
+  // **"Ours" has to mean both classes.** This helper is shared verbatim by
+  // `manualButtonsTick` and `manualSourceButtonsTick`, and it once excluded only
+  // `MANUAL_BTN_CLASS` - the target side's. On the source side our own button
+  // therefore matched its own label, which made the plugin conclude a foreign button
+  // was showing and drop the path. That shrank `paths`, which changed `pathIdsKey`,
+  // which re-armed the existence probe, which cleared every source button while it
+  // was pending - and with the button gone the next tick saw no match, restored the
+  // path, and started the whole cycle again. The visible result was a source button
+  // blinking once a second, live-reported on a detail page. It bites only where
+  // another plugin declares the same path (`tags:performer>scene`, the one
+  // `MergePerformerTagsToScenes` declares) *and* that plugin is not currently showing
+  // its own button - if it were, the match would be genuine and the path would stay
+  // dropped, which is why this survived every test and the target side never showed it.
+  function foreignButtonAlreadyShows(container, label) {
+    var kids = Array.prototype.slice.call(container.childNodes || []);
+    for (var i = 0; i < kids.length; i++) {
+      if (hasClass(kids[i], MANUAL_BTN_CLASS) || hasClass(kids[i], MANUAL_SRC_BTN_CLASS)) continue;
+      if (sameButtonLabel(kids[i].textContent, label)) return true;
+    }
+    return false;
+  }
+
+  // Whether each of `paths` would actually add anything to this one entity.
+  //
+  // This is eligibility gating rather than existence gating, and the reason it can be
+  // is that the answer was already being computed and thrown away.
+  // `planEntities` fetches the target through `oneQuery`, whose `targetParts` carries
+  // the target's own `tags`/`performers` *and* every path's full walk down to its
+  // payload leaf - so `planTarget` runs the entire diff (aggregate, the common-tags
+  // fold, the already-has check, the tag filter) before deciding whether to create a
+  // plan entry. `recordExistence` tapped that pass at `agg.n`, the weakest question
+  // available in it. `recordAddable` taps the strongest, at no extra request.
+  //
+  // Both hooks are still read. `has` is what the source side and the failure path
+  // fall back to, and keeping them apart is what lets a probe answer "the relationship
+  // is there but has nothing left to give" separately from "there is no relationship" -
+  // the two are one hidden button either way, but only one of them is a bug when it is
+  // wrong.
+  function probeButtons(target, paths, id, s) {
+    return probeContext(s).then(function (ctx) {
+      var run = new AutoRun(s, ctx.tagMap, ctx.filters, ctx.npt);
+      var has = {}, adds = {};
+      run.recordExistence = function (pathId, exists) { has[pathId] = exists; };
+      run.recordAddable = function (pathId) { adds[pathId] = (adds[pathId] || 0) + 1; };
+      return run.planEntities(target, paths, [String(id)])
+        .then(function () { return { has: has, adds: adds }; });
+    });
+  }
+
+  function pathIdsKey(paths) {
+    return paths.map(function (p) { return p.id; }).sort().join(',');
+  }
+
+  // Single-slot, like MergePerformerTagsToScenes' own `sceneCheck`/`performerCheck`:
+  // one page is in view at a time, so there is nothing to key a map on beyond what
+  // would immediately be invalidated by navigating away. Keyed on the path *set*, not
+  // just the entity, because toggling a path's setting while the page is open changes
+  // what needs probing without changing either the target or the id.
+  var _existenceCheck = null; // { target, id, pathsKey, status: 'pending'|'ready', adds }
+
+  // Arms the probe if what it holds does not answer the question being asked, and
+  // reports whether an answer is ready. Split out of `manualButtonsTick` so
+  // it can be called *before* the container is found: measured on a live Scene Edit tab,
+  // the three sequential passes took ~900 ms of wall clock, and they were starting the
+  // moment the row appeared - which is the moment the user clicked Edit, and also the
+  // moment Stash fires its own five `*ForSelect` queries for the form's dropdowns, each
+  // of which measured 810-1096 ms. So the probe was queueing behind the busiest instant
+  // of the page load, and every millisecond of it sat between the click and the button.
+  // Run from the route instead and it is spent while the user is still reading the
+  // detail view, with the answer already cached by the time the row exists.
+  function armExistenceCheck(rt, paths, s) {
+    var wantKey = pathIdsKey(paths);
+    if (!_existenceCheck || _existenceCheck.target !== rt.target ||
+        _existenceCheck.id !== rt.id || _existenceCheck.pathsKey !== wantKey) {
+      var check = _existenceCheck = {
+        target: rt.target, id: rt.id, pathsKey: wantKey, status: 'pending', adds: null, has: null,
+      };
+      gate.log('probing ' + TARGETS[rt.target].label + ' ' + rt.id + ' for ' +
+        plural(paths.length, 'path') + ' - the outcomes below are this probe\'s');
+      probeButtons(rt.target, paths, rt.id, s).then(function (r) {
+        if (_existenceCheck !== check) return;
+        check.adds = r.adds; check.has = r.has; check.status = 'ready';
+        manualButtonsTick();
+      }, function (e) {
+        // A failed probe must not silently hide every button on the page - the
+        // recorded preference is a button that is sometimes unneeded over one that
+        // is missing when it was needed, and a network hiccup is exactly that trade.
+        // `adds: null` is read downstream as "show everything".
+        console.error('[ptp2re] button probe failed:', e);
+        if (_existenceCheck !== check) return;
+        check.status = 'ready'; check.adds = null; check.has = null;
+        manualButtonsTick();
+      });
+    }
+    return _existenceCheck.status === 'ready';
+  }
+
+  // Reconciles the container's buttons against the currently enabled paths for this
+  // page, adding what is missing and dropping what no longer belongs - a stale
+  // button left over from the previous entity, or every button at once when the
+  // setting is off or the page is not one of the four.
+  // A tick whose settings read failed - Stash restarting, the network gone - draws nothing
+  // and says so once, rather than leaving a rejection nobody handles, once a second.
+  function settingsUnread(e) {
+    gate.once('t:settings', 'no buttons drawn: the settings could not be read - ' +
+      (e && e.message ? e.message : String(e)));
+  }
+
+  function manualButtonsTick() {
+    autoSettings().then(function (s) {
+      var any = anyButtonOn(s);
+      var rt = any ? currentRouteTarget() : null;
+      if (!rt) {
+        gate.once('t:route', any
+          ? 'no target buttons: this route is not one of the four target pages'
+          : 'no target buttons: no manual button is switched on');
+        clearManualButtons(); return;
+      }
+      var wanted = enabledPaths(s).filter(function (p) {
+        return p.target === rt.target && buttonOn(s, 'target', p);
+      });
+      if (!wanted.length) {
+        gate.once('t:route', 'no target buttons on ' + TARGETS[rt.target].label + ' ' + rt.id +
+          ': no enabled path with its button on writes into a ' + TARGETS[rt.target].label.toLowerCase());
+        clearManualButtons(); return;
+      }
+      gate.once('t:route', TARGETS[rt.target].label + ' ' + rt.id + ' - ' +
+        plural(wanted.length, 'enabled path') + ' into this page: ' + wanted.map(function (p) { return p.id; }).join(', '));
+      var container = findEditContainer();
+      if (!container) {
+        // No row yet - on a Scene that means the Edit tab is not open. Probe anyway:
+        // see `armExistenceCheck`. The dedup filter below needs a container to read, so
+        // this arms on the unfiltered set; dedup only drops a path when another plugin
+        // is *showing* a button for it, so in every other case the key is the one the
+        // filtered call would have produced and the answer is already there when the
+        // row appears.
+        gate.once('t:container', 'no button row yet on ' + TARGETS[rt.target].label + ' ' + rt.id +
+          ' - probing anyway; this usually means the Edit tab is not open');
+        armExistenceCheck(rt, wanted, s);
+        clearManualButtons();
+        return;
+      }
+      gate.once('t:container', 'button row found on ' + TARGETS[rt.target].label + ' ' + rt.id);
+      ensureRowSpacing(container);
+      // A path another plugin also declares, whose button is already visible right
+      // here, is dropped from what we want before either loop below ever sees it -
+      // so the removal loop tears an earlier one of ours down the moment a sibling
+      // plugin's appears, and the add loop never puts a second one up beside it.
+      var paths = wanted.filter(function (p) {
+        var dropped = otherPluginDeclaresPath(p.id) && foreignButtonAlreadyShows(container, buttonLabel(p, s));
+        if (dropped) gate.once('t:dedup:' + p.id, p.id + ' - hidden: another plugin is already ' +
+          'showing "' + buttonLabel(p, s) + '" in this row');
+        return !dropped;
+      });
+      // Read once per tick and used for the caption, the tooltip and (through
+      // `runManual`) the click, so the "..." cannot say one thing and the click do
+      // another.
+      var immediate = savesImmediately(s);
+      if (!paths.length) { clearManualButtons(); return; }
+      // Eligibility gating: a button whose path would add
+      // nothing to this entity stays off rather than sitting there to report "No
+      // changes" on every click. That covers an absent relationship (no performers, no
+      // studio, no markers), as plain existence gating did, and also a
+      // relationship whose sources carry nothing, one whose payload the target already
+      // has in full, an empty "common tags only" intersection, and a payload the
+      // exclusion filter refuses. An entity blocked outright by `f1`/`f2` hides every
+      // button here, which it already did - `planTarget` returns before either hook.
+      //
+      // The probe is async, so a button that was showing a moment ago can disappear for
+      // one tick while a fresh one is checked; there is no synchronous way to know
+      // without the query.
+      //
+      // What this reads is the server. In staging mode a click diffs against the
+      // *form*, so an unsaved edit is invisible to the gate until Save - see
+      // `invalidateButtonProbes`, which is what makes Save enough.
+      if (!armExistenceCheck(rt, paths, s)) { clearManualButtons(); return; }
+      // Reported here rather than from the probe's callback, and that is the whole
+      // point: a probe runs once per entity, so a cached answer produced no line at
+      // all - which is exactly the state someone is in when they switch the debug flag
+      // on while already looking at the page whose buttons they are asking about.
+      // `gate.once` keys on the path and carries the entity in the text, so a repeat
+      // of the same answer is silent and a change (or a navigation) speaks.
+      var adds = _existenceCheck.adds, seen = _existenceCheck.has;
+      paths.forEach(function (p) {
+        gate.once('t:out:' + p.id, TARGETS[rt.target].label + ' ' + rt.id + ' - ' + p.id + ' - ' +
+          // `has` and `adds` are both kept precisely so this can tell the two reasons
+          // for hiding apart: "there is no studio here" and "the studio's tags are
+          // already all on this scene" look identical from the button.
+          (!adds ? 'SHOWN: the probe failed, so every button is shown rather than hidden'
+            : adds[p.id] > 0 ? 'SHOWN: ' + adds[p.id] + ' to add'
+            : seen && seen[p.id] === false ? 'hidden: no ' + p.source.toLowerCase() + ' on this entity'
+            : seen && seen[p.id] ? 'hidden: source found, but nothing it carries is missing here'
+            // Neither hook fired: `planTarget` returned before both of them, which it
+            // does for an entity the f1/f2 entity-level filters exclude outright.
+            : 'hidden: entity excluded by a filter'));
+      });
+      if (adds) {
+        paths = paths.filter(function (p) { return adds[p.id] > 0; });
+      }
+      // A button whose path is no longer enabled - or no longer wanted because its
+      // source turned out to be empty - is removed outright. A button for a
+      // *different* entity (the container reused across a navigation) is not handled
+      // here - the loop below already replaces it, since `existing` would fail the
+      // entity-id check and get torn down before its replacement is appended. Two
+      // removal paths for the same case would be one more place to keep in sync.
+      //
+      // `childNodes` is a live NodeList in a real browser, not an Array - it has no
+      // `.slice()`, only `.length` and index access. `Array.prototype.slice.call`
+      // copies it into a real array first, both so `.forEach` exists at all and so
+      // removing a node mid-loop cannot skip the next one the way mutating a live
+      // collection while iterating it would.
+      Array.prototype.slice.call(container.childNodes || []).forEach(function (node) {
+        if (!hasClass(node, MANUAL_BTN_CLASS)) return;
+        var stillWanted = paths.some(function (p) { return manualButtonId(p) === node.id; });
+        if (!stillWanted && node.parentNode) node.parentNode.removeChild(node);
+      });
+      paths.forEach(function (p) {
+        var label = withEllipsis(buttonLabel(p, s), immediate);
+        var existing = document.getElementById(manualButtonId(p));
+        if (existing && existing._ptp2reEntityId === rt.id && existing._ptp2reLabel === label) return;
+        if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+        insertBeforeImportantAction(container, buildManualButton(p, label, rt.target, rt.id, immediate));
+      });
+    }, settingsUnread);
+  }
+
+  // ── The source-side buttons: push outward instead of pulling in ─────────────
+  //
+  // Everything above puts a button on the *target's* page - "copy my performers'
+  // tags in". This is the other direction: a button on the *source's* own page -
+  // "push my tags out to every scene/group/etc. I reach" - matching MergePerformerTagsToScenes'
+  // own performer-page button rather than the selection-menu alternative discussed
+  // and deferred (see AGENTS.md). Twelve of the fourteen paths qualify: the two
+  // marker paths are deliberately absent, because a SceneMarker has no detail page of
+  // its own to put a button on - it lives inside a scene's Markers tab.
+  //
+  // There is no staging equivalent here. Staging pushes into *one* captured form
+  // control; a source button can fan out to dozens of targets at once, and there is
+  // no single form to stage into. Every source button saves immediately, regardless
+  // of `a2SaveImmediately` - that setting is about which of the *target* buttons'
+  // two behaviours to use, and does not apply to a button that only ever has one.
+
+  var SOURCE_ROUTES = {
+    // A Performer is only ever a source in this plugin - never one of `TARGETS` - so it
+    // needs its own route regex here.
+    performer: /^\/performers\/(\d+)(?:\/|$)/,
+    // The other five are also targets, and a source button lives on the very same
+    // route as a target button - just in the detail-view DOM state rather than the
+    // edit-form one. Reusing `TARGETS[key].route` rather than a second copy of the
+    // patterns.
+    studio: TARGETS.studio.route,
+    scene: TARGETS.scene.route,
+    gallery: TARGETS.gallery.route,
+    image: TARGETS.image.route,
+    group: TARGETS.group.route,
+  };
+
+  function currentSourceRouteTarget() {
+    for (var key in SOURCE_ROUTES) {
+      if (!hasOwn(SOURCE_ROUTES, key)) continue;
+      var m = SOURCE_ROUTES[key].exec(location.pathname);
+      if (m) return { sourceType: key, id: m[1] };
+    }
+    return null;
+  }
+
+  // Whether a mutation's ids name the entity currently on screen. Both route matchers,
+  // because the same URL is a target page and a source page at once - `/scenes/7` shows
+  // target buttons on its Edit tab and a source button on its detail view, and a
+  // `sceneUpdate` is the save that changes what either would do.
+  //
+  // Matching on the id alone, rather than on the id *and* the entity-type the mutation
+  // names, is deliberate: the two route matchers agree on the type for every page this
+  // plugin draws a button on, so adding the type would only be a second way to say the
+  // same thing. The cost of a false positive is one re-probe.
+  function viewingOneOf(ids) {
+    var rt = currentRouteTarget(), src = currentSourceRouteTarget();
+    if (!rt && !src) return false;
+    for (var i = 0; i < ids.length; i++) {
+      var id = String(ids[i]);
+      if (rt && rt.id === id) return true;
+      if (src && src.id === id) return true;
+    }
+    return false;
+  }
+
+  // The source-side counterpart to each path's target-side `button` label. Keyed
+  // separately, rather than derived from `path.button`, because the two read in
+  // opposite directions ("from all Performers" versus "to all Scenes") and a table
+  // that tried to flip one string into the other would be harder to audit than two
+  // short tables. A path missing here gets no source button - both marker paths, on
+  // purpose (see above).
+  var SOURCE_BUTTON_LABELS = {
+    'tags:performer>scene': 'Add Tags to all Scenes',
+    'tags:performer>group': 'Add Tags to all Groups',
+    'tags:studio>scene': 'Add Tags to all Scenes',
+    'tags:studio>group': 'Add Tags to all Groups',
+    'tags:scene>group': 'Add {mode} Tags to all Groups from their Scenes',
+    'performers:gallery>scene': 'Add Perfs to all Scenes',
+    'tags:gallery>image': 'Add Tags to all Images',
+    'performers:image>gallery': 'Add Perfs to all Galleries',
+    'tags:image>gallery': 'Add {mode} Tags to all Galleries from their Images',
+    'tags:group>scene': 'Add Tags to all Scenes',
+    'tags:subgroup>group': 'Add {mode} Tags to all Containing Groups from their Sub-groups',
+    'tags:scene>studio': 'Add common Tags to its Studio from its Scenes',
+  };
+
+  function sourceButtonLabel(path, s) {
+    var template = SOURCE_BUTTON_LABELS[path.id];
+    if (!path.common) return template;
+    return template.replace('{mode}', pathCommon(s, path) ? 'common' : 'all');
+  }
+
+  // The other half of the swap `findEditContainer` already reads: the
+  // detail-view navbar carrying a Delete button, rather than the edit form a target
+  // button wants. This is where a source button belongs, on the page *about* the
+  // source entity rather than inside its edit form.
+  // MergePerformerTagsToScenes' own performer button already depends on exactly this
+  // container. Confirmed live only for Group (via the edit-container fallback's own
+  // rejected half) and, through that plugin's precedent, for Performer; Studio,
+  // Scene, Gallery and Image are the same guess, unverified - see AGENTS.md.
+  function findDetailContainer() {
+    var candidates = document.querySelectorAll('.details-edit');
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i].querySelector('button.delete')) return candidates[i];
+    }
+    return null;
+  }
+
+  // ── The tab strip: where a source button goes on a page with no navbar ──────
+  //
+  // `findDetailContainer` wants a `.details-edit` carrying a Delete button, and live
+  // use confirmed that **only Performer and Group render one**. Scene and Gallery show
+  // a tab strip instead - Details / File Info / Chapters / Edit - and no action row at
+  // all, so five of the eleven source buttons had nowhere to go and had never once
+  // appeared. Image is untested and handled by the same rule either way.
+  //
+  // Read off a live Stash rather than guessed, which is §6's rule and the one four
+  // releases of placement churn were spent learning:
+  //
+  //   <div class="scene-tabs order-xl-first order-last">      <- grandparent, flex
+  //     <div>                                                  <- parent, block, 1 child
+  //       <div class="mr-auto nav nav-tabs" role="tablist">    <- the strip, flex
+  //         <div class="nav-item"><a data-rb-event-key="scene-details-panel" …>
+  //         … <a data-rb-event-key="scene-edit-panel">Edit</a>
+  //
+  // **The strip is found by its Edit tab's key, not by its class.** Gallery renders
+  // *two* `.nav-tabs` strips - its own panels, and an Images/Add strip for the image
+  // list - and only the entity's own carries a `*-edit-panel` key. A class match alone
+  // picks the wrong one on that page. Scene also renders a second element whose text is
+  // exactly "Edit" (a `button.btn-link` in the details panel), so matching on the label
+  // the way `findActionByLabel` does would be ambiguous too. The key is the one signal
+  // that is unambiguous on both pages, and it names what it is.
+  //
+  // The walk is hand-rolled rather than `querySelectorAll('[data-rb-event-key$=…]')`
+  // for the reason `findActionByLabel` is: the shared test harness's fake DOM answers
+  // class selectors and nothing more.
+  function hasEditPanelTab(node) {
+    if (!node) return false;
+    var key = node.getAttribute && node.getAttribute('data-rb-event-key');
+    if (typeof key === 'string' && key.length > 11 && key.slice(-11) === '-edit-panel') return true;
+    var kids = node.childNodes || [];
+    for (var i = 0; i < kids.length; i++) if (hasEditPanelTab(kids[i])) return true;
+    return false;
+  }
+
+  function findTabStrip() {
+    var lists = document.querySelectorAll('.nav-tabs') || [];
+    for (var i = 0; i < lists.length; i++) if (hasEditPanelTab(lists[i])) return lists[i];
+    return null;
+  }
+
+  // Which entity-type a tab shows, from its `data-rb-event-key`. The keys are
+  // `<page>-<what>-panel` (`scene-details-panel`, `scene-edit-panel`), so the middle
+  // segment is the answer. Gallery's image-list strip uses bare keys (`images`, `add`)
+  // with neither prefix nor suffix, hence the no-hyphen fallback.
+  //
+  // **Exact match on that segment, not a substring test on the whole key** - and this
+  // is defence rather than a fix for anything observed. A substring test cannot be told
+  // apart from this one by any fixture: the case it looks like it protects against is a
+  // Group page whose keys all start `group-`, and there a substring matcher matches
+  // *every* tab, so one of them is always selected and it answers "shown" exactly as
+  // falling open does. What the exact match actually buys is the future key that merely
+  // *contains* a target's name without being that target's tab - `scene-grouping-panel`
+  // and the like - which would engage the gate and let it hide a button. Hiding is the
+  // bad direction here (see `targetTabSelected`), so the stricter test is the cheap side
+  // to be wrong on. A mutant using `indexOf` passes the whole suite; do not read that as
+  // the check being redundant, and do not read it as the check being proven either.
+  function tabShows(node) {
+    var key = node && node.getAttribute && node.getAttribute('data-rb-event-key');
+    if (typeof key !== 'string' || !key) return '';
+    var mid = key.indexOf('-') === -1 ? key : key.split('-').slice(1).join('-');
+    return mid.replace(/-panel$/, '').toLowerCase();
+  }
+
+  function eachTab(fn) {
+    var lists = document.querySelectorAll('.nav-tabs') || [];
+    for (var i = 0; i < lists.length; i++) {
+      var kids = [];
+      (function walk(n) {
+        if (!n) return;
+        if (n.getAttribute && n.getAttribute('data-rb-event-key')) kids.push(n);
+        var c = n.childNodes || [];
+        for (var j = 0; j < c.length; j++) walk(c[j]);
+      }(lists[i]));
+      for (var k = 0; k < kids.length; k++) fn(kids[k]);
+    }
+  }
+
+  // Whether the tab showing this path's *targets* is the one currently open.
+  //
+  // Live feedback: "Add Tags to all Groups from their Scenes" is only meaningful while
+  // you are looking at the scene's groups, and the tab strip it is anchored under is
+  // present on every tab - so without this it sits over the Details panel, over File
+  // Info, and just above the target-side buttons on Edit.
+  //
+  // **Fails open, and that direction is deliberate.** Three of the keys here have been
+  // read off a live Stash and the rest have not; a page whose target tab this cannot
+  // identify shows the button on every tab, which is what this did before it read the
+  // key at all. Hiding on a failed match would make an unrecognised key look identical
+  // to the bug above - the recorded preference is a button sometimes unneeded over one
+  // missing when it was needed, and a naming guess is precisely where to apply it.
+  // `null` means "no such tab on this page", which the caller reads as "show".
+  function targetTabSelected(path) {
+    var want = path.target, found = null;
+    eachTab(function (tab) {
+      var shows = tabShows(tab);
+      if (shows !== want && shows !== want + 's') return;
+      if (found === null) found = false;
+      if (String(tab.getAttribute('aria-selected')) === 'true') found = true;
+    });
+    return found;
+  }
+
+  var SRC_ROW_CLASS = 'ptp2re-src-row';
+
+  // A row of our own, immediately after the strip inside the strip's own block-level
+  // parent. This is the one container in the plugin that Stash puts nothing into, so
+  // it is also the one with no anchor to find and nothing to order against - a button
+  // here appends, which is what `insertBeforeImportantAction` already does when it
+  // recognises no action, so that call needs no branch for this case.
+  //
+  // Not *inside* the strip: it is `role="tablist"`, whose children are meant to be
+  // tabs, and it is the flex row the tabs are laid out in. A button in there would be
+  // wrong to a screen reader and would sit on the tab line rather than under it.
+  function ensureTabStripRow() {
+    var strip = findTabStrip();
+    if (!strip || !strip.parentNode) return null;
+    var existing = byClass(strip.parentNode, SRC_ROW_CLASS);
+    if (existing) return existing;
+    var row = el('div', SRC_ROW_CLASS);
+    strip.parentNode.insertBefore(row, strip.nextSibling);
+    return row;
+  }
+
+  // The navbar where there is one, our own row under the tab strip where there is not.
+  // Order matters: Performer and Group render a navbar *and* no tab strip, so the first
+  // branch is the only one they ever reach, and their placement is unchanged.
+  function findSourceButtonContainer() {
+    return findDetailContainer() || ensureTabStripRow();
+  }
+
+  var MANUAL_SRC_BTN_CLASS = 'ptp2re-manual-src-btn';
+
+  function manualSourceButtonId(path) {
+    return 'ptp2re-msbtn-' + path.id.replace(/[^a-zA-Z0-9]+/g, '-');
+  }
+
+  function clearManualSourceButtons() {
+    (document.querySelectorAll('.' + MANUAL_SRC_BTN_CLASS) || []).forEach(function (b) {
+      if (b.parentNode) b.parentNode.removeChild(b);
+    });
+  }
+
+  // Whether each of `paths` finds any target at all from this one source entity -
+  // the source-side equivalent of `checkButtonExistence`, but simpler: there is no
+  // walk to aggregate, only `resolveSourceTargets`' own id list, the same lookup a
+  // click performs. A performer in no scenes yields an empty list either way, so the
+  // button and the click can never disagree about what counts as "nothing here".
+  // In parallel, unlike every other reverse lookup here: this is one entity's worth of
+  // work per path with nothing to accumulate between them, and a probe is what the user
+  // is waiting on before a button appears. The sequential shape elsewhere is about not
+  // firing a query per entity across a whole library; a handful of paths on one page is
+  // not that.
+  // The source's own payload, in one by-id query covering every candidate path. A page
+  // can offer paths of both kinds - an Image is the source of `performers:image>gallery`
+  // and `tags:image>gallery` at once - so the selection is the union of their leaves,
+  // deduplicated, and `payloadOf` then reads each path's own ids back out of the one
+  // response exactly as the walk does.
+  function sourcePayloadQuery(sourceType, paths) {
+    var one = SOURCES[sourceType].one, seen = {}, parts = [];
+    paths.forEach(function (p) {
+      var sel = leafSelection(p);
+      if (seen[sel]) return;
+      seen[sel] = true;
+      parts.push(sel);
+    });
+    return 'query PTP_spayload_' + one + '($id: ID!) {' +
+      ' ' + one + '(id: $id) { ' + parts.join(' ') + ' } }';
+  }
+
+  // Whether each of `paths` would put anything on the page's targets from this one
+  // source entity. Two halves, and the split is the whole design:
+  //
+  //   - **a target exists** - `resolveSourceTargets`, the same lookup a click performs,
+  //     so button and click can never disagree about what counts as nothing.
+  //   - **the source carries a payload** worth copying - its own tags or performers,
+  //     minus anything the tag filter refuses. Without that, a performer with
+  //     scenes but no tags shows a button that could only ever open a dialog saying
+  //     "Nothing to change."
+  //     This is what `MergePerformerTagsToScenes`' performer button has always gated on
+  //     (`hasTags && hasScenes`), and matching it was the point.
+  //
+  // What is deliberately *not* asked here, unlike the target side: whether the targets
+  // already have it. That means reading every scene a studio touches - unbounded, and
+  // the one check on this page that could be. A source button can still report "No
+  // changes" for that reason, and that is the ceiling, not a bug.
+  //
+  // In parallel, unlike every other reverse lookup here: this is one entity's worth of
+  // work per path with nothing to accumulate between them, and a probe is what the user
+  // is waiting on before a button appears. The sequential shape elsewhere is about not
+  // firing a query per entity across a whole library; a handful of paths on one page is
+  // not that. The payload query joins the same `Promise.all`, so it costs no wall clock
+  // beyond the slowest lookup already running.
+  // The two halves write into maps of their own and are folded at the end, never into
+  // one shared map: they resolve in either order, and a late `true` from the target
+  // lookup landing on the same key a payload miss had already set to `false` would
+  // show a button whose source has nothing in it.
+  function checkSourceButtonExistence(paths, id, s) {
+    var reaches = {}, carries = {};
+    var targets = paths.map(function (p) {
+      return resolveSourceTargets(p, [String(id)], true).then(function (ids) { reaches[p.id] = ids.length > 0; });
+    });
+    var payload = probeContext(s).then(function (ctx) {
+      return gqlRequest(sourcePayloadQuery(paths[0].sourceType, paths), { id: String(id) })
+        .then(function (data) {
+          var src = data[SOURCES[paths[0].sourceType].one];
+          paths.forEach(function (p) {
+            carries[p.id] = !!src && payloadOf(src, p).some(function (pid) {
+              // A performers-kind payload has no tag filter to answer to: `f3`/`f4`
+              // refuse a tag, and there is no performer equivalent (§4a).
+              return p.kind === 'performers' || !ctx.filters.tagBlocked(pid);
+            });
+          });
+        });
+    });
+    return Promise.all(targets.concat([payload])).then(function () {
+      var has = {};
+      paths.forEach(function (p) { has[p.id] = !!reaches[p.id] && !!carries[p.id]; });
+      // The two halves are handed back beside the verdict, not folded away, so the tick
+      // can state a *reason* off a cached answer: "this performer is in no scenes" and
+      // "this performer has no tags" are one absent button and two entirely different
+      // things to go and fix.
+      return { has: has, reaches: reaches, carries: carries };
+    });
+  }
+
+  // The one thing a source button's caption cannot say, and the thing users get wrong:
+  // it does not copy *this* entity's payload outward. It finds the targets this entity
+  // reaches and then rebuilds each of them from **all** of their own sources - every
+  // performer of that scene, every scene of that group. This entity is how the targets
+  // were found, not the whole of what is copied.
+  //
+  // For the two "common tags only" paths that is the difference between something and
+  // nothing, which is why they say it in the label as well (`SOURCE_BUTTON_LABELS`).
+  // For the other nine the extra sources only ever *add* on top of what you expected,
+  // so the tooltip carries it alone.
+  function manualSourceButtonTitle(path, s) {
+    var target = TARGETS[path.target].label.toLowerCase();
+    var common = pathCommon(s, path);
+    return pathLabel(path) + ' - updates every ' + target + ' this ' +
+      SOURCES[path.sourceType].label.toLowerCase() + ' belongs to. Each ' + target +
+      ' is rebuilt from ALL of its ' + path.source.toLowerCase() + ', not only this one' +
+      (common
+        ? ', and only tags that every one of them carries are copied - so this can add nothing.'
+        : '.') +
+      ' Opens a dialog listing every change first; nothing is written until you press ' +
+      'Proceed. There is no staging here - the write fans out to many entities at once, ' +
+      'and there is no single form to stage it into.';
+  }
+
+  // Drops what we just wrote out of Apollo's cache, so the panel listing those entities
+  // redraws with the new tags instead of the ones it read before the click. The tag
+  // *counts* on a Scene's Groups tab are the visible case: they are rendered from the
+  // cached Group objects, and nothing else would refresh them short of a navigation.
+  //
+  // Eviction only, never `location.reload()` - which is where this differs from
+  // `MergePerformerTagsToScenes`' `refreshSceneData`, whose fallback is a reload. That
+  // is tolerable after its performer button, which navigates the user away anyway; here
+  // it would tear the page down mid-"+3" and lose the flash the click just earned.
+  // Where Apollo is absent the panel stays stale until the user navigates, which is the
+  // same trade the sibling's task makes for its own dialog.
+  //
+  // `TARGETS[].label` doubles as the GraphQL typename ('Scene', 'Gallery', 'Image',
+  // 'Group'), which is what Apollo keys normalised objects on.
+  function evictTargets(target, ids) {
+    var client = window.__APOLLO_CLIENT__;
+    if (!client || !client.cache || !client.cache.evict) return;
+    try {
+      ids.forEach(function (id) {
+        client.cache.evict({ id: TARGETS[target].label + ':' + String(id) });
+      });
+      // The list query too. Apollo drops an evicted object out of any list that held
+      // it and calls the read complete, so evicting only the objects emptied a
+      // performer page's scene list rather than refreshing it. An evicted root field
+      // is an incomplete read, and that is what makes the list refetch.
+      client.cache.evict({ id: 'ROOT_QUERY', fieldName: TARGETS[target].find });
+      if (client.cache.gc) client.cache.gc();
+    } catch (e) {
+      console.error('[ptp2re] cache eviction failed:', e);
+    }
+  }
+
+  // `{ target: { id: true } }`, as `AutoRun.apply` accumulates it. Nothing written
+  // means nothing to evict - refetching a panel this run did not change is the one
+  // cost eviction has.
+  function evictWritten(wrote) {
+    for (var target in wrote) {
+      if (!hasOwn(wrote, target)) continue;
+      var ids = Object.keys(wrote[target]);
+      if (ids.length) evictTargets(target, ids);
+    }
+  }
+
+  // The click. Just this one path onto whatever the source reaches - not
+  // `runAutoTargets`' "replan everything enabled for this target", which would pull in
+  // *other* sources' paths too and do more than the button that was clicked promised.
+  //
+  // It writes nothing itself: it opens the review dialog scoped to this
+  // path and this source, and the dialog resolves the targets, lists every change and
+  // waits for Proceed. This was the widest unreviewed write in the plugin - one click
+  // on a studio's page rewriting every scene it owns - and it is now the one with the
+  // most to read before it happens. The lookup, the planner and the writes are the
+  // same code as before; only what drives them moved.
+  function runManualSource(path, id, label) {
+    return scopeLabel(path.sourceType, id).then(function (what) {
+      startRun(stripEllipsis(label) + ' - from ' + what,
+        { pathId: path.id, sourceIds: [String(id)] });
+      return { mode: 'dialog', count: 0 };
+    });
+  }
+
+  // ── The selection menu ────────────────────────────────────────────────────
+  //
+  // One item, Propagate..., in a list's "..." menu while cards are ticked, wherever the
+  // ticked entities are the source or the target of a path switched on. It opens a
+  // chooser of those paths, captioned as the detail pages' buttons are, and each opens
+  // the usual review scoped to the selection. Ten items on Scenes or Groups would bury
+  // Stash's own; a chooser holds any number.
+  // ponytail: no counts in the chooser - the review counts; markers have no list menu
+  // that lists them as a selection here.
+  var SEL_TYPES = { scenes: 'scene', images: 'image', galleries: 'gallery', performers: 'performer',
+    groups: 'group', studios: 'studio' };
+
+  // Source-side where the detail page has a source button - the lookup a selection reuses.
+  function selectionChoices(type, s) {
+    var key = SEL_TYPES[type], out = [];
+    if (!key || !s) return out;
+    enabledPaths(s).forEach(function (p) {
+      if (p.sourceType === key && hasOwn(SOURCE_BUTTON_LABELS, p.id)) {
+        out.push({ path: p, source: true, label: sourceButtonLabel(p, s) });
+      }
+      if (p.target === key) out.push({ path: p, source: false, label: buttonLabel(p, s) });
+    });
+    return out;
+  }
+
+  function selectionWhat(type, ids) {
+    var key = SEL_TYPES[type];
+    return 'the ' + plural(ids.length, 'selected ' + SOURCES[key].label.toLowerCase(), 'selected ' + type);
+  }
+
+  function ChooserDialog(type, ids, s) {
+    var self = this, key = SEL_TYPES[type], what = selectionWhat(type, ids);
+    this.taskName = SEL_ITEM_LABEL;
+    var head = dialogShell(this, 'ptp2re-narrow', SEL_ITEM_LABEL);
+    head.appendChild(el('div', 'ptp2re-note', 'What to copy for ' + what + '. Each opens the review; ' +
+      'nothing is written until you press Proceed there.'));
+    var list = el('div', 'ptp2re-choices');
+    selectionChoices(type, s).forEach(function (c) {
+      var b = button(c.label + '...', 'ptp2re-choice');
+      b.className = b.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+      b.title = (c.source ? 'From ' + what + ', along ' : 'Into ' + what + ', along ') + c.path.id +
+        '. Opens the review listing every change; nothing is written until you press Proceed.';
+      b.addEventListener('click', function () {
+        self.close();
+        startRun(c.label + ' - ' + (c.source ? 'from ' : 'into ') + what, c.source
+          ? { pathId: c.path.id, sourceIds: ids.slice() }
+          : { pathId: c.path.id, target: key, ids: ids.slice() });
+      });
+      list.appendChild(b);
+    });
+    this.modal.appendChild(list);
+    var foot = el('div', 'ptp2re-foot');
+    this.cancelBtn = button('Cancel', 'ptp2re-cancel');
+    this.cancelBtn.title = 'Close this without running anything.';
+    this.cancelBtn.addEventListener('click', function () { self.close(); });
+    foot.appendChild(this.cancelBtn);
+    this.modal.appendChild(foot);
+    dialogOpen(this);
+  }
+  ChooserDialog.prototype.close = function () { dialogClose(this); };
+
+  C.selectionMenuItem({
+    owner: PLUGIN_ID, label: SEL_ITEM_LABEL,
+    // From the cached settings, so drawing the menu reads nothing; until they are in, the
+    // item waits for the next tick.
+    show: function (type) { return selectionChoices(type, _autoSettings).length > 0; },
+    tip: function (type, ids) {
+      return 'Copy tags or performers to or from ' + selectionWhat(type, ids) + ', along a path ' +
+        'switched on in Path Settings. Opens a chooser, then the review; nothing is written until you press Proceed.';
+    },
+    run: function (type, ids) {
+      autoSettings().then(function (s) { new ChooserDialog(type, ids, s); }, function (e) {
+        console.error('[ptp2re] the selection menu could not read the settings:', e);
+      });
+    },
+  });
+  autoSettings().then(null, function () { /* the menu waits for a later read */ });
+
+  function buildManualSourceButton(path, label, id, s) {
+    // No margin of either axis here - same reasoning as the target-side button above,
+    // and `applyButtonSpacing` handles both. Studio can show two of these at once and
+    // wraps just as readily.
+    var btn = el('button', 'btn ' + PLUGIN_BTN_VARIANT + ' ' + MANUAL_SRC_BTN_CLASS, label);
+    btn.type = 'button';
+    btn.id = manualSourceButtonId(path);
+    btn._coopOwner = PLUGIN_ID; // read by `insertOrdered`'s cross-plugin priority scan
+    btn._ptp2reEntityId = id;
+    btn._ptp2reLabel = label;
+    btn.style = 'align-self:flex-start;';
+    btn.title = manualSourceButtonTitle(path, s);
+    btn.addEventListener('click', function (event) {
+      if (event && event.preventDefault) event.preventDefault();
+      var orig = btn.textContent;
+      btn.disabled = true;
+      holdWidth(btn);
+      btn.textContent = 'Working\u2026';
+      runManualSource(path, id, label).then(function () {
+        btn.disabled = false;
+        // Always the dialog on this side - there is no staging here - so the caption
+        // goes straight back rather than flashing a count under a modal that covers it.
+        // The re-probe is `Run.close`'s now, once whatever was approved has been written.
+        btn.textContent = orig;
+      }, function (err) {
+        btn.disabled = false;
+        btn.textContent = orig;
+        console.error('[ptp2re]', err);
+        alert('Error: ' + (err && err.message ? err.message : err));
+      });
+    });
+    return btn;
+  }
+
+  var _existenceCheckSrc = null; // same shape as `_existenceCheck`, keyed on sourceType instead of target
+
+  // Both probe slots are keyed on the entity and the path set, neither of which a save
+  // changes - so without this a button decided before an edit keeps that answer until
+  // the user navigates away and back. Dropping them re-arms on the next tick, and the
+  // ticks are called here rather than waited for so the button moves with the save
+  // rather than up to a second after it.
+  //
+  // Three callers, and the reasoning differs at each:
+  //
+  //   - the `fetch` wrapper, on a save of the entity in view. **Unconditional on the
+  //     auto-mode settings**: these caches decide whether a button appears, and a scene
+  //     that just gained a performer has to gain its button whether or not auto-mode is
+  //     also configured to react. `MergePerformerTagsToScenes` learned this one first
+  //     and its AGENTS.md §3 says the same thing about not tidying it into the auto
+  //     conditions.
+  //   - `runAutoTargets`, because an auto reaction writes *after* the save that
+  //     triggered it. Invalidating only at the mutation would re-probe against the
+  //     library as it was a moment before our own reaction changed it.
+  //   - a manual button click, on the flash timer rather than at once, so "+3" is
+  //     not torn off the button mid-caption by the tick that removes it.
+  //
+  // The library-wide task writes thousands of mutations and reaches none of this: they
+  // all run inside `guarded()`, which returns from the wrapper before any of it.
+  function invalidateButtonProbes() {
+    _existenceCheck = null;
+    _existenceCheckSrc = null;
+    manualButtonsTick();
+    manualSourceButtonsTick();
+  }
+
+  function manualSourceButtonsTick() {
+    autoSettings().then(function (s) {
+      var any = anyButtonOn(s);
+      var rt = any ? currentSourceRouteTarget() : null;
+      if (!rt) {
+        gate.once('s:route', any
+          ? 'no source buttons: this route is not one of the six source pages'
+          : 'no source buttons: no manual button is switched on');
+        clearManualSourceButtons(); return;
+      }
+      // The enabled-path filter is split off from the dedup one and runs *first*, so a
+      // page with nothing to place never reports having nowhere to place it. Only the
+      // dedup half needs the container, which is why the two were one filter before -
+      // and why a Scene with its Edit tab open used to complain about a missing detail
+      // navbar whether or not any path even reads from a Scene.
+      var candidates = PATHS.filter(function (p) {
+        return p.sourceType === rt.sourceType && pathOn(s, p) && hasOwn(SOURCE_BUTTON_LABELS, p.id) &&
+          buttonOn(s, 'source', p);
+      });
+      if (!candidates.length) {
+        gate.once('s:paths', 'no source buttons on ' + SOURCES[rt.sourceType].label + ' ' + rt.id +
+          ': no enabled path with its button on reads from a ' + SOURCES[rt.sourceType].label.toLowerCase() +
+          ' (both marker paths have no detail page and never qualify)');
+        clearManualSourceButtons(); return;
+      }
+      gate.once('s:paths', SOURCES[rt.sourceType].label + ' ' + rt.id + ' - ' +
+        plural(candidates.length, 'candidate path') + ': ' + candidates.map(function (p) { return p.id; }).join(', '));
+      var container = findSourceButtonContainer();
+      if (!container) {
+        gate.once('s:container', 'nowhere to put a source button on ' + SOURCES[rt.sourceType].label +
+          ' ' + rt.id + ' - no detail action row and no tab strip');
+        clearManualSourceButtons(); return;
+      }
+      gate.once('s:container', 'source button row on ' + SOURCES[rt.sourceType].label + ' ' + rt.id +
+        ': ' + (hasClass(container, SRC_ROW_CLASS) ? 'our own, under the tab strip' : "Stash's detail action row"));
+      ensureRowSpacing(container);
+      var paths = candidates.filter(function (p) {
+        var dropped = otherPluginDeclaresPath(p.id) && foreignButtonAlreadyShows(container, sourceButtonLabel(p, s));
+        if (dropped) gate.once('s:dedup:' + p.id, p.id + ' - hidden: another plugin is already ' +
+          'showing "' + sourceButtonLabel(p, s) + '" in this row');
+        return !dropped;
+      }).filter(function (p) {
+        var sel = targetTabSelected(p);
+        gate.once('s:tab:' + p.id, p.id + ' - ' + (sel === null
+          ? 'no ' + TARGETS[p.target].plural + ' tab found on this page, so the tab does not gate it'
+          : sel ? 'the ' + TARGETS[p.target].plural + ' tab is open'
+          : 'hidden: the ' + TARGETS[p.target].plural + ' tab is not the one open'));
+        return sel !== false;
+      });
+      if (!paths.length) { clearManualSourceButtons(); return; }
+      var wantKey = pathIdsKey(paths);
+      if (!_existenceCheckSrc || _existenceCheckSrc.sourceType !== rt.sourceType ||
+          _existenceCheckSrc.id !== rt.id || _existenceCheckSrc.pathsKey !== wantKey) {
+        var check = _existenceCheckSrc = { sourceType: rt.sourceType, id: rt.id, pathsKey: wantKey, status: 'pending', has: null };
+        gate.log('probing ' + SOURCES[rt.sourceType].label + ' ' + rt.id + ' for ' +
+          plural(paths.length, 'path') + ' - the outcomes below are this probe\'s');
+        checkSourceButtonExistence(paths, rt.id, s).then(function (r) {
+          if (_existenceCheckSrc !== check) return;
+          check.has = r.has; check.reaches = r.reaches; check.carries = r.carries;
+          check.status = 'ready'; manualSourceButtonsTick();
+        }, function (e) {
+          console.error('[ptp2re] source button probe failed:', e);
+          if (_existenceCheckSrc === check) { check.status = 'ready'; check.has = null; manualSourceButtonsTick(); }
+        });
+      }
+      if (_existenceCheckSrc.status !== 'ready') { clearManualSourceButtons(); return; }
+      // From the tick rather than the probe, for the reason the target side is: a cached
+      // answer runs no probe, which is precisely the state someone is in when they turn
+      // the debug flag on while already on the page they are asking about.
+      var srcHas = _existenceCheckSrc.has;
+      var srcReaches = _existenceCheckSrc.reaches || {};
+      paths.forEach(function (p) {
+        gate.once('s:out:' + p.id, SOURCES[rt.sourceType].label + ' ' + rt.id + ' - ' + p.id + ' - ' +
+          (!srcHas ? 'SHOWN: the probe failed, so every button is shown rather than hidden'
+            : srcHas[p.id] ? 'SHOWN: reaches at least one ' + TARGETS[p.target].label.toLowerCase() +
+                ' and carries something to copy'
+            : !srcReaches[p.id] ? 'hidden: reaches no ' + TARGETS[p.target].label.toLowerCase()
+            : 'hidden: carries no ' + (p.kind === 'performers' ? 'performers' : 'tags') +
+              ' to copy (or the tag filter refuses all of them)'));
+      });
+      if (srcHas) {
+        paths = paths.filter(function (p) { return srcHas[p.id]; });
+      }
+      Array.prototype.slice.call(container.childNodes || []).forEach(function (node) {
+        if (!hasClass(node, MANUAL_SRC_BTN_CLASS)) return;
+        var stillWanted = paths.some(function (p) { return manualSourceButtonId(p) === node.id; });
+        if (!stillWanted && node.parentNode) node.parentNode.removeChild(node);
+      });
+      paths.forEach(function (p) {
+        // Always "..." here: a source button has no staging branch to be without one.
+        var label = withEllipsis(sourceButtonLabel(p, s), true);
+        var existing = document.getElementById(manualSourceButtonId(p));
+        if (existing && existing._ptp2reEntityId === rt.id && existing._ptp2reLabel === label) return;
+        if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+        insertBeforeImportantAction(container, buildManualSourceButton(p, label, rt.id, s));
+      });
+    }, settingsUnread);
+  }
+
+  // A MutationObserver, unlike the settings page's decoration-only tick: a button
+  // has to land before the user can click it, and React re-renders the edit panel
+  // constantly enough (every keystroke in the form) that polling alone would leave
+  // it flickering in and out. Coalesced into one tick per burst.
+  var _entityTickScheduled = false;
+  function scheduleEntityTick() {
+    if (_entityTickScheduled) return;
+    _entityTickScheduled = true;
+    setTimeout(function () { _entityTickScheduled = false; manualButtonsTick(); manualSourceButtonsTick(); }, 100);
+  }
+
+  // The shared bus rather than an observer of our own - see `domBus`. `subscribe` is
+  // idempotent, so this is safe from both the script bottom and `load`, and where there
+  // is nothing to observe yet the interval below still drives the tick.
+  function startEntityObserver() {
+    domBus().subscribe(scheduleEntityTick);
+  }
+
+  function bothButtonTicks() { manualButtonsTick(); manualSourceButtonsTick(); }
+
+  if (!installSelectPatches()) {
+    window.addEventListener('load', function () { installSelectPatches(); });
+  }
+  if (window.addEventListener) {
+    window.addEventListener('load', function () { bothButtonTicks(); startEntityObserver(); });
+    window.addEventListener('popstate', function () { setTimeout(bothButtonTicks, 300); });
+  }
+  document.addEventListener('click', function () { setTimeout(bothButtonTicks, 300); }, true);
+  setInterval(bothButtonTicks, 1000);
+  // At script bottom as well as on `load`, guarded so the two cannot register twice:
+  // a script evaluated after `load` has already fired would otherwise be left with the
+  // one-second poll alone, which its own comment says is not enough.
+  startEntityObserver();
+  bothButtonTicks();
+
+  // Warm the probe's tag context now rather than making the first button wait for it.
+  // It is the same answer for every page and it is the expensive one (see
+  // `PROBE_CTX_TTL_MS`), so paying for it while Stash is still rendering costs the user
+  // nothing, where paying for it on their first click costs three quarters of a second.
+  // Gated on the buttons being on at all: a user who has never enabled one should not be
+  // asked for the tag library on every page load. Failure is ignored - this is a warm-up,
+  // and the probe that actually needs the context will report its own.
+  autoSettings().then(function (s) {
+    if (anyButtonOn(s)) probeContext(s).then(null, function () {});
+  }, function () {});
+
+  // ── Task interception ─────────────────────────────────────────────────────
+  //
+  // Layer 1: capture-phase click. React attaches its handlers to the root container,
+  // which is a descendant of document, so a capture listener here runs first and
+  // stopPropagation keeps PluginTasks' onPluginTaskClicked - and its misleading
+  // "added job to queue" toast - from ever running.
+  //
+  // The button is only ours if it carries one of our task names AND sits inside a
+  // SettingGroup headed with the plugin name (Core's `ownTaskName`); another plugin is
+  // free to declare a task with the same name. When the group cannot be identified the click is left
+  // alone on purpose: layer 2 still blocks it, keyed on the plugin id the mutation
+  // itself carries, which is the authoritative check.
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    var btn = target && target.closest ? target.closest('button') : null;
+    if (!btn) return;
+    var taskName = ownTaskName(btn, PLUGIN_NAME, TASKS);
+    if (!taskName) return;
+    event.preventDefault();
+    event.stopPropagation();
+    startRun(taskName);
+  }, true);
+
+  // Layer 2: backstop for a click layer 1 did not recognise. The mutation is
+  // answered from here with a synthesized success rather than being forwarded, so
+  // the server never tries to exec a plugin that has nothing to exec (Core's `fakeOk`).
+
+  var _fetch = window.fetch;
+  window.fetch = function (url, opts) {
+    // The task backstop stays first and ahead of the _writeDepth check below: the
+    // mutation has to be *answered* rather than forwarded, and a task click is a
+    // user action whether or not a write happens to be in flight.
+    if (typeof url === 'string' && url.indexOf('/graphql') !== -1 && opts && opts.body) {
+      try {
+        var parsed = JSON.parse(opts.body);
+        var vars = parsed.variables || {};
+        if (/\brunPluginTask\b/.test(parsed.query || '') && vars.plugin_id === PLUGIN_ID) {
+          startRun(vars.task_name || TASK_PROPAGATE_ALL);
+          return Promise.resolve(fakeOk({ data: { runPluginTask: PLUGIN_ID + '-handled-in-browser' } }));
+        }
+      } catch (e) {
+        // Not JSON, or no variables - nothing to match on; fall through.
+      }
+    }
+
+    var self = this, args = arguments;
+    function forward() { return _fetch.apply(self, args); }
+    var req = null;
+    if (_writeDepth === 0 && typeof url === 'string' && url.indexOf('/graphql') !== -1 &&
+        opts && opts.body) {
+      try { req = JSON.parse(opts.body); } catch (e) { req = null; }
+    }
+    if (!req) return forward();
+
+    var q = req.query || '';
+    var v = req.variables || {};
+    // What the save puts: `$input`, or - where Stash's page spells it out of separate
+    // variables named like its fields, as `SceneMarkerCreate` and `SceneMarkerUpdate` do -
+    // the variables themselves. Read as `v.input` alone, a marker save was never seen.
+    var input = v.input || v;
+    var hit = targetOfMutation(q);
+    // The one case the save waits for us: the assist needs the saved entity as it was.
+    // Forwarded whatever the read does, so a failure there is never a failed save.
+    // Not under a lease: a sibling's bulk write (Scene Variants' synchronize) is not a
+    // removal the user made by hand.
+    var dsave = depropSave(q, hit, input);
+    var before = dsave && !autoSuppressed() ? depropBefore(dsave, input) : null;
+    // Registered on Core's settling registry like the reaction below, so a sibling reading
+    // an entity after this save waits for the offer to be answered: the saved entity at
+    // once, and each entity the offer may write once the read names it - still ahead of
+    // the save, which waits for that read.
+    var helds = [];
+    if (before) {
+      helds = dsave.ids.map(function (id) { return settle(dsave.type, id); });
+      before = before.then(function (b) {
+        (b ? b.affected : []).forEach(function (a) { helds.push(settle(a.type, a.id)); });
+        return b;
+      });
+    }
+    var p = before ? before.then(forward, forward) : forward();
+
+    try {
+
+      // Our own settings being saved. Auto-mode caches them for AUTO_SETTINGS_TTL_MS,
+      // so without this, changing an exclusion filter and immediately saving an entity
+      // would be governed by the old settings for up to ten seconds. Two details:
+      // re-read only once the mutation has landed, or the old values come straight
+      // back and are cached for another ten seconds - and `pathFieldTick` would then
+      // canonicalise the stale `b1Paths` back over the save; and scope it to our own
+      // plugin_id, since the settings page saves each plugin in its own mutation.
+      if (/\bconfigurePlugin\b/.test(q) && v.plugin_id === PLUGIN_ID &&
+          !/PTPSeedSettings/.test(q)) {
+        mutationSucceeded(p).then(function (ok) {
+          if (!ok) return;
+          invalidateAutoSettings();
+          settingsTick();
+        });
+      }
+
+      // A save of whatever is on screen re-arms the button probes, whichever entity
+      // type it names and whatever the auto-mode settings say. Deliberately its own
+      // branch, ahead of and independent of both reaction branches below: those are
+      // gated on `a3`/`a4` and on `autoSuppressed()`, and a button appearing after a
+      // save is not something a user should have to enable auto-mode to get. See
+      // `invalidateButtonProbes`.
+      var savedIds = (input.ids || (input.id != null ? [input.id] : []));
+      if (savedIds.length && (targetOfMutation(q) || sourceOfMutation(q)) && viewingOneOf(savedIds)) {
+        mutationSucceeded(p).then(function (ok) { if (ok) invalidateButtonProbes(); });
+      }
+
+      if (before) {
+        var offered = function () { helds.forEach(function (d) { d(); }); };
+        mutationSucceeded(p).then(function (ok) {
+          if (!ok) { offered(); return; }
+          before.then(function (b) { return b ? offerDepropagate(b) : 0; }).then(offered, offered);
+        });
+      }
+
+      // A save of one of our four target types. The suppression check sits after the
+      // match rather than before it, so the one-time "standing down" line is only
+      // emitted for a mutation that would actually have been reacted to.
+      if (hit && !autoSuppressed()) {
+        var ids = hit.bulk
+          ? (input && input.ids) || []
+          : (input && input.id != null ? [input.id] : []);
+        if (ids.length) {
+          // Registered now, synchronously, so a sibling watching this same save finds
+          // it when the response lands; released once the reaction is over, which with
+          // Silent off is after the user has answered. Registered whatever the mode
+          // setting says - it is read asynchronously - and released at once when off.
+          var dones = ids.map(function (id) { return settle(hit.target, id); });
+          var release = function () { dones.forEach(function (d) { d(); }); };
+          mutationSucceeded(p).then(function (ok) {
+            if (!ok) { release(); return; }
+            reactToTargets(hit.target, ids).then(release, release);
+          });
+        }
+      }
+
+      // A marker created rather than edited. Its own branch because it is the one
+      // mutation here whose input names neither `id` nor `ids`, so neither the probe
+      // invalidation above nor the source reaction below can see it: both are driven
+      // from the scene it names instead.
+      var newScene = newMarkerScene(q, v);
+      if (newScene) {
+        mutationSucceeded(p).then(function (ok) {
+          if (!ok) return;
+          if (viewingOneOf([newScene])) invalidateButtonProbes();
+          if (!autoSuppressed()) reactToSources('marker', [newScene], newMarkerTargets);
+        });
+      }
+
+      // A save of anything this plugin ever reads *from* - independent of the check
+      // above, since a save can be both: a Scene is a target of its own paths and a
+      // source of `tags:scene>group`.
+      var srcHit = sourceOfMutation(q);
+      if (srcHit && !autoSuppressed()) {
+        var sids = srcHit.bulk
+          ? (input && input.ids) || []
+          : (input && input.id != null ? [input.id] : []);
+        if (sids.length) {
+          mutationSucceeded(p).then(function (ok) {
+            if (ok) reactToSources(srcHit.sourceType, sids);
+          });
+        }
+      }
+    } catch (e) {
+      // Not JSON, or no variables - nothing to match on.
+    }
+    return p;
+  };
+
+  // Exposed for the test suites, which need to read the tables and drive the dialog
+  // without a running Stash. Nothing in the plugin reads this back. Under `__GTTx__`
+  // rather than on `window` directly, because that is the only global this repo takes
+  // - a test-only surface is no more entitled to a name of its own than a shared one.
+  coopObject();   // whichever plugin loaded first, this is what created `__GTTx__`
+  window.__GTTx__.ptp2re = {
+    PLUGIN_ID: PLUGIN_ID,
+    PLUGIN_NAME: PLUGIN_NAME,
+    PLUGIN_VERSION: PLUGIN_VERSION,
+    README_URL: README_URL,
+    TASKS: TASKS,
+    TARGETS: TARGETS,
+    SOURCES: SOURCES,
+    PATHS: PATHS,
+    PATH_COLUMNS: PATH_COLUMNS,
+    DIAGRAM_NODES: DIAGRAM_NODES,
+    diagramGeometry: diagramGeometry,
+    DEFAULTS: DEFAULTS,
+    pathSelection: pathSelection,
+    targetSelection: targetSelection,
+    bulkField: bulkField,
+    pathById: pathById,
+    pathLabel: pathLabel,
+    enabledPaths: enabledPaths,
+    parsePaths: parsePaths,
+    formatPaths: formatPaths,
+    manualButtons: manualButtons,
+    parseButtons: parseButtons,
+    parseAuto: parseAuto,
+    formatAuto: formatAuto,
+    formatButtons: formatButtons,
+    pathMode: pathMode,
+    settingsFrom: settingsFrom,
+    describeFilters: describeFilters,
+    openExclusions: exclusionDialog.open,
+    exclusionSummary: exclusionSummary,
+    pairedBoth: pairedBoth,
+    buildPasses: buildPasses,
+    buildBatches: buildBatches,
+    bulkMutation: bulkMutation,
+    passQuery: passQuery,
+    sweepQuery: sweepQuery,
+    walkSources: walkSources,
+    payloadOf: payloadOf,
+    entityLabel: entityLabel,
+    sourceLabel: sourceLabel,
+    fromLabel: fromLabel,
+    fromText: fromText,
+    entityHref: entityHref,
+    injectStyle: injectStyle,
+    oneQuery: oneQuery,
+    reverseQuery: reverseQuery,
+    targetParts: targetParts,
+    resolveExclusionTagId: resolveExclusionTagId,
+    targetOfMutation: targetOfMutation,
+    sourceOfMutation: sourceOfMutation,
+    SOURCE_REVERSE: SOURCE_REVERSE,
+    sourceFieldQuery: sourceFieldQuery,
+    sourceFilterQuery: sourceFilterQuery,
+    AUTO_COOLDOWN_MS: AUTO_COOLDOWN_MS,
+    currentRouteTarget: currentRouteTarget,
+    currentSourceRouteTarget: currentSourceRouteTarget,
+    manualButtonId: manualButtonId,
+    MANUAL_BTN_CLASS: MANUAL_BTN_CLASS,
+  };
+}());

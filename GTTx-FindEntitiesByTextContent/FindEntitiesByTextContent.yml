@@ -1,0 +1,16 @@
+name: ᝯㄝₓ Find & Replace Entities by Text Content
+description: "Which entities in your library mention this text? Stash cannot search every text field at once, and cannot filter on custom fields at all. This plugin can.\n\nRun it from Settings - Tasks - Plugin Tasks. Type the text, turn on the types to search (Scenes, Images, Galleries, Performers, Studios, Groups, Tags) and press Search. It reads every text field, custom field names and values and file names included, or the attributes you keep on. Each result is a link, with the attributes that matched and the text around the match.\n\nWhole word finds the text only as a word of its own. A long search can be paused and resumed; the list is shown a page at a time - ᝯㄝₓ Core's Lines Drawn at Once, 1000 by default - with Previous and Next while it goes on reading. Copy log keeps every result.\n\nTick Replace to rewrite the text in every entity on the list. The attribute filters narrow what a Replace covers, file names are never rewritten, and Undo takes it back while the dialog stays open. With Replace off, nothing is ever written.\n\nExport saves the text of every type turned on as one file, no search needed: plain text, JSON, YAML, or Term counts - a CSV of the words and phrases used most, saying which De-Spicer's Explicit Terms already carry.\n\nBACKING UP YOUR DATABASE BEFORE THE FIRST REPLACE IS STRONGLY RECOMMENDED.\n\nScene markers are not searched. Requires Stash 0.31.0 or newer."
+url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-FindEntitiesByTextContent/README.md"
+version: 4.11.2
+ui:
+  # Loaded before this script, and installed with it. `plugins.tsx` topologically
+  # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished
+  # running before this file begins - which is what lets the shared blocks be bound
+  # at load rather than looked up on every call.
+  requires:
+    - GTTxCore
+  javascript:
+    - FindEntitiesByTextContent.js
+tasks:
+  - name: Find & Replace Entities by Text Content...
+    description: Search every text field of every Scene, Image, Gallery, Performer, Studio, Group and Tag for a piece of text, and optionally replace it - titles, details, descriptions, synopses, aliases, URLs, file names, and the names and values of custom fields. Turn on the types you want, and the attributes, type what to look for, and results arrive as they are found, each one a link. Search pauses and resumes, and pauses itself when the list on screen is full. Nothing is written until you tick Replace, type what to put in its place and press Replace; Undo takes that back while the dialog stays open. Export saves the text of every type turned on as one file - text, JSON, YAML, or a CSV of the words and phrases used most.

@@ -1,0 +1,3335 @@
+// Merge Performer Tags To Scenes
+//
+// Requires Stash 0.31.0 or newer: tag custom_fields (the custom-field exclusion
+// filter) and PluginApi component patching (staging tags into the scene edit form)
+// both depend on it.
+(function () {
+  'use strict';
+
+  // ── The shared blocks, from ᝯㄝₓ Core ─────────────────────────────────────
+  //
+  // These used to be copies in this file, pinned byte-identical by a test that could
+  // prove the copies agreed and never that this plugin could run one. They are bound
+  // here instead: `ui: requires:` in the .yml is topologically sorted by Stash and
+  // `useScript` sets `async = false`, so Core has finished running before this line.
+  // Binding rather than looking up per call is what keeps every call site below
+  // reading exactly as it did when the block was local.
+  var C = (window.__GTTx__ || {}).core;
+  // The Core floor, ᝯㄝₓ Core 5.11.0 or newer, told by one of its exports (`selectionMenuItem`).
+  // Below it nothing else in this file can run, and no shared code is left to say so.
+  if (!C || typeof C.selectionMenuItem !== 'function') {
+    if (window.console && console.error) {
+      console.error('[cpt2s] ᝯㄝₓ Merge Performer Tags To Scenes cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
+        + 'enabled. Install or update it from the same source and reload the page.');
+    }
+    return;
+  }
+  var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass, settle = C.settle,
+    gqlRequest = C.gqlRequest, settingElement = C.settingElement, settingRow = C.settingRow,
+    stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
+    coop = C.coop, domBus = C.domBus, plural = C.plural, copyToClipboard = C.copyToClipboard,
+    keepLog = C.keepLog, droppedLine = C.droppedLine, linkTarget = C.linkTarget,
+    tagTip = C.tagTip, tipText = C.tipText, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
+    cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
+    ensureReloadUiButton = C.ensureReloadUiButton,
+    staleReloadButton = C.staleReloadButton, insertOrdered = C.insertOrdered,
+    insertBeforeImportantAction = C.insertBeforeImportantAction,
+    fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
+    wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, paintButton = C.paintButton;
+  var tagHasDetail = C.tagHasDetail, tagTooltip = C.tagTooltip, lowerId = C.lowerId, partsText = C.partsText;
+  var runLog = C.runLog, linesDrawn = C.linesDrawn;   // log lines kept in the DOM; all stay in `lines`
+  // Every plugin's settings through Core's one shared read.
+  var pluginConfig = C.pluginConfig;
+
+  var PLUGIN_ID           = 'MergePerformerTagsToScenes';
+  var PLUGIN_NAME         = 'ᝯㄝₓ Merge Performer Tags To Scenes';
+  // The name the dialog wears, declared beside the full one the way
+  // `PropagateTagsAndPerformers` declares its own - there, the manifest name is long
+  // enough to crowd out the task, the path and the entity that follow it in a scoped
+  // title. Here it already fits, so the two are the same string. The constant exists
+  // anyway, so the head reads identically in both plugins and a future rename has one
+  // place to happen; `PLUGIN_NAME` stays the manifest's, since `page.group()`
+  // matches the settings page's heading against it.
+  var PLUGIN_SHORT_NAME   = PLUGIN_NAME;
+  var SIBLING_ID          = 'NormalizeParentTags';
+  var SIBLING_NAME        = 'ᝯㄝₓ Normalize Parent Tags';
+  // The other named sibling, and the only one that does this plugin's own job.
+  // `SIBLING_*` is the hierarchy plugin, which collides with a merge; this one
+  // *replaces* it - see `ensureSupersededNotice`.
+  var SUPERSEDER_ID       = 'PropagateTagsAndPerformers';
+  var SUPERSEDER_NAME      = 'ᝯㄝₓ Propagate Tags and Performers to Related Entities';
+  // The notice sits inline on the heading line, where the full name would be most of
+  // the row. Elided rather than abbreviated, and the full name is on the element's
+  // title, so what the user hovers is what they will look for in the plugin list.
+  var SUPERSEDER_SHORT     = 'Propagate Tags and Performers...';
+
+  // The one version that proves anything. The settings page reads the manifest over
+  // GraphQL and updates as soon as plugins are reloaded, while the browser can still
+  // be running a script it cached before the edit — a heading reading one version
+  // over the previous one's behaviour is the normal look of a stale script. This
+  // constant travels
+  // inside the file. Bump it with the manifest and the yml; the `version` suite
+  // fails if the three disagree.
+  var PLUGIN_VERSION      = '5.3.3';
+
+  // Printed before anything else runs, so a script that loads and then throws is told
+  // apart from one that never loaded: banner plus error means the new code is running
+  // and broken, no banner means the browser is still on the old one.
+  // Through whatever the console offers rather than console.info directly, the way
+  // logInfo already does: this is the first statement in the file, so a console
+  // without it would take the whole plugin down before anything loaded.
+  function cpt2s(message) {
+    if (typeof console !== 'undefined' && (console.info || console.log)) {
+      (console.info || console.log).call(console, message);
+    }
+  }
+
+  cpt2s('[cpt2s] MergePerformerTagsToScenes.js ' + PLUGIN_VERSION + ' loaded. This is the ' +
+    'running script\'s own version - the settings page reads the manifest instead, which can ' +
+    'be newer than the script your browser has cached.');
+
+  var PERFORMER_BTN_CLASS = 'cpt2s-merge-to-scenes-btn';
+  var SCENE_BTN_CLASS     = 'cpt2s-merge-from-perfs-btn';
+  // The two captions. The base text is a cross-plugin contract - `PropagateTagsAndPerformers`
+  // matches on it to tell "the other plugin is already showing this button" from "it
+  // only could be" - and the trailing "..." is this repo's mark for a click that opens
+  // a dialog rather than acting. The performer button always does; the scene button
+  // does only where staging is unavailable, so it resolves its caption per tick and the
+  // sibling's dedup compares with the dots stripped.
+  var PERFORMER_BTN_LABEL = 'Add Tags to all Scenes...';
+  // Its two items in a list's "..." menu of actions on the ticked cards.
+  var SEL_PERFORMERS_LABEL = 'Merge Their Tags into Their Scenes...';
+  var SEL_SCENES_LABEL = "Merge Their Performers' Tags...";
+  var SCENE_BTN_LABEL     = 'Add all Tags from all Performers';
+
+  // Every button this plugin puts on a page, and the task button Stash renders for
+  // it, in orange. Stash's own row actions are `btn-secondary`, so a button of ours
+  // sitting among them was indistinguishable from one of its own - and these are not
+  // the same kind of thing: Stash's write what is in the form in front of you, ours
+  // reach out and rewrite other entities. Orange says "this one is mine and it writes"
+  // without claiming the primary role `btn-primary` would.
+  //
+  // A Bootstrap variant class rather than a color of our own, so the hover, focus
+  // and active states come from Stash's theme and stay in step with it. Its
+  // `btn-warning` renders white text, unlike stock Bootstrap's dark - checked live,
+  // 2026-08-11 - so nothing here overrides the foreground. `btn-dark` is worth
+  // knowing about and not worth using: Stash themes it identically to
+  // `btn-secondary`, so it would read as no change at all.
+  //
+  // Pinned to the same string in PropagateTagsAndPerformers: the two plugins' buttons
+  // share a row, and one orange beside one gray would read as a difference in kind
+  // rather than in plugin.
+  var PLUGIN_BTN_VARIANT  = 'btn-warning';
+
+  // Declared in the manifest so Stash lists it under Settings - Tasks - Plugin
+  // Tasks, but run in the browser: this plugin has no exec, so a queued job could
+  // only fail. See the task section near the end of this file.
+  var TASK_MERGE_ALL   = 'Merge Performer Tags into All Their Scenes...';
+  var TASKS            = [TASK_MERGE_ALL];
+  var TASK_PAGE_SIZE   = 500;   // performers per page while walking the library
+  var TASK_UNDO_CHUNK  = 100;   // scene ids per undo mutation
+  var TASK_UNDO_ARM_MS = 4000;  // how long Undo stays armed for its second click
+
+  var settings = {
+    showManualMergeButtons: false,
+    autoMergeOnSceneUpdate: false,
+    autoMergeOnPerformerUpdate: false,
+    excludeSceneOrganized: false,
+    excludeSceneWithTagName: '',
+    excludeTagWithIgnoreAutoTag: false,
+    excludeTagWithCustomFieldName: '',
+    // Inverted on purpose. Stash has no default value for plugin settings and renders
+    // an unset BOOLEAN as unchecked, so the behaviour we want by default has to be the
+    // one that "off" selects — otherwise the box would read off while acting on, and
+    // the first click on it would send true rather than false.
+    saveTagsImmediately: false,
+  };
+
+  // ── Cross-plugin cooperation ──────────────────────────────────────────────
+  //
+  // See "Cross-plugin cooperation: the bulk-edit lease" in the repo-root AGENTS.md.
+  // This plugin is on both sides of the protocol.
+  //
+  // Reactive: another plugin rewriting many entities on purpose (NormalizeParentTags)
+  // takes a lease for the duration of its writes; auto-merge stands down while one is
+  // held, because those writes look exactly like user edits from in here and reacting
+  // to them undoes the other plugin's work as fast as it lands. Manual button clicks
+  // are never suppressed: the user asked for those directly.
+  //
+  // Bulk: the library-wide task rewrites scenes across the whole library, which is
+  // the same thing seen from the other end, so it takes a lease of its own while it
+  // writes. The siblings that react to saves or start bulk runs of their own check for
+  // it (Core's `foreignLease`), and a bulk run that does not announce itself is the case
+  // a third plugin could not defend against.
+
+  // ── Button gating diagnostics ────────────────────────────────────────────
+  //
+  // Core's `[cpt2s gate]` channel, off unless `__GTTx__.StashPluginCoop.logButtonVisInfo =
+  // true` is typed into the browser console. `gateLog` fires every time - its callers are
+  // the eligibility probes, and seeing the same answer twice says the re-check ran;
+  // `gateLogOnce` is for the tick-driven states, which would otherwise emit every second.
+  var gate = C.gate('cpt2s'), gateLog = gate.log, gateLogOnce = gate.once;
+
+  // Registered at load so a bulk plugin can tell "will stand down" apart from "too
+  // old to know about leases" and warn the user accordingly.
+  coop().respecters[PLUGIN_ID] = true;
+
+  // A fixed, agreed priority for the deterministic-ordering protocol below
+  // (`insertOrdered`) - not a capability like `respecters`, but a number both sides
+  // have to pick once and keep consistent, the same way the two plugins pin their
+  // overlapping CSS byte-identical. Higher sits closer to Save/Delete; this plugin's
+  // performer and scene buttons were on the page first, so they keep that position
+  // and PropagateTagsAndPerformers (registered at 10) lands to their left instead of
+  // racing them for it. Gaps of 10 leave room for a third plugin to slot in without
+  // renumbering either existing value.
+  coop().order[PLUGIN_ID] = 20;
+
+  // Declared at load, unconditionally: this plugin always performs this one path,
+  // via its buttons at minimum, whatever its auto-merge settings say. `declares` is
+  // the N-way registry `PropagateTagsAndPerformers` (a later, generalised sibling
+  // that implements the same path among thirteen) reads to warn about redundant
+  // work - see the repo-root AGENTS.md. The id matches its own path table exactly,
+  // by agreement rather than by any shared code: the two plugins carry no shared
+  // module, so the string `'tags:performer>scene'` is the entire contract.
+  coop().declares[PLUGIN_ID] = ['tags:performer>scene'];
+
+  var _standDownAnnounced = false;
+  function autoMergeSuppressed() {
+    var c = coop();
+    var now = Date.now();
+    // Expired leases are dropped rather than honoured: a tab that crashes mid-run
+    // must not leave auto-merge disabled until the next page reload.
+    for (var i = c.leases.length - 1; i >= 0; i--) {
+      if (!c.leases[i] || !(c.leases[i].until > now)) c.leases.splice(i, 1);
+    }
+    if (!c.leases.length) { _standDownAnnounced = false; return false; }
+    if (!_standDownAnnounced) {
+      _standDownAnnounced = true;
+      console.info('[cpt2s] auto-merge is standing down while ' + c.leases[0].owner +
+        ' applies bulk changes (' + c.leases[0].label + ')');
+    }
+    return true;
+  }
+
+  // Staging is the default, but it needs PluginApi. Where that is missing the button
+  // falls back to merging and saving, because the user never opted into review — they
+  // just get the behaviour their Stash can support.
+  // COMPAT: a Stash with no `PluginApi.patch`, before Stash 0.31.0
+  // (since MergePerformerTagsToScenes 0.8.0); remove when never on its own: it is also what
+  // runs if a Stash drops that API.
+  function stagingActive() {
+    return !settings.saveTagsImmediately && _tagPatchInstalled;
+  }
+
+  var _warnedNoStaging = false;
+  function warnNoStagingOnce() {
+    if (_warnedNoStaging || settings.saveTagsImmediately || _tagPatchInstalled) return;
+    _warnedNoStaging = true;
+    console.warn('[cpt2s] tag staging is unavailable — this Stash does not expose PluginApi ' +
+      'component patching, so "Add all Tags from all Performers" will merge and save directly.');
+  }
+  // Depth of merge work currently in flight. A counter rather than a boolean so
+  // that overlapping flows (a bulk update racing a single update, a manual button
+  // click racing auto-merge) cannot have the first one to finish re-open fetch
+  // interception while the others are still issuing mutations.
+  var _mergeDepth = 0;
+
+  var _excludeTag     = null;   // the resolved tag, or null for a cached miss
+  var _excludeTagName = '';
+  var _excludeTagAt   = 0; // when the current cached hit/miss was resolved
+  var EXCLUDE_TAG_HIT_TTL_MS  = 60000;
+  var EXCLUDE_TAG_MISS_TTL_MS = 10000;
+
+  var GOTO_EDIT_TIMEOUT_MS = 10000;
+
+  // ── Helpers ───────────────────────────────────────────────────────────────
+
+  // Runs fn() with fetch interception suppressed for the lifetime of the promise
+  // it returns. Every entry point into merge work goes through this, so the
+  // mutations we issue ourselves are never mistaken for user edits.
+  function guarded(fn) {
+    _mergeDepth++;
+    var p;
+    try {
+      p = fn();
+    } catch (e) {
+      _mergeDepth--;
+      throw e;
+    }
+    return p.then(
+      function (v) { _mergeDepth--; return v; },
+      function (e) { _mergeDepth--; throw e; }
+    );
+  }
+
+  function getPerformerId() {
+    var m = window.location.pathname.match(/^\/performers\/(\d+)(?:\/|$)/);
+    return m ? m[1] : null;
+  }
+
+  function getSceneId() {
+    var m = window.location.pathname.match(/^\/scenes\/(\d+)(?:\/|$)/);
+    return m ? m[1] : null;
+  }
+
+  // Undo History, which ᝯㄝₓ Core keeps: a merge is, per scene, the tags it added -
+  // recorded as that delta, which an undo checks are still there and takes off again,
+  // whatever else the scene gained since.
+  function journalPass(label, libraryWide) {
+    return coop().journal.pass({ plugin: PLUGIN_SHORT_NAME, label: label, libraryWide: !!libraryWide });
+  }
+
+  function journalTags(scene, added, removing) {
+    var name = scene.title || ((scene.files || [])[0] || {}).basename || '';
+    return { type: 'scenes', id: String(scene.id), name: name, field: 'tag_ids',
+      before: removing ? added.slice() : [], after: removing ? [] : added.slice() };
+  }
+
+  function updateSceneTags(sceneId, tagIds) {
+    return gqlRequest(
+      'mutation SceneUpdate($input: SceneUpdateInput!) { sceneUpdate(input: $input) { id } }',
+      { input: { id: sceneId, tag_ids: tagIds } }
+    );
+  }
+
+  // Takes tags off scenes as a delta, which is the one place this plugin removes a
+  // tag at all - see the Undo section of the task. REMOVE rather than a rewritten
+  // list on purpose: the forward merge writes the whole list because it is building
+  // one, but an undo that rewrote the list would revert anything changed since,
+  // which is exactly what an undo must not do.
+  function removeSceneTags(sceneIds, tagIds) {
+    return gqlRequest(
+      'mutation BulkSceneUpdate($input: BulkSceneUpdateInput!) {' +
+      '  bulkSceneUpdate(input: $input) { id }' +
+      '}',
+      { input: { ids: sceneIds, tag_ids: { ids: tagIds, mode: 'REMOVE' } } }
+    );
+  }
+
+  // custom_fields is only requested when the custom-field exclusion filter is
+  // configured — it is dead weight on every tag of every performer otherwise.
+  //
+  // withDisplay adds the fields Stash's TagSelect needs to render a chip. Its Tag
+  // type is Pick<Tag, "id"|"name"|"sort_name"|"aliases"|"image_path"|"stash_ids">;
+  // sort_name and stash_ids are left out because they drive dropdown sorting and
+  // stash-box matching, neither of which applies to a chip we inject.
+  function tagFields(withDisplay) {
+    var cfName = (settings.excludeTagWithCustomFieldName || '').trim();
+    var fields = 'id ignore_auto_tag';
+    if (cfName) fields += ' custom_fields';
+    // The log line names the tag, so the name comes along for that too.
+    if (withDisplay || logsToConsole(PLUGIN_ID)) fields += ' name';
+    if (withDisplay) fields += ' aliases image_path';
+    return fields;
+  }
+
+  // ── Merge logging (Core's Dev Mods: LOG_MPTTS) ────────────────────────────────────
+
+  // Scene fields the log line needs, spliced into whichever scene query is about to
+  // run. Requested only when logging is on: on the performer path these ride along
+  // with every scene of the performer, so they are pure weight otherwise.
+  function sceneLogFields() {
+    return logsToConsole(PLUGIN_ID) ? ' title files { basename }' : '';
+  }
+
+  // A scene's title is optional in Stash, so fall back to the file name the way its
+  // own UI does rather than logging an empty pair of quotes. sceneId is passed
+  // separately because the single-scene queries look the scene up by id and do not
+  // ask for it back.
+  //
+  // The label carries its own quotes and leaves the id outside them - "Name" (12),
+  // not "Name (12)" - so a title containing brackets cannot be misread as an id.
+  // NormalizeParentTags logs the same shape.
+  function sceneLogLabel(scene, sceneId) {
+    var name = scene.title;
+    if (!name) {
+      var files = scene.files || [];
+      if (files.length) name = files[0].basename;
+    }
+    return '"' + (name || 'untitled') + '" (' + (scene.id || sceneId) + ')';
+  }
+
+  function logInfo(msg) {
+    var log = console.info || console.log;
+    if (log) log.call(console, '[' + PLUGIN_ID + '] ' + msg);
+  }
+
+  // Announced once when the setting is seen on, and again if it is switched off and
+  // back on. Without it there is no way to tell "logging is not working" apart from
+  // "nothing has been merged yet" — the log is silent in both cases, and merging
+  // nothing is the normal outcome of a scene that already has all its performer tags.
+  var _loggingAnnounced = false;
+  function announceLogging() {
+    if (!logsToConsole(PLUGIN_ID)) { _loggingAnnounced = false; return; }
+    if (_loggingAnnounced) return;
+    _loggingAnnounced = true;
+    logInfo('merge logging enabled — one line will appear here per tag merged into a scene. ' +
+      'The number in brackets after a name is that tag\'s or scene\'s id.');
+  }
+
+  // One line per tag, at info level. Callers log only once the change is real: after
+  // the mutation resolves when saving, after the form takes the tags when staging.
+  //
+  // action is 'staged' or 'saved'. Names can be missing if logging was switched on
+  // between the query being built and this call, hence the fallback.
+  function logMerges(tags, scene, sceneId, action) {
+    if (!logsToConsole(PLUGIN_ID)) return;
+    var label = sceneLogLabel(scene, sceneId);
+    tags.forEach(function (t) {
+      logInfo('Tag "' + (t.name || 'unnamed') + '" (' + t.id + ') ' +
+        action + ' to Scene ' + label);
+    });
+  }
+
+  // Resolves the tag ID for excludeSceneWithTagName. Both hits and misses are cached
+  // with a TTL: a miss expires quickly so the filter starts working once the user
+  // creates the tag, and a hit expires too so that deleting or recreating the tag is
+  // noticed instead of leaving a stale ID that silently matches nothing forever.
+  // A failed request rejects rather than resolving to null: silently treating an
+  // error as "no exclusion configured" would merge tags into the very scenes the
+  // user asked to protect, and tags are never removed again.
+  //
+  // **A name that matches no tag rejects too.** It used to warn to the console
+  // and merge unfiltered, which is the same silent-failure shape the paragraph above
+  // rejects, reached by a typo instead of by a network error: the user believes scenes
+  // carrying that tag are protected, every one of them is merged into, and nothing here
+  // removes a tag afterwards. A miss is still *cached* on the short TTL, so creating the
+  // tag starts the filter working without a reload - what changed is that the run stops
+  // meanwhile instead of proceeding without the protection it was asked for.
+  // `PropagateTagsAndPerformers`' `resolveExclusionTagId` throws on the same condition,
+  // with the same message shape; the two were opposite until now.
+  function excludeTagMissing(name) {
+    return new Error('The exclusion tag "' + name + '" does not exist, by name or by ' +
+      'alias. Nothing was merged: running without it would write to the scenes it is ' +
+      'there to protect. Create the tag, or clear that setting.');
+  }
+
+  // **An alias counts, and every name is tried before any alias.** Stash shows aliases
+  // beside the name, searches on them, and refuses to let two tags share one, so a box
+  // holding an alias names exactly one tag - and refusing it would send the user to look
+  // up a spelling nothing else in Stash made them use. The name still wins where both
+  // match: a tag called X and a different tag carrying X as an alias is a library a user
+  // can build, and the one they named is the one they meant.
+  // `PropagateTagsAndPerformers`' `resolveExclusionTagId` resolves the same way, which
+  // matters more here than anywhere else - that plugin adopts this setting's value.
+  // **The one rule two callers resolve by**, written once. The run resolves through
+  // `resolveExclusionTag` below, which caches, warns and rejects because a run stopping
+  // is what a miss means; the settings row resolves through `lookupExclusionTag`, which
+  // does none of those because a link is not a run. What must not differ is *which tag*
+  // they land on - a second copy of the rule is what would let the row's link promise a
+  // tag the merge then refuses.
+  //
+  // Exact and case-sensitive; the server's EQUALS is neither. **Every name is tried
+  // before any alias**: a tag called X and a different tag carrying X as an alias is a
+  // library a user can build, and the one they named is the one they meant.
+  function pickTagByNameOrAlias(tags, wanted) {
+    var i;
+    for (i = 0; i < tags.length; i++) if (tags[i] && tags[i].name === wanted) return tags[i];
+    for (i = 0; i < tags.length; i++) {
+      if (tags[i] && ((tags[i].aliases || []).indexOf(wanted) !== -1)) return tags[i];
+    }
+    return null;
+  }
+
+  // per_page: -1 because Stash compiles the EQUALS modifier to SQL LIKE, where _ and %
+  // are wildcards. A name containing either can match far more tags than the default
+  // page holds, and the exact match falling off page 1 would silently disable the
+  // filter — the one failure mode this lookup exists to prevent.
+  var EXCLUDE_TAG_QUERY =
+    'query FindTagByName($filter: FindFilterType, $tag_filter: TagFilterType) {' +
+    '  findTags(filter: $filter, tag_filter: $tag_filter) { tags { id name aliases ' +
+    'description parents { name } children { name } } }' +
+    '}';
+
+  function excludeTagVars(name) {
+    return {
+      filter: { per_page: -1 },
+      tag_filter: {
+        name: { value: name, modifier: 'EQUALS' },
+        OR: { aliases: { value: name, modifier: 'EQUALS' } },
+      },
+    };
+  }
+
+  // Every merge starts here, so this is also where the sibling's pruner is asked for afresh.
+  function resolveExclusionTagId() {
+    return Promise.all([resolveExclusionTag(), refreshPruner()]).then(function (r) { return r[0] ? r[0].id : null; });
+  }
+
+  // ── Not adding what NormalizeParentTags would prune straight back off ─────
+  //
+  // Where that sibling auto-prunes scenes, a parent tag merged onto a scene that already
+  // carries a more specific one is taken off again by the next save of it - or stays
+  // on until then, where the merge was a bulk write the sibling stood down for. Either
+  // way it is not wanted there, and the user said so in that plugin's settings: such a
+  // tag is not merged. Asked, never reimplemented - `prepare` hands back a synchronous
+  // `plan`, read from inside `sceneMergePlan`. Only while it prunes scenes on its own
+  // (`autoMode`); a sibling missing, older or not answering filters nothing.
+  var _pruner = null;
+
+  function refreshPruner() {
+    var api = coop().api && coop().api[SIBLING_ID];
+    if (!api || typeof api.prepare !== 'function') { _pruner = null; return Promise.resolve(); }
+    return api.prepare({ entityType: 'scenes' }).then(function (w) {
+      _pruner = w && w.autoMode === 'prune' && typeof w.plan === 'function' ? w : null;
+    }, function () { _pruner = null; });
+  }
+
+  // ponytail: asked per performer, so on a scene two performers share, a parent one adds and
+  // the child the other adds are each kept; ask over the scene's whole plan if that shows up.
+  // `adding` less the ids the sibling would prune off a scene carrying `have` and `adding`;
+  // a task's run, as `tally`, counts what was left out for its log. A scene the sibling's own
+  // exclusions leave alone (Organized, its exclusion tag) is never pruned, so nothing is left out.
+  function unpruned(have, adding, tally, scene) {
+    if (!_pruner || !adding.length) return adding;
+    if (typeof _pruner.excludes === 'function' &&
+        _pruner.excludes({ organized: !!(scene && scene.organized), tagIds: have })) return adding;
+    var res = null;
+    try { res = _pruner.plan({ mode: 'prune', tagIds: have.concat(adding) }); } catch (e) { return adding; }
+    var drop = {};
+    ((res && res.remove) || []).forEach(function (id) { drop[String(id)] = true; });
+    var kept = adding.filter(function (id) { return !drop[String(id)]; });
+    // Once per scene and tag: two performers bringing the same parent are one assignment left out.
+    if (tally) {
+      var seen = tally.prunedSeen || (tally.prunedSeen = {});
+      adding.forEach(function (id) {
+        var k = (scene ? scene.id : '') + ':' + id;
+        if (drop[String(id)] && !seen[k]) { seen[k] = true; tally.prunedSkipped = (tally.prunedSkipped || 0) + 1; }
+      });
+    }
+    return kept;
+  }
+
+  // The tag itself rather than its id, because the settings row wants its name to say
+  // what an alias resolved to. Same cache, same rejection.
+  function resolveExclusionTag() {
+    var name = (settings.excludeSceneWithTagName || '').trim();
+    if (!name) { _excludeTag = null; _excludeTagName = ''; return Promise.resolve(null); }
+    if (name === _excludeTagName) {
+      var age = Date.now() - _excludeTagAt;
+      if (_excludeTag && age < EXCLUDE_TAG_HIT_TTL_MS) return Promise.resolve(_excludeTag);
+      if (!_excludeTag && age < EXCLUDE_TAG_MISS_TTL_MS) {
+        return Promise.reject(excludeTagMissing(name));
+      }
+    }
+    return gqlRequest(EXCLUDE_TAG_QUERY, excludeTagVars(name)).then(function (data) {
+      // The server-side match is also case-insensitive, so re-check exactly here to
+      // make sure a near-miss can never bind the exclusion to the wrong tag.
+      var match = pickTagByNameOrAlias((data.findTags || {}).tags || [], name);
+      var had = _excludeTag && name === _excludeTagName;
+      _excludeTagName = name;
+      _excludeTag     = match || null;
+      _excludeTagAt   = Date.now();
+      if (!match) {
+        console.warn('[cpt2s] exclusion tag not found: ' + name +
+          (had ? ' (it existed a moment ago — merging is stopping until it is back)' : ''));
+        throw excludeTagMissing(name);
+      }
+      return _excludeTag;
+    });
+  }
+
+  // ── Core merge logic (shared by buttons and auto-merge) ───────────────────
+
+  // Shared predicate for the two tag-level exclusion filters. exclTagId is rejected
+  // as well: copying the "skip this scene" tag onto scenes would permanently exclude
+  // them from every future merge, and tags are never removed again.
+  function tagIsMergeable(t, exclTagId, cfName) {
+    if (exclTagId && t.id === exclTagId) return false;
+    if (settings.excludeTagWithIgnoreAutoTag && t.ignore_auto_tag) return false;
+    // Presence alone excludes: the value is never inspected. Tag custom fields come
+    // back as JSON, so a value typed as text is a string — "false" and "0" are truthy
+    // in JS, which made any value-based rule surprising to configure. hasOwnProperty
+    // rather than `in` so inherited keys like "constructor" cannot match every tag.
+    if (cfName && t.custom_fields && hasOwn(t.custom_fields, cfName)) return false;
+    return true;
+  }
+
+  // The scene-level half of the exclusion rules. Split out because the staging path
+  // needs the answer on its own - it reports "Scene excluded" rather than merging -
+  // while the two saving paths only want it folded into sceneMergePlan. One copy, so
+  // a new scene-level filter cannot land on two of the three and be forgotten on the
+  // third.
+  function sceneIsExcluded(scene, exclTagId) {
+    if (settings.excludeSceneOrganized && scene.organized) return true;
+    if (exclTagId) {
+      var hasExcl = false;
+      (scene.tags || []).forEach(function (t) { if (t.id === exclTagId) hasExcl = true; });
+      if (hasExcl) return true;
+    }
+    return false;
+  }
+
+  // The one place that decides whether a scene is skipped and, if not, which of the
+  // performer tags it is missing. Returns null for "skip", otherwise
+  // { existingIds, missing }. All three saving paths - the single scene, a
+  // performer's scenes, and the task's review pass - go through it, so the plan the
+  // user approves and the write that follows can never disagree about what a scene
+  // needs.
+  function sceneMergePlan(scene, perfTagIds, exclTagId, tally) {
+    if (sceneIsExcluded(scene, exclTagId)) return null;
+    var existingIds = (scene.tags || []).map(function (t) { return t.id; });
+    var existingSet = {};
+    existingIds.forEach(function (id) { existingSet[id] = true; });
+    var missing = unpruned(existingIds, perfTagIds.filter(function (id) { return !existingSet[id]; }), tally, scene);
+    return missing.length ? { existingIds: existingIds, missing: missing } : null;
+  }
+
+  // Resolves to true when the scene's tags were updated, false when it was skipped
+  // (excluded by a filter, or already carrying every performer tag).
+  // `pass`, when given, is a run in Undo History the merge adds to and leaves open - a
+  // bulk edit's scenes are one run, finished by the caller once the last one is done.
+  function mergeTagsIntoScene(sceneId, pass) {
+    return guarded(function () { return runMergeTagsIntoScene(sceneId, pass); });
+  }
+
+  // Everything between "here is a scene" and "here is what it needs", extracted so
+  // the scene button's gate can ask the identical question the click answers.
+  // Same rule as `sceneMergePlan` itself (§3, "one filter, one implementation"): a gate
+  // that re-derived this would be a second opinion free to drift from the first, and a
+  // button that hides while a click would have merged is the drift nobody would notice.
+  // Returns `null` for a scene with nothing to do - no performers, no mergeable tags,
+  // excluded, or already carrying everything.
+  // `who` labels the diagnostic line, because the gate and the click now ask this the
+  // same question through this same function - two identical lines with nothing to tell
+  // them apart would be worse than none.
+  // The reason the most recent `scenePlanFrom` refused, so a *cached* eligibility answer
+  // can still be explained. The gate probes once per scene, so without this the debug
+  // channel says nothing at all to someone who switches it on while already looking at
+  // the page whose button they are asking about - which is the normal way to switch it
+  // on. Read straight after the call that set it, never later.
+  var _lastPlanReason = null;
+
+  function scenePlanFrom(scene, exclTagId, who) {
+    function no(reason) { _lastPlanReason = reason; gateLog(who + ': no - ' + reason); return null; }
+    if (!scene) return no('scene not found');
+    var performers = scene.performers || [];
+    if (!performers.length) return no('no performers on this scene');
+    // Keyed by id to dedupe performers sharing a tag; the tag itself is kept as
+    // the value so the log line can name what was merged.
+    var perfTagById = {};
+    var cfName = (settings.excludeTagWithCustomFieldName || '').trim();
+    performers.forEach(function (p) {
+      (p.tags || []).forEach(function (t) {
+        if (tagIsMergeable(t, exclTagId, cfName)) perfTagById[t.id] = t;
+      });
+    });
+    var perfTagIds = Object.keys(perfTagById);
+    if (!perfTagIds.length) {
+      return no('the performers here carry no mergeable tags (all excluded, or they have none)');
+    }
+    var plan = sceneMergePlan(scene, perfTagIds, exclTagId);
+    // `sceneMergePlan` folds two refusals into one `null`, so the reason is recovered
+    // rather than reported by it: an excluded scene and a complete one are one absent
+    // button and two entirely different things to go and fix.
+    if (!plan) {
+      return no(sceneIsExcluded(scene, exclTagId)
+        ? 'scene excluded by a filter (Organized, or the exclusion tag)'
+        : 'scene already carries all ' + plural(perfTagIds.length, 'mergeable performer tag'));
+    }
+    plan.tagById = perfTagById;
+    _lastPlanReason = plural(plan.missing.length, 'tag') + ' to add';
+    gateLog(who + ': YES - ' + _lastPlanReason);
+    return plan;
+  }
+
+  // The selection both callers need. One string, for the same reason `scenePlanFrom`
+  // is one function: a field present in the click's query and missing from the gate's
+  // is a gate answering a different question from the one it reports on.
+  function sceneMergeSelection() {
+    return 'organized' + sceneLogFields() +
+      ' tags { id } performers { tags { ' + tagFields() + ' } }';
+  }
+
+  function runMergeTagsIntoScene(sceneId, shared) {
+    return resolveExclusionTagId().then(function (exclTagId) {
+      return gqlRequest(
+        'query FindScene($id: ID!) {' +
+        '  findScene(id: $id) { ' + sceneMergeSelection() + ' }' +
+        '}',
+        { id: sceneId }
+      ).then(function (data) {
+        var scene = data.findScene;
+        var plan = scenePlanFrom(scene, exclTagId, 'merge into scene ' + sceneId);
+        if (!plan) return false;
+        return updateSceneTags(sceneId, plan.existingIds.concat(plan.missing)).then(function () {
+          logMerges(plan.missing.map(function (id) { return plan.tagById[id]; }), scene, sceneId, 'saved');
+          var pass = shared || journalPass('Tags merged into one scene');
+          pass.entries([journalTags({ id: sceneId, title: scene.title, files: scene.files }, plan.missing, false)]);
+          if (!shared) pass.finish();
+          return true;
+        });
+      });
+    });
+  }
+
+  // ── Staging into the scene edit form (the default; see saveTagsImmediately) ─
+  //
+  // Instead of saving, push the performer tags into the open edit form's tag box so
+  // the user can review them and press Save themselves.
+  //
+  // Stash's scene edit form does not render its tag list from formik.values.tag_ids —
+  // useTagsEdit() keeps its own copy and calls formik.setFieldValue as a side effect:
+  //
+  //   function onSetTags(items) { setTags(items); setFieldValue(items.map(i => i.id)); }
+  //
+  // So writing to formik alone would enable Save while leaving the visible chips
+  // stale. Going through onSetTags does both. It reaches us as the onSelect prop of
+  // TagSelect, which Stash exposes through PluginApi's component patching.
+
+  var _tagSelectCaptures = [];
+  var TAG_SELECT_CAPTURE_LIMIT = 10;
+  var _tagPatchInstalled = false;
+
+  function installTagSelectPatch() {
+    var api = window.PluginApi;
+    if (!api || !api.patch || typeof api.patch.before !== 'function') return false;
+    try {
+      // A before-patch returns the argument list for the real render, so returning
+      // props untouched makes this a pure observer.
+      api.patch.before('TagSelect', function (props) {
+        if (!settings.saveTagsImmediately && props &&
+            props.isMulti && typeof props.onSelect === 'function') {
+          // values is tracked on the entry rather than read back off props, so it can
+          // be corrected the moment we stage into the control instead of waiting for
+          // React to re-render and capture it again.
+          _tagSelectCaptures.push({
+            props: props,
+            sceneId: getSceneId(),
+            values: props.values || [],
+          });
+          if (_tagSelectCaptures.length > TAG_SELECT_CAPTURE_LIMIT) _tagSelectCaptures.shift();
+        }
+        return [props];
+      });
+      _tagPatchInstalled = true;
+      return true;
+    } catch (e) {
+      console.warn('[cpt2s] could not patch TagSelect:', e);
+      return false;
+    }
+  }
+
+  // **The newest capture for this page is the live control, and nothing else is.** This
+  // used to prefer the capture whose contents matched what was last staged, on the
+  // reasoning that a second click has to see the already-staged list. It does - but
+  // staging mutates the capture's own `values`, so that stale capture goes on matching
+  // for ever, and the moment the user edits the box by hand the plugin is diffing against
+  // a list the form no longer holds. Newest-first needs no such rule: a newer capture is
+  // a more recent render, which is by definition more current, and it makes a second
+  // click correct for the same reason it makes a hand edit correct. It also deleted the
+  // "what we expect it to hold" bookkeeping rather than simplifying it.
+  // What the scene's tag control is expected to be holding: our own last staged list if
+  // we have written to it, otherwise whatever the scene carries on the server. The
+  // picking rule itself is ᝯㄝₓ Core's - see `pickControl` for why neither "newest" nor
+  // "exact match" is enough on its own.
+  var _stagedForm = { sceneId: null, ids: null };
+
+  function findSceneTagControl(expectedIds) {
+    var sid = getSceneId();
+    return pickControl(_tagSelectCaptures,
+      function (c) { return c.sceneId === sid; }, expectedIds);
+  }
+
+  // Resolves to a status string: 'staged' (with count), 'nochange', or 'excluded'.
+  function stageTagsIntoSceneForm(sceneId) {
+    return guarded(function () {
+      return resolveExclusionTagId().then(function (exclTagId) {
+        return gqlRequest(
+          'query FindSceneForStaging($id: ID!) {' +
+          '  findScene(id: $id) { organized' + sceneLogFields() +
+          ' tags { id } performers { tags { ' + tagFields(true) + ' } } }' +
+          '}',
+          { id: sceneId }
+        ).then(function (data) {
+          var scene = data.findScene;
+          if (!scene) return { status: 'nochange' };
+
+          // The exclusion filters are applied exactly as in save-immediately mode:
+          // they express "these tags do not belong on this scene", which is true
+          // however the tags get there.
+          if (sceneIsExcluded(scene, exclTagId)) return { status: 'excluded' };
+
+          var cfName = (settings.excludeTagWithCustomFieldName || '').trim();
+          var byId = {};
+          (scene.performers || []).forEach(function (p) {
+            (p.tags || []).forEach(function (t) {
+              if (tagIsMergeable(t, exclTagId, cfName)) byId[t.id] = t;
+            });
+          });
+
+          var existingIds = (scene.tags || []).map(function (t) { return t.id; });
+          var expectedIds = _stagedForm.sceneId === sceneId ? _stagedForm.ids : existingIds;
+          var control = findSceneTagControl(expectedIds);
+          if (!control) {
+            throw new Error('could not find the scene tag editor — open the Edit tab first');
+          }
+
+          // Diff against what is in the form, not what is on the server, so tags the
+          // user has already added or removed by hand are respected — and so clicking
+          // twice without saving reports 0 the second time.
+          var current = control.values || [];
+          var have = {};
+          current.forEach(function (t) { have[t.id] = true; });
+
+          var added = [], keep = {};
+          unpruned(current.map(function (t) { return String(t.id); }),
+            Object.keys(byId).filter(function (id) { return !have[id]; }), null, scene)
+            .forEach(function (id) { keep[id] = true; });
+          Object.keys(byId).forEach(function (id) {
+            if (have[id] || !keep[id]) return;
+            var t = byId[id];
+            added.push({
+              id: t.id,
+              name: t.name,
+              aliases: t.aliases || [],
+              image_path: t.image_path || null,
+            });
+          });
+          if (!added.length) return { status: 'nochange' };
+
+          var next = current.concat(added);
+          control.props.onSelect(next);
+          logMerges(added, scene, sceneId, 'staged');
+          // Record the new contents immediately. React will re-render and capture the
+          // control again, but this keeps the count correct even if it does not.
+          control.values = next;
+          _stagedForm = { sceneId: sceneId, ids: next.map(function (t) { return t.id; }) };
+          return { status: 'staged', count: added.length };
+        });
+      });
+    });
+  }
+
+  function mergeTagsIntoAllPerformerScenes(performerId, onProgress) {
+    return guarded(function () { return runMergeTagsIntoAllPerformerScenes(performerId, onProgress); });
+  }
+
+  function runMergeTagsIntoAllPerformerScenes(performerId, onProgress) {
+    return resolveExclusionTagId().then(function (exclTagId) {
+      return gqlRequest(
+        'query FindPerformer($id: ID!) { findPerformer(id: $id) { tags { ' + tagFields() + ' } } }',
+        { id: performerId }
+      ).then(function (data) {
+        var performer = data.findPerformer;
+        if (!performer) return;
+        var cfName = (settings.excludeTagWithCustomFieldName || '').trim();
+        var perfTags = (performer.tags || []).filter(function (t) {
+          return tagIsMergeable(t, exclTagId, cfName);
+        });
+        var perfTagIds = perfTags.map(function (t) { return t.id; });
+        if (!perfTagIds.length) return;
+        var perfTagById = {};
+        perfTags.forEach(function (t) { perfTagById[t.id] = t; });
+
+        return gqlRequest(
+          'query FindPerformerScenes($filter: FindFilterType, $scene_filter: SceneFilterType) {' +
+          '  findScenes(filter: $filter, scene_filter: $scene_filter) { scenes { id organized' +
+          sceneLogFields() + ' tags { id } } }' +
+          '}',
+          {
+            filter: { per_page: -1 },
+            scene_filter: { performers: { value: [performerId], modifier: 'INCLUDES_ALL' } },
+          }
+        ).then(function (data2) {
+          var scenes = data2.findScenes.scenes;
+          if (!scenes || !scenes.length) return;
+
+          var i = 0;
+          var failed = 0;
+          var pass = journalPass('Tags merged into a performer\u2019s scenes');
+          // Skipped scenes advance the loop; only a scene that actually needs updating
+          // chains a promise and re-enters. Recursing on skips instead grew the stack
+          // by a frame per scene and overflowed at roughly twelve thousand consecutive
+          // skips — and skipping is the common path, since every re-run skips the
+          // scenes that already carry the tags.
+          function next() {
+            while (i < scenes.length) {
+              var scene = scenes[i++];
+              if (onProgress) onProgress(i, scenes.length);
+              var plan = sceneMergePlan(scene, perfTagIds, exclTagId);
+              if (!plan) continue;
+              return updateSceneTags(scene.id, plan.existingIds.concat(plan.missing))
+                .then(makeSceneLogger(scene, plan.missing))
+                .catch(makeSceneFailureHandler(scene))
+                .then(next);
+            }
+            pass.finish();
+            // Report failures only after every scene has been attempted, so one bad
+            // scene cannot silently cancel the rest of the run.
+            if (failed) {
+              throw new Error(failed + ' of ' + plural(scenes.length, 'scene') +
+                ' could not be updated; see the browser console for details');
+            }
+          }
+
+          // Built outside the loop so the handlers close over this scene rather than
+          // over the loop's shared `var`.
+          function makeSceneFailureHandler(scene) {
+            return function (e) {
+              failed++;
+              console.error('[cpt2s] scene ' + scene.id + ' update failed:', e);
+            };
+          }
+
+          // Chained ahead of the failure handler, so a scene that could not be updated
+          // is never logged as merged.
+          function makeSceneLogger(scene, mergedIds) {
+            return function () {
+              pass.entries([journalTags(scene, mergedIds, false)]);
+              logMerges(mergedIds.map(function (id) { return perfTagById[id]; }),
+                scene, scene.id, 'saved');
+            };
+          }
+
+          return next();
+        });
+      });
+    });
+  }
+
+  // ── Settings ──────────────────────────────────────────────────────────────
+
+  // loadSettings is called on every link click and popstate as well as on a timer, so
+  // that a settings change is picked up promptly after the user navigates away from
+  // the settings page. Those triggers fire far more often than settings actually
+  // change, and the query behind them is not free: Core's shared read
+  // (`pluginConfig`) returns every ᝯㄝₓ plugin's settings but De-Spicer's. Throttling keeps the prompt pickup while collapsing a
+  // burst of navigation into a single request, and stops a slow response from
+  // overlapping the next call.
+  // The manifest's setting keys, each mapped to the plugin's own name for it. One
+  // table rather than the three hand-kept lists this replaced - the unpacking below,
+  // the tooltip list, and the pair of keys the settings group is found by - because a
+  // key missing from any one of them failed silently: no tooltip, or an anchor that a
+  // rename could quietly break. `.tests/version.test.js` fails if the `.yml` declares a
+  // key this does not name.
+  //
+  // The a1/b2/d1 prefixes on the manifest keys are what orders the settings page:
+  // `settings:` is a YAML map, so Stash renders the keys sorted, and without them
+  // "Save Immediately" lands five rows below the button toggle it modifies. This
+  // is the only place the wire names are read - the internal names on the right are
+  // the plugin's own and stay plain. A `false` default means a boolean, `''` a string.
+  var SETTING_MAP = {
+    a1ShowManualMergeButtons:      ['showManualMergeButtons', false],
+    a2SaveTagsImmediately:         ['saveTagsImmediately', false],
+    a3AutoMergeOnSceneUpdate:      ['autoMergeOnSceneUpdate', false],
+    a4AutoMergeOnPerformerUpdate:  ['autoMergeOnPerformerUpdate', false],
+    b1ExcludeSceneWithTagName:     ['excludeSceneWithTagName', ''],
+    b2ExcludeSceneOrganized:       ['excludeSceneOrganized', false],
+    c1ExcludeTagWithIgnoreAutoTag: ['excludeTagWithIgnoreAutoTag', false],
+    c2ExcludeTagWithCustomFieldName: ['excludeTagWithCustomFieldName', ''],
+  };
+
+  var LOAD_SETTINGS_MIN_INTERVAL_MS = 2000;
+  var _settingsLoadedAt = 0;
+  var _settingsInFlight = false;
+  var _siblingSettings = null;
+  var _supersederSettings = null;
+
+  // force skips the rate limit but never the in-flight check — there is nothing to be
+  // gained by stacking a second copy of the same query on a slow connection.
+  function loadSettings(force) {
+    var now = Date.now();
+    if (_settingsInFlight) return;
+    if (!force && now - _settingsLoadedAt < LOAD_SETTINGS_MIN_INTERVAL_MS) return;
+    _settingsLoadedAt = now;
+    _settingsInFlight = true;
+    pluginConfig()
+      .then(function (data) {
+        var ps = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {};
+        for (var key in SETTING_MAP) {
+          if (!hasOwn(SETTING_MAP, key)) continue;
+          var spec = SETTING_MAP[key];
+          settings[spec[0]] = typeof spec[1] === 'boolean' ? !!ps[key] : (ps[key] || '');
+        }
+        // Every plugin's settings arrive in this one response - Stash cannot scope
+        // it - so the sibling's are already paid for, and the task dialog uses them
+        // to warn (see checkSibling). Kept as the raw object rather than unpacked
+        // into named flags: they are somebody else's wire names, and the one place
+        // that reads them is the one place that should know them.
+        _siblingSettings = ((data.configuration || {}).plugins || {})[SIBLING_ID] || null;
+        // Same response, same reasoning: the superseding sibling's four exclusion
+        // filters are what the settings-page notice compares these against.
+        _supersederSettings =
+          ((data.configuration || {}).plugins || {})[SUPERSEDER_ID] || null;
+        announceLogging();
+      })
+      .catch(function () {})
+      // Stamped on completion as well as on dispatch, so the throttle window starts
+      // from when the answer arrived rather than from when a slow request began.
+      .then(function () { _settingsInFlight = false; _settingsLoadedAt = Date.now(); });
+  }
+
+  // ── Library-wide task ─────────────────────────────────────────────────────
+  //
+  // The task is declared in the manifest so Stash renders it natively under
+  // Settings - Tasks - Plugin Tasks, but this plugin has no `exec`, so a click that
+  // reached the server could only produce a failed job. Both layers below stop it
+  // from getting there, exactly as NormalizeParentTags does: a capture-phase click
+  // listener, and a backstop in the fetch wrapper keyed on the plugin id that the
+  // runPluginTask mutation carries.
+  //
+  // What the run does is what the performer button does, for every performer in the
+  // library. There is no dry-run phase: the merge only ever *adds* tags, and the set
+  // it would add is exactly what the per-performer pass computes scene by scene, so
+  // a planning pass would cost the same queries as the run itself and could still be
+  // stale by the time it was applied. The dialog opens ready-but-not-started
+  // instead, so the user confirms before anything is written.
+
+  var TASK_STYLE_ID = 'cpt2s-task-style';
+  var TASK_CSS =
+    '.cpt2s-backdrop{position:fixed;inset:0;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);' +
+    'z-index:1600;display:flex;align-items:center;justify-content:center;}' +
+    '.cpt2s-modal{background:var(--gttx-bg,#202b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);border-radius:4px;' +
+    'width:min(100rem,94vw);max-height:88vh;display:flex;flex-direction:column;}' +
+    '.cpt2s-head{padding:.75rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);}' +
+    '.cpt2s-title{font-size:1.1rem;font-weight:600;}' +
+    '.cpt2s-warn{color:var(--gttx-highlight,#ffc107);margin-top:.35rem;}' +
+    '.cpt2s-note{color:var(--gttx-muted,#a7b6c2);margin-top:.35rem;}' +
+    '.cpt2s-legend{color:var(--gttx-dim,#7d8f9c);margin-top:.35rem;font-size:.8rem;}' +
+    '.cpt2s-progress{padding:.5rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);color:var(--gttx-muted,#a7b6c2);' +
+    'white-space:pre-wrap;}' +
+    '.cpt2s-log{flex:1 1 auto;overflow:auto;padding:.5rem 1rem;font-family:monospace;' +
+    'font-size:.8rem;line-height:1.35;min-height:14rem;}' +
+    '.cpt2s-line{white-space:pre-wrap;word-break:break-word;}' +
+    '.cpt2s-stale{margin:.5rem 0;padding:.6rem .75rem;border-left:4px solid #ff7373;' +
+    'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
+    'font-weight:600;}' +
+    // The highlight, not the stale banner's red: nothing is broken and nothing needs doing
+    // today. It is the repo's "a plugin wrote this" color, used here for the one
+    // thing on this page that is about a plugin rather than about a setting.
+    '.cpt2s-super{display:inline-block;max-width:22rem;margin:0 .5rem;vertical-align:middle;' +
+    'padding:.2rem .45rem;border-left:4px solid var(--gttx-highlight,#ffc107);background:rgba(255,182,72,.14);' +
+    'color:var(--gttx-highlight,#ffc107);font-size:.75rem;line-height:1.3;font-weight:600;}' +
+    '.cpt2s-ERROR{color:#ff7373;} .cpt2s-WARN{color:var(--gttx-highlight,#ffc107);} .cpt2s-MERGE{color:#84d68a;}' +
+    '.cpt2s-INFO{color:var(--gttx-muted,#a7b6c2);}' +
+    '.cpt2s-foot{padding:.75rem 1rem;border-top:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
+    'flex-wrap:wrap;align-items:center;}' +
+    '.cpt2s-foot button{margin-right:.5rem;}' +
+    // **`!important`, because a hidden utility that loses a cascade is not one.** Every
+    // one of these rules is a single class, so the last one written wins - and this one
+    // is written before the strips and rows that set their own `display`. A `-hidden` on
+    // one of those did nothing at all, which is how Find & Replace shipped a row that
+    // stayed on screen with the checkbox that reveals it switched off.
+    '.cpt2s-hidden{display:none !important;}' +
+    // Stash's own .sub-heading is white-space: normal, so the newlines in this
+    // plugin's description would collapse into one paragraph. Scoped to the group we
+    // marked, never to .sub-heading at large: another plugin's description is not
+    // ours to reflow, and it may well have been written for the collapse.
+    // pre-wrap is the fallback for a description we have not split yet - a blank
+    // line renders as a blank line. Once split, the paragraphs are divs and the gap
+    // is this margin instead: roughly a third of a line, not a whole one.
+    '.cpt2s-own-group .sub-heading{white-space:pre-wrap;}' +
+    '.cpt2s-own-group .sub-heading .cpt2s-p{margin:0 0 .35em;}' +
+    '.cpt2s-own-group .sub-heading .cpt2s-p:last-child{margin-bottom:0;}' +
+    // The group description sits in the group header, outside the <Collapse>, so it
+    // is on screen at whatever size whether the group is expanded or not. Hiding all
+    // but the first paragraph is the only thing that shortens it.
+    '.cpt2s-desc-collapsed .cpt2s-p:not(:first-child){display:none;}' +
+    '.cpt2s-desc-toggle{display:block;margin-top:.25rem;padding:0;border:0;' +
+    'background:none;color:var(--gttx-accent,#7cc4ff);font-size:.8rem;cursor:pointer;' +
+    'text-decoration:underline;}' +
+    // The box a tag's tooltip opens instead of the browser's own, which cannot hold a
+    // picture. Fixed to the viewport and placed from the node, because the logs these
+    // open over are `overflow:auto` boxes that would clip a positioned child against
+    // their own top edge. `pointer-events:none` is load-bearing: a box that took the
+    // pointer would fire mouseleave on the node, close, hand the pointer back and
+    // reopen. Unprefixed, like the Reload UI button's id - six plugins draw this one
+    // box and it belongs to none of them.
+    '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
+    'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
+    'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
+    'white-space:pre-wrap;pointer-events:none;text-align:left;font-family:inherit;' +
+    'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.gttx-tipbox.gttx-tip-open{display:block;}' +
+    '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
+    'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}' +
+    // The exclusion tag's own row, when the name in it names something. A link, so the
+    // tag is one click away and the name beside it can be selected; the same blue the
+    // dialog's own entity links use.
+    // The mark beside a setting that names a custom field. Gray and `cursor:help`,
+    // not the tag links' blue: it opens a tooltip and goes nowhere. The one shared,
+    // unprefixed class in this repo besides the Reload UI button's id, and for the
+    // same reason - five plugins draw the identical mark.
+    '.gttx-cftip{margin-left:.2em;font-family:monospace,monospace;font-size:1.25em;line-height:1;' +
+    'color:var(--gttx-highlight,#ffc107);cursor:help;}' +
+    // **A box of ours, not a native `title`, and the cursor is why.** A `title` opens
+    // below-right of the pointer, which is exactly where `cursor:help` draws its `?` -
+    // so the first line arrived half covered, and nothing in CSS can move a tooltip the
+    // browser owns.
+    //
+    // **`position:fixed`, placed from the mark's own rect** - which is the second answer,
+    // not the first. It was `position:absolute` against the wrapper, and that failed in
+    // both of the ways an absolutely positioned box can: an inline `<span>` is a poor
+    // containing block, and Stash's settings card clips what overflows it, so the box
+    // landed in the corner of the page and was cut off by the section edge. Fixed to the
+    // viewport is the one position nothing on the page can clip, and it is the same
+    // conclusion - and the same `tipPlace` arithmetic - the shared entity card reached
+    // about a scrolling log.
+    //
+    // `pointer-events:none` is load-bearing, not tidiness: a box that took the pointer
+    // would fire mouseleave on the mark, close, hand the pointer back and reopen.
+    '.gttx-cftipbox{display:none;position:fixed;left:0;top:0;' +
+    'z-index:1600;width:max-content;max-width:min(48rem,60vw);padding:.5rem .65rem;' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;' +
+    'font-size:.92rem;line-height:1.45;white-space:pre-wrap;pointer-events:none;' +
+    'text-align:left;box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
+    '.gttx-cftipped.gttx-cftip-open .gttx-cftipbox{display:block;}' +
+    '.cpt2s-tagicon{margin-left:.9rem;text-decoration:none;}' +
+    '.cpt2s-tagicon:hover{text-decoration:underline;}';
+
+  function taskInjectStyle() {
+    if (document.getElementById(TASK_STYLE_ID)) return;
+    var style = document.createElement('style');
+    style.id = TASK_STYLE_ID;
+    style.textContent = TASK_CSS;
+    (document.head || document.body || document.documentElement).appendChild(style);
+  }
+
+  function taskButton(label, className) {
+    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
+    b.type = 'button';
+    return b;
+  }
+
+  // The review log names every tag it plans to add, so `name` is always requested -
+  // unlike tagFields(), which adds it only while console logging is on. Everything
+  // else the filters need is the same.
+  function taskTagFields() {
+    var cfName = (settings.excludeTagWithCustomFieldName || '').trim();
+    // sort_name is what Stash orders tags by where it is set; the closing recap
+    // below lists them in that order so it reads against the tag list in the UI.
+    return 'id name sort_name ignore_auto_tag' + (cfName ? ' custom_fields' : '');
+  }
+
+  // Stash orders tags by COALESCE(sort_name, name) under its NATURAL_CI collation:
+  // case-insensitive, with numeric runs compared as numbers so "Volume 2" precedes
+  // "Volume 10". Same rule as NormalizeParentTags' summary line - see §3 of its
+  // AGENTS.md. Intl.Collator is the browser's nearest equivalent; without Intl this
+  // degrades to a case-insensitive compare, and the id tie-break keeps the order
+  // total either way.
+  var taskCollate = (function () {
+    try {
+      if (typeof Intl !== 'undefined' && Intl && Intl.Collator) {
+        var c = new Intl.Collator(undefined, { numeric: true, sensitivity: 'accent' });
+        return function (a, b) { return c.compare(a, b); };
+      }
+    } catch (e) { /* fall through to the plain compare */ }
+    return function (a, b) {
+      var la = String(a).toLowerCase(), lb = String(b).toLowerCase();
+      return la === lb ? 0 : (la < lb ? -1 : 1);
+    };
+  }());
+
+  function taskTagSortKey(t) {
+    if (!t) return '';
+    return ((t.sort_name || '').trim()) || t.name || '';
+  }
+
+  // The per-scene lines answer "what happened to this scene". This answers "which
+  // tags did this run move, and onto how many scenes" - the question worth asking
+  // before approving a library-wide merge, and one a six-figure log cannot be read
+  // for.
+  //
+  // Returned as segments rather than a string: each tag becomes its own span so it
+  // can carry a tooltip naming its aliases and description, which is what tells two
+  // tags with the same name apart without leaving the dialog. `detail` is optional -
+  // without it the line is exactly what it always was, which is also what happens
+  // when the detail query fails.
+  function taskTagSummaryParts(counts, tagsById, verb, detail) {
+    var ids = [], id;
+    for (id in counts) if (hasOwn(counts, id)) ids.push(id);
+    if (!ids.length) return null;
+    ids.sort(function (a, b) {
+      var c = taskCollate(taskTagSortKey(tagsById[a]), taskTagSortKey(tagsById[b]));
+      if (c) return c;
+      return lowerId(a, b) ? -1 : 1;
+    });
+    var parts = [{ text: plural(ids.length, 'tag') + ' ' + verb + ': ' }];
+    ids.forEach(function (tid, i) {
+      var t = tagsById[tid];
+      var d = detail && hasOwn(detail, tid) ? detail[tid] : null;
+      // The name is the link and the count is not: `x18` is this run's arithmetic rather
+      // than part of what the tag is called, and underlining it would say otherwise. Two
+      // segments, so `partsText` still produces the line it always did.
+      parts.push({
+        text: '"' + ((t && t.name) || 'unnamed') + '" (' + tid + ')',
+        href: entityHref('tags', tid),
+        title: d && tagHasDetail(d) ? tagTooltip(d, tid, 'unnamed') : null,
+        tip: tid,
+      });
+      parts.push({ text: ' x' + counts[tid] });
+      if (i < ids.length - 1) parts.push({ text: ', ' });
+    });
+    return parts;
+  }
+
+  function performerLabel(p) {
+    return '"' + (p.name || 'unnamed') + '" (' + p.id + ')';
+  }
+
+  // Where an entity of each type lives in Stash's UI, keyed by `TYPES[].key` - which
+  // is already the plural the URL uses. A Scene Marker is deliberately absent: it has
+  // no page of its own, so a marker's name stays plain text on the line, and nothing
+  // else has to know about the exception.
+  var ROUTES = {
+    scenes: '/scenes/', images: '/images/', galleries: '/galleries/', groups: '/groups/',
+    performers: '/performers/', studios: '/studios/', tags: '/tags/',
+  };
+
+  function entityHref(key, id) {
+    return ROUTES[key] ? ROUTES[key] + id : null;
+  }
+
+  // One entity named in the log: a link to its page, and a card on hover saying which
+  // one it is. Every line here names a scene, a performer or a tag, and none of them is
+  // recognisable from a title and an id alone - which is what the log had.
+  function entSeg(key, id, text) {
+    return { text: text, href: entityHref(key, String(id)),
+      ent: { type: key, id: String(id) } };
+  }
+
+  // What a scoped run's title calls the entity the click was made on. Reuses the two
+  // label functions the log already writes, so a title and a log line can never
+  // disagree about how an entity is named.
+  //
+  // A query for a title, and it earns it: the dialog used to say "Performer 57", which
+  // names the one thing about that performer the user cannot recognise. It is one by-id
+  // read, made while a dialog opens on a review about to make several.
+  //
+  // Falls back to the bare kind and id rather than rejecting - a dialog that cannot
+  // name its scope should still open. It is a title.
+  function scopeLabel(kind, id) {
+    var performer = kind === 'Performer';
+    var query = performer
+      ? 'query CPT2S_ScopeName($id: ID!) { findPerformer(id: $id) { id name } }'
+      : 'query CPT2S_ScopeName($id: ID!) { findScene(id: $id) { id title files { basename } } }';
+    return gqlRequest(query, { id: String(id) }).then(function (data) {
+      var ent = (data && (performer ? data.findPerformer : data.findScene)) || { id: id };
+      return kind + ' ' + (performer ? performerLabel(ent) : sceneLogLabel(ent, id));
+    }, function () {
+      return kind + ' ' + id;
+    });
+  }
+
+  var _activeTask = null;
+
+  // `scope` is what the two manual buttons add: `{ performerIds }` for the performer
+  // page's button (that performer's scenes) or `{ sceneIds }` for the scene page's (that
+  // one scene) - several from a list's selection menu. Absent for the library-wide task,
+  // which walks every performer.
+  function startTaskRun(taskName, scope) {
+    if (_activeTask) { _activeTask.focus(); return; }
+    _activeTask = new TaskRun(taskName || TASK_MERGE_ALL, scope);
+    _activeTask.build();
+  }
+
+  function TaskRun(taskName, scope) {
+    this.taskName = taskName;
+    // Held on the run rather than passed to begin(), because Rescan calls begin()
+    // again and a rescan of a scoped run has to stay scoped.
+    this.scope = scope || null;
+    this.reset();
+  }
+
+  // Same shape as NormalizeParentTags' Run.reset: everything a pass owns is cleared
+  // here, and rescan() is the only caller that puts anything back. Keep the two
+  // readable against each other - they are one design with two sets of counters.
+  TaskRun.prototype.reset = function () {
+    // One entry per scene, never one per performer: a scene featuring two performers
+    // is missing tags from both, and writing it twice from a plan computed before
+    // either write would have the second write - built from the scene's scan-time
+    // tags - drop what the first one added. See planScene.
+    this.plan = [];
+    this.planByScene = {};
+    this.prunedSkipped = 0;   // what `sceneMergePlan` left out for the sibling's prune
+    this.prunedSeen = {};     // by scene and tag, so it is counted once
+    // Set by checkVersion when the running script is not the installed one. Per pass,
+    // because a rescan re-checks - the user may have reloaded plugins in between.
+    this.stale = false;
+    // Scenes per tag, for the closing recap: what the plan would touch, and what the
+    // apply actually wrote. `tagsById` carries the names and sort keys for both.
+    this.plannedTagCounts = {};
+    this.appliedTagCounts = {};
+    this.tagsById = {};
+    // Aliases and descriptions for the recap's tooltips, fetched per recap rather
+    // than during the walk. `pass` counts the passes so a recap whose detail query
+    // is still in flight when Rescan is pressed cannot land in the next one's log.
+    this.tagDetail = {};
+    this.pass = (this.pass || 0) + 1;
+    this.tagsPlanned = 0;
+    this.performersSeen = 0;
+    this.performersTotal = 0;
+    this.scenesUpdated = 0;
+    this.tagsAdded = 0;
+    this.errors = 0;
+    // Scenes the server has accepted a write for this pass, so the dialog can drop
+    // exactly those from Apollo's cache when it finishes. The library-wide task barely
+    // needs it - it evicts the scene *list* - but a scoped run's user is looking at the
+    // one scene it wrote, and a stale `Scene:7` is what they would see.
+    this.wroteScenes = {};
+    // What this dialog has written and can still take back: one entry per scene the
+    // server accepted, holding only the tags this run put there. Session-scoped like
+    // `lines` rather than pass-scoped - rescan() saves it across this call - so
+    // converging on an empty plan does not cost the ability to undo the passes that
+    // got there. Same rule as the sibling's Run.undoable.
+    this.undoable = [];
+    this.undone = 0;
+    this.undoFailed = 0;
+    this.undoneTagCounts = {};
+    this.undoTotal = 0;
+    this.cancelled = false;
+    this.stopped = false;
+    // `lines` is the export buffer and survives a Rescan, because Copy log is meant
+    // to hand over the whole session - rescan() saves it across this call. It is
+    // emptied here rather than kept, so a first run starts clean without the
+    // constructor needing a special case. The rendered log survives a Rescan too, so
+    // `lines.length` is also what the progress line counts; a separate pass-scoped
+    // counter existed only while a rescan emptied the view under it.
+    this.lines = [];
+    this.pending = [];
+    this.state = 'scanning';
+  };
+
+  TaskRun.prototype.build = function () {
+    taskInjectStyle();
+    var self = this;
+
+    this.backdrop = el('div', 'cpt2s-backdrop');
+    this.modal = el('div', 'cpt2s-modal');
+    this.backdrop.appendChild(this.modal);
+
+    var head = el('div', 'cpt2s-head');
+    // A plain block, so a scoped title too long for one line wraps rather than being
+    // clipped. Nothing to set: it is the default, and it holds only because no rule in
+    // `TASK_CSS` makes this a flex child or sets `white-space`.
+    head.appendChild(el('div', 'cpt2s-title', PLUGIN_SHORT_NAME + ' - ' + stripEllipsis(this.taskName)));
+    // The stale-script warning gets a box of its own, in the same red the settings
+    // banner uses, rather than a sentence appended to `noteEl` among the run's other
+    // warnings. Every other note here is about the library or another plugin; this one
+    // is about the dialog itself running code the user has already replaced, and it is
+    // the only one that disables Proceed. It reads as a different kind of thing because
+    // it is one.
+    this.staleEl = el('div', 'cpt2s-stale cpt2s-hidden', '');
+    head.appendChild(this.staleEl);
+    // The merge only ever adds tags. Undo is the single exception in this plugin -
+    // it takes back what this dialog itself added - and it is not a restore, so the
+    // backup instruction stays and its limits are stated beside it.
+    head.appendChild(el('div', 'cpt2s-warn',
+      'The merge only ever adds tags. Backing up your database before proceeding is strongly recommended: Undo only ' +
+      'reverses what this dialog added, while it stays open, and cannot account for changes made ' +
+      'elsewhere in the meantime.'));
+    // Same legend as NormalizeParentTags', because the log lines are the same shape:
+    // the id sits outside the quotes, and the only other numbers here are counts
+    // written as x250. Saying which is which is cheaper than a misread scene id.
+    head.appendChild(el('div', 'cpt2s-legend',
+      'Reading the log: the number in brackets after a name is that scene\'s, performer\'s or ' +
+      'tag\'s id - Scene "My Scene" (345) is the scene with id 345. Counts are written ' +
+      'as x250, never in brackets.'));
+    this.noteEl = el('div', 'cpt2s-note', '');
+    head.appendChild(this.noteEl);
+    this.modal.appendChild(head);
+
+    this.progressEl = el('div', 'cpt2s-progress', 'Starting...');
+    this.modal.appendChild(this.progressEl);
+
+    this.logEl = el('div', 'cpt2s-log');
+    this.modal.appendChild(this.logEl);
+
+    var foot = el('div', 'cpt2s-foot');
+    // Orange: the two buttons that write. See "one color for a plugin wrote this".
+    this.proceedBtn = taskButton('Proceed', 'cpt2s-proceed');
+    this.cancelBtn  = taskButton('Cancel', 'cpt2s-cancel');
+    this.stopBtn    = taskButton('Stop', 'cpt2s-stop cpt2s-hidden');
+    this.copyBtn    = taskButton('Copy log', 'cpt2s-copy');
+    this.undoBtn    = taskButton('Undo', 'cpt2s-undo cpt2s-hidden');
+    [this.proceedBtn, this.undoBtn].forEach(function (b) {
+      b.className = b.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    });
+    this.rescanBtn  = taskButton('Rescan', 'cpt2s-rescan cpt2s-hidden');
+    this.closeBtn   = taskButton('Close', 'cpt2s-close cpt2s-hidden');
+    this.proceedBtn.disabled = true;
+    this.undoBtn.title = 'Remove the tags this dialog added, from the scenes it added them to. ' +
+      'Only what this dialog wrote, and only while it stays open.';
+    this.rescanBtn.title = 'Review again and replace the plan with whatever is left to merge. ' +
+      'The log is kept, and so is what Undo can still reverse.';
+
+    this.proceedBtn.addEventListener('click', function () { self.proceed(); });
+    this.cancelBtn.addEventListener('click', function () { self.cancel(); });
+    this.stopBtn.addEventListener('click', function () { self.stop(); });
+    this.copyBtn.addEventListener('click', function () { self.copy(); });
+    this.undoBtn.addEventListener('click', function () { self.undo(); });
+    this.rescanBtn.addEventListener('click', function () { self.rescan(); });
+    this.closeBtn.addEventListener('click', function () { self.close(); });
+
+    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.undoBtn,
+      this.rescanBtn, this.closeBtn].forEach(function (b) { foot.appendChild(b); });
+    this.modal.appendChild(foot);
+
+    wireEscape(this, 'cpt2s');
+    document.body.appendChild(this.backdrop);
+    this.begin();
+  };
+
+  // Empty hides it. `begin()` clears it on every pass for the same reason it clears
+  // the note: a rescan after a reload must not go on claiming the script is stale.
+  TaskRun.prototype.showStale = function (msg) {
+    this.staleEl.textContent = msg || '';
+    if (msg) staleReloadButton(this.staleEl);
+    this.show(this.staleEl, !!msg);
+  };
+
+  TaskRun.prototype.show = function (node, visible) {
+    node.className = node.className.replace(/\s*cpt2s-hidden/g, '') + (visible ? '' : ' cpt2s-hidden');
+  };
+
+  TaskRun.prototype.setState = function (state) {
+    this.state = state;
+    var scanning = state === 'scanning', ready = state === 'ready';
+    var applying = state === 'applying', done = state === 'done';
+    // Undoing is a write like applying, so it offers Stop and nothing else: Rescan
+    // would plan against a library being changed underneath it, and Close would
+    // abandon the reversal halfway with no way back to it.
+    var undoing = state === 'undoing';
+    // Nothing to proceed on: the dialog has scanned and found no work, so there is
+    // nothing to abandon and "Cancel" would be answering a question nobody asked.
+    // Close is the same act with the honest word on it.
+    var nothingToDo = ready && !this.plan.length;
+    this.show(this.proceedBtn, scanning || ready);
+    this.show(this.cancelBtn, (scanning || ready) && !nothingToDo);
+    this.show(this.stopBtn, applying || undoing);
+    // Offered in ready as well as done: a rescan leaves the dialog holding a fresh
+    // plan over a library an earlier pass already changed, and that is exactly when
+    // the user is deciding between merging more and taking back what is there.
+    this.show(this.undoBtn, (ready || done) && this.undoable.length > 0);
+    this.show(this.rescanBtn, done);
+    this.show(this.closeBtn, done || nothingToDo);
+    // Undo is deliberately not gated on `stale`: it takes back tags this dialog has
+    // already added, and stranding the user with a merge they cannot reverse would be
+    // worse than the mismatch it is protecting them from.
+    this.proceedBtn.disabled = !ready || !this.plan.length || this.stale;
+    // Green when nothing is left to write: an empty plan, or a pass that has run. Undo
+    // does not take the green away - it is an offer, not something waiting on the user.
+    // Errors, a stopped pass and a stale script stay gray: those say "something is
+    // wrong", not "nothing to do".
+    paintButton(this.closeBtn, (nothingToDo || done) && !this.errors && !this.stopped &&
+      !this.stale ? 'btn-success' : 'btn-secondary');
+    this.spin(scanning || applying || undoing);
+  };
+
+  // The log - its cursor, lines, flush, and the Undo button's disarm - is Core's `runLog`.
+  runLog(TaskRun.prototype, 'cpt2s');
+
+  // A run-level warning: into the log, where Copy log will carry it, and into the
+  // dialog head, where it stays visible after the log has scrolled past it. Appends
+  // rather than assigns, so a second warning cannot silently replace the first;
+  // begin() blanks the head on every pass, so a rescan re-derives both.
+  TaskRun.prototype.note = function (msg) {
+    this.log('WARN', msg);
+    this.noteEl.textContent = this.noteEl.textContent
+      ? this.noteEl.textContent + ' ' + msg : msg;
+  };
+
+  // The distinct tags a run moves are a bounded set - tens, where the walk that
+  // found them read tens of thousands of performers - so their aliases and
+  // descriptions are worth one query here and would be worth nothing on
+  // taskTagFields(), where the same text would ride along on every performer's tag
+  // list. A description can run to paragraphs; see NormalizeParentTags' §5a for the
+  // same trade in its viewer.
+  //
+  // Failure is silent by design. This buys a tooltip, not a merge, and an [ERROR]
+  // line in a log the user is reading for what was written would be a worse outcome
+  // than a recap that hovers to nothing.
+  TaskRun.prototype.loadTagDetail = function (counts) {
+    var ids = [], id;
+    for (id in counts) if (hasOwn(counts, id)) ids.push(id);
+    if (!ids.length) return Promise.resolve();
+    var self = this;
+    return gqlRequest(
+      'query CPT2STagDetail($ids: [ID!]) { findTags(ids: $ids) ' +
+      '{ tags { id name aliases description } } }', { ids: ids }
+    ).then(function (data) {
+      (((data.findTags || {}).tags) || []).forEach(function (t) { self.tagDetail[t.id] = t; });
+    }, function () { /* the recap still reads; it just does not hover */ });
+  };
+
+  TaskRun.prototype.logTagSummary = function (counts, verb) {
+    var self = this;
+    // A rescan empties the log while this is in flight, and a recap of the pass
+    // before it would land in the middle of the new one. The pass token is what
+    // makes the wait safe.
+    var pass = this.pass;
+    return this.loadTagDetail(counts).then(function () {
+      if (self.pass !== pass) return;
+      var parts = taskTagSummaryParts(counts, self.tagsById, verb, self.tagDetail);
+      if (parts) self.log('INFO', partsText(parts), parts);
+      self.flush();
+    });
+  };
+
+  TaskRun.prototype.renderProgress = function () {
+    var summary;
+    if (this.state === 'scanning') {
+      summary = 'Reviewing. Performers ' + this.performersSeen + ' / ' + this.performersTotal +
+        ', ' + plural(this.plan.length, 'scene') + ' to update';
+    } else if (this.state === 'ready') {
+      summary = 'Review complete. ' + plural(this.plan.length, 'scene') + ' to update, ' +
+        plural(this.tagsPlanned, 'tag assignment') + ' to add. Nothing has been written.';
+    } else if (this.state === 'applying') {
+      summary = 'Merging. ' + this.scenesUpdated + ' of ' + plural(this.plan.length, 'scene') + ' updated';
+    } else if (this.state === 'undoing') {
+      summary = 'Undoing. ' + this.undone + ' of ' + plural(this.undoTotal, 'scene') + ' reversed';
+    } else {
+      summary = 'Finished. ' + plural(this.scenesUpdated, 'scene') + ' updated, ' +
+        plural(this.tagsAdded, 'tag assignment') + ' added' +
+        (this.undone ? ', ' + plural(this.undone, 'scene') + ' reversed by Undo' : '') +
+        (this.stopped ? ' (stopped early; what was written stays written)' : '');
+    }
+    if (this.errors) summary += ', ' + plural(this.errors, 'error');
+    if ((this.logged || 0) > linesDrawn()) {
+      summary += ' - showing the last ' + linesDrawn() + ' of ' + this.logged + ' lines';
+    }
+    this.progressEl.textContent = summary;
+  };
+
+  // ── Phase 1: review ───────────────────────────────────────────────────────
+
+  TaskRun.prototype.begin = function () {
+    var self = this;
+    this.setState('scanning');
+    this.noteEl.textContent = '';
+    this.showStale('');
+    this.renderProgress();
+    this.log('INFO', PLUGIN_NAME + ' - ' + this.taskName + ' - reviewing, nothing will be written yet.');
+    this.describeFilters();
+
+    // A lease means a bulk plugin is mid-run. It is advisory and this is a manual
+    // action, so it does not block - but two plugins rewriting the same scenes at
+    // once is worth saying out loud.
+    if (coop().leases.length) {
+      this.note('Another plugin is applying bulk changes right now. Running both at once means ' +
+        'each may undo part of the other; let it finish first.');
+    }
+
+    this.checkSibling();
+    this.checkDeclaredOverlap();
+    // Not chained ahead of the walk: one small query against a pass that reads every
+    // performer in the library. It lands long before Proceed is reachable, and
+    // setState is re-applied when it does.
+    this.checkVersion();
+
+    resolveExclusionTagId().then(function (exclTagId) {
+      return self.scope ? self.scanScope(exclTagId) : self.walk(1, exclTagId);
+    }).then(function () {
+      self.finishScan();
+    }, function (e) {
+      self.log('ERROR', 'Review failed: ' + (e && e.message ? e.message : e));
+      self.errors++;
+      self.finishScan();
+    });
+  };
+
+  // NormalizeParentTags' auto-modes, as its settings actually spell them.
+  // Today that is one string carrying a mode per entity-type ("SCENES=PRUNE,
+  // IMAGES=ROLLUP"), so both directions can be on at once for different types; the
+  // pair of booleans it replaced covered every type it was enabled for, where both at
+  // once was that plugin's own documented no-op.
+  //
+  // Read by name rather than through its `coop().api`, like the rest of this check:
+  // the API answers for one entity-type at a time and needs the plugin to be running
+  // in this page, and what this warning is about is a setting that may be set while
+  // the plugin is disabled. It renamed every key it had at once, which is why the old
+  // pair is still read - an install that has not been touched since then still
+  // carries them, and this check has to keep working against it.
+  function siblingAutoModes(ps) {
+    var modes = String((ps && ps.a1AutoModes) || '');
+    if (modes) {
+      return {
+        prune: /=\s*prune\b/i.test(modes),
+        rollup: /=\s*roll[\s_-]*up\b/i.test(modes),
+      };
+    }
+    // COMPAT: `a8AutoPruneOnUpdate` / `a9AutoRollUpOnUpdate`, the sibling's boolean pair before
+    // its one `a1AutoModes` string (since NormalizeParentTags 4.0.0); remove when never on its
+    // own: an install that has not saved that plugin's settings since still carries the pair.
+    var prune = !!(ps && ps.a8AutoPruneOnUpdate), rollup = !!(ps && ps.a9AutoRollUpOnUpdate);
+    if (prune === rollup) return { prune: false, rollup: false };
+    return { prune: prune, rollup: rollup };
+  }
+
+  // The mirror of NormalizeParentTags' own check: it reads our auto-merge flags out
+  // of the shared settings response and says whether we will stand down, and it has
+  // reactive modes worth the same treatment in reverse. Both of its
+  // directions collide with a merge - Prune strips the parent tags we add straight
+  // back out, Roll-Up piles more ancestors on top - so the warning names which.
+  //
+  // Unlike its version, this reads the last loaded copy rather than reloading: the
+  // task shares `settings` with the rest of the plugin, which is refreshed on
+  // navigation and on the 10s timer. That is the same freshness describeFilters()
+  // already runs on.
+  TaskRun.prototype.checkSibling = function () {
+    var ps = _siblingSettings;
+    if (!ps) return;
+
+    var auto = siblingAutoModes(ps);
+    if (!auto.prune && !auto.rollup) return;
+
+    // Both, where its settings set one type to prune and another to roll up - a state
+    // the pair of booleans it used to keep could not express, and which this once read
+    // as "no mode is running".
+    var mode = auto.prune && auto.rollup
+      ? 'Auto-Prune and Auto-Roll-Up'
+      : (auto.prune ? 'Auto-Prune' : 'Auto-Roll-Up');
+    var effect = auto.prune && auto.rollup
+      ? 'it will rewrite the tags this merge adds - removing the ones a more specific tag ' +
+        'on the same scene implies, or adding every ancestor, depending on the entity-type'
+      : (auto.prune
+        ? 'it will remove the parent tags this merge adds, wherever a more specific tag on the ' +
+          'same scene already implies them'
+        : 'it will add every ancestor of the tags this merge adds');
+
+    if (coop().respecters[SIBLING_ID]) {
+      this.log('INFO', SIBLING_NAME + ' has ' + mode + ' enabled; it will stand down while ' +
+        'this task writes.');
+      return;
+    }
+    // Not registered means one of two things and there is no way to tell them apart
+    // from here: the plugin is disabled in Stash (so its settings linger in the
+    // config but nothing is running), or the installed copy predates the lease
+    // protocol. Say both rather than assert the alarming one.
+    this.note(SIBLING_NAME + ' has ' + mode + ' enabled in its settings but has not registered ' +
+      'as honoring bulk-edit leases - either it is disabled in Stash, or the installed copy is ' +
+      'older than the protocol. If it is running, ' + effect + '. Turn it off for the duration, ' +
+      'or check the result afterwards.');
+  };
+
+  // The N-way counterpart to `checkSibling` above: that one is specific to
+  // NormalizeParentTags because its collision (prune/roll-up along the tag
+  // hierarchy) is a different kind from this one and needs its own wording. This
+  // one is generic - any plugin, present or future, that declares
+  // `'tags:performer>scene'` in `coop().declares` is doing the exact same path this
+  // plugin does, which is redundant work and doubled log lines, never wrong data,
+  // since both plugins only ever add. `PropagateTagsAndPerformers` is the first
+  // such plugin; nothing here names it, so a second one needs no edit here either.
+  TaskRun.prototype.checkDeclaredOverlap = function () {
+    var declares = coop().declares, others = [];
+    for (var id in declares) {
+      if (!hasOwn(declares, id) || id === PLUGIN_ID) continue;
+      if ((declares[id] || []).indexOf('tags:performer>scene') !== -1) others.push(id);
+    }
+    if (!others.length) return;
+    this.log('INFO', others.join(', ') + ' also merges performer tags onto scenes ' +
+      '(declares the same path). Running both is redundant work and doubled log lines, ' +
+      'never wrong data - both only ever add.');
+  };
+
+  TaskRun.prototype.describeFilters = function () {
+    var on = [];
+    if (settings.excludeSceneOrganized) on.push('scenes marked Organized are skipped');
+    if ((settings.excludeSceneWithTagName || '').trim()) {
+      on.push('scenes tagged "' + settings.excludeSceneWithTagName.trim() + '" are skipped');
+    }
+    if (settings.excludeTagWithIgnoreAutoTag) on.push('tags set to Ignore Auto Tag are not merged');
+    if ((settings.excludeTagWithCustomFieldName || '').trim()) {
+      on.push('tags with the custom field "' + settings.excludeTagWithCustomFieldName.trim() +
+        '" are not merged');
+    }
+    this.log('INFO', on.length ? 'Active exclusions: ' + on.join('; ') + '.'
+      : 'No exclusion filters are configured, so every performer tag will be merged.');
+  };
+
+  // Pages the performer list rather than asking for all of them at once: a large
+  // library has tens of thousands, and `per_page: -1` on that is one response the
+  // tab has to hold whole. Tags come back with the page, so the review needs no
+  // second query per performer.
+  TaskRun.prototype.walk = function (page, exclTagId) {
+    var self = this;
+    if (this.cancelled) return Promise.resolve();
+    return gqlRequest(
+      'query CPT2S_TaskPerformers($page: Int!, $per: Int!) {' +
+      '  findPerformers(filter: { page: $page, per_page: $per, sort: "id", direction: ASC }) {' +
+      '    count performers { id name tags { ' + taskTagFields() + ' } }' +
+      '  }' +
+      '}',
+      { page: page, per: TASK_PAGE_SIZE }
+    ).then(function (data) {
+      var result = (data && data.findPerformers) || {};
+      var list = result.performers || [];
+      self.performersTotal = result.count || 0;
+      if (!list.length) return;
+
+      var i = 0;
+      function nextChunk() {
+        // Performers with nothing mergeable are skipped here rather than costing a
+        // scene query each: on a large library that is most of the run's savings. The
+        // rest go out in chunks, which is the other half of it.
+        var chunk = [];
+        while (i < list.length && chunk.length < TASK_SCENE_CHUNK) {
+          if (self.cancelled) return;
+          var p = list[i++];
+          self.performersSeen++;
+          var perfTags = (p.tags || []).filter(function (t) {
+            return tagIsMergeable(t, exclTagId, (settings.excludeTagWithCustomFieldName || '').trim());
+          });
+          if (!perfTags.length) continue;
+          chunk.push({ p: p, tags: perfTags });
+        }
+        if (chunk.length) {
+          return self.scenesFor(chunk.map(function (c) { return c.p; })).then(function (by) {
+            // In the order the page listed them, which is the order the log had when
+            // each of these was a query of its own.
+            chunk.forEach(function (c) {
+              self.planPerformer(c.p, c.tags, exclTagId, by[String(c.p.id)] || []);
+            });
+            self.renderProgress();
+          }, function (e) {
+            // One line per performer, as before: the chunk is how they were asked
+            // about, not something the reader of a log has to know.
+            chunk.forEach(function (c) { self.sceneQueryFailed(c.p, e); });
+          }).then(nextChunk);
+        }
+        self.renderProgress();
+        if (self.cancelled || self.performersSeen >= self.performersTotal) return;
+        return self.walk(page + 1, exclTagId);
+      }
+      return nextChunk();
+    });
+  };
+
+  // ── Phase 1, scoped: what a manual button reviews ─────────────────────────
+  //
+  // The same review pass, over one performer or one scene instead of the library. It
+  // goes through `reviewPerformer` / `sceneMergePlan` / `planScene` like the walk does,
+  // so the plan the dialog lists is the plan the walk would have listed - §3's "one
+  // filter, one implementation" extended to the review itself. What it replaces is a
+  // click that wrote with nothing in front of the user.
+  TaskRun.prototype.scanScope = function (exclTagId) {
+    var self = this, perf = !!this.scope.performerIds;
+    var ids = perf ? this.scope.performerIds : this.scope.sceneIds;
+    if (perf) this.performersTotal = ids.length;
+    return ids.reduce(function (chain, id) {
+      return chain.then(function () {
+        if (self.cancelled) return null;
+        return perf ? self.scanPerformer(id, exclTagId) : self.scanScene(id, exclTagId);
+      });
+    }, Promise.resolve());
+  };
+
+  // One performer's scenes. `reviewPerformer` does the whole of it once the performer's
+  // own mergeable tags are in hand, which is the same shape the walk uses per page.
+  TaskRun.prototype.scanPerformer = function (performerId, exclTagId) {
+    var self = this;
+    return gqlRequest(
+      'query CPT2S_TaskPerformer($id: ID!) {' +
+      '  findPerformer(id: $id) { id name tags { ' + taskTagFields() + ' } }' +
+      '}',
+      { id: String(performerId) }
+    ).then(function (data) {
+      var p = data && data.findPerformer;
+      self.performersSeen++;
+      if (!p) {
+        self.log('ERROR', 'Performer ' + performerId + ' was not found.');
+        self.errors++;
+        return null;
+      }
+      var perfTags = (p.tags || []).filter(function (t) {
+        return tagIsMergeable(t, exclTagId, (settings.excludeTagWithCustomFieldName || '').trim());
+      });
+      if (!perfTags.length) {
+        var none = [{ text: 'Performer ' }, entSeg('performers', p.id, performerLabel(p)),
+          { text: ' carries no mergeable tags - they have none, or every one is excluded.' }];
+        self.log('INFO', partsText(none), none);
+        self.renderProgress();
+        return null;
+      }
+      return self.reviewPerformer(p, perfTags, exclTagId);
+    });
+  };
+
+  // One scene, from the other end: its performers are the sources, and each contributes
+  // to the same single plan entry - which is exactly what `planScene` is for, and why
+  // this does not need a plan shape of its own.
+  TaskRun.prototype.scanScene = function (sceneId, exclTagId) {
+    var self = this;
+    return gqlRequest(
+      'query CPT2S_TaskScene($id: ID!) {' +
+      '  findScene(id: $id) {' +
+      '    id organized title files { basename } tags { id }' +
+      '    performers { id name tags { ' + taskTagFields() + ' } }' +
+      '  }' +
+      '}',
+      { id: String(sceneId) }
+    ).then(function (data) {
+      var scene = data && data.findScene;
+      if (!scene) {
+        self.log('ERROR', 'Scene ' + sceneId + ' was not found.');
+        self.errors++;
+        return;
+      }
+      // Said out loud rather than left as an empty plan: an excluded scene and a scene
+      // that already has everything are one empty dialog and two different things to go
+      // and fix. `sceneMergePlan` folds both into `null`, so this asks first.
+      if (sceneIsExcluded(scene, exclTagId)) {
+        var skip = [{ text: 'Scene ' }, entSeg('scenes', scene.id, sceneLogLabel(scene, scene.id)),
+          { text: ' is excluded by a filter (Organized, or the exclusion tag). Nothing to merge.' }];
+        self.log('INFO', partsText(skip), skip);
+        self.renderProgress();
+        return;
+      }
+      var performers = scene.performers || [];
+      self.performersTotal += performers.length;
+      var cfName = (settings.excludeTagWithCustomFieldName || '').trim();
+      performers.forEach(function (p) {
+        self.performersSeen++;
+        var perfTags = (p.tags || []).filter(function (t) {
+          return tagIsMergeable(t, exclTagId, cfName);
+        });
+        if (!perfTags.length) return;
+        var perfTagById = {};
+        perfTags.forEach(function (t) { perfTagById[t.id] = t; });
+        var need = sceneMergePlan(scene, Object.keys(perfTagById), exclTagId, self);
+        if (!need) return;
+        self.planScene(scene, need, perfTagById, p);
+      });
+      self.renderProgress();
+    });
+  };
+
+  // ── The scenes a page of performers appears in ────────────────────────────
+  //
+  // **One query per performer was the whole cost of this task.** The walk asked for a
+  // performer's scenes, waited for the answer, planned it, and only then asked about the
+  // next one - so a library with two thousand tagged performers spent two thousand round
+  // trips in sequence, whatever each of them cost the server. The sibling that does more
+  // than this is faster for exactly one reason: it asks bigger questions.
+  //
+  // So the criterion takes a **list** and the modifier is `INCLUDES` (any of these) rather
+  // than `INCLUDES_ALL` (all of them, which is what a one-element list made it look like).
+  // The scenes come back once each however many of the chunk's performers are on them, and
+  // `performers { id }` is what puts each scene back under the performers that asked for
+  // it - so the planning loop below is unchanged, and so is the order of every line it
+  // logs. Nothing about the plan or the log depends on how the scenes were fetched, which
+  // is the property that made this safe to change.
+  //
+  // Ten at a time rather than all of them: `per_page: -1` over one chunk is already a
+  // response holding every scene those performers appear in, and the point is to cut round
+  // trips rather than to move the whole library in one.
+  var TASK_SCENE_CHUNK = 10;
+
+  TaskRun.prototype.scenesFor = function (performers) {
+    var ids = performers.map(function (p) { return String(p.id); });
+    return gqlRequest(
+      'query CPT2S_TaskPerformerScenes($filter: FindFilterType, $scene_filter: SceneFilterType) {' +
+      '  findScenes(filter: $filter, scene_filter: $scene_filter) {' +
+      '    scenes { id organized title files { basename } tags { id } performers { id } }' +
+      '  }' +
+      '}',
+      {
+        filter: { per_page: -1 },
+        scene_filter: { performers: { value: ids, modifier: 'INCLUDES' } },
+      }
+    ).then(function (data) {
+      var scenes = (data.findScenes && data.findScenes.scenes) || [];
+      var by = {};
+      ids.forEach(function (id) { by[id] = []; });
+      scenes.forEach(function (scene) {
+        // A one-performer chunk needs no grouping and gets it anyway: a scene coming
+        // back for a performer it does not list would be a filter this code got wrong,
+        // and dropping it here is better than planning it against the wrong performer.
+        (scene.performers || []).forEach(function (pp) {
+          var key = String(pp && pp.id);
+          if (hasOwn(by, key)) by[key].push(scene);
+        });
+      });
+      return by;
+    });
+  };
+
+  // What one performer's scenes mean for the plan, once they are in hand. Split out of
+  // `reviewPerformer` so the chunked walk and the scoped single-performer run share it
+  // rather than each having a copy of the loop.
+  TaskRun.prototype.planPerformer = function (p, perfTags, exclTagId, scenes) {
+    var self = this;
+    var perfTagIds = perfTags.map(function (t) { return t.id; });
+    var perfTagById = {};
+    perfTags.forEach(function (t) { perfTagById[t.id] = t; });
+    scenes.forEach(function (scene) {
+      var need = sceneMergePlan(scene, perfTagIds, exclTagId, self);
+      if (!need) return;
+      self.planScene(scene, need, perfTagById, p);
+    });
+  };
+
+  TaskRun.prototype.sceneQueryFailed = function (p, e) {
+    var bad = [{ text: 'Performer ' }, entSeg('performers', p.id, performerLabel(p)),
+      { text: ': listing scenes failed: ' + (e && e.message ? e.message : e) }];
+    this.log('ERROR', partsText(bad), bad);
+    this.errors++;
+  };
+
+  TaskRun.prototype.reviewPerformer = function (p, perfTags, exclTagId) {
+    var self = this;
+    return this.scenesFor([p]).then(function (by) {
+      self.planPerformer(p, perfTags, exclTagId, by[String(p.id)] || []);
+      self.renderProgress();
+    }, function (e) { self.sceneQueryFailed(p, e); });
+  };
+
+  // Folds one performer's needs for one scene into that scene's single plan entry.
+  TaskRun.prototype.planScene = function (scene, need, perfTagById, p) {
+    var entry = this.planByScene[scene.id];
+    if (!entry) {
+      entry = {
+        scene: scene,
+        existingIds: need.existingIds,
+        tagIds: [],
+        tags: [],
+        from: [],
+      };
+      this.planByScene[scene.id] = entry;
+      this.plan.push(entry);
+    }
+    var added = [];
+    var self = this;
+    need.missing.forEach(function (id) {
+      if (entry.tagIds.indexOf(id) !== -1) return;   // another performer already needs it
+      entry.tagIds.push(id);
+      entry.tags.push(perfTagById[id]);
+      added.push(perfTagById[id]);
+      self.tagsById[id] = perfTagById[id];
+      // Counted per scene, not per performer: the scene is written once whichever
+      // of its performers asked for the tag.
+      self.plannedTagCounts[id] = (hasOwn(self.plannedTagCounts, id) ? self.plannedTagCounts[id] : 0) + 1;
+    });
+    entry.from.push({ id: p.id, label: performerLabel(p) });
+    this.tagsPlanned += added.length;
+    if (added.length) {
+      var parts = [{ text: 'Performer ' },
+        entSeg('performers', p.id, performerLabel(p)),
+        { text: ' - Scene ' },
+        entSeg('scenes', scene.id, sceneLogLabel(scene, scene.id)),
+        { text: ' - ' + plural(added.length, 'tag') + ': ' }];
+      added.forEach(function (t, i) {
+        parts.push(entSeg('tags', t.id, '"' + (t.name || 'unnamed') + '" (' + t.id + ')'));
+        if (i < added.length - 1) parts.push({ text: ', ' });
+      });
+      // `partsText` is what goes into `lines`, so Copy log hands over exactly the
+      // text it always did - a link and a card are not text.
+      this.log('MERGE', partsText(parts), parts);
+    }
+  };
+
+  // Called from begin(), so a rescan re-checks: the script cannot change without a
+  // page reload, but the installed version can, if the user reloads plugins while
+  // this dialog is open - which is what they do after seeing the warning.
+  TaskRun.prototype.checkVersion = function () {
+    var self = this;
+    return C.installedVersion(PLUGIN_ID, 'CPT2SPluginVersion').then(function (installed) {
+      // The two quiet outcomes go to the console, beside the load banner, rather than
+      // into the log: this log is about the library, a matching version is the boring
+      // case, and a line arriving whenever one small query resolves would land in a
+      // different place every run.
+      if (!installed) {
+        cpt2s('[cpt2s] version check: Stash reported no installed version; running ' +
+          PLUGIN_VERSION + '.');
+        return;
+      }
+      if (installed === PLUGIN_VERSION) {
+        cpt2s('[cpt2s] version check: running ' + PLUGIN_VERSION + ', which is what is installed.');
+        return;
+      }
+      // The plan is being computed by code that is not what is installed, so Proceed
+      // is held back until the page is reloaded. This is the one warning in this
+      // dialog that blocks: every other one is about the library or another plugin,
+      // where the user knows more than the dialog does - here the dialog knows
+      // something the user cannot see.
+      self.stale = true;
+      var msg = '\u26a0 This page is running ' + PLUGIN_SHORT_NAME + ' ' + PLUGIN_VERSION +
+        ', but ' + installed + ' is installed. Reload the page (F5) and run the task again; ' +
+        'if this warning comes back, hard-refresh with Ctrl+Shift+R (\u2318+Shift+R on a Mac). ' +
+        'Proceed stays disabled until the script matches, since the plan would be computed by ' +
+        'the older code.';
+      // Into the log as well as the box: Copy log is how a user reports this, and a
+      // warning that only exists as chrome is one they cannot paste.
+      self.log('WARN', msg);
+      self.showStale(msg);
+      self.setState(self.state);
+    });
+  };
+
+  TaskRun.prototype.finishScan = function () {
+    this.flush();
+    if (this.cancelled) return;
+    var pruned = this.prunedSkipped || 0;
+    if (pruned) {
+      this.log('INFO', plural(pruned, 'tag assignment') + ' skipped: ' + SIBLING_NAME +
+        ' auto-prunes scenes and would take ' + (pruned === 1 ? 'it' : 'them') + ' straight back off.');
+    }
+    if (!this.plan.length) {
+      this.log('INFO', 'Nothing to merge.');
+    } else {
+      this.log('INFO', 'Review complete: ' + plural(this.tagsPlanned, 'tag assignment') +
+        ' across ' + plural(this.plan.length, 'scene') +
+        '. Nothing has been written. Press Proceed to apply.');
+      this.logTagSummary(this.plannedTagCounts, 'to add');
+    }
+    this.setState('ready');
+    this.flush();
+  };
+
+  // ── Phase 2: apply ────────────────────────────────────────────────────────
+
+  // Apply and Undo walk their units - plan entries one side, undo batches the other -
+  // identically, and the reasoning holds for both, which is why it is written once.
+  //
+  // The lease covers the writing phase only. Phase 1 writes nothing, so there is
+  // nothing to suppress, and holding one across a library-wide review would stand a
+  // reactive plugin down for the half of the run that cannot disturb it. It is renewed
+  // per unit and released in every outcome - success, failure, Stop - so a reactive
+  // plugin is never left standing down.
+  //
+  // One guard around the whole thing rather than one per unit: every scene written
+  // would otherwise look to our own fetch wrapper like a user edit and re-enter the
+  // merge - and `bulkSceneUpdate`, which the undo issues, is precisely what auto-merge
+  // on scene update watches for, so without this an undo would merge the tags straight
+  // back in. That is internal re-entrancy; the lease is about other plugins, and the
+  // two are not substitutes.
+  //
+  // Progress is rendered by `applyEntry`/`undoBatch` themselves, not from here.
+  TaskRun.prototype.runUnits = function (units, leaseLabel, step, verb, finish) {
+    var self = this;
+    var lease = C.lease(PLUGIN_ID, leaseLabel);
+    var i = 0;
+    var pass = self.journalRun = journalPass(/\(undo\)$/.test(leaseLabel)
+      ? leaseLabel.replace(/\s*\(undo\)$/, ', undone') : leaseLabel, true);
+    var recorded = function () {
+      self.journalRun = null;
+      pass.finish().then(function (line) { if (line) self.log('INFO', line); });
+    };
+
+    guarded(function () {
+      function next() {
+        if (self.stopped || i >= units.length) return Promise.resolve();
+        lease.renew();
+        return step(units[i++]).then(next);
+      }
+      return next();
+    }).then(function () {
+      lease.release();
+      finish.call(self);
+      recorded();
+    }, function (e) {
+      lease.release();
+      self.log('ERROR', verb + ' aborted: ' + (e && e.message ? e.message : e));
+      self.errors++;
+      finish.call(self);
+      recorded();
+    });
+  };
+
+  TaskRun.prototype.proceed = function () {
+    if (this.state !== 'ready' || !this.plan.length) return;
+    var self = this;
+    this.disarmUndo();   // any other button takes back an armed Undo, as Rescan and Close do
+    this.setState('applying');
+    this.scenesUpdated = 0;
+    this.tagsAdded = 0;
+    this.appliedTagCounts = {};
+    // Held by the state machine today - a stopped run lands in `done` and only a
+    // rescan returns it to `ready` - but stated here anyway, the way `undo` states it.
+    this.stopped = false;
+    this.log('INFO', 'Applying ' + plural(this.plan.length, 'scene change') + ' - ' + new Date().toISOString());
+
+    this.runUnits(this.plan.slice(), this.taskName,
+      function (entry) { return self.applyEntry(entry); },
+      'Apply', TaskRun.prototype.finishApply);
+  };
+
+  // The write is the scene's scan-time tags plus every tag the plan folded into it.
+  // Anything a *third party* changed in between is lost the same way any other Stash
+  // edit loses a concurrent one - but nothing this run does can clobber itself,
+  // because a scene appears in the plan exactly once.
+  TaskRun.prototype.applyEntry = function (entry) {
+    var self = this;
+    return updateSceneTags(entry.scene.id, entry.existingIds.concat(entry.tagIds)).then(function () {
+      // Recorded only once the server has taken it, so Undo can never try to reverse
+      // a write that never landed. Only the tags this run added are kept: the scene's
+      // own tags are none of Undo's business.
+      self.undoable.push({ scene: entry.scene, tagIds: entry.tagIds.slice(),
+        run: self.journalRun ? self.journalRun.id : null });
+      if (self.journalRun) self.journalRun.entries([journalTags(entry.scene, entry.tagIds, false)]);
+      self.wroteScenes[entry.scene.id] = true;
+      self.scenesUpdated++;
+      self.tagsAdded += entry.tagIds.length;
+      entry.tagIds.forEach(function (id) {
+        self.appliedTagCounts[id] = (hasOwn(self.appliedTagCounts, id) ? self.appliedTagCounts[id] : 0) + 1;
+      });
+      logMerges(entry.tags, entry.scene, entry.scene.id, 'saved');
+      var parts = [{ text: 'Scene ' },
+        entSeg('scenes', entry.scene.id, sceneLogLabel(entry.scene, entry.scene.id)),
+        { text: ' - ' + plural(entry.tagIds.length, 'tag') + ' added - from Performer ' }];
+      entry.from.forEach(function (f, i) {
+        parts.push(entSeg('performers', f.id, f.label));
+        if (i < entry.from.length - 1) parts.push({ text: ', ' });
+      });
+      self.log('MERGE', partsText(parts), parts);
+      self.renderProgress();
+    }, function (e) {
+      var failed = [{ text: 'Scene ' },
+        entSeg('scenes', entry.scene.id, sceneLogLabel(entry.scene, entry.scene.id)),
+        { text: ' update failed: ' + (e && e.message ? e.message : e) }];
+      self.log('ERROR', partsText(failed), failed);
+      self.errors++;
+    });
+  };
+
+  TaskRun.prototype.finishApply = function () {
+    this.log('INFO', 'Finished. ' + plural(this.scenesUpdated, 'scene') + ' updated, ' +
+      plural(this.tagsAdded, 'tag assignment') + ' added' +
+      (this.errors ? ', ' + plural(this.errors, 'error') : '') +
+      (this.stopped ? ' (stopped early; what was written stays written)' : '') +
+      '. Press Rescan to review what is left.');
+    // Counted from what was written, not from the plan: a failed scene, or a Stop,
+    // must not be summarised as though it had landed.
+    this.logTagSummary(this.appliedTagCounts, 'added');
+    this.setState('done');
+    this.flush();
+
+    this.evictWritten();
+  };
+
+  // Evict the cached scene list, and every scene this pass wrote, so open views pick
+  // the new tags up - but never through refreshSceneList, whose fallback is
+  // location.reload(). Reloading here would tear down this dialog, and the log with it,
+  // at the moment the user wants to read or copy it. Without Apollo the worst case is a
+  // stale view until the user navigates, which is the right way round.
+  //
+  // The named scenes matter for the manual buttons' scoped runs: their user is looking
+  // at the very scene the dialog just wrote, which is read from `Scene:<id>` rather
+  // than from the list.
+  TaskRun.prototype.evictWritten = function () {
+    var client = window.__APOLLO_CLIENT__;
+    if (!client || !client.cache || !client.cache.evict) return;
+    client.cache.evict({ id: 'ROOT_QUERY', fieldName: 'findScenes' });
+    for (var id in this.wroteScenes) {
+      if (hasOwn(this.wroteScenes, id)) client.cache.evict({ id: 'Scene:' + id });
+    }
+    this.wroteScenes = {};
+    if (client.cache.gc) client.cache.gc();
+  };
+
+  // ── Undo ──────────────────────────────────────────────────────────────────
+  //
+  // Takes back the tags this dialog added, as a REMOVE delta per scene. What it is
+  // *not* is a restore: it reverses this dialog's own writes and nothing else, it
+  // cannot see a change made in between, and it dies with the tab. The head of the
+  // dialog says so and the backup instruction stays where it was.
+  //
+  // The apply writes one scene at a time because it is building each scene's whole
+  // tag list; the undo has no such need, so it groups scenes by the set of tags to
+  // take off - the same trick as the sibling's buildBatches - and one mutation
+  // serves up to TASK_UNDO_CHUNK of them.
+  function buildUndoBatches(entries) {
+    var groups = {}, order = [];
+    entries.forEach(function (entry) {
+      var tagIds = entry.tagIds.slice().sort();
+      var key = tagIds.join(',');
+      if (!hasOwn(groups, key)) {
+        groups[key] = { tagIds: tagIds, entries: [] };
+        order.push(key);
+      }
+      groups[key].entries.push(entry);
+    });
+
+    var batches = [];
+    order.forEach(function (key) {
+      var g = groups[key];
+      for (var i = 0; i < g.entries.length; i += TASK_UNDO_CHUNK) {
+        batches.push({ tagIds: g.tagIds, entries: g.entries.slice(i, i + TASK_UNDO_CHUNK) });
+      }
+    });
+    return batches;
+  }
+
+  // Allowed from ready and done - anywhere the dialog is not itself mid-write. It
+  // finishes in done either way: once the writes are reversed, a plan reviewed
+  // against the library as it was no longer describes it, so Rescan is the honest
+  // next step rather than a Proceed left armed over stale ground.
+  TaskRun.prototype.undo = function () {
+    if ((this.state !== 'ready' && this.state !== 'done') || !this.undoable.length) return;
+    var self = this;
+
+    // A single click here starts a library-wide write, in the one state where the
+    // user is most likely to be clicking around - Copy log, Rescan and Close are its
+    // neighbours - so it arms and asks. The count is what makes the prompt worth
+    // reading: it is the scope of the reversal, not a generic "are you sure".
+    if (!this.undoArmed) {
+      this.undoArmed = true;
+      this.undoBtn.textContent = 'Undo ' + plural(this.undoable.length, 'scene') + '?';
+      this.undoTimer = setTimeout(function () { self.disarmUndo(); }, TASK_UNDO_ARM_MS);
+      return;
+    }
+    this.disarmUndo();
+
+    this.setState('undoing');
+    this.stopped = false;
+    this.undone = 0;
+    this.undoFailed = 0;
+    this.undoneTagCounts = {};
+    this.undoTotal = this.undoable.length;
+    this.log('INFO', 'Undoing the merge on ' + plural(this.undoTotal, 'scene') + ' - ' +
+      new Date().toISOString());
+
+    // Newest first. Every batch is a REMOVE delta, and those commute, so today the order
+    // does not change where it lands; a write that does not commute (a SET) would need it.
+    // An undo is a bulk write like any other, so it announces itself the same way - see runUnits.
+    this.runUnits(buildUndoBatches(this.undoable.slice().reverse()), this.taskName + ' (undo)',
+      function (batch) { return self.undoBatch(batch); },
+      'Undo', TaskRun.prototype.finishUndo);
+  };
+
+  TaskRun.prototype.undoBatch = function (batch) {
+    var self = this;
+    var ids = batch.entries.map(function (e) { return e.scene.id; });
+    return removeSceneTags(ids, batch.tagIds).then(function () {
+      batch.entries.forEach(function (entry) {
+        // Dropped from the record as it is reversed, so a Stop halfway leaves behind
+        // exactly the scenes that still carry what this run added.
+        var at = self.undoable.indexOf(entry);
+        if (at !== -1) self.undoable.splice(at, 1);
+        // Recorded from the pass that wrote it, reversed, so that run reads as undone in
+        // the history rather than staying live beside a second run that cancels it.
+        if (self.journalRun && entry.run) {
+          self.journalRun.reverse(entry.run, 'scenes', String(entry.scene.id));
+        }
+        self.wroteScenes[entry.scene.id] = true;
+        entry.tagIds.forEach(function (id) {
+          self.undoneTagCounts[id] = (hasOwn(self.undoneTagCounts, id) ? self.undoneTagCounts[id] : 0) + 1;
+        });
+        self.undone++;
+        var back = [{ text: 'Undo - Scene ' },
+          entSeg('scenes', entry.scene.id, sceneLogLabel(entry.scene, entry.scene.id)),
+          { text: ' - ' + plural(entry.tagIds.length, 'tag') + ' removed again' }];
+        self.log('MERGE', partsText(back), back);
+      });
+      self.renderProgress();
+    }, function (e) {
+      self.log('ERROR', 'Undo failed for ' + plural(ids.length, 'scene') + ' (' +
+        ids.slice(0, 5).join(', ') + (ids.length > 5 ? ', ...' : '') + '): ' +
+        (e && e.message ? e.message : e));
+      self.errors++;
+      self.undoFailed += batch.entries.length;
+    });
+  };
+
+  TaskRun.prototype.finishUndo = function () {
+    this.log('INFO', 'Undo finished. ' + plural(this.undone, 'scene') + ' reversed' +
+      (this.undoFailed ? ', ' + this.undoFailed + ' could not be' : '') +
+      (this.stopped ? ' (stopped early; what was reversed stays reversed)' : '') +
+      (this.undoable.length
+        ? '. ' + plural(this.undoable.length, 'scene') + ' still carry what this run added.'
+        : '. Everything this dialog added has been taken back.'));
+    this.logTagSummary(this.undoneTagCounts, 'removed again');
+    this.setState('done');
+    this.flush();
+
+    // Same reasoning as finishApply, through the same function.
+    this.evictWritten();
+  };
+
+  TaskRun.prototype.stop = function () {
+    if (this.state !== 'applying' && this.state !== 'undoing') return;
+    this.stopped = true;
+    this.log('WARN', 'Stopping after the current ' +
+      (this.state === 'undoing' ? 'request' : 'scene') + '...');
+  };
+
+  TaskRun.prototype.cancel = function () {
+    this.cancelled = true;
+    this.log('INFO', 'Canceled. Nothing was written.');
+    this.close();
+  };
+
+  // The plan is computed in full before the first write, so anything that changes
+  // tags while phase 2 runs - another tab, a scan, the auto-merge modes - is not in
+  // the plan being applied. Rescanning until it comes back empty is how a run
+  // converges.
+  //
+  // The rendered log is kept rather than emptied: the "--- Rescan ---" marker
+  // separates the passes, and a log that stays until the dialog closes is the whole
+  // session on screen - the same thing Copy log has always handed over.
+  TaskRun.prototype.rescan = function () {
+    this.disarmUndo();
+    var lines = this.lines.slice();
+    // Carried across the reset for the same reason `lines` is: both are the record
+    // of what this dialog has already done, and a rescan starts a pass rather than
+    // a session. Converging on an empty plan must not cost the ability to undo the
+    // passes that got there.
+    var undoable = this.undoable;
+    this.reset();
+    this.lines = lines;
+    this.undoable = undoable;
+    this.log('INFO', '--- Rescan ---');
+    this.begin();
+  };
+
+  TaskRun.prototype.copy = function () {
+    this.disarmUndo();
+    var text = [droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n');
+    var self = this;
+    copyToClipboard(text, function (ok) {
+      holdWidth(self.copyBtn);
+      self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
+      setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
+    });
+  };
+
+  TaskRun.prototype.close = function () {
+    unwireEscape(this);
+    this.disarmUndo();
+    this.spin(false);
+    if (this.flushTimer) { clearTimeout(this.flushTimer); this.flushTimer = null; }
+    if (this.backdrop && this.backdrop.parentNode) {
+      this.backdrop.parentNode.removeChild(this.backdrop);
+    }
+    if (_activeTask === this) _activeTask = null;
+    // Whatever this dialog wrote may have made a button on the page behind it eligible
+    // or not, and the buttons were unreachable while it was open - so this is the first
+    // moment a re-check is worth anything. The fetch wrapper's own invalidation cannot
+    // do it: every write in here runs inside `guarded()`, which returns before those
+    // branches. Clearing only arms the probe; the tick is what runs it.
+    sceneCheck = null;
+    performerCheck = null;
+    tick();
+  };
+
+  // Layer 1: capture-phase click. React attaches its handlers to the root
+  // container, a descendant of document, so a capture listener here runs first and
+  // stopPropagation keeps PluginTasks' own handler - and its misleading "added job
+  // to queue" toast - from running at all.
+  //
+  // The button is only ours if it carries our task name AND sits inside a
+  // SettingGroup headed with the plugin name; another plugin may declare a task by
+  // the same name. Where the group cannot be identified the click is left alone:
+  // layer 2 still catches it, keyed on the plugin id in the mutation itself.
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    var btn = target && target.closest ? target.closest('button') : null;
+    if (!btn) return;
+    var taskName = C.ownTaskName(btn, PLUGIN_NAME, TASKS);
+    if (!taskName) return;
+    event.preventDefault();
+    event.stopPropagation();
+    startTaskRun(taskName);
+  }, true);
+
+  // ── Fetch interception for auto-merge ─────────────────────────────────────
+  //
+  // Wraps window.fetch to detect sceneUpdate / performerUpdate mutations from
+  // Stash itself. _mergeDepth guards against recursion when our own merge work
+  // fires a sceneUpdate mutation.
+
+  var _fetch = window.fetch;
+  // A scene save the auto-merge reacts to, registered on Core's settling registry - the
+  // scene-save reactions only: a performer's save reaches scenes nobody can name until the
+  // merge has looked them up, so a reader of one of them cannot be told to wait for it.
+  function settleScenes(ids) {
+    var dones = ids.map(function (id) { return settle('scene', String(id)); });
+    return function () { dones.forEach(function (d) { d(); }); };
+  }
+
+  window.fetch = function (url, opts) {
+    // Layer 2 of the task interception, ahead of everything else: the mutation must
+    // be answered rather than forwarded, so it cannot go through _fetch first, and
+    // the check has to sit in front of the _mergeDepth early return - a task click
+    // is a user action and stays one even if a merge happens to be in flight.
+    if (typeof url === 'string' && url.indexOf('/graphql') !== -1 && opts && opts.body) {
+      try {
+        var taskReq = JSON.parse(opts.body);
+        var taskVars = taskReq.variables || {};
+        if (/\brunPluginTask\b/.test(taskReq.query || '') && taskVars.plugin_id === PLUGIN_ID) {
+          startTaskRun(taskVars.task_name || TASK_MERGE_ALL);
+          return Promise.resolve(fakeOk({ data: { runPluginTask: PLUGIN_ID + '-handled-in-browser' } }));
+        }
+      } catch (e) { /* not JSON, or not ours: fall through to the real fetch */ }
+    }
+
+    var p = _fetch.apply(this, arguments);
+    if (_mergeDepth > 0 || typeof url !== 'string' || url.indexOf('/graphql') === -1 || !opts || !opts.body) {
+      return p;
+    }
+    try {
+      var parsed = JSON.parse(opts.body);
+      var q = parsed.query || '';
+      var vars = parsed.variables || {};
+
+      // Our own settings saved - on Stash's settings page, or seeded - are read again once
+      // the save lands, past the throttle: waiting for the next navigation or the ten-second
+      // timer left a changed exclusion or switch unapplied in between.
+      if (/\bconfigurePlugin\b/.test(q) && (vars.plugin_id || vars.id) === PLUGIN_ID) {
+        mutationSucceeded(p).then(function (ok) { if (ok) loadSettings(true); });
+      }
+
+      if (settings.autoMergeOnSceneUpdate && /\bbulkSceneUpdate\b/.test(q) && !autoMergeSuppressed()) {
+        var bulkSceneIds = vars.input && vars.input.ids;
+        if (bulkSceneIds && bulkSceneIds.length) {
+          // Registered now, on Core's settling registry, so a sibling reading these scenes
+          // after the save waits for the merge; released once it is over, however it ends.
+          var bulkDone = settleScenes(bulkSceneIds);
+          mutationSucceeded(p).then(function (ok) {
+            if (!ok) { bulkDone(); return; }
+            var i = 0;
+            var pass = journalPass('Tags merged into bulk-edited scenes');
+            function nextScene() {
+              if (i >= bulkSceneIds.length) {
+                pass.finish();
+                bulkDone();
+                refreshSceneList();
+                return;
+              }
+              var sid = String(bulkSceneIds[i++]);
+              mergeTagsIntoScene(sid, pass)
+                .catch(function (e) { console.error('[cpt2s] auto-merge bulk scene:', e); })
+                .then(nextScene);
+            }
+            nextScene();
+          }, bulkDone);
+        }
+      }
+
+      if (settings.autoMergeOnSceneUpdate && /\bsceneUpdate\b/.test(q) && !autoMergeSuppressed()) {
+        var sceneId = vars.input && vars.input.id;
+        if (sceneId) {
+          var sceneDone = settleScenes([sceneId]);
+          mutationSucceeded(p).then(function (ok) {
+            if (!ok) { sceneDone(); return; }
+            mergeTagsIntoScene(String(sceneId))
+              .catch(function (e) { console.error('[cpt2s] auto-merge scene:', e); })
+              .then(function () {
+                sceneDone();
+                if (getSceneId() === String(sceneId)) refreshSceneData(sceneId);
+              });
+          }, sceneDone);
+        }
+      }
+
+      if (settings.autoMergeOnPerformerUpdate && /\bperformerUpdate\b/.test(q) && !autoMergeSuppressed()) {
+        var performerId = vars.input && vars.input.id;
+        if (performerId) {
+          mutationSucceeded(p).then(function (ok) {
+            if (!ok) return;
+            mergeTagsIntoAllPerformerScenes(String(performerId))
+              .catch(function (e) { console.error('[cpt2s] auto-merge performer:', e); })
+              .then(function () { refreshSceneList(); });
+          });
+        }
+      }
+
+      if (settings.autoMergeOnPerformerUpdate && /\bbulkPerformerUpdate\b/.test(q) && !autoMergeSuppressed()) {
+        var performerIds = vars.input && vars.input.ids;
+        if (performerIds && performerIds.length) {
+          mutationSucceeded(p).then(function (ok) {
+            if (!ok) return;
+            var i = 0;
+            function nextPerformer() {
+              if (i >= performerIds.length) {
+                refreshSceneList();
+                return;
+              }
+              var pid = String(performerIds[i++]);
+              mergeTagsIntoAllPerformerScenes(pid)
+                .catch(function (e) { console.error('[cpt2s] auto-merge bulk performer:', e); })
+                .then(nextPerformer);
+            }
+            nextPerformer();
+          });
+        }
+      }
+
+      // The performer button's eligibility (tags + scenes) is cached per performer
+      // id so it isn't re-queried on every tick. That cache goes stale the moment a
+      // save changes the performer's tags — most visibly when a performer with no
+      // tags gains some, which should make the button appear without a page reload.
+      // Unconditional on autoMergeOnPerformerUpdate: the cache is invalidated by the
+      // save itself, not by whether auto-merge is also configured to run.
+      // `tick()` straight after, for the reason the scene pair below states: clearing
+      // the slot only *arms* a re-probe on the next tick, and the tick after that is
+      // what draws the result, so a button left to the 1s interval is up to two seconds
+      // stale. `tick()` is idempotent, so an extra one costs a probe at most.
+      if (/\bperformerUpdate\b/.test(q)) {
+        var savedPerformerId = vars.input && vars.input.id;
+        if (savedPerformerId != null) {
+          mutationSucceeded(p).then(function (ok) {
+            if (ok && performerCheck && performerCheck.id === String(savedPerformerId)) {
+              performerCheck = null;
+              tick();
+            }
+          });
+        }
+      }
+      if (/\bbulkPerformerUpdate\b/.test(q)) {
+        var savedPerformerIds = vars.input && vars.input.ids;
+        if (savedPerformerIds && savedPerformerIds.length) {
+          mutationSucceeded(p).then(function (ok) {
+            if (!ok || !performerCheck) return;
+            var ids = savedPerformerIds.map(String);
+            if (ids.indexOf(performerCheck.id) !== -1) { performerCheck = null; tick(); }
+          });
+        }
+      }
+
+      // The same two branches for `sceneCheck`, which the scene button's eligibility
+      // gate needs. This cache had no invalidation at all before that,
+      // which was survivable while it only asked "has this scene any performers" - the
+      // one edit that could change that answer was rare. It is not survivable now that
+      // the gate reads the scene's own tags: adding a performer in the Edit tab and
+      // pressing Save has to make the button appear, and merging its tags has to make it
+      // go away, neither with a navigation.
+      //
+      // Unconditional on `autoMergeOnSceneUpdate`, for the reason §3 already states
+      // about the performer pair: this decides whether a button appears, and that is not
+      // something a user should have to enable auto-merge to get.
+      // `tick()` straight after, rather than leaving it to the 1s interval: clearing the
+      // slot only *arms* a re-probe on the next tick, and the tick after that is what
+      // draws the result - up to two seconds of a stale button either way. Calling it
+      // here spends the first of those immediately. `tick()` is idempotent by
+      // construction (it is what the interval and the observer both call), so an extra
+      // one costs a probe at most.
+      if (/\bsceneUpdate\b/.test(q)) {
+        var savedSceneId = vars.input && vars.input.id;
+        if (savedSceneId != null) {
+          mutationSucceeded(p).then(function (ok) {
+            if (ok && sceneCheck && sceneCheck.id === String(savedSceneId)) { sceneCheck = null; tick(); }
+          });
+        }
+      }
+      if (/\bbulkSceneUpdate\b/.test(q)) {
+        var savedSceneIds = vars.input && vars.input.ids;
+        if (savedSceneIds && savedSceneIds.length) {
+          mutationSucceeded(p).then(function (ok) {
+            if (!ok || !sceneCheck) return;
+            if (savedSceneIds.map(String).indexOf(sceneCheck.id) !== -1) { sceneCheck = null; tick(); }
+          });
+        }
+      }
+    } catch (e) {}
+    return p;
+  };
+
+  // ── Performer page: "Add Tags to all Scenes" ─────────────────────────────
+
+  var performerCheck = null; // { id, status: 'pending'|'yes'|'no' }
+
+  // A performer with no tags has nothing to merge, so the button would be a dead
+  // click — checked alongside the scene count so both conditions resolve in one
+  // round trip instead of gating the button behind two sequential queries.
+  function checkPerformerHasScenes(performerId) {
+    gqlRequest(
+      'query CheckPerformerScenes($id: ID!, $filter: FindFilterType, $scene_filter: SceneFilterType) {' +
+      '  findPerformer(id: $id) { tags { id } }' +
+      '  findScenes(filter: $filter, scene_filter: $scene_filter) { count }' +
+      '}',
+      {
+        id: performerId,
+        filter: { per_page: 1 },
+        scene_filter: { performers: { value: [performerId], modifier: 'INCLUDES_ALL' } },
+      }
+    )
+      .then(function (data) {
+        var hasTags   = !!(data.findPerformer && (data.findPerformer.tags || []).length);
+        var hasScenes = !!(data.findScenes && data.findScenes.count > 0);
+        // Both halves named, not just the verdict: "this performer has no tags" and
+        // "this performer is in no scenes" are one absent button and two different
+        // things to go and fix.
+        var why = hasTags && hasScenes ? 'has tags and scenes'
+          : !hasTags && !hasScenes ? 'no tags of their own, and in no scenes'
+          : !hasTags ? 'no tags of their own to copy'
+          : 'in no scenes to copy them to';
+        if (performerCheck && performerCheck.id === performerId) {
+          performerCheck.status = (hasTags && hasScenes) ? 'yes' : 'no';
+          performerCheck.why = why;
+        }
+      })
+      .catch(function (e) {
+        var failed = 'the check itself failed: ' + (e && e.message ? e.message : e);
+        if (performerCheck && performerCheck.id === performerId) {
+          performerCheck.status = 'no'; performerCheck.why = failed;
+        }
+      });
+  }
+
+  // Stash renders a .details-edit container in two different places on the performer
+  // page and swaps between them: DetailsEditNavbar in the detail view, and the edit
+  // form's own container while editing. Only the detail view lists the performer's
+  // scenes, so that is the only place the button belongs — matching on .details-edit
+  // alone would follow the user into the edit form.
+  //
+  // The navbar is identified by its Delete button, which Stash renders only when not
+  // editing; the edit form holds Cancel/Save instead.
+  function findPerformerDetailContainer() {
+    var candidates = document.querySelectorAll('#performer-page .details-edit');
+    for (var i = 0; i < candidates.length; i++) {
+      if (candidates[i].querySelector('button.delete')) return candidates[i];
+    }
+    return null;
+  }
+
+  function removePerformerButton() {
+    var existing = document.querySelector('.' + PERFORMER_BTN_CLASS);
+    if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+  }
+
+  function addPerformerButton() {
+    if (!settings.showManualMergeButtons) {
+      gateLogOnce('p:setting', 'performer button: Show Manual Buttons is off');
+      removePerformerButton();
+      return;
+    }
+    gateLogOnce('p:setting', 'performer button: Show Manual Buttons is on');
+    var performerId = getPerformerId();
+    if (!performerId) return;
+    var container = findPerformerDetailContainer();
+    if (!container) {
+      // Editing (or the navbar has not rendered yet) — drop a button left over from
+      // the detail view rather than letting it ride along into the edit form.
+      gateLogOnce('p:container', 'performer button: no detail navbar - the edit form is ' +
+        'open, or the navbar has not rendered yet');
+      removePerformerButton();
+      return;
+    }
+    gateLogOnce('p:container', 'performer button: detail navbar found on performer ' + performerId);
+    var existing = document.querySelector('.' + PERFORMER_BTN_CLASS);
+    if (existing) {
+      if (existing.parentNode === container) return;
+      if (existing.parentNode) existing.parentNode.removeChild(existing);
+    }
+
+    if (performerCheck && performerCheck.status !== 'pending') {
+      // From the tick rather than the check, so a cached answer still explains itself -
+      // see `_lastPlanReason` for why that matters. Both halves named rather than the
+      // verdict: "no tags of their own" and "in no scenes" are one absent button and
+      // two different things to go and fix.
+      gateLogOnce('p:outcome', 'performer button, performer ' + performerCheck.id + ': ' +
+        (performerCheck.status === 'yes' ? 'SHOWN' : 'hidden') +
+        (performerCheck.why ? ' - ' + performerCheck.why : ''));
+    }
+    if (!performerCheck || performerCheck.id !== performerId) {
+      performerCheck = { id: performerId, status: 'pending' };
+      gateLog('probing performer ' + performerId + ' - the outcome below is this probe\'s');
+      checkPerformerHasScenes(performerId);
+      return;
+    }
+    if (performerCheck.status !== 'yes') return;
+
+    var button = document.createElement('button');
+    button.type = 'button';
+    button._coopOwner = PLUGIN_ID; // read by `insertOrdered`'s cross-plugin priority scan
+    // No spacing class here - `applyButtonSpacing` copies the row's own
+    // margins inline and adds `mx-2` back itself when there is nothing to copy. A
+    // Bootstrap `mx-*` is `!important` and would outrank the copied margins.
+    button.className = 'btn ' + PLUGIN_BTN_VARIANT + ' ' + PERFORMER_BTN_CLASS;
+    // "Add Tags to all Scenes", not the older "Add Tags to Scene(s)": harmonized
+    // with PropagateTagsAndPerformers' naming convention, since that plugin's own
+    // manual-button dedup (§7d's `declares`) matches on this exact label text to
+    // decide whether its own identical-path button is already showing here.
+    // "..." because the click opens the review dialog rather than merging - the
+    // convention every button in these plugins that asks something first now follows.
+    button.textContent = PERFORMER_BTN_LABEL;
+    // The scene set comes from a findScenes query keyed only on this performer, not
+    // from the list below, so say so — an active filter looks like it ought to apply.
+    button.title = "Add this performer's tags to every scene featuring them. " +
+      "Opens a dialog listing every change first; nothing is written until you press " +
+      "Proceed. Filters and selections in the scene list are ignored.";
+    // This used to merge straight into every scene the performer appears in - the
+    // widest unreviewed write in the plugin, and the only one with no staging and no
+    // plan. It opens the task's own dialog scoped to this performer instead: same review,
+    // same Proceed, same Undo, over one performer's scenes instead of the library.
+    // The click makes a round trip before the dialog appears, and until it does the page
+    // looks exactly as it did - which on a slow instance reads as a button that did
+    // nothing and invites a second press. `Working...` and a disabled button for the
+    // gap, the same shape `PropagateTagsAndPerformers`' source buttons use. The caption
+    // goes straight back rather than flashing a count: the dialog is the feedback, and
+    // it covers this row.
+    button.addEventListener('click', function (event) {
+      event.preventDefault();
+      var perfId = getPerformerId();
+      if (!perfId) return;
+      var orig = button.textContent;
+      button.disabled = true;
+      button.textContent = 'Working...';
+      function done() {
+        button.disabled = false;
+        button.textContent = orig;
+      }
+      scopeLabel('Performer', perfId).then(function (what) {
+        startTaskRun(stripEllipsis(PERFORMER_BTN_LABEL) + ' - from ' + what,
+          { performerIds: [String(perfId)] });
+        done();
+      }, function (err) {
+        done();
+        console.error('[cpt2s]', err);
+      });
+    });
+    insertBeforeImportantAction(container, button);
+  }
+
+  // ── Scene page: "Add all Tags from all Performers" ───────────────────────
+
+  var sceneCheck = null; // { id, status: 'pending'|'yes'|'no' }
+  var _sceneFlashToken = 0;
+  var FLASH_MS = 1400;
+
+  // Eligibility, not existence. This used to ask only whether the scene
+  // had any performers, so a scene already carrying every one of their tags showed a
+  // button whose click could report nothing but "No changes" - which is what the
+  // *performer* button had never done (`checkPerformerHasScenes` has always required
+  // `hasTags && hasScenes`). The two of this plugin's own buttons disagreeing was never
+  // a decision; the performer side got the reasoning and this side was not revisited.
+  //
+  // It costs no extra round trip. The query grows from `performers { id }` to what a
+  // merge actually reads, and `scenePlanFrom` then answers exactly the question the
+  // click will answer - including the Organized and exclusion-tag filters and the
+  // custom-field tag rules, which the old gate could not see at all.
+  //
+  // What it reads is the server. In staging mode the click diffs against the *form*, so
+  // an unsaved edit is invisible here until Save - which the `sceneUpdate` branch in the
+  // fetch wrapper is what makes sufficient.
+  function checkSceneHasPerformers(sceneId) {
+    resolveExclusionTagId()
+      .then(function (exclTagId) {
+        return gqlRequest(
+          'query FindSceneMergeable($id: ID!) {' +
+          '  findScene(id: $id) { ' + sceneMergeSelection() + ' }' +
+          '}',
+          { id: sceneId }
+        ).then(function (data) {
+          var plan = scenePlanFrom(data.findScene, exclTagId, 'scene button, scene ' + sceneId);
+          if (sceneCheck && sceneCheck.id === sceneId) {
+            sceneCheck.status = plan ? 'yes' : 'no';
+            sceneCheck.why = _lastPlanReason;
+          }
+        });
+      })
+      .catch(function (e) {
+        var failed = 'the check itself failed: ' + (e && e.message ? e.message : e);
+        gateLog('scene button, scene ' + sceneId + ': no - ' + failed);
+        if (sceneCheck && sceneCheck.id === sceneId) { sceneCheck.status = 'no'; sceneCheck.why = failed; }
+      });
+  }
+
+  // "..." only where the click opens the dialog. With staging available it puts the
+  // tags in the box in front of you and asks nothing, which is not what the dots mean.
+  function sceneButtonLabel() {
+    return stagingActive() ? SCENE_BTN_LABEL : SCENE_BTN_LABEL + '...';
+  }
+
+  function addSceneButton() {
+    if (!settings.showManualMergeButtons) {
+      gateLogOnce('s:setting', 'scene button: Show Manual Buttons is off');
+      var existing = document.querySelector('.' + SCENE_BTN_CLASS);
+      if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+      return;
+    }
+    gateLogOnce('s:setting', 'scene button: Show Manual Buttons is on');
+    var sceneId = getSceneId();
+    if (!sceneId) return;
+    var container = document.querySelector('.edit-buttons');
+    if (!container) {
+      gateLogOnce('s:container', 'scene button: no .edit-buttons row on this page yet - ' +
+        'on a Scene that means the Edit tab is not open');
+      return;
+    }
+    gateLogOnce('s:container', 'scene button: row found on scene ' + sceneId);
+
+    if (!sceneCheck || sceneCheck.id !== sceneId) {
+      sceneCheck = { id: sceneId, status: 'pending' };
+      gateLog('probing scene ' + sceneId + ' - the outcome below is this probe\'s');
+      checkSceneHasPerformers(sceneId);
+      return;
+    }
+    // Not eligible means *removed*, not merely "not added". The
+    // already-exists early return used to sit above this check, so once the button was
+    // on the page nothing ever re-evaluated it - harmless while the gate asked only
+    // whether the scene had performers and nothing invalidated the cache anyway, and
+    // wrong the moment a save can make an eligible scene ineligible. A click that
+    // merges everything now takes its own button away.
+    gateLogOnce('s:outcome', 'scene button, scene ' + sceneId + ': ' +
+      (sceneCheck.status === 'yes' ? 'SHOWN' : 'hidden') +
+      (sceneCheck.why ? ' - ' + sceneCheck.why : ''));
+    var showing = document.querySelector('.' + SCENE_BTN_CLASS);
+    if (sceneCheck.status !== 'yes') {
+      if (showing && showing.parentNode) showing.parentNode.removeChild(showing);
+      return;
+    }
+    if (showing) {
+      // The caption depends on a setting, so a button already on the page is relabelled
+      // rather than left saying "..." after staging was switched back on. Only while it
+      // is showing its own label: mid-flash the text is "Added 3", and rewriting that
+      // would cut the flash short.
+      var want = sceneButtonLabel();
+      if (showing.textContent === showing._cpt2sLabel && showing._cpt2sLabel !== want) {
+        showing.textContent = showing._cpt2sLabel = want;
+      }
+      return;
+    }
+
+    var button = document.createElement('button');
+    button.type = 'button';
+    button._coopOwner = PLUGIN_ID; // read by `insertOrdered`'s cross-plugin priority scan
+    // No spacing class here, same as the performer button - the fallback
+    // `mx-2` (a left-only `ml-2` would not do, once this button lands *between* Save
+    // and Delete rather than at the row's end) is applied by
+    // `applyButtonSpacing` only when the row has no margins of its own to copy.
+    button.className = 'btn ' + PLUGIN_BTN_VARIANT + ' ' + SCENE_BTN_CLASS;
+    // "Add all Tags from all Performers", not the older "Add Perf Tags" - same
+    // harmonization as the performer button above. `_cpt2sLabel` is what the caption
+    // is *supposed* to read, held apart from `textContent` because a click overwrites
+    // that with "Adding..."/"Added 3" while a flash is in flight.
+    button.textContent = button._cpt2sLabel = sceneButtonLabel();
+    function updateSceneButtonTitle() {
+      button.title = stagingActive()
+        ? "Add all performer tags to the tag box for review — you still have to press Save"
+        : "Add all performer tags into this scene's tags. Opens a dialog listing every " +
+          "change first; nothing is written until you press Proceed.";
+    }
+    updateSceneButtonTitle();
+    button.addEventListener('mouseenter', updateSceneButtonTitle);
+    button.addEventListener('click', function (event) {
+      event.preventDefault();
+      var sId = getSceneId();
+      if (!sId) return;
+      var btn = event.currentTarget;
+      var orig = btn.textContent;
+
+      // Shows each message in turn and then restores the caption. Splitting the
+      // messages keeps every one of them shorter than the button's own label, and
+      // `holdWidth` below is what keeps a shorter one from narrowing it. The token makes
+      // a later click supersede a running sequence instead of the two fighting over the
+      // caption.
+      function flash() {
+        var texts = Array.prototype.slice.call(arguments);
+        var token = ++_sceneFlashToken;
+        var i = 0;
+        (function step() {
+          if (token !== _sceneFlashToken) return;
+          if (i >= texts.length) { btn.textContent = orig; return; }
+          btn.textContent = texts[i++];
+          setTimeout(step, FLASH_MS);
+        })();
+      }
+      function fail(err) {
+        console.error('[cpt2s]', err);
+        alert('Error merging tags: ' + err.message);
+        _sceneFlashToken++; // cancel any flash still in flight
+        btn.disabled = false;
+        btn.textContent = orig;
+      }
+
+      btn.disabled = true;
+      holdWidth(btn);
+
+      if (stagingActive()) {
+        btn.textContent = 'Adding...';
+        stageTagsIntoSceneForm(sId)
+          .then(function (result) {
+            btn.disabled = false;
+            if (result.status === 'excluded') return flash('Scene excluded');
+            if (result.status === 'nochange') return flash('No changes');
+            // Nothing is saved and nothing is refetched: the tags are now sitting in
+            // the form for the user to review, and Stash's own Save button is live.
+            flash('Added ' + result.count, 'Save pending');
+          })
+          .catch(fail);
+        return;
+      }
+
+      // No form to stage into, so the review happens in the dialog instead of not at
+      // all. It plans this one scene through the same pass the library-wide
+      // task uses and writes nothing until Proceed - which is what the "..." on the
+      // caption promises. The button itself goes straight back to its label: the dialog
+      // covers it, so a flash underneath would be a caption nobody can see.
+      warnNoStagingOnce();
+      btn.disabled = false;
+      btn.textContent = orig;
+      scopeLabel('Scene', sId).then(function (what) {
+        startTaskRun(stripEllipsis(SCENE_BTN_LABEL) + ' - for ' + what, { sceneIds: [String(sId)] });
+      });
+    });
+    insertBeforeImportantAction(container, button);
+  }
+
+  // ── The selection menu ────────────────────────────────────────────────────
+  //
+  // The two buttons' runs over a list's ticked cards: the ticked performers' scenes, or the
+  // ticked scenes from their performers - the same review, nothing written until Proceed.
+  C.selectionMenuItem({
+    owner: PLUGIN_ID, label: SEL_PERFORMERS_LABEL,
+    show: function (type) { return type === 'performers'; },
+    tip: function (type, ids) {
+      return 'Add the tags of the ' + plural(ids.length, 'selected performer', 'selected performers') +
+        ' to every scene featuring them. Opens a dialog listing every change first; nothing is written until you press Proceed.';
+    },
+    run: function (type, ids) {
+      startTaskRun(stripEllipsis(SEL_PERFORMERS_LABEL) + ' - from ' + plural(ids.length, 'selected performer', 'selected performers'),
+        { performerIds: ids.slice() });
+    },
+  });
+  C.selectionMenuItem({
+    owner: PLUGIN_ID, label: SEL_SCENES_LABEL,
+    show: function (type) { return type === 'scenes'; },
+    tip: function (type, ids) {
+      return 'Add their performers\' tags to the ' + plural(ids.length, 'selected scene', 'selected scenes') +
+        '. Opens a dialog listing every change first; nothing is written until you press Proceed.';
+    },
+    run: function (type, ids) {
+      startTaskRun(stripEllipsis(SEL_SCENES_LABEL) + ' - for ' + plural(ids.length, 'selected scene', 'selected scenes'),
+        { sceneIds: ids.slice() });
+    },
+  });
+
+  // ── Main loop ─────────────────────────────────────────────────────────────
+
+  var _reloading = false;
+
+  function refreshSceneData(sceneId) {
+    var client = window.__APOLLO_CLIENT__;
+    if (client && client.cache && client.cache.evict) {
+      client.cache.evict({ id: 'Scene:' + sceneId });
+      client.cache.gc();
+      return;
+    }
+    // _reloading stops maybeGoToEdit from consuming the key during the ticks that
+    // still run between the write and the browser actually unloading the page. It is
+    // set after the write so a storage failure cannot leave it stuck on.
+    try { sessionStorage.setItem('cpt2s_goto_edit', String(sceneId)); } catch (e) {}
+    _reloading = true;
+    window.location.reload();
+  }
+
+  function refreshSceneList() {
+    var client = window.__APOLLO_CLIENT__;
+    if (client && client.cache && client.cache.evict) {
+      client.cache.evict({ id: 'ROOT_QUERY', fieldName: 'findScenes' });
+      client.cache.gc();
+      return;
+    }
+    window.location.reload();
+  }
+
+  // The pending goto-edit key is always consumed: on a scene we are no longer
+  // looking at, and on a deadline if the Edit link never renders. Leaving it behind
+  // would make a later, unrelated visit to that scene jump into edit mode.
+  var _gotoEditDeadline = 0;
+
+  function clearGotoEdit() {
+    try { sessionStorage.removeItem('cpt2s_goto_edit'); } catch (e) {}
+    _gotoEditDeadline = 0;
+  }
+
+  function maybeGoToEdit() {
+    if (_reloading) return;
+    var gotoId;
+    try { gotoId = sessionStorage.getItem('cpt2s_goto_edit'); } catch (e) { return; }
+    if (!gotoId) { _gotoEditDeadline = 0; return; }
+    if (gotoId !== getSceneId()) { clearGotoEdit(); return; }
+    if (!_gotoEditDeadline) _gotoEditDeadline = Date.now() + GOTO_EDIT_TIMEOUT_MS;
+    var links = document.querySelectorAll('a.nav-link');
+    for (var i = 0; i < links.length; i++) {
+      if (links[i].textContent.trim() === 'Edit') {
+        clearGotoEdit();
+        links[i].click();
+        return;
+      }
+    }
+    if (Date.now() > _gotoEditDeadline) clearGotoEdit();
+  }
+
+  // ── The settings group ────────────────────────────────────────────────────
+  //
+  // Core's `settingsPage` finds the group, splits the description behind Show more,
+  // reduces each multi-paragraph setting to its summary, shows the stale-script banner
+  // and adds the labelled README link. It reads the heading through `headingText`,
+  // because the superseded notice below sits inside that h3.
+  var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-MergePerformerTagsToScenes/README.md';
+
+  // The group heading's own text, with the superseded notice - which sits inside that
+  // h3, after the name - left out. Both readers of this heading are exact: the name
+  // match compares the whole string, and the installed version is a parenthesised
+  // number anchored at the end. An injected node breaks both silently: the settings
+  // group stops being findable by heading, and the stale-script banner stops finding
+  // the installed version. So nothing reads `h3.textContent` directly.
+  function headingText(h3) {
+    if (!h3) return '';
+    var mine = document.getElementById(SUPERSEDED_ID);
+    if (mine && mine.parentNode === h3 && typeof mine._cpt2sHeadingWas === 'string') {
+      return mine._cpt2sHeadingWas;
+    }
+    return h3.textContent == null ? '' : String(h3.textContent);
+  }
+
+  var page = C.settingsPage({
+    id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
+    prefix: 'cpt2s', keys: Object.keys(SETTING_MAP), tasks: TASKS, readmeUrl: README_URL,
+    readmeLabel: 'GTTx-MergePerformerTagsToScenes/README.md', injectStyle: taskInjectStyle,
+    headingText: headingText,
+  });
+
+  // ── "PropagateTagsAndPerformers has taken this over" ──────────────────────
+  //
+  // That plugin performs this plugin's whole job as one of its thirteen paths, and
+  // adopts these four exclusion filters where it has never had its own. Somebody
+  // running both is running two implementations of one operation, and the place to
+  // say so is beside the button that turns this one off.
+  //
+  // Neither half of the claim is assumed:
+  //
+  //  - **`declares` is what says the path is enabled there**, not merely that the
+  //    plugin is installed. It republishes its *currently enabled* paths on every
+  //    settings load, so a copy with `tags:performer>scene` switched off supersedes
+  //    nothing and the notice stays away. This is the same registry
+  //    `checkDeclaredOverlap` reads, asked a narrower question.
+  //  - **"Settings migrated" is checked value by value**, because it is a claim about
+  //    this user's configuration. That plugin's import only fires for a key it has
+  //    never been set to, so two plugins configured differently by hand is a real
+  //    state, and the notice says the opposite thing there.
+  //
+  // A filter left at its default is nothing to carry over and cannot fail the check.
+  var SUPERSEDED_PATH = 'tags:performer>scene';
+  var SUPERSEDED_ID = 'cpt2s-superseded-notice';
+
+  // Our internal name -> their manifest key: the mirror of that plugin's own
+  // `SIBLING_EXCLUSIONS`, which maps the same four in the other direction.
+  var SUPERSEDER_EXCLUSIONS = {
+    excludeSceneWithTagName:       'f1ExcludeTargetWithTagName',
+    excludeSceneOrganized:         'f2ExcludeTargetOrganized',
+    excludeTagWithIgnoreAutoTag:   'f3ExcludeTagWithIgnoreAutoTag',
+    excludeTagWithCustomFieldName: 'f4ExcludeTagWithCustomFieldName',
+  };
+
+  function supersederRegistered() {
+    return (coop().declares[SUPERSEDER_ID] || []).indexOf(SUPERSEDED_PATH) !== -1;
+  }
+
+  // Two ways this is true, and the second is why `declares` alone is not the test.
+  // That registry is a *live* one: an entry says the path is enabled **and** that
+  // plugin's script is running on this page. A copy disabled in Stash registers
+  // nothing while the configuration that makes this notice worth showing is still
+  // sitting in the config map - which arrives here in the same response as our own
+  // settings. Same reasoning as `checkSibling`, which reads the hierarchy sibling's
+  // settings rather than asking it: what is being reported is a configuration, and a
+  // disabled plugin has one of those and no running code.
+  function supersederCovers() {
+    return supersederRegistered() || supersederPathEnabled(_supersederSettings);
+  }
+
+  // That plugin keeps its thirteen paths in one string of `<id>=<MODE>` pairs, a path
+  // named twice taking its last mention. Anything that is not OFF is on - a mode this
+  // reader has never heard of is one that plugin has and this copy does not know
+  // about, which is still a path it walks.
+  var SUPERSEDER_PATH_RE = /tags:performer>scene\s*=\s*([A-Za-z]+)/gi;
+
+  function supersederPathEnabled(raw) {
+    if (!raw) return false;
+    var text = String(raw.b1Paths || ''), word = null, m;
+    SUPERSEDER_PATH_RE.lastIndex = 0;
+    while ((m = SUPERSEDER_PATH_RE.exec(text)) !== null) word = m[1].toUpperCase();
+    if (word) return word !== 'OFF';
+    // COMPAT: `b1TagsPerformersToScenes`, the path's boolean before that plugin's `b1Paths`
+    // string (since PropagateTagsAndPerformers 3.0.0); remove when never on its own: a copy that
+    // stays disabled never runs the migration that would move it across.
+    return !text.replace(/^\s+|\s+$/g, '') && !!raw.b1TagsPerformersToScenes;
+  }
+
+  function exclusionsMigrated(theirs) {
+    if (!theirs) return false;
+    for (var mine in SUPERSEDER_EXCLUSIONS) {
+      if (!hasOwn(SUPERSEDER_EXCLUSIONS, mine)) continue;
+      var ours = settings[mine];
+      if (!ours) continue;                                  // default: '' or false
+      var there = theirs[SUPERSEDER_EXCLUSIONS[mine]];
+      if (typeof ours === 'boolean' ? !there : String(there || '') !== String(ours)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  // Inside the group's own h3, after the name: an <h3> is a block, so a sibling of it
+  // would land on the next line however the notice itself is displayed, and this has
+  // to be *on* the title's line. `headingText` is what keeps that from breaking the
+  // two things that read this heading. A group with no h3 gets the stale banner's slot,
+  // above the description.
+  function supersededSlot(group) {
+    // The group's own heading: not one of the rows Core draws for a dialog, which head
+    // themselves with an h3 too.
+    var heads = group.querySelectorAll ? group.querySelectorAll('h3') : [], h3 = null;
+    for (var i = 0; i < heads.length && !h3; i++) {
+      var inRow = false;
+      for (var n = heads[i]; n && n !== group; n = n.parentNode) if (hasClass(n, 'gttxcore-dialog-row')) inRow = true;
+      if (!inRow) h3 = heads[i];
+    }
+    if (h3) return { parent: h3, before: null };
+    var sub = byClass(group, 'sub-heading');
+    if (sub && sub.parentNode) return { parent: sub.parentNode, before: sub };
+    return { parent: group, before: group.firstChild };
+  }
+
+  function ensureSupersededNotice(group) {
+    var node = document.getElementById(SUPERSEDED_ID);
+    if (!supersederCovers()) {
+      if (node && node.parentNode) node.parentNode.removeChild(node);
+      return;
+    }
+    // Three tails, because they are three different truths and the last two are a
+    // claim about what happens if this plugin is removed. Nothing registered means
+    // the sibling is configured to do this and is not running: disabled in Stash, or
+    // a copy older than the registry. Either way "uninstall safe" would be false.
+    var text = '\u26a0 ' + SUPERSEDER_SHORT + ' is present and functionally supersedes ' +
+      'this plugin. ' + (!supersederRegistered()
+        ? 'It is not running here, though - disabled in Stash, or an older copy.'
+        : (exclusionsMigrated(_supersederSettings)
+          ? 'Settings migrated. Uninstall safe \u2705'
+          : 'Its exclusion filters do not match these - check them before uninstalling.'));
+    // Rewritten rather than replaced: either half can change while the page is open -
+    // a path toggled there, a filter edited here - and this tick is what notices.
+    if (node && node.parentNode) {
+      if (node.textContent !== text) node.textContent = text;
+      return;
+    }
+    var box = el('div', 'cpt2s-super', text);
+    box.id = SUPERSEDED_ID;
+    box.title = SUPERSEDER_NAME;
+    var slot = supersededSlot(group);
+    // What the heading said before this went into it, carried on the notice itself:
+    // the capture is worth exactly as long as the node is in there, and React drops
+    // both together whenever it re-renders the panel.
+    if (String(slot.parent.tagName).toLowerCase() === 'h3') {
+      box._cpt2sHeadingWas = slot.parent.textContent == null ? '' : String(slot.parent.textContent);
+    }
+    slot.parent.insertBefore(box, slot.before);
+  }
+
+  var EXCL_LINK_ID = 'cpt2s-exclusion-tag';
+  var EXCL_MARK = '🔗';      // link symbol
+  var EXCL_TTL_MS = 15000;             // so a tag created just now is found without a reload
+  var _exclFor = null, _exclAt = 0, _exclWait = null;
+
+  function lookupExclusionTag(name) {
+    if (name === _exclFor && Date.now() - _exclAt < EXCL_TTL_MS) return _exclWait;
+    _exclFor = name;
+    _exclAt = Date.now();
+    _exclWait = gqlRequest(EXCLUDE_TAG_QUERY, excludeTagVars(name)).then(function (data) {
+      return pickTagByNameOrAlias((data.findTags || {}).tags || [], name);
+    }, function () { return null; });   // a link is not worth an error
+    return _exclWait;
+  }
+
+  // The link to the tag `name` resolves to, or null: what the Exclusion Filters dialog draws
+  // beside the box naming it. Nothing, rather than a warning, for a name that resolves to
+  // nothing: a box being typed into is empty, then wrong, then right.
+  // `id`: the dialog's own by default; the row's summary draws a second one of its own.
+  function exclusionMark(name, id) {
+    if (!name) return null;
+    return lookupExclusionTag(name).then(function (tag) {
+      if (!tag) return null;
+      var node = el('a', 'cpt2s-tagicon', EXCL_MARK);
+      node.id = id || EXCL_LINK_ID;
+      node.target = linkTarget();
+      node.rel = 'noopener noreferrer';
+      node.href = '/tags/' + tag.id;
+      // The tooltip goes through `tagTip`, which draws it as a `title` and reopens it as a
+      // box with the tag's picture above it wherever the tag has one.
+      tagTip(node, tag.id, tagLinkTitle(tag,
+        tag.name === name ? null : 'Matched on "' + name + '", one of its aliases.'));
+      return node;
+    });
+  }
+
+  // ── Two rows and two dialogs ──────────────────────────────────────────────
+  //
+  // Eight settings - four about the buttons and the auto-merges, four filters - were eight
+  // rows of the group, and the page read as a wall. They are two rows now, each opening a
+  // dialog of Core's (`settingsDialog`): stored under the same keys, so nothing already set
+  // moves, the sibling plugin still adopts the filters from them, and config.yml still edits
+  // them; each keeps its whole description on hover. The three switches that make this plugin
+  // write on its own are highlighted there, as they were on the page. The tag box gets its link and
+  // the field box its ⓕ beside them, where the rows carried them.
+  var BUTTON_FIELDS = [
+    { key: 'a1ShowManualMergeButtons', label: 'Show Manual Buttons',
+      tip: 'Show "Add Tags to all Scenes..." on the performer detail view (not while editing) and "Add all ' +
+        'Tags from all Performers" on the scene Edit tab.\n\nButtons only appear when related content ' +
+        'exists - the performer button also needs the performer to have at least one tag.\n\nA caption ' +
+        'ending in "..." opens a dialog listing every change first; nothing is written until you press ' +
+        'Proceed.' },
+    { key: 'a2SaveTagsImmediately', label: 'Save Immediately',
+      warn: true,
+      tip: 'Make "Add all Tags from all Performers" review in a dialog instead of staging in the ' +
+        'form.\n\nLeave this off to stage the tags in the scene\'s tag box, so you can check them and ' +
+        'press Save yourself. Turned on - or on a Stash that cannot stage - the button opens a dialog ' +
+        'listing every change first, and nothing is written until you press Proceed. Only affects the ' +
+        'scene button; the performer button always reviews in the dialog, and auto-merge always saves.' },
+    { key: 'a3AutoMergeOnSceneUpdate', label: 'Auto-Merge when the Scene is Saved',
+      warn: true,
+      tip: 'When a scene is saved, automatically merge all of its performers\' tags into that scene.' },
+    { key: 'a4AutoMergeOnPerformerUpdate', label: 'Auto-Merge when the Performer is Saved',
+      warn: true,
+      tip: 'When a performer is saved, automatically merge their tags into all of their scenes.\n\nCovers ' +
+        'every scene featuring the performer; filters and selections in the scene list are ignored.' },
+  ];
+
+  var EXCL_FIELDS = [
+    { key: 'b1ExcludeSceneWithTagName', label: 'Exclude Scenes Carrying This Tag', tag: true, warn: 'semi',
+      text: true, wide: true,
+      mark: function (v) { return exclusionMark(v); },
+      tip: 'Do not merge performer tags to scenes if the scene has this tag.\n\nMatched by exact name, ' +
+        'case-sensitive; a tag one of whose aliases is that exact string counts too, with the name ' +
+        'winning where both match. A link to the tag appears beside the box once it resolves - if it ' +
+        'does not, nothing here names anything, and every merge stops rather than writing into the ' +
+        'scenes this is meant to protect.' },
+    { key: 'b2ExcludeSceneOrganized', label: 'Exclude Scenes Marked as Organized', warn: 'semi',
+      tip: 'Do not merge performer tags to scenes if the scene is marked as Organized' },
+    { key: 'c1ExcludeTagWithIgnoreAutoTag', label: 'Never Merge Tags Set to Ignore Auto Tag', warn: 'semi',
+      tip: 'Do not merge a performer tag to scenes if the tag is set to Ignore Auto Tag' },
+    { key: 'c2ExcludeTagWithCustomFieldName', label: 'Never Merge Tags Marked via This Custom Field', warn: 'semi',
+      text: true, wide: true,
+      mark: function (v) { return v ? cfTipMark(v) : null; },
+      tip: 'Do not merge a performer tag to scenes if the tag has this custom field.\n\nOnly the presence ' +
+        'of the field matters - its value is ignored, so any value at all excludes the tag. Remove the ' +
+        'field from a tag to have it merged again.' },
+  ];
+
+  // The settings under their stored keys, from the plugin's own names for them.
+  function storedSettings() {
+    var out = {};
+    for (var key in SETTING_MAP) if (hasOwn(SETTING_MAP, key)) out[key] = settings[SETTING_MAP[key][0]];
+    return out;
+  }
+  // Read fresh as a dialog opens, a change another tab saved included.
+  function readStored() {
+    return pluginConfig(true).then(function (data) {
+      var ps = ((data.configuration || {}).plugins || {})[PLUGIN_ID] || {}, out = {};
+      for (var key in SETTING_MAP) {
+        if (!hasOwn(SETTING_MAP, key)) continue;
+        out[key] = typeof SETTING_MAP[key][1] === 'boolean' ? !!ps[key] : (ps[key] || '');
+      }
+      return out;
+    });
+  }
+
+  // The switches that write on their own in their level here as in the dialog.
+  function buttonsSummary(cfg) {
+    var on = BUTTON_FIELDS.filter(function (f) { return !!cfg[f.key]; });
+    if (!on.length) return 'Every switch off.';
+    var parts = ['On: '];
+    on.forEach(function (f, i) { parts.push(i ? ', ' : '', { text: f.label, hl: f.warn }); });
+    return parts.concat('.');
+  }
+
+  // The tag with its 🔗 and the field with its ⓕ after them, as the dialog draws them; each
+  // exclusion in force in the semi level, as the dialog names them.
+  function exclusionSummary(cfg) {
+    var q = function (k) { return String(cfg[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var tag = q('b1ExcludeSceneWithTagName'), field = q('c2ExcludeTagWithCustomFieldName'), on = [];
+    if (tag) on.push(['scenes tagged ', { text: '"' + tag + '"', tag: true, mark: function () { return exclusionMark(tag, EXCL_LINK_ID + '-sum'); } }]);
+    if (cfg.b2ExcludeSceneOrganized) on.push(['Organized scenes']);
+    if (cfg.c1ExcludeTagWithIgnoreAutoTag) on.push(['tags set to Ignore Auto Tag']);
+    if (field) on.push(['tags carrying the custom field ', { cf: field }]);
+    if (!on.length) return 'Nothing is excluded.';
+    var parts = ['Leaving alone: '];
+    on.forEach(function (c, i) { parts = parts.concat(i ? ['; '] : [], C.atLevel(c, 'semi')); });
+    return parts.concat('.');
+  }
+
+  function dialogSaved() { loadSettings(true); }
+
+  var buttonsDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'cpt2s', key: 'buttons', title: 'Buttons and Auto-Merge',
+    line: 'The manual buttons on the performer and scene pages, whether the scene button saves at once, ' +
+      'and the two auto-merges that write whenever Stash saves a scene or a performer. Four switches, in a dialog.',
+    fields: BUTTON_FIELDS, summary: buttonsSummary, settings: storedSettings, load: readStored, saved: dialogSaved,
+  });
+  var exclusionDialog = settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'cpt2s', key: 'exclusions', title: 'Exclusion Filters',
+    line: 'Which scenes and which tags a merge leaves alone: a tag or Organized on the scene, Ignore Auto Tag, ' +
+      'and a custom field on the tag. Four settings, in a dialog.',
+    fields: EXCL_FIELDS, summary: exclusionSummary, settings: storedSettings, load: readStored, saved: dialogSaved,
+  });
+
+  function ensureReadmeLink() {
+    var group = page.group();
+    if (!group) return;
+    page.decorate(group);
+    buttonsDialog.tick(group);
+    exclusionDialog.tick(group);
+    ensureSupersededNotice(group);
+  }
+
+  // ── Plugin Task buttons ───────────────────────────────────────────────────
+  //
+  // Settings - Tasks - Plugin Tasks renders every task of every plugin with the same
+  // `btn-secondary`, so nothing on that page says which buttons rewrite the library.
+  // Core's `paintTaskButtons` repaints ours orange every tick - React hands the button
+  // back with Stash's own classes on a re-render - deciding what is ours with the same
+  // `ownTaskName` the click interception keys on.
+
+  function tick() {
+    maybeGoToEdit();
+    addPerformerButton();
+    addSceneButton();
+    // Costs two getElementById calls off the settings page, which is where this tab
+    // spends none of its time; no query, no observer of its own.
+    ensureReadmeLink();
+    C.paintTaskButtons(PLUGIN_NAME, TASKS, function () { return PLUGIN_BTN_VARIANT; });
+  }
+
+  // The MutationObserver watches the whole SPA subtree, which churns constantly
+  // during video playback, so coalesce bursts into a single tick.
+  var _tickScheduled = false;
+  function scheduleTick() {
+    if (_tickScheduled) return;
+    _tickScheduled = true;
+    setTimeout(function () { _tickScheduled = false; tick(); }, 100);
+  }
+
+  // The shared bus rather than an observer of our own - see `domBus`. No return value
+  // and no retry: there was a `if (!startObserver()) DOMContentLoaded` retry here and it
+  // was unreachable, since the only falsy answer needed `document.documentElement` to be
+  // missing and the catch deliberately reported success because the interval below covers
+  // it. A guard that reads as protection and provides none is worse than none.
+  // `subscribe` is idempotent, so this is safe from both the script bottom and `load`.
+  function startObserver() {
+    domBus().subscribe(scheduleTick);
+  }
+
+  // Patches have to be registered before the components they target first render,
+  // so this runs at script load. Stash sets window.PluginApi before loading plugin
+  // scripts; the load-event retry only covers an unusual ordering.
+  if (!installTagSelectPatch()) {
+    window.addEventListener('load', function () { installTagSelectPatch(); });
+  }
+
+  window.addEventListener('load', function () { loadSettings(); startObserver(); tick(); });
+  document.addEventListener('click', function (event) {
+    var target = event.target;
+    var link = target && target.closest ? target.closest('a') : null;
+    // Wrapped rather than passed by reference so a timer argument can never arrive as
+    // loadSettings' `force` and defeat the throttle.
+    if (link) { setTimeout(tick, 300); setTimeout(function () { loadSettings(); }, 300); }
+  });
+  window.addEventListener('popstate', function () {
+    setTimeout(tick, 300);
+    setTimeout(function () { loadSettings(); }, 300);
+  });
+
+  // Started before the observer so a missing/unobservable root can never stop the
+  // polling fallback from being installed.
+  setInterval(tick, 1000);
+  // force: the periodic refresh is the backstop that guarantees settings changes are
+  // picked up, so it must never be throttled away by a recent navigation.
+  setInterval(function () { loadSettings(true); }, 10000);
+
+  startObserver();
+
+  loadSettings();
+  tick();
+})();

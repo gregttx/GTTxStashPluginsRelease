@@ -1,0 +1,29 @@
+name: ᝯㄝₓ Normalize Parent Tags
+description: "Makes tag hierarchies explicit on your entities, in either direction.\n\nPrune removes any tag that another tag on the same entity already implies. Roll-Up adds every ancestor, recursively, of the tags already there. Each entity-type is set to Off, Prune or Roll-Up on its own, so one library can prune its scenes and roll up its performers.\n\nNormalize Parent Tags runs from Settings - Tasks - Plugin Tasks and asks first: the dialog holds the seven selectors, lists every change it would make, and writes nothing until you press Proceed. Undo reverses the run while the dialog stays open. Auto-Mode Settings edits what happens by itself, and Show Tag Hierarchy browses the tree read-only.\n\nA type set to Prune or Roll-Up is also normalized silently whenever Stash saves one of them - no dialog and no review; only ᝯㄝₓ Core's Undo History can take it back. Everything is Off until you say otherwise.\n\nBACKING UP YOUR DATABASE BEFORE THE FIRST RUN IS STRONGLY RECOMMENDED. \n\nRequires Stash 0.31.0 or newer."
+url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-NormalizeParentTags/README.md"
+version: 6.3.2
+ui:
+  # Loaded before this script, and installed with it. `plugins.tsx` topologically
+  # sorts on this and `useScript` sets `async = false`, so ᝯㄝₓ Core has finished
+  # running before this file begins - which is what lets the shared blocks be bound
+  # at load rather than looked up on every call.
+  requires:
+    - GTTxCore
+  javascript:
+    - NormalizeParentTags.js
+tasks:
+  - name: Normalize Parent Tags...
+    description: Prune, roll up, or leave alone, per entity-type - chosen in the dialog, which starts from the auto-modes below with Images off. Lists every change for review before anything is written, and offers an Undo that takes the run back while the dialog stays open. BACKING UP YOUR DATABASE BEFORE THE FIRST RUN IS STRONGLY RECOMMENDED.
+  - name: Auto-Mode Settings...
+    description: Set what happens by itself whenever Stash saves an entity - Off, Prune or Roll-Up, for each of the seven types. Writes nothing but the setting itself, which is the one shown in the row below.
+  - name: Show Tag Hierarchy...
+    description: Read-only. Opens a browsable tree of the whole tag hierarchy, marking tags with more than one parent, tags protected by the Exclusion Filters, below, and any cycle. Select a tag to see what Prune and Roll-Up would do with it, and jump from a multi-parent tag to each of its parents. Writes nothing.
+settings:
+  a1AutoModes:
+    displayName: Auto-mode per entity-type
+    description: "What happens by itself whenever Stash saves an entity, one mode per type.\n\nWARNING: a type set to PRUNE or ROLLUP is updated immediately, with no dialog and no review - only ᝯㄝₓ Core's Undo History can take it back - and PRUNE deletes tag assignments. A type that is missing, or set to OFF, is left alone.\n\nPress Auto-Mode Settings to change it: the seven selectors are the editor for this setting. It is stored as one line of text, and anything that writes it directly is read forgivingly - any order, any case, the singular of a type, and any separators between the pairs - with whatever was understood written back in canonical form.\n\nThe Exclusion Filters, below, still apply. The task dialog starts from these modes - with Images off, since it is usually the largest type and the slowest to scan - and lets you change them for that one run."
+    type: STRING
+  d1ShowSceneButtons:
+    displayName: Show Prune and Roll-Up Buttons on an Entity
+    description: "Show Prune and Roll-Up buttons on a scene, image, gallery, performer, studio or group.\n\nOff by default. With it on, an entity's edit form carries a Prune button when the entity holds a tag that a more specific tag on it already implies, and a Roll-Up button when it is missing a parent its own tags imply. Both are drawn whenever the form is open, and each is enabled only when it would actually change something - grayed out otherwise, with the reason on hover. A scene marker has no page of its own and gets none.\n\nNeither writes on the click: they change the tag box in front of you, and Stash's own Save is what commits it - exactly as if you had picked the tags from the dropdown yourself. Close the form without saving and nothing happened. On a Stash too old to let a plugin reach the tag box, the click opens the review dialog instead, and the caption says so by ending in a full stop trio. Every one of the Exclusion Filters still applies, and the auto-modes above are a separate question - a button is offered whether or not this plugin does that direction on its own."
+    type: BOOLEAN
