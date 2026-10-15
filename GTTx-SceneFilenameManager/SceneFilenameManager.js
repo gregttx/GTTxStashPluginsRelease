@@ -30,10 +30,10 @@
   // `ui: requires:` in the .yml is topologically sorted by Stash and `useScript` sets
   // `async = false`, so Core has finished running before this line - when it is present.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.1.0 or newer, told by one of its exports (`busyCursor`).
+  // The Core floor, ᝯㄝₓ Core 5.26.0 or newer, told by the newest export it binds (`styleOnce`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.busyCursor !== 'function') {
-    var NAME = 'ᝯㄝₓ Scene Filename Manager', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.1.0 or newer, installed and '
+  if (!C || typeof C.styleOnce !== 'function') {
+    var NAME = 'ᝯㄝₓ Scene Filename Manager', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.26.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[sfm] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -41,6 +41,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -57,10 +59,12 @@
     return;
   }
   // Every plugin's settings through Core's one shared read.
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var trim = C.trim, button = C.button;
   var pluginConfig = C.pluginConfig;
   var showDefaults = C.showDefaults, coop = C.coop, plural = C.plural, el = C.el,
     hasOwn = C.hasOwn, gqlRequest = C.gqlRequest, coreSettingRow = C.settingRow, linkTarget = C.linkTarget,
-    entityTip = C.entityTip, copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    entityTip = C.entityTip, copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, keepLog = C.keepLog, droppedLine = C.droppedLine,
     holdWidth = C.holdWidth, cfTipTick = C.cfTipTick, fieldLocks = C.fieldLocks, settle = C.settle,
     staleReloadButton = C.staleReloadButton, paintButton = C.paintButton, foreignLease = C.foreignLease,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape;
@@ -74,7 +78,7 @@
   var PLUGIN_SHORT_NAME = PLUGIN_NAME;
   // The one version that proves which code is running; the settings page reads the
   // manifest, which can be newer than the script this browser cached.
-  var PLUGIN_VERSION = '2.4.14';
+  var PLUGIN_VERSION = '3.0.0';
 
   function sfm(message) {
     if (typeof console !== 'undefined' && (console.info || console.log)) {
@@ -116,10 +120,6 @@
   var PATH_MIN = 100;
   var PATH_AUTO = 'Auto';
   var PATH_WINDOWS = 259, PATH_MAC = 1023, PATH_LINUX = 4095;
-
-  function trim(text) {
-    return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
-  }
 
   // ── Filenames ─────────────────────────────────────────────────────────────
   //
@@ -405,19 +405,7 @@
     'background:rgba(255,115,115,.14);color:#ff7373;font-size:.95rem;line-height:1.45;' +
     'font-weight:600;}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = el('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // ── The two tasks ─────────────────────────────────────────────────────────
   //
@@ -1550,7 +1538,6 @@
     this.filter = { off: {}, cut: false, find: '' };
     this.jobs = [];       // what the scan found to do
     this.changes = [];    // what Proceed wrote, newest last, for Undo
-    this.entriesIn = {};  // Undo History entries per 'run:scene', -1 once Undo recorded some itself
     this.scanned = 0;
     this.total = 0;
     this.noFile = 0;
@@ -1604,13 +1591,17 @@
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.copyBtn = button('Copy log', 'sfm-copy');
     this.copyBtn.title = 'Copy the counters and every line of the log as plain text.';
+    this.saveLogBtn = button('Save log', 'sfm-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.closeBtn = button('Close', 'sfm-close');
     this.goBtn.addEventListener('click', function () { self.go(); });
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.stopBtn.addEventListener('click', function () { self.stop(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.saveLogBtn.addEventListener('click', function () { saveLogFile('scene-filename-manager', self.logLines()); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
-    [this.goBtn, this.stopBtn, this.rescanBtn, this.copyBtn, this.undoBtn, this.closeBtn]
+    [this.goBtn, this.stopBtn, this.rescanBtn, this.copyBtn, this.saveLogBtn, this.undoBtn, this.closeBtn]
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -1983,7 +1974,6 @@
       // The archives this pass wrote ahead of the renames are changes of their own; one an
       // earlier pass wrote is that pass's.
       pass.entries(wrote.map(function (st) { return journalEntry(st, field, false); }));
-      wrote.forEach(function (st) { self.recorded(runId, st); });
       // Only a file whose name is archived is renamed: a step a Stop left unsent waits
       // for the next Proceed.
       jobs = jobs.filter(function (j) {
@@ -2019,7 +2009,6 @@
           self.sceneLine(doneKind(task), job, task.tail(job, field));
           pass.entries([journalEntry(job, field, false)]);
           job.run = runId;
-          self.recorded(runId, job);
         }
       }
     }).then(function () {
@@ -2093,16 +2082,10 @@
     });
   };
 
-  Run.prototype.recorded = function (runId, job) {
-    var k = runId + ':' + job.scene.id;
-    if (this.entriesIn[k] !== -1) this.entriesIn[k] = (this.entriesIn[k] || 0) + 1;
-  };
-
   Run.prototype.undoWrites = function () {
     var self = this, task = this.task, field = this.field;
     var jobs = this.changes.slice().reverse();
-    var pass = journalPass(task.title + ', undone'), undone = {};
-    var byField = coop().journal.reversesFields === true;
+    var pass = journalPass(task.title + ', undone');
     this.setState('undoing');
     this.runJobs(jobs, task.op + 'Undo', PLUGIN_SHORT_NAME + ': ' + task.title + ' (undo)',
       function (job) { return task.undo(job, field); },
@@ -2122,25 +2105,8 @@
         // Core reverses the run's entry for what this job wrote - its file's name, or the
         // field's value - and marks it undone there; what the job did not write stays done,
         // as the archive a rename wrote first does.
-        if (byField) { pass.reverse(job.run, 'scenes', job.scene.id, journalEntry(job, field, false).field); return; }
-        var k = job.run + ':' + job.scene.id;
-        (undone[k] = undone[k] || []).push(job);
+        pass.reverse(job.run, 'scenes', job.scene.id, journalEntry(job, field, false).field);
       }).then(function () {
-      // COMPAT: a Core whose `reverse` takes no field (`journal.reversesFields`), before 4.24.0
-      // (since SceneFilenameManager 2.3.0); remove when this plugin's Core floor is 4.24.0 or
-      // newer, with `entriesIn` and `recorded`. There, where this Undo put back everything a
-      // scene has in a run, Core reverses the whole scene; where it did not, the reversal is
-      // recorded here and that scene of that run stays done.
-      Object.keys(undone).forEach(function (k) {
-        var list = undone[k];
-        if (self.entriesIn[k] === list.length) {
-          pass.reverse(list[0].run, 'scenes', list[0].scene.id);
-          delete self.entriesIn[k];
-        } else {
-          pass.entries(list.map(function (j) { return journalEntry(j, field, true); }));
-          self.entriesIn[k] = -1;
-        }
-      });
       if (self.stopped) self.msg('WARN', 'Stopped. ' + plural(self.changes.length, self.task.unit || 'scene') +
         ' still written.');
       pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
@@ -2171,10 +2137,13 @@
     this.msg('WARN', 'Stopping after the request in flight…');
   };
 
+  Run.prototype.logLines = function () {
+    return [this.progressEl.textContent, droppedLine(this.logDropped)].filter(Boolean)
+      .concat(this.logText).join('\n');
+  };
   Run.prototype.copyLog = function () {
     var self = this, was = this.copyBtn.textContent;
-    copyToClipboard([this.progressEl.textContent, droppedLine(this.logDropped)].filter(Boolean)
-      .concat(this.logText).join('\n'), function (ok) {
+    copyToClipboard(this.logLines(), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = was; }, 2000);
@@ -2847,6 +2816,9 @@
 
   coop().respecters[PLUGIN_ID] = true;
   installMoveWatch();
+  // The field's name, edited in Stash's own setting dialog: the library's field names listed
+  // under the box as you type.
+  C.suggestSetting('Original Filename Custom Field', 'field');
   if (window.addEventListener) window.addEventListener('load', tick);
   setInterval(tick, 1000);
   // After the first settings read, so the configured name is the one described - and

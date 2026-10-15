@@ -1,0 +1,14 @@
+name: ᝯㄝₓ Orphan Cleanup
+description: "Which tags, performers, studios and groups does nothing use any more? Stash sorts each list by scene count one type at a time; this plugin lists the four at once and deletes the ones you tick.\n\nRun it from Settings - Tasks - Plugin Tasks. An orphan is something no scene, marker, image, gallery, performer, studio or group carries. A tag a ᝯㄝₓ plugin works by is never listed; the Exclusion Filters below set what else is left out - favorites, stash-box links, a tag, a custom field, anything with children, anything with a parent.\n\nNothing is ticked until you tick it. Delete asks for a second press, checks each one again first, and records every delete in ᝯㄝₓ Core's Undo History, where Undo makes it again under a new id; the dialog's own Undo does the same while it stays open.\n\nBACKING UP YOUR DATABASE BEFORE THE FIRST DELETE IS STRONGLY RECOMMENDED.\n\nRequires Stash 0.31.0 or newer."
+url: "https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-OrphanCleanup/README.md"
+version: 1.0.0
+ui:
+  # Loaded before this script, and installed with it: Stash topologically sorts on this, so
+  # ᝯㄝₓ Core has finished running before this file begins.
+  requires:
+    - GTTxCore
+  javascript:
+    - OrphanCleanup.js
+tasks:
+  - name: Find Orphans...
+    description: List every tag, performer, studio and group nothing uses - no scene, marker, image, gallery, performer, studio or group carries it - leaving out the tags a ᝯㄝₓ plugin works by and what the Exclusion Filters name. Nothing is ticked; tick what to delete and press Delete twice. Each delete is checked again first and recorded in Undo History, and Undo makes it again under a new id.

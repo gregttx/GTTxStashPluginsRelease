@@ -19,6 +19,7 @@ and UI plugin component patching ([<abbr title="Holding changes for you to revie
 > only while it stays open. It is a way out of a run you regret in the moment, not a safety net —
 > the backup is the safety net. ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history) keeps every run for
 > later, automatic ones included, but it lives in this browser and is no backup either.
+> Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo).
 >
 > The two **[<abbr title="Merge Performer Tags merging a performer's tags onto their scenes whenever a scene or performer is saved.">auto-merge</abbr>](../GLOSSARY.md#auto-merge)** settings deserve the same caution for a different reason: they write on
 > every save, with no dialog; only ᝯㄝₓ Core's Undo History can take them back. The manual buttons are the safe way to try
@@ -171,7 +172,7 @@ it. Three limits to know before relying on it:
   re-added one of the same tags, Undo still removes it.
 
 Everything else in the plugin — the scene button and both auto-merge modes — only ever adds tags,
-and has no Undo button of its own; ᝯㄝₓ Core's Undo History takes those back. The performer button
+and has no Undo button of its own; ᝯㄝₓ Core's Undo History takes those back. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo). The performer button
 opens the same review dialog as the task, Undo included. Backing up your
 database before the first library-wide run is strongly recommended.
 
@@ -195,7 +196,7 @@ Four optional exclusion filters let you protect certain scenes or tags from bein
 in one dialog, opened from the **Exclusion Filters** row of the plugin's settings, which says which
 of them do something now; each has its whole description when you hover it there:
 
-- **Exclude Scenes Carrying This Tag** — enter a tag name; any scene carrying that tag is skipped. The tag is looked up by exact name, and a tag one of whose aliases is that exact string counts too, with the name winning where both match; the result is re-checked periodically, so creating, deleting or recreating the tag is picked up without a page reload. Once it resolves, a **🔗** appears beside its box in the dialog, linking to the tag it found — so a typo shows up as a missing link rather than as a merge that refuses to run. Hover it for what that tag is: its picture, its aliases, its [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parents</abbr>](../GLOSSARY.md#parent), its children and its description. **If no tag by that name exists, nothing is merged at all** — a typo would otherwise leave every scene you meant to protect unprotected, and a merge that was not meant is taken back only through Undo History. Create the tag, or clear the setting; the browser console says which. The exclusion tag itself is never merged into a scene, even if one of the performers carries it.
+- **Exclude Scenes Carrying This Tag** — enter a tag name; any scene carrying that tag is skipped. The tag is looked up by exact name, and a tag one of whose aliases is that exact string counts too, with the name winning where both match; the result is re-checked periodically, so creating, deleting or recreating the tag is picked up without a page reload. Once it resolves, a **🔗** appears beside its box in the dialog, linking to the tag it found — so a typo shows up as a missing link rather than as a merge that refuses to run. Hover it for what that tag is: its picture, its aliases, its [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parents</abbr>](../GLOSSARY.md#parent), its children and its description. **If no tag by that name exists, nothing is merged at all** — a typo would otherwise leave every scene you meant to protect unprotected, and a merge that was not meant is taken back only through Undo History ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). Create the tag, or clear the setting; the browser console says which. The exclusion tag itself is never merged into a scene, even if one of the performers carries it.
 - **Exclude Scenes Marked as Organized** — scenes with the "organized" flag set are skipped entirely.
 - **Never Merge Tags Set to Ignore Auto Tag** — performer tags that have "Ignore Auto Tag" enabled in their tag settings are not merged into scenes.
 - **Never Merge Tags Marked via This Custom Field** — enter a custom field name; performer tags carrying that custom field are not merged into scenes. **Only the presence of the field matters** — the value is never looked at, so any value at all (including a blank one) excludes the tag. To have a tag merged again, remove the field from it rather than trying to set it to something falsy. Where `ᝯㄝₓ Custom Fields Bulk Editor` describes the field, a **ⓕ** appears beside its box: hover it for what the field is — that description, how many entities carry it, and the first ten of them by name and type. The carriers are not read until you hover, because finding them means seven filtered queries ([the custom-field mark](../GTTx-Core/README.md#links-cards-and-tooltips)).
@@ -244,7 +245,7 @@ still edits them, and the sibling plugin still reads the filters from there.
 | **Buttons and Auto-Merge** | every switch off | The row and dialog holding the next four. |
 | **Show Manual Buttons** | off | Draws the two [manual buttons](#usage), on the performer detail view and the scene Edit tab. |
 | **Save Immediately** | off | Makes the scene button review in a dialog instead of [staging into the form](#review-before-saving-in-scene-edit-tab-manual-merge). |
-| **Auto-Merge when the Scene is Saved** | off | Whenever a scene is saved, its performers' tags are merged in, with no dialog; only ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history) can take it back. |
+| **Auto-Merge when the Scene is Saved** | off | Whenever a scene is saved, its performers' tags are merged in, with no dialog; only ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history) can take it back ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). |
 | **Auto-Merge when the Performer is Saved** | off | Whenever a performer is saved, their tags are merged into all of their scenes, the same way. |
 | **Exclusion Filters** | nothing excluded | The row and dialog holding the next four — see [Exclusion filters](#exclusion-filters). |
 | **Exclude Scenes Carrying This Tag** | empty | A scene carrying this tag is skipped. |
@@ -395,11 +396,11 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Merge Performer Tags into All Their Scenes | 271 MB | 294 MB | 283 MB |
+| Merge Performer Tags into All Their Scenes | 270 MB | 295 MB | 283 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** and **Save log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.

@@ -15,10 +15,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.11.0 or newer, told by one of its exports (`selectionMenuItem`).
+  // The Core floor, ᝯㄝₓ Core 5.27.0 or newer, told by the newest export it binds (`sharedRead`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.selectionMenuItem !== 'function') {
-    var NAME = 'ᝯㄝₓ Merge Performer Tags To Scenes', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
+  if (!C || typeof C.sharedRead !== 'function') {
+    var NAME = 'ᝯㄝₓ Merge Performer Tags To Scenes', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.27.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[cpt2s] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -26,6 +26,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -41,15 +43,16 @@
     mark();
     return;
   }
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var pickTagByNameOrAlias = C.pickTagByNameOrAlias;
   var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass, settle = C.settle,
-    gqlRequest = C.gqlRequest, settingElement = C.settingElement, settingRow = C.settingRow,
+    gqlRequest = C.gqlRequest,
     stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, holdWidth = C.holdWidth,
-    coop = C.coop, domBus = C.domBus, plural = C.plural, copyToClipboard = C.copyToClipboard,
-    keepLog = C.keepLog, droppedLine = C.droppedLine, linkTarget = C.linkTarget,
-    tagTip = C.tagTip, tipText = C.tipText, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
+    coop = C.coop, domBus = C.domBus, plural = C.plural, copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile,
+    droppedLine = C.droppedLine, linkTarget = C.linkTarget,
+    tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle,
     cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
-    ensureReloadUiButton = C.ensureReloadUiButton,
-    staleReloadButton = C.staleReloadButton, insertOrdered = C.insertOrdered,
+    staleReloadButton = C.staleReloadButton,
     insertBeforeImportantAction = C.insertBeforeImportantAction,
     fakeOk = C.fakeOk, mutationSucceeded = C.mutationSucceeded,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, paintButton = C.paintButton;
@@ -87,7 +90,7 @@
   // constant travels
   // inside the file. Bump it with the manifest and the yml; the `version` suite
   // fails if the three disagree.
-  var PLUGIN_VERSION      = '5.3.8';
+  var PLUGIN_VERSION      = '6.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded: banner plus error means the new code is running
@@ -436,18 +439,7 @@
   // they land on - a second copy of the rule is what would let the row's link promise a
   // tag the merge then refuses.
   //
-  // Exact and case-sensitive; the server's EQUALS is neither. **Every name is tried
-  // before any alias**: a tag called X and a different tag carrying X as an alias is a
-  // library a user can build, and the one they named is the one they meant.
-  function pickTagByNameOrAlias(tags, wanted) {
-    var i;
-    for (i = 0; i < tags.length; i++) if (tags[i] && tags[i].name === wanted) return tags[i];
-    for (i = 0; i < tags.length; i++) {
-      if (tags[i] && ((tags[i].aliases || []).indexOf(wanted) !== -1)) return tags[i];
-    }
-    return null;
-  }
-
+  // Which tag answers is Core's `pickTagByNameOrAlias`, exact, every name before any alias.
   // per_page: -1 because Stash compiles the EQUALS modifier to SQL LIKE, where _ and %
   // are wildcards. A name containing either can match far more tags than the default
   // page holds, and the exact match falling off page 1 would silently disable the
@@ -496,11 +488,12 @@
   // the child the other adds are each kept; ask over the scene's whole plan if that shows up.
   // `adding` less the ids the sibling would prune off a scene carrying `have` and `adding`;
   // a task's run, as `tally`, counts what was left out for its log. A scene the sibling's own
-  // exclusions leave alone (Organized, its exclusion tag) is never pruned, so nothing is left out.
+  // exclusions leave alone (Organized, its exclusion tag - carried now, or brought by this merge) is
+  // never pruned, so nothing is left out.
   function unpruned(have, adding, tally, scene) {
     if (!_pruner || !adding.length) return adding;
     if (typeof _pruner.excludes === 'function' &&
-        _pruner.excludes({ organized: !!(scene && scene.organized), tagIds: have })) return adding;
+        _pruner.excludes({ organized: !!(scene && scene.organized), tagIds: have.concat(adding) })) return adding;
     var res = null;
     try { res = _pruner.plan({ mode: 'prune', tagIds: have.concat(adding) }); } catch (e) { return adding; }
     var drop = {};
@@ -1359,6 +1352,9 @@
     this.cancelBtn  = taskButton('Cancel', 'cpt2s-cancel');
     this.stopBtn    = taskButton('Stop', 'cpt2s-stop cpt2s-hidden');
     this.copyBtn    = taskButton('Copy log', 'cpt2s-copy');
+    this.saveLogBtn = taskButton('Save log', 'cpt2s-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.undoBtn    = taskButton('Undo', 'cpt2s-undo cpt2s-hidden');
     [this.proceedBtn, this.undoBtn].forEach(function (b) {
       b.className = b.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
@@ -1375,11 +1371,12 @@
     this.cancelBtn.addEventListener('click', function () { self.cancel(); });
     this.stopBtn.addEventListener('click', function () { self.stop(); });
     this.copyBtn.addEventListener('click', function () { self.copy(); });
+    this.saveLogBtn.addEventListener('click', function () { self.saveLog(); });
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
 
-    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.undoBtn,
+    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.saveLogBtn, this.undoBtn,
       this.rescanBtn, this.closeBtn].forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -2290,11 +2287,17 @@
     this.begin();
   };
 
+  TaskRun.prototype.logLines = function () {
+    return [droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n');
+  };
+  TaskRun.prototype.saveLog = function () {
+    this.disarmUndo();
+    saveLogFile('merge-performer-tags-to-scenes', this.logLines());
+  };
   TaskRun.prototype.copy = function () {
     this.disarmUndo();
-    var text = [droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n');
     var self = this;
-    copyToClipboard(text, function (ok) {
+    copyToClipboard(this.logLines(), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
@@ -3054,7 +3057,7 @@
     // COMPAT: `b1TagsPerformersToScenes`, the path's boolean before that plugin's `b1Paths`
     // string (since PropagateTagsAndPerformers 3.0.0); remove when never on its own: a copy that
     // stays disabled never runs the migration that would move it across.
-    return !text.replace(/^\s+|\s+$/g, '') && !!raw.b1TagsPerformersToScenes;
+    return !text.trim() && !!raw.b1TagsPerformersToScenes;
   }
 
   function exclusionsMigrated(theirs) {
@@ -3129,17 +3132,11 @@
   var EXCL_LINK_ID = 'cpt2s-exclusion-tag';
   var EXCL_MARK = '🔗';      // link symbol
   var EXCL_TTL_MS = 15000;             // so a tag created just now is found without a reload
-  var _exclFor = null, _exclAt = 0, _exclWait = null;
-
-  function lookupExclusionTag(name) {
-    if (name === _exclFor && Date.now() - _exclAt < EXCL_TTL_MS) return _exclWait;
-    _exclFor = name;
-    _exclAt = Date.now();
-    _exclWait = gqlRequest(EXCLUDE_TAG_QUERY, excludeTagVars(name)).then(function (data) {
+  var lookupExclusionTag = C.sharedRead(function (name) {
+    return gqlRequest(EXCLUDE_TAG_QUERY, excludeTagVars(name)).then(function (data) {
       return pickTagByNameOrAlias((data.findTags || {}).tags || [], name);
     }, function () { return null; });   // a link is not worth an error
-    return _exclWait;
-  }
+  }, EXCL_TTL_MS);
 
   // The link to the tag `name` resolves to, or null: what the Exclusion Filters dialog draws
   // beside the box naming it. Nothing, rather than a warning, for a name that resolves to
@@ -3209,7 +3206,7 @@
       tip: 'Do not merge a performer tag to scenes if the tag is set to Ignore Auto Tag' },
     { key: 'c2ExcludeTagWithCustomFieldName', label: 'Never Merge Tags Marked via This Custom Field', warn: 'semi',
       text: true, wide: true,
-      mark: function (v) { return v ? cfTipMark(v) : null; },
+      cf: true, mark: function (v) { return v ? cfTipMark(v) : null; },
       tip: 'Do not merge a performer tag to scenes if the tag has this custom field.\n\nOnly the presence ' +
         'of the field matters - its value is ignored, so any value at all excludes the tag. Remove the ' +
         'field from a tag to have it merged again.' },
@@ -3245,7 +3242,7 @@
   // The tag with its 🔗 and the field with its ⓕ after them, as the dialog draws them; each
   // exclusion in force in the semi level, as the dialog names them.
   function exclusionSummary(cfg) {
-    var q = function (k) { return String(cfg[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var q = function (k) { return String(cfg[k] || '').trim(); };
     var tag = q('b1ExcludeSceneWithTagName'), field = q('c2ExcludeTagWithCustomFieldName'), on = [];
     if (tag) on.push(['scenes tagged ', { text: '"' + tag + '"', tag: true, mark: function () { return exclusionMark(tag, EXCL_LINK_ID + '-sum'); } }]);
     if (cfg.b2ExcludeSceneOrganized) on.push(['Organized scenes']);
@@ -3308,16 +3305,9 @@
     setTimeout(function () { _tickScheduled = false; tick(); }, 100);
   }
 
-  // The shared bus rather than an observer of our own - see `domBus`. No return value
-  // and no retry: there was a `if (!startObserver()) DOMContentLoaded` retry here and it
-  // was unreachable, since the only falsy answer needed `document.documentElement` to be
-  // missing and the catch deliberately reported success because the interval below covers
-  // it. A guard that reads as protection and provides none is worse than none.
-  // `subscribe` is idempotent, so this is safe from both the script bottom and `load`.
-  function startObserver() {
-    domBus().subscribe(scheduleTick);
-  }
-
+  // The DOM is watched through the shared bus rather than an observer of our own (`domBus`), subscribed
+  // at script bottom and on `load` - `subscribe` is idempotent - with no retry: a guard that reads as
+  // protection and provides none is worse than none, and the interval below covers a missed start.
   // Patches have to be registered before the components they target first render,
   // so this runs at script load. Stash sets window.PluginApi before loading plugin
   // scripts; the load-event retry only covers an unusual ordering.
@@ -3325,7 +3315,7 @@
     window.addEventListener('load', function () { installTagSelectPatch(); });
   }
 
-  window.addEventListener('load', function () { loadSettings(); startObserver(); tick(); });
+  window.addEventListener('load', function () { loadSettings(); domBus().subscribe(scheduleTick); tick(); });
   document.addEventListener('click', function (event) {
     var target = event.target;
     var link = target && target.closest ? target.closest('a') : null;
@@ -3345,7 +3335,7 @@
   // picked up, so it must never be throttled away by a recent navigation.
   setInterval(function () { loadSettings(true); }, 10000);
 
-  startObserver();
+  domBus().subscribe(scheduleTick);
 
   loadSettings();
   tick();

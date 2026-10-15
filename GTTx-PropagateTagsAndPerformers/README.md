@@ -21,6 +21,7 @@ and UI plugin component patching ([<abbr title="Holding changes for you to revie
 > the safety net. ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history) keeps every pass for later, automatic
 > ones included - except the image writes of a Propagate All run, unless Core's **Record
 > Library-Wide Image Writes** is on - but it lives in this browser and is no backup either.
+> Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo).
 >
 > The two **automatic** modes deserve the same caution for a different reason: they [<abbr title="A plugin's automatic response to a save you just made in Stash - auto-propagation, auto-prune.">react</abbr>](../GLOSSARY.md#reaction) to
 > every save, and with **Silent [<abbr title="Propagate Tags and Performers copying tags or performers from one entity to related ones.">Auto-propagation</abbr>](../GLOSSARY.md#propagate)** on they write with no dialog; only ᝯㄝₓ Core's
@@ -262,7 +263,7 @@ Escape write nothing. The dialog draws the first thousand lines and says how man
 those start as the drawn lines do, and **Select All**, **Unselect All** and **OK** cover them too. It
 opens over whatever is on screen, so Escape closes it first. On, a reaction writes the moment Stash
 saves, with no dialog and no review. Either way every write is recorded in ᝯㄝₓ Core's
-[Undo History](../GTTx-Core/README.md#undo-history), where it can be undone later. The switch is grayed out while neither mode is on. When another plugin is waiting for
+[Undo History](../GTTx-Core/README.md#undo-history), where it can be undone later ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). The switch is grayed out while neither mode is on. When another plugin is waiting for
 your answer before it reads an entity the dialog may write — Scene Variants does, before it reads
 a scene for its own propagate offer, and Normalize Parent Tags, before it prunes one — the dialog says so, naming the entity, with the time it has left; if that runs out while the dialog is open, a warning
 replaces it, because what you add here will then not be part of what that plugin read.
@@ -283,7 +284,7 @@ the entity still carries, and that nothing still related to it carries, are list
 dialog, **unticked**; one save can list several entities - a scene leaving a group loses the
 group's tags, and the group the scene's. Tick the ones to remove and press OK, which stays
 unavailable until something is ticked; nothing else is touched, and the removal is recorded in
-Undo History. A tag a marker of the scene still carries, as its primary tag or one of its tags, is
+Undo History ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). A tag a marker of the scene still carries, as its primary tag or one of its tags, is
 not offered while the marker path is on; a gallery's tag is still carried while any image left in
 it carries it. On a path in **Common** mode a tag came from the leaving source only if every
 source carried it, so it is offered only once no source is left on that path, and only a tag every
@@ -704,11 +705,11 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Propagate All | 1163 MB | 1050 MB | 1034 MB |
+| Propagate All | 1163 MB | 1051 MB | 1034 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** and **Save log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.

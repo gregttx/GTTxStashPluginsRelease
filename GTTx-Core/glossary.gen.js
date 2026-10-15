@@ -8,7 +8,7 @@
   if (!ns || typeof ns !== 'object') ns = window.__GTTx__ = {};
   ns.glossary = {
     format: 1,
-    names: ["Core","Custom Fields Bulk Editor","De-Spicer","Entity Name Maintainer","Find & Replace","Find & Replace Entities by Text Content","Merge Performer Tags","Merge Performer Tags To Scenes","Normalize Parent Tags","Propagate","Propagate Tags and Performers to Related Entities","Scene Filename Manager","Scene Variants","Tag Bundle Clipboard"],
+    names: ["Core","Custom Fields Bulk Editor","De-Spicer","Entity Name Maintainer","Find & Replace","Find & Replace Entities by Text Content","Merge Performer Tags","Merge Performer Tags To Scenes","Normalize Parent Tags","Orphan Cleanup","Propagate","Propagate Tags and Performers to Related Entities","Scene Filename Manager","Scene Variants","Tag Bundle Clipboard"],
     terms: [
       {"id":"entity","tip":"entity: One item in a Stash library - a scene, image, gallery, performer, studio, group, tag or scene marker.","re":["(^|[^\\w-])()(entity(?:e?s)?)()(?![\\w-])","(^|[^\\w-])()(entities(?:e?s)?)()(?![\\w-])"],"not":[]},
       {"id":"entity-type","tip":"entity-type: Which kind of entity an item is - scene, image, gallery, performer, studio, group, tag or scene marker. Much here is set, searched or run per entity-type.","re":["(^|[^\\w-])()(entity-type(?:e?s)?)()(?![\\w-])"],"not":[]},

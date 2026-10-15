@@ -153,6 +153,29 @@ Tags*, *Paste Tags* — and then explains what pressing it does.
 If another of these plugins is installed, its buttons and these share the row in a fixed order
 rather than whichever loaded first.
 
+## Keyboard shortcuts
+
+Two keys in a row, the way Stash's own shortcuts work, on any of the six entity pages:
+
+| Keys | What it does |
+|---|---|
+| `t` `c` | Presses **⮺ Tags**: this entity's tags go onto the clipboard |
+| `t` `v` | Presses **📋Tags…** on the Edit tab: the dialog opens with the newest bundle picked |
+| `Enter` | In that dialog, presses **Add** |
+
+**Keyboard Shortcuts...**, on this plugin's settings, sets the first two - one or two single keys
+each, a space between, as Stash writes its own - or turns either off with an empty box, for when they
+clash with another plugin's keys. Each box says, in gray, when its keys are one of Stash's own, start
+with one, are a single key that starts Stash's own (`v`, before its view keys), clash with the other
+shortcut, or are not a shortcut at all (the default is then used). Shift for a key that needs it is
+fine: `t ?` is T, then Shift and ?.
+
+None of them clashes with Stash's own: Stash binds nothing that starts with `t`, and the key that
+completes one of these goes no further, so Stash's `c c` (a cover from the player) or its Enter
+(play and pause) never sees it. Nothing happens while you are typing in a box, or with Ctrl, Alt
+or Meta held, and a shortcut whose button is not on the page - or on a tab you have left, such as
+the Edit tab once you go back to Details - does nothing. Each button's tooltip names its keys.
+
 ## Settings
 
 | Setting | |

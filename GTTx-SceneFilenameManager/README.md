@@ -202,7 +202,7 @@ again writes what it left, archives first.
 **Undo** reverses what this dialog wrote — the fields put back as they were, the files renamed back —
 for as long as the dialog stays open. Every pass is also kept in ᝯㄝₓ Core's
 [Undo History](../GTTx-Core/README.md#undo-history), where it can be undone later — a file renamed back in its folder — and what the dialog's Undo puts
-back is marked undone there. **Copy log** puts the counters and every line on the clipboard.
+back is marked undone there. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo). **Copy log** puts the counters and every line on the clipboard.
 
 A run over a whole library writes far more lines than the dialog shows, so a bar over the log
 filters what is drawn: a box per kind of line — PLAN, SAME, EDIT (RENAME in Rename Files From Metadata), UNDO (what Undo took back, without the merged value the PLAN line ends on), INFO,
@@ -235,6 +235,9 @@ field or renaming by the default template.
 |---|---|---|
 | **Original Filename Custom Field** | `ᱜ╦╦🞮_Original_Filename` | The custom field the tasks archive into and restore from: every file's name, by file id. Written into the box the first time the plugin loads; clearing the box goes back to the default. Renaming it does not move what is already written. |
 | **Rename Template** | `{[\|studio\|] }{\|basetitle\|}{\|!basetitle\|{\|origfilename\|}}{ (\|year\|)}{ \|variantpostfix\|}{ [\|performers\|]}{ by \|director\|}{ \|autoindex2\|}` | The name Rename Files From Metadata builds, before the extension. Seeded like the field; clearing it goes back to the default. **Rename Template...** opens the template editor, which also holds the four limits below; the row says under the template what they are set to. |
+
+Editing the **Original Filename Custom Field** in Stash's own dialog, a list under the box offers the
+custom field names your library's [<abbr title="One item in a Stash library - a scene, image, gallery, performer, studio, group, tag or scene marker.">entities</abbr>](../GLOSSARY.md#entity) hold ([ᝯㄝₓ Core](../GTTx-Core/README.md#links-cards-and-tooltips)).
 
 The four limits are in the template editor, beside the template whose output they hold, each with
 its whole description on hover. Each is stored under its own key as a row of its own would be, so
@@ -279,13 +282,13 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Archive Original Filenames | 116 MB | 162 MB | 161 MB |
-| Restore Original Filenames | 56 MB | 82 MB | 82 MB |
-| Rename Files From Metadata | 199 MB | 258 MB | 258 MB |
+| Archive Original Filenames | 116 MB | 154 MB | 152 MB |
+| Restore Original Filenames | 56 MB | 77 MB | 77 MB |
+| Rename Files From Metadata | 199 MB | 252 MB | 248 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** and **Save log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.

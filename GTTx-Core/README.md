@@ -5,7 +5,7 @@ The shared half of the ᝯㄝₓ plugins, and the home for the things that belon
 
 **Install this alongside any other ᝯㄝₓ plugin.** Each one declares it as a dependency, so Stash
 installs it with them and loads it before them. It adds one task, **Undo History...**, and writes to
-your library only when you undo something there.
+your library only when you undo something there ([not everything can be undone](#what-undo-history-cannot-undo)).
 
 Requires Stash 0.31.0 or newer.
 
@@ -36,7 +36,7 @@ plugin you have, with no warning from Stash. See [Troubleshooting](#troubleshoot
 ## What you actually see
 
 Seventeen things: six are off until you turn them on, two counters on the cards are on, one says how
-many lines a dialog draws at once, one is the busy cursor's style and seven are colors — and [Undo History](#undo-history), which is on.
+many lines a dialog draws at once, one is the busy cursor's style and seven are colors — and [Undo History](#undo-history), which is on ([not everything can be undone](#what-undo-history-cannot-undo)).
 
 Those seventeen are one dialog: the first row of this plugin's settings, **UI Customizations**, says
 what they are now, and its **UI Customizations...** button opens them. **Set All to Default**, at
@@ -228,7 +228,8 @@ font. On Windows nothing changes.
 ### How many log lines a dialog keeps
 
 Every ᝯㄝₓ dialog shows the last lines of its log - as many as [Lines Drawn at Once](#how-many-lines-a-dialog-draws-at-once) says, 1,000 by default — a node per line is a page that stops
-responding — and keeps the rest so **Copy log** can hand over the whole run. That buffer is what a
+responding — and keeps the rest so **Copy log** can hand over the whole run, and **Save log** beside it
+download it as a text file named by the plugin and the time. That buffer is what a
 library-wide run grows: ᝯㄝₓ Normalize Parent Tags over 100,000 scenes and 1,000,000 images writes
 9.8 million lines, several gigabytes of them, beside a plan that is already the largest thing in
 the page.
@@ -304,6 +305,23 @@ its file. The tooltip opens *above* the mark rather
 than under the pointer, so the pointer does not cover its first line. A setting that names
 **several** fields - Custom Fields Bulk Editor's [<abbr title="A custom field locked in Custom Fields Bulk Editor: added to, never changed or removed.">Locked</abbr>](../GLOSSARY.md#lock) Custom Fields - shows each name with a mark
 of its own behind it.
+
+A box for a **tag's name** or a **custom field's name** - in a plugin's settings dialog, in Stash's
+own dialog for Custom Fields Bulk Editor's and Scene Filename Manager's names, and Find & Replace's
+Tag box - opens a **list of what your library has** under it:
+
+- **A tag box** lists, as you type, up to 20 tags whose name or an alias holds what you typed -
+  Stash's own tag search, as on its Tags page; a tag found by an alias says which.
+- **A custom field box** lists, as soon as it is focused, every field name an entity holds - the
+  most held first, with how many hold it - and the names Custom Fields Bulk Editor describes,
+  whatever the box holds already; typing narrows it. The names are read once a minute at most.
+
+Each row leads with the tag icon or **ⓕ**. In Stash's own dialog the box also gets the marks a ᝯㄝₓ
+dialog draws beside it: the tag icon and a 🔗 to the tag (a red **?** where no tag has the name), or
+the field's **ⓕ** with its description, each with its tooltip.
+
+A click, or ↑/↓ and Enter, puts the name in the box; Escape closes the list, and a second Escape
+the dialog. Anything else can still be typed - a name for a tag not made yet, say.
 
 An **uncommon term** - a word Stash or these plugins use in a sense of their own, such as
 [<abbr title="Normalize Parent Tags adding the parents implied by an entity's tags.">Roll-Up</abbr>](../GLOSSARY.md#roll-up), [<abbr title="The link from an entity in your library to its entry on a stash-box: the box's address and the entry's id.">stash-id</abbr>](../GLOSSARY.md#stash-id) or drift-score - carries a dotted underline, and hovering it, focusing it or
@@ -384,13 +402,29 @@ does.
 
 What the ᝯㄝₓ plugins write, and what you save in Stash's own pages in this browser, is kept in this
 browser so it can be undone later — after the dialog that wrote it has closed, days later if need be.
+
+> **Not everything can be undone.** Some changes are never recorded, some are recorded but cannot be
+> undone, and a deleted entity comes back under a new id — see
+> [What Undo History cannot undo](#what-undo-history-cannot-undo). A database backup is the one
+> complete way back.
+
 Open it from **Settings → Tasks → Undo History...**, or from the **↶** button in Stash's top bar, in the GTTx highlight color,
 beside Settings.
 
+**On an entity's own page** - a scene, image, gallery, performer, studio, group or tag - the ↶ button
+opens it **narrowed to that entity**: its own changes, under any id it had before an undo made it
+again ("what changed this title?"). **Show Everything** widens it to the whole history, and back. For
+a tag, performer, studio or group, **Where it was added or removed** also lists the changes that put
+it on something or took it off - the scenes a tag went on, say - and what was merged into it.
+
+<img src="screenshots/undo-button.png" alt="Stash's top bar: the ↶ Undo History button, in the Highlighted Text Color, just before Settings">
+
 <img src="screenshots/undo-history.png" alt="Undo History: each run a plugin wrote, newest first, with what it changed, and a tag hovered for its tooltip">
 
-- **The list** shows the history newest first, a run a row: when, who — *Your edit*, a plugin, or an
-  *Undo* — what, and how many changes. Click a row for its changes: the entity, with its hover card,
+- **The list** shows the history newest first, a run a row: when, who — *Your edit*, a plugin, an
+  *Undo* or a *Replay* — what, how many changes and how much they keep in this browser: a size, and the share of
+  the Size Limit once that is 0.01% or more (a picture, a large run). Click a row for its changes, each
+  with its own size: the entity, with its hover card,
   the field, and the value before and after; a custom field is named in blue, with the box its
   name opens elsewhere. Tags, performers, studios, groups and the other related
   entities are named with their id — `+Blonde (105)` — each a link with its hover card, and so is
@@ -404,14 +438,54 @@ beside Settings.
   only some ticked shows as partly ticked. Every ticked change is checked
   against what your library holds now, and the list says which can be undone and which are skipped,
   before anything is written. **Proceed** writes it. **Copy log**, under the review and after the
-  undo, copies what they list as plain text. **back to here**, at the end of a run's row,
+  undo, copies what they list as plain text, and **Save log** downloads it as a file. **back to here**, at the end of a run's row,
   ticks that run and every newer one, to take the library back to before it.
 - **Take it out of the history**, ticked in the review before Proceed, makes the undo a *pop* (it
   starts as the **Undo Takes It Out of the History** setting says, off by default): what
   it undoes leaves the history instead of an undo run joining it, so the history reads as it did
-  before those changes. **It risks history loss:** nothing is kept of that undo, so it cannot be
-  redone, and the changes it took out cannot be found or exported again. A change and the undo of it, both
+  before those changes. **It risks history loss:** only **Redo...** can bring those changes back —
+  written again where the library still holds what the undo put back, and returned to the history —
+  and only until the next change is recorded in this browser (a play Stash's player adds by itself
+  does not count) or the history is cleared, as an editor drops its redo once you type again; a pop
+  of more than 1 MB, pictures say, is not kept for Redo at all, and says so. After that they cannot
+  be redone, found or exported. A change and the undo of it, both
   ticked, cancel out: nothing is written, and a pop takes both out.
+- **Replay Selected...** writes the ticked changes **again**, for a database put back from a backup:
+  1. **Back Up and Export** takes a Stash backup and saves the history with it.
+  2. Work goes on; some of it good, some of it - a plugin being debugged, say - not.
+  3. You put Stash's database back from that backup (Stash has no restore button: replace the
+     database file while Stash is stopped).
+  4. **Import...** the history file saved since, so the runs after the backup are listed again.
+  5. **Tick Since the Last Backup** ticks every run after it (untick what you do not want back), or
+     tick by hand, then **Replay Selected...**.
+
+  Each change is checked oldest first: written where its field still holds what it held before,
+  **already applied** where it holds what the change wrote - a change and a later one on the same
+  field count as applied together - and *changed since* otherwise. A relation is replayed by what it
+  added and removed.
+  - **A create** is made again from what it set, which a create made in Stash's pages keeps with it -
+    under a new id where the old one is taken, and every later change in the replay follows it
+    there. A create recorded without it (a plugin's, or one from before the history kept it) is not
+    replayed, nor a tag only it made put on anything.
+  - **A delete** is deleted again where what carries the entity - once the changes before it in the
+    same replay are written - is what carried it then - else
+    *changed since*: it would take the entity off something the original delete never touched. An
+    image, a gallery or a scene deleted with its files is deleted as a plain delete: the files are
+    gone already.
+  - **A merge** - tags, performers, scenes - is made again where its destination and a source are
+    still there, or made first by the same replay; a source gone is *merged already*.
+
+  A delete or a merge replayed is recorded as Stash's page would record it, a run of its own named
+  *Replay*, so each can be undone as any other. **A database put back hands out again the ids used
+  after the backup**, so an entity found under a recorded id counts as the same only where its name is
+  the recorded one - else the change is *changed since*: its id is another entity's now, and so is a
+later change that would put that id on something. A change
+  replayed already is not replayed again until that replay is undone, and a replay in two goes follows
+  the first's new ids. **Not replayed**, each saying why in the review: a
+  change undone later, unless its undo is ticked too, when the two cancel out; a file moved to another
+  scene, or deleted. The replay is recorded as a run of its own (*Replay*), each change it replayed
+  marked *(replayed)*, so Undo Selected... takes it back. Tick Since the Last Backup knows the backup taken in this browser, or
+  the one an imported history names - the export carries its time.
 - **Delete Selected...** takes the ticked runs and changes out of the history — test runs, say —
   without touching your library. It asks twice.
 - **Unselect All** and **Select All** close the footer, at its right. **Unselect All** clears every tick, the ones a filter hides included, since those would still be
@@ -422,7 +496,7 @@ beside Settings.
   A custom field locked in ᝯㄝₓ Custom Fields Bulk Editor is never changed or removed by an undo; one
   an edit removed can be put back.
 - **An undo is recorded too**, so undoing it is redo — all but the undo of a create.
-- **Settings changes are recorded** (Record Settings Changes, on by default): a plugin's settings
+- **Settings changes are recorded** (Record Settings Changes, on by default): a ᝯㄝₓ plugin's settings
   saved in this browser — on Stash's settings page or in a ᝯㄝₓ plugin's own dialog — each setting
   that changed a change of its own, undone by putting its value back. The defaults a plugin writes
   in when it first loads are not recorded, nor a plugin's own state - De-Spicer's [<abbr title="A made-up value De-Spicer puts in place of a real one. Consistent: the same original always becomes the same pseudonym, so a performer's name in a title still matches the performer.">pseudonym</abbr>](../GLOSSARY.md#pseudonym) secret and
@@ -449,15 +523,34 @@ beside Settings.
   Clear**, **Clear Without Exporting** or **Cancel**. Imported runs came from a file and do not
   count. With nothing recorded, only Import... can be pressed.
 
-What is recorded and what is not:
+What is recorded:
 
-| Recorded | Not recorded |
-|---|---|
-| every write a ᝯㄝₓ plugin makes, as it lands | edits made in another browser or on another device |
-| edits you save in Stash's own pages in this browser — edit forms and bulk edits of scenes, images, galleries, performers, studios, groups and tags, and creating one | Stash's own tasks: Scan, Identify, Auto Tag, Clean |
-| deleting a tag, performer, studio, group or scene, and merging tags or performers — undone by creating it again under a new id and putting it back on what still carries it, and for a performer merge putting back what it set on the performer it went into; older changes naming the old id follow it to the new one | scripts using Stash's API |
-| deleting an image or a gallery, or a scene with its files, and merging scenes — recorded, not undone: the review says why | a scene's play history and O-count, markers and pictures, which a delete takes for good |
-| | a cover image, a picture or a stash-id in a save — the run says so |
+- every write a ᝯㄝₓ plugin makes, as it lands;
+- edits you save in Stash's own pages in this browser — edit forms and bulk edits of scenes, images,
+  galleries, performers, studios, groups, tags and scene [<abbr title="A scene marker: a moment in a scene (a time, and optionally an end), with a title, a primary tag and other tags.">markers</abbr>](../GLOSSARY.md#marker), and creating one — stash-ids and a
+  group's containing groups and sub-groups included, a group's sub-groups added, removed or reordered
+  on its page, and a gallery's cover chosen or reset — undone by showing the image it showed, chosen
+  again only where Stash's own fallback is not that image;
+- the rest of what Stash's pages change: a gallery's chapters added, edited or deleted, and images
+  added to a gallery or removed from it; a scene's O-counter and plays, added, deleted or reset - an
+  added one is undone by deleting that timestamp, a deleted one by adding it back - and its resume
+  point and play time reset; a scene's primary file chosen, and a file moved to another scene,
+  undone by moving it back (the undo of that undo is refused: the file would have to go to a scene
+  the history does not keep); with **Record Pictures** on, a cover generated from the video, read once
+  Stash's job ends - one still unchanged 30 seconds on is shown as not recorded, in case its job runs
+  later;
+- deleting a tag, performer, studio, group, scene or scene marker, and merging tags or performers —
+  undone by creating it again under a new id and putting it back on what still carries it; a scene
+  comes back with its markers, and a performer merge's undo also puts back what it set on the
+  performer it went into. Older changes naming the old id follow it to the new one;
+- with **Record Pictures** on, a picture changed in a save or taken by a delete — a scene's cover, a
+  tag's, studio's or performer's image, a group's front and back images — kept whole, before and after,
+  and a scene cover Scene Variants' Synchronize replaces;
+- a deleted tag comes back on everything that carried it — scenes, images, galleries, performers,
+  groups, studios, the scene markers whose tags held it — under its parents and over its children;
+  undoing a tag merge also gives a scene marker back the primary tag the merge moved.
+
+Everything else is in [What Undo History cannot undo](#what-undo-history-cannot-undo), below.
 
 To record an edit of yours, the entity is read just before Stash saves it and again just after, so
 a save waits for one small read; a bulk edit is read 50 at a time, a few reads at once, so one of
@@ -465,6 +558,57 @@ thousands pauses a while. A delete reads each entity it takes, a few at once. If
 save still goes through and the history shows a gap there - for a delete, only for what could not be
 read. A record over half the Size Limit is not kept either, and leaves a gap line saying so; one the
 browser refuses to store, its storage full, is said in the browser console.
+
+### What Undo History cannot undo
+
+Undo History is a safety net with holes. **Back up your database** (Back Up and Export does it
+together with the history) before anything you could not redo by hand; the backup is the one thing
+that brings back all of it.
+
+**Never recorded, so there is nothing to undo:**
+
+- anything done outside this browser: in another browser or on another device, by Stash's own tasks
+  (Scan, Identify, Auto Tag, Clean, Generate and the rest), and by scripts or other plugins using
+  Stash's API;
+- what a switch leaves out while it is off: Record Edits Made in Stash's Pages, Record Deletes and
+  Merges, Record Pictures, Record Settings Changes, and Record Library-Wide Image Writes for a ᝯㄝₓ
+  plugin's pass over the Image entities;
+- in Stash's pages: the resume point and play time the player saves every few seconds while a scene
+  plays (resetting them is recorded); [<abbr title="A shared online database of scene, performer and studio metadata that Stash matches against and scrapes from; StashDB is the best-known one.">stash-box</abbr>](../GLOSSARY.md#stash-box) submissions; saved and default filters; and Stash's
+  own settings (a ᝯㄝₓ plugin's settings are recorded; another plugin's never are - they may hold a
+  key or a password). Stash's pages cannot rename or move a file; Scene
+  Filename Manager's and De-Spicer's renames are recorded;
+- from a ᝯㄝₓ plugin, the stash-ids, pictures and group hierarchy it writes — the covers Scene Variants
+  pushes are the exception, kept with Record Pictures on; De-Spicer says so
+  before Proceed;
+- a save whose read failed — the history shows a gap there — and a run too large to keep: over half
+  the Size Limit, which the dialog that wrote it says;
+- whatever the history no longer holds: past Keep For or the Size Limit, before the last backup with
+  Only Since the Last Backup on, taken out by Delete Selected..., Clear History... or an undo that
+  took it out of the history, and all of it when this site's browser data is cleared.
+
+**Recorded, but not undone** — the review lists each with the reason:
+
+- deleting an image or a gallery: Stash cannot create one; it comes back only by rescanning its files,
+  as a new entity;
+- deleting a scene together with its files, and merging scenes, which moves the files;
+- deleting a file in Stash's pages: it is gone from the disk;
+- the redo of a file moved back to its scene: the history does not keep the scene it had gone to;
+- the redo of a merge: undoing the split it was put back with would not merge again — merge again in
+  Stash;
+- undoing a create while anything still carries it, since deleting it would take it off them and
+  nothing is kept to put it back — and so an undone create cannot be redone either.
+
+**Undone only in part:**
+
+- a deleted entity comes back **under a new id** — Stash never reuses one — so a bookmark, a link or a
+  note naming the old id no longer reaches it;
+- a deleted scene comes back without its play history, O-counter history and resume point, and,
+  unless Record Pictures was on, without its cover; a deleted tag, studio or performer without its
+  picture, and a deleted group without its front and back images, likewise;
+- a change is undone only while its field still holds what was written: anything changed since — by
+  hand, in another browser, by a Stash task — is skipped, never overwritten, and a custom field locked
+  in ᝯㄝₓ Custom Fields Bulk Editor is never changed by an undo.
 
 **Its settings** are in a dialog: the second row of this plugin's settings, **Undo History**, says
 what they are now, and its **Undo History Settings...** button opens them.
@@ -475,10 +619,11 @@ what they are now, and its **Undo History Settings...** button opens them.
 | Size Limit (MB) | 256 | 16 to 4096. A single run over half of it is not recorded, and its dialog's own Undo still covers it. Export and the history's filters hold the whole history in memory, so keep it modest on a machine short of memory |
 | Only Since the Last Backup | off | keeps only what came after the last backup this browser saw; a run you imported is kept |
 | Record Edits Made in Stash's Pages | on | deletes and merges have a switch of their own |
-| Record Library-Wide Image Writes | off | a pass over a million Image entities would crowd everything else out; the pictures entities show are never recorded |
+| Record Library-Wide Image Writes | off | a pass over a million Image entities would crowd everything else out; the pictures entities show are Record Pictures' to keep, not this |
 | Protect Its Storage | on | asks the browser not to clear it when the disk is nearly full |
-| Record Deletes and Merges | on | keeps what a delete or a tag merge takes away, so it can be put back; a delete of something large reads a lot first |
-| Record Settings Changes | on | every plugin's settings saved in this browser, each setting a change of its own; not the defaults a plugin seeds, nor a plugin's own state (De-Spicer's pseudonym secret and record) |
+| Record Deletes and Merges | on | keeps what a delete or a tag merge made in Stash's pages takes away, so it can be put back; a delete of something large reads a lot first. A ᝯㄝₓ plugin's own deletes - Orphan Cleanup's - are recorded whatever this says |
+| Record Pictures | off | keeps the picture itself — a scene's cover, a tag's, studio's or performer's image, a group's front and back images — when a save in Stash's pages changes it or a delete takes it, so the undo puts it back. Each is kept whole, before and after, usually 20 KB to 1 MB, counted against the Size Limit, and a save that changes one waits while it is read. Of the pictures a ᝯㄝₓ plugin writes, only the covers Scene Variants pushes are recorded |
+| Record Settings Changes | on | every ᝯㄝₓ plugin's settings saved in this browser (another plugin's may hold a key or a password, and are never recorded), each setting a change of its own; not the defaults a plugin seeds, nor a plugin's own state (De-Spicer's pseudonym secret and record) |
 | Undo Takes It Out of the History | off | **in the GTTx highlight color: it risks history loss.** Where the review's **Take it out of the history** box starts; the box, beside Proceed, still decides for each undo |
 
 The history lives in this browser's own storage, per browser and per device, and goes if you clear
@@ -498,15 +643,16 @@ every ᝯㄝₓ plugin's settings to another Stash, or keeps a copy before you t
   pseudonyms, so keep a file with it apart from any database you share.
 - **Import Settings...** reads such a file and lists every setting it would change, the value now
   and the file's. Nothing is written until you press **Proceed**. A setting the file does not name
-  is left as it is; a plugin in it that is not a ᝯㄝₓ one is skipped and named. With **Record
+  is left as it is; a plugin in it that is not a ᝯㄝₓ one, or a key not named as a ᝯㄝₓ setting is,
+  is skipped and named. With **Record
   Settings Changes** on, Undo History records what the import changed - all but De-Spicer's secret
-  and records, which it never records.
+  and records, which it never records ([not everything can be undone](#what-undo-history-cannot-undo)).
 
 ## Nothing else touches your library
 
 Apart from an undo you proceed with in Undo History, nothing here writes to your library — the
 only other thing this plugin stores is its own settings, and an import you proceed with writes only
-settings. Every other ᝯㄝₓ plugin still asks before
+settings ([not everything can be undone](#what-undo-history-cannot-undo)). Every other ᝯㄝₓ plugin still asks before
 it writes, exactly as it did.
 
 ## License

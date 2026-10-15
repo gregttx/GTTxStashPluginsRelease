@@ -2,8 +2,8 @@ id: GTTx-DeSpicer
 name: ᝯㄝₓ De-Spicer
 metadata:
   description: "Vanillify and anonymize your library: rewrite what names real people, studios and sites, and what is explicit, across every entity-type at once.\n\nRun it from Settings - Tasks - Plugin Tasks. Choose the goals - Anonymize, Vanillify or both - and how each kind of data is treated: kept, blanked, replaced by a placeholder or by a consistent pseudonym. The scan lists every change, entity by entity, before and after; nothing is written until you press Proceed.\n\nBACKING UP YOUR DATABASE BEFORE THE FIRST RUN IS STRONGLY RECOMMENDED.\n\nRequires Stash 0.31.0 or newer."
-version: 1.0.4
-date: "2026-10-12 23:44:17"
+version: 2.0.0
+date: "2026-10-14 23:39:41"
 requires:
 - GTTx-Core
 files:

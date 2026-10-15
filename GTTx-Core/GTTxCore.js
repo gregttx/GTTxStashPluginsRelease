@@ -21,11 +21,8 @@
   var PLUGIN_ID = 'GTTxCore';
   var PLUGIN_NAME = 'ᝯㄝₓ Core';
   var PLUGIN_SHORT_NAME = 'ᝯㄝₓ Core';
-  var PLUGIN_VERSION = '5.12.8';
+  var PLUGIN_VERSION = '6.0.0';
   var README_URL = 'https://github.com/gregttx/GTTxStashPluginsRelease/blob/main/GTTx-Core/README.md';
-  var README_LINK_ID = 'gttxcore-readme-link';
-  var DESC_TOGGLE_ID = 'gttxcore-desc-toggle';
-  var STALE_ID = 'gttxcore-stale-notice';
   var STYLE_ID = 'gttxcore-style';
   var SETTINGS_TTL_MS = 10000;
   var OBSERVE_MS = 100;
@@ -159,6 +156,65 @@
     if (className) node.className = className;
     if (text != null) node.textContent = text;
     return node;
+  }
+
+  // One read shared by everyone who asks: the read in flight while it runs, however long it takes, and
+  // its answer for `ttl` ms after it landed - a number, or a function of the answer (a miss kept shorter
+  // than a hit). A new `key`, `force` or `drop()` reads afresh, and an older read landing after a newer
+  // one started changes nothing. A failed read rejects its callers and keeps nothing, so the next asks
+  // again; a read that must not hammer a failing server answers its last value instead (`last()`).
+  function sharedRead(read, ttl) {
+    var key, has = false, value, at = 0, wait = null;
+    function get(k, force) {
+      if (k !== key) { key = k; has = false; value = undefined; wait = null; }
+      if (wait && !force) return wait;
+      if (has && !force && Date.now() - at < (typeof ttl === 'function' ? ttl(value) : ttl)) return Promise.resolve(value);
+      var mine = wait = Promise.resolve(k).then(read);
+      mine.then(function (v) { if (wait !== mine) return; value = v; has = true; at = Date.now(); wait = null; },
+        function () { if (wait === mine) wait = null; });
+      return mine;
+    }
+    // The last answer, or undefined: for a caller that draws now and cannot wait.
+    get.last = function () { return value; };
+    get.drop = function () { has = false; wait = null; };
+    return get;
+  }
+
+  // A plugin's stylesheet, put in the page once under its id.
+  function styleOnce(id, css) {
+    if (document.getElementById(id)) return;
+    var style = document.createElement('style');
+    style.id = id;
+    style.textContent = css;
+    (document.head || document.body || document.documentElement).appendChild(style);
+  }
+  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  // Normalize Parent Tags' published API, where it answers `prepare`; null where it is missing or older.
+  function nptApi() {
+    var api = coop().api && coop().api.NormalizeParentTags;
+    return api && typeof api.prepare === 'function' ? api : null;
+  }
+  // A write job's input sent: through its own `write` where it has one, else as `spec.mutation`.
+  function jobWrite(job, input, op) {
+    if (job.write) return job.write(input);
+    return gqlRequest('mutation ' + op + '($input: ' + job.spec.input + '!) { ' + job.spec.mutation +
+      '(input: $input) { id } }', { input: input });
+  }
+  // The tag of `tags` named `wanted`, else the first holding it as an alias; null where none does.
+  // Exact and case-sensitive, where the server's EQUALS is neither. **Every name is tried before any
+  // alias**: a tag called X and a different tag carrying X as an alias is a library a user can build,
+  // and the one they named is the one they meant. Two passes rather than one loop with a remembered
+  // fallback, because that loop's answer would depend on the order the list arrives in. Aliases are
+  // matched on the same terms as the name because Stash shows them beside it and refuses to let two
+  // tags share one, so a box holding an alias names exactly one tag. The raw `aliases`, not a list
+  // collapsed for display: a match here has to be the comparison the name gets.
+  function pickTagByNameOrAlias(tags, wanted) {
+    var i;
+    for (i = 0; i < tags.length; i++) if (tags[i] && tags[i].name === wanted) return tags[i];
+    for (i = 0; i < tags.length; i++) {
+      if (tags[i] && ((tags[i].aliases || []).indexOf(wanted) !== -1)) return tags[i];
+    }
+    return null;
   }
 
   function byClass(root, name) {
@@ -602,7 +658,7 @@
 
 
   var GLOSS_CLASS = 'gttx-gloss';
-  var GLOSS_PREFIXES = ['gttxcore', 'npt', 'cpt2s', 'ptp2re', 'cfbe', 'enm', 'fretc', 'sfm', 'svr', 'tbc', 'dsp'];
+  var GLOSS_PREFIXES = ['gttxcore', 'npt', 'cpt2s', 'ptp2re', 'cfbe', 'enm', 'fretc', 'sfm', 'svr', 'tbc', 'dsp', 'oc'];
   var GLOSS_SKIP_TAGS = /^(A|BUTTON|INPUT|TEXTAREA|SELECT|OPTION|LABEL|H1|H2|H3|H4|H5|H6|CODE|PRE|SCRIPT|STYLE)$/;
   // The setting row's hover box and its ⓘ mark, a dialog's title and log, and a mark
   // already drawn. `-tip` is matched whole, so a row's `-tipped` summary is still read.
@@ -1393,14 +1449,30 @@
     return g;
   }
 
+  // The tag a name names, by its name or an alias as Stash's EQUALS reads it: `{ id, name }`, null
+  // where none does, a rejection where the read failed. One read per name in flight, so a mark
+  // and its plugin's own lookup of the same name share it.
+  var _tagNamed = {};
+  function tagNamed(name) {
+    var n = String(name == null ? '' : name).trim();
+    if (!n) return Promise.resolve(null);
+    if (hasOwn(_tagNamed, n)) return _tagNamed[n];
+    var done = function () { delete _tagNamed[n]; };
+    var p = _tagNamed[n] = gqlRequest('query GTTxTagMark($n: String!) { byName: findTags(tag_filter: { name: { value: $n, ' +
+      'modifier: EQUALS } }) { tags { id name } } byAlias: findTags(tag_filter: { aliases: { value: $n, modifier: EQUALS } }) ' +
+      '{ tags { id name } } }', { n: n }).then(function (d) {
+      var tag = (((d || {}).byName || {}).tags || [])[0] || (((d || {}).byAlias || {}).tags || [])[0];
+      return tag ? { id: String(tag.id), name: tag.name } : null;
+    });
+    p.then(done, done);
+    return p;
+  }
+
   // `withGlyph`: the tag icon before the link, for a box no field of Core's draws (`tag: true` there).
   function tagMark(name, withGlyph) {
-    var n = String(name == null ? '' : name).replace(/^\s+|\s+$/g, '');
+    var n = String(name == null ? '' : name).trim();
     if (!n) return Promise.resolve(null);
-    return gqlRequest('query GTTxTagMark($n: String!) { byName: findTags(tag_filter: { name: { value: $n, modifier: EQUALS } }) ' +
-      '{ tags { id name } } byAlias: findTags(tag_filter: { aliases: { value: $n, modifier: EQUALS } }) { tags { id name } } }',
-    { n: n }).then(function (d) {
-      var tag = ((d.byName || {}).tags || [])[0] || ((d.byAlias || {}).tags || [])[0];
+    return tagNamed(n).then(function (tag) {
       injectStyle();
       if (!tag) {
         var none = el('span', 'gttx-tagmark gttx-tagmark-none', '?');
@@ -1418,6 +1490,250 @@
       both.appendChild(node);
       return both;
     }, function () { return null; });
+  }
+
+  // ── Suggestions under a box: tags by name or alias, custom field names in use ──
+  //
+  // A list opened under a box as you type in it, each row a value to put there: a click, or ↑/↓
+  // and Enter, puts it in; Escape closes the list (the dialog only on a second press). Typing
+  // anything else stays allowed - a name for a tag not made yet, say. Fixed to the window, so a
+  // dialog's scrolling body cannot clip it, and closed when anything scrolls.
+  var SUGGEST_MAX = 20, SUGGEST_MS = 250;
+  // A box React draws keeps its own copy of the value: set through the element's own setter, the
+  // `input` event then tells React, as typing would.
+  function putValue(box, v) {
+    var proto = window.HTMLInputElement && window.HTMLInputElement.prototype;
+    var desc = proto && Object.getOwnPropertyDescriptor ? Object.getOwnPropertyDescriptor(proto, 'value') : null;
+    if (desc && desc.set && proto && box instanceof window.HTMLInputElement) desc.set.call(box, v); else box.value = v;
+    var fire = function (type) {
+      var ev;
+      try { ev = new Event(type, { bubbles: true }); } catch (e) { ev = document.createEvent('Event'); ev.initEvent(type, true, true); }
+      box.dispatchEvent(ev);
+    };
+    fire('input');
+    fire('change');
+  }
+  // `source(text)`: a Promise of rows `{ value, note, tip }`; `onEmpty`: whether an empty box is
+  // asked too (a few dozen field names, yes; every tag in the library, no).
+  // `glyph()`: the kind's mark at the head of each row - the tag icon, or ⓕ.
+  function suggestBox(box, source, onEmpty, glyph) {
+    if (!box || box._gttxSuggest) return box;
+    injectStyle();
+    var list = null, items = [], at = -1, asked = 0, wait = null, picked = false;
+    // Anything scrolling closes the list, which is fixed to the window - listened for only while it is open.
+    function onScroll(e) { if (list && !(list.contains && list.contains(e.target))) close(); }
+    function close() {
+      if (list && list.parentNode) list.parentNode.removeChild(list);
+      if (list && window.removeEventListener) window.removeEventListener('scroll', onScroll, true);
+      list = null; items = []; at = -1;
+    }
+    function paint() {
+      if (!list) return;
+      for (var i = 0; i < list.childNodes.length; i++) toggleClass(list.childNodes[i], 'gttx-suggest-on', i === at);
+      var on = list.childNodes[at];
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+    }
+    // The `input` a pick sends, as typing would, is not typing: it asks for no list.
+    function put(v) { close(); picked = true; putValue(box, v); picked = false; }
+    function show(rows) {
+      close();
+      if (!rows.length || document.activeElement !== box) return;
+      items = rows;
+      list = el('div', 'gttx-suggest');
+      rows.forEach(function (r) {
+        var o = list.appendChild(el('div', 'gttx-suggest-row'));
+        var head = o.appendChild(el('span', 'gttx-suggest-val'));
+        if (glyph) head.appendChild(glyph());
+        head.appendChild(document.createTextNode(r.value));
+        if (r.note) o.appendChild(el('span', 'gttx-suggest-note', r.note));
+        o.title = r.tip || 'Put "' + r.value + '" in the box.';
+        // On the press, not the click: the box keeps its focus, so the list is still there.
+        o.addEventListener('mousedown', function (e) { if (e.preventDefault) e.preventDefault(); put(r.value); });
+      });
+      // A press on the list itself - its scrollbar, its padding - keeps the box's focus, so the list stays.
+      list.addEventListener('mousedown', function (e) { if (e.preventDefault) e.preventDefault(); });
+      var at0 = box.getBoundingClientRect ? box.getBoundingClientRect() : null;
+      if (at0) {
+        list.style.left = Math.round(at0.left) + 'px';
+        list.style.top = Math.round(at0.bottom + 2) + 'px';
+        list.style.minWidth = Math.round(at0.width) + 'px';
+      }
+      document.body.appendChild(list);
+      // Above the box where there is no room under it, so every row can be reached.
+      var room = window.innerHeight || 0, tall = list.offsetHeight || 0;
+      if (at0 && room && tall && at0.bottom + 2 + tall > room && at0.top - 2 - tall >= 0) list.style.top = Math.round(at0.top - 2 - tall) + 'px';
+      if (window.addEventListener) window.addEventListener('scroll', onScroll, true);
+    }
+    // `all`: on focus, a list that is short enough (`onEmpty`) shows whole, whatever the box holds
+    // - one name in it is no reason to hide the others; typing narrows it.
+    function ask(all) {
+      if (document.activeElement !== box) return;   // a box left asks nothing
+      var text = all === true && onEmpty ? '' : String(box.value || '').trim(), n = ++asked;
+      if (!text && !onEmpty) { close(); return; }
+      Promise.resolve(source(text)).then(function (rows) { if (n === asked) show((rows || []).slice(0, SUGGEST_MAX)); },
+        function () { if (n === asked) close(); });
+    }
+    box._gttxSuggest = ask;
+    box.setAttribute('autocomplete', 'off');
+    box.addEventListener('input', function () { if (picked) return; clearTimeout(wait); wait = setTimeout(ask, SUGGEST_MS); });
+    box.addEventListener('focus', function () { ask(true); });
+    box.addEventListener('blur', function () { clearTimeout(wait); asked++; close(); });
+    box.addEventListener('keydown', function (e) {
+      if (!list) {
+        if (e.key === 'ArrowDown') { if (e.preventDefault) e.preventDefault(); ask(true); }
+        return;
+      }
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        at = (at + (e.key === 'ArrowDown' ? 1 : items.length - 1) + (at < 0 && e.key === 'ArrowUp' ? 1 : 0)) % items.length;
+        paint();
+      } else if (e.key === 'Enter' && at >= 0) {
+        put(items[at].value);
+      } else if (e.key === 'Escape') {
+        close();
+      } else return;
+      // The list's key, not the dialog's: Enter would save Stash's setting, Escape close the dialog.
+      if (e.preventDefault) e.preventDefault();
+      if (e.stopPropagation) e.stopPropagation();
+    });
+    return box;
+  }
+
+  // Tags whose name or an alias holds the text - Stash's own tag search, as its Tags page's box
+  // searches - the name put in the box; a row found by an alias says which.
+  function tagSuggestions(text) {
+    var low = text.toLowerCase();
+    // The tag the text names exactly, asked only where the rows are full without it: sorted by name,
+    // twenty others holding the text could come before it ("Ash Blonde" ahead of "Blonde").
+    return gqlRequest('query GTTxTagSuggest($q: String!) { findTags(filter: { q: $q, per_page: ' + SUGGEST_MAX +
+      ', sort: "name", direction: ASC }) { tags { name aliases } } }', { q: text }).then(function (d) {
+      var got = ((d || {}).findTags || {}).tags || [];
+      var named = function (t) { return String(t.name).toLowerCase() === low || (t.aliases || []).some(function (a) { return String(a).toLowerCase() === low; }); };
+      if (got.length < SUGGEST_MAX || got.some(named)) return d;
+      return tagNamed(text).then(function (hit) {
+        return hit ? { findTags: { tags: [{ name: hit.name, aliases: [text] }].concat(got) } } : d;
+      }, function () { return d; });
+    }).then(function (d) {
+      var rows = ((((d || {}).findTags || {}).tags) || []).map(function (t) {
+        var alias = String(t.name).toLowerCase().indexOf(low) === -1
+          ? (t.aliases || []).filter(function (a) { return String(a).toLowerCase().indexOf(low) !== -1; })[0] : null;
+        var exact = String(t.name).toLowerCase() === low || (t.aliases || []).some(function (a) { return String(a).toLowerCase() === low; });
+        return { value: t.name, note: alias ? 'alias: ' + alias : '', exact: exact,
+          tip: 'Put the tag "' + t.name + '" in the box' + (alias ? ', found by its alias "' + alias + '"' : '') + '.' };
+      });
+      return rows.filter(function (r) { return r.exact; }).concat(rows.filter(function (r) { return !r.exact; }));
+    });
+  }
+  function tagSuggest(box) { return suggestBox(box, tagSuggestions, false, tagGlyph); }
+
+  // Every custom field name the library uses, with how many entities of each type hold it, and
+  // the ones Custom Fields Bulk Editor describes; read once a minute at most, one read in flight.
+  var CF_TYPES = [['scenes', 'findScenes'], ['images', 'findImages'], ['galleries', 'findGalleries'],
+    ['performers', 'findPerformers'], ['studios', 'findStudios'], ['tags', 'findTags'], ['groups', 'findGroups']];
+  var CF_NAMES_MS = 60000;
+  var customFieldNames = sharedRead(function () {
+    var api = coop().api && coop().api.CustomFieldsBulkEditor;
+    var described = api && typeof api.descriptions === 'function' ? api.descriptions().then(null, function () { return {}; }) : Promise.resolve({});
+    var read = gqlRequest('query GTTxFieldNames { ' + CF_TYPES.map(function (t) {
+      return t[0] + ': ' + t[1] + '(filter: { per_page: -1 }) { ' + t[0] + ' { custom_fields } }';
+    }).join(' ') + ' }', null);
+    return Promise.all([read, described]).then(function (both) {
+      var by = {};
+      CF_TYPES.forEach(function (t) {
+        ((((both[0] || {})[t[0]] || {})[t[0]]) || []).forEach(function (e) {
+          Object.keys(e.custom_fields || {}).forEach(function (k) {
+            var n = by[k] = by[k] || { name: k, total: 0, types: {} };
+            n.total++;
+            n.types[t[0]] = (n.types[t[0]] || 0) + 1;
+          });
+        });
+      });
+      Object.keys(both[1] || {}).forEach(function (k) { if (!hasOwn(by, k)) by[k] = { name: k, total: 0, types: {} }; });
+      return Object.keys(by).map(function (k) { return by[k]; })
+        .sort(function (a, b) { return (b.total - a.total) || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0); });
+    });
+  }, CF_NAMES_MS);
+  function fieldSuggestions(text) {
+    var low = text.toLowerCase();
+    return customFieldNames().then(function (all) {
+      return all.filter(function (n) { return n.name.toLowerCase().indexOf(low) !== -1; }).map(function (n) {
+        var where = Object.keys(n.types).map(function (t) { return plural(n.types[t], t === 'galleries' ? 'gallery' : t.replace(/s$/, ''), t); }).join(', ');
+        return { value: n.name, note: n.total ? n.total.toLocaleString() : 'unused',
+          tip: 'Put the custom field "' + n.name + '" in the box. ' + (n.total ? 'Held by ' + where + '.'
+            : 'No entity holds it; Custom Fields Bulk Editor describes it.') };
+      });
+    });
+  }
+  function fieldGlyph() {
+    var g = el('span', 'gttx-cftip gttx-cfinline', CF_TIP_MARK);
+    g.title = 'The name of a custom field';
+    return g;
+  }
+  function fieldSuggest(box) { return suggestBox(box, fieldSuggestions, true, fieldGlyph); }
+
+  // A setting on Stash's own settings page, edited in Stash's dialog (`#setting-dialog`, headed by
+  // the setting's name): its box gets the list once it is focused. `kind`: 'tag' or 'field'.
+  var _nativeSuggest = {}, _nativeSuggestOn = false;
+  function headingOf(dlg) {
+    var h = dlg.querySelector ? dlg.querySelector('.modal-header') : null;
+    if (!h) return '';
+    var t = '';
+    for (var i = 0; i < h.childNodes.length; i++) if (h.childNodes[i].nodeType === 3) t += h.childNodes[i].textContent;
+    return t.trim();
+  }
+  // Beside the box, as a settings dialog of Core's draws it: the tag icon and 🔗, or a red ? where no
+  // tag has the name; ⓕ with the field's description. Redrawn as the box changes.
+  function nativeMark(box, kind) {
+    // On the box's own line, at its end, as a ᝯㄝₓ dialog draws it: Stash's box spans the dialog, so it
+    // gives up the room by its own style - React sets none there - and is not moved, which React would not survive.
+    var slot = el('span', 'gttx-nativemark');
+    box.style.display = 'inline-block';
+    box.style.width = 'calc(100% - ' + NATIVE_MARK_ROOM + ')';
+    box.style.verticalAlign = 'middle';
+    box.parentNode.insertBefore(slot, box.nextSibling);
+    var asked = 0, wait = null;
+    function draw() {
+      var v = String(box.value || '').trim(), n = ++asked;
+      Promise.resolve(v ? (kind === 'tag' ? tagMark(v) : cfTipMark(v)) : null).then(function (node) {
+        if (n !== asked) return;
+        while (slot.firstChild) slot.removeChild(slot.firstChild);
+        // The tag icon whatever the answer, as a Core dialog draws it beside a tag box: the box names a tag.
+        if (kind === 'tag') slot.appendChild(tagGlyph());
+        if (node) slot.appendChild(node);
+      }, function () {});
+    }
+    box.addEventListener('input', function () { clearTimeout(wait); wait = setTimeout(draw, 400); });
+    draw();
+  }
+  var NATIVE_MARK_ROOM = '4rem';   // the tag icon and 🔗, or ⓕ, beside the box
+  function suggestSetting(heading, kind) {
+    _nativeSuggest[heading] = kind;
+    if (_nativeSuggestOn || !document.addEventListener) return;
+    _nativeSuggestOn = true;
+    // The dialog is mounted into the page's body, outside Stash's root, and takes no focus as it
+    // opens: the body is watched - one lookup by id per change, so cheap - and the box's mark is
+    // there before it is clicked; the list opens once the box itself is focused.
+    var attach = function (dlg) {
+      var k = dlg ? _nativeSuggest[headingOf(dlg)] : null;
+      var t = k && dlg.querySelector ? dlg.querySelector('.modal-body input') : null;
+      if (!t || t._gttxSuggest) return t;
+      (k === 'tag' ? tagSuggest : fieldSuggest)(t);
+      nativeMark(t, k);
+      return t;
+    };
+    if (typeof MutationObserver === 'function' && document.body) {
+      new MutationObserver(function () {
+        var all = document.querySelectorAll('#setting-dialog');
+        for (var i = 0; i < all.length; i++) attach(all[i]);
+      }).observe(document.body, { childList: true, subtree: true });
+    }
+    document.addEventListener('focusin', function (e) {
+      var dlg = e.target;
+      while (dlg && dlg.id !== 'setting-dialog') dlg = dlg.parentNode;
+      var fresh = dlg && !(dlg.querySelector && (dlg.querySelector('.modal-body input') || {})._gttxSuggest);
+      var t = attach(dlg);
+      // A box attached on this very focus missed its own focus listener: asked once here, never twice.
+      if (t && fresh && e.target === t) t._gttxSuggest(true);
+    }, true);
   }
 
   function cfTipMark(field) {
@@ -1623,6 +1939,71 @@
   // navbar carrying a Delete button, and the edit form itself carrying Cancel/Save in its
   // place. The edit-form instance is the one wanted, so a `.details-edit` carrying a
   // Delete is skipped. Null where no edit form is open.
+  // Where a plugin's button goes on an entity's detail view, `rowClass` naming its own row - from
+  // PropagateTagsAndPerformers, shared with Tag Bundle Clipboard and Merge Performer Tags.
+  //
+  // The other half of the swap `findEditContainer` already reads: the
+  // detail-view navbar carrying a Delete button, rather than the edit form a target
+  // button wants. This is where a source button belongs, on the page *about* the
+  // source entity rather than inside its edit form.
+  // MergePerformerTagsToScenes' own performer button already depends on exactly this
+  // container. Confirmed live only for Group (via the edit-container fallback's own
+  // rejected half) and, through that plugin's precedent, for Performer; Studio,
+  // Scene, Gallery and Image are the same guess, unverified - see AGENTS.md.
+  // ── The tab strip: where a source button goes on a page with no navbar ──────
+  //
+  // The navbar is a `.details-edit` carrying a Delete button, and live
+  // use confirmed that **only Performer and Group render one**. Scene and Gallery show
+  // a tab strip instead - Details / File Info / Chapters / Edit - and no action row at
+  // all, so five of the eleven source buttons had nowhere to go and had never once
+  // appeared. Image is untested and handled by the same rule either way.
+  //
+  // Read off a live Stash rather than guessed, which is §6's rule and the one four
+  // releases of placement churn were spent learning:
+  //
+  //   <div class="scene-tabs order-xl-first order-last">      <- grandparent, flex
+  //     <div>                                                  <- parent, block, 1 child
+  //       <div class="mr-auto nav nav-tabs" role="tablist">    <- the strip, flex
+  //         <div class="nav-item"><a data-rb-event-key="scene-details-panel" …>
+  //         … <a data-rb-event-key="scene-edit-panel">Edit</a>
+  //
+  // **The strip is found by its Edit tab's key, not by its class.** Gallery renders
+  // *two* `.nav-tabs` strips - its own panels, and an Images/Add strip for the image
+  // list - and only the entity's own carries a `*-edit-panel` key. A class match alone
+  // picks the wrong one on that page. Scene also renders a second element whose text is
+  // exactly "Edit" (a `button.btn-link` in the details panel), so matching on the label
+  // the way `findActionByLabel` does would be ambiguous too. The key is the one signal
+  // that is unambiguous on both pages, and it names what it is.
+  //
+  // The walk is hand-rolled rather than `querySelectorAll('[data-rb-event-key$=…]')`
+  // for the reason `findActionByLabel` is: the shared test harness's fake DOM answers
+  // class selectors and nothing more.
+  //
+  // A row of our own, immediately after the strip inside the strip's own block-level parent. Not
+  // *inside* the strip: it is `role="tablist"`, whose children are meant to be tabs, and it is the
+  // flex row the tabs are laid out in. A button in there would be wrong to a screen reader and would
+  // sit on the tab line rather than under it.
+  function hasEditPanelTab(node) {
+    if (!node) return false;
+    var key = node.getAttribute && node.getAttribute('data-rb-event-key');
+    if (typeof key === 'string' && key.length > 11 && key.slice(-11) === '-edit-panel') return true;
+    var kids = node.childNodes || [];
+    for (var i = 0; i < kids.length; i++) if (hasEditPanelTab(kids[i])) return true;
+    return false;
+  }
+  function detailButtonContainer(rowClass) {
+    var navs = document.querySelectorAll('.details-edit');
+    for (var i = 0; i < navs.length; i++) if (navs[i].querySelector('button.delete')) return navs[i];
+    var lists = document.querySelectorAll('.nav-tabs') || [], strip = null;
+    for (var j = 0; j < lists.length && !strip; j++) if (hasEditPanelTab(lists[j])) strip = lists[j];
+    if (!strip || !strip.parentNode) return null;
+    var row = byClass(strip.parentNode, rowClass);
+    if (row) return row;
+    row = el('div', rowClass);
+    strip.parentNode.insertBefore(row, strip.nextSibling);
+    return row;
+  }
+
   function findEditContainer() {
     var c = document.querySelector('.edit-buttons');
     if (c) return c;
@@ -1920,7 +2301,7 @@
     { key: 'd5MatchBgColor', css: '--gttx-match-bg', dflt: '#3f6b46' },
   ];
   function colorOf(v, dflt) {
-    v = String(v == null ? '' : v).replace(/^\s+|\s+$/g, '');
+    v = String(v == null ? '' : v).trim();
     return /^#[0-9a-f]{6}$/i.test(v) ? v.toLowerCase() : dflt;
   }
   function applyColors(s) {
@@ -2018,7 +2399,7 @@
     x: 'd09GMgABAAAAAANMAA4AAAAACAQAAAL8AAID1wAAAAAAAAAAAAAAAAAAAAAAAAAAGhQbIBw2BmAANBEICjBOATYCJAMICwYABCAFijQHIBspBxGVnHoEXyZwmyp8Vg9U1HF8vMXWtoNOCJ1WY5d+BDXNe83xEL/ftzPz7oo6EDWp1bWEeSompZBFE3lDQTUUiPxLncolHNYfg3LiAlCIpvYMMgQkn/QO8LRkagDk5O05bMCFiWLiww3A5Tg9/0E57ftL9S5dDziz428CdMQRq8U3BeiDpFS6YGsgsQCHS7NMyL4FLBSwjMe2GTb4S0MRESJHhMhzeEagFRD6Gs1GjYt9B3I10qhADQRswY02K580fHoku2T2vGQdMnvFRE5mnY9Byd1xh2yS19ZaOLpqFsdsjD1kS12WupJZAAFwsFj8IK/ApJL+v3ImrhMiIAdzjUkFiQq9KoFexSSKIpi8X6PinIB0nM4dgwSFbGp9iB4QrSvL+0sr+4tLe8uLe1dfBqun1qg1ehqu5v9Pv4u/xSMBgaxer511x4+3/XW7+oOPy893uxzU1nK+EfUSBDFLuWoKaI25k0MdmauOaU0Fcs1Tu2MdXq6L0oSnZIfQ6ylSuzVUdpE3KGZjEHUWtW2oNx130GCf9hCNNsQ/NFmXk2h2Yu0QWuzIB2i1LX+hLaarae3bbS37ZryIcCQDz0cwMoYBNZ9BQaCAkhRtZiM8RegLqSDmI4bqWte9AP3Iorbo6Rz8r7uCo9K7JgY87UnGOml7JINuN7DjH7XaEJ6lyZ0K86KuKY3D4FuAWEChIkttj3GMbDCpguc5GDSTPbsBRNeMUPj92wixfpZe0lN6kT5zzqyWlBFp6X5cBgpMaJSmw3rCDmQs4UMI7xiDXO6F5sVPcBQasl+ArPes9OCL2wMcfGXR3d7+GjN7x3cxB6wRYOyOF0NT8CUZoRHasv1aROmKaXYwLVAvZDdjlseSrE2iQxy9F3tBUmHkBJEqxBLPvzNLqKZMHKReYWCMcaoYV2kw4sGVBCzVoepXDoph77ngzIGMVH/amKVzrKSD7ncTwr5Zn4ppkZAflJJg3udTebcbr6HCvwFlyyBERVXQpUJ6evE95+b6EE4GAA==',
   };
   var BRAND_CHARS = /[\u176F\u311D\u2093]/;
-  var BRAND_PREFIXES = ['gttxcore', 'cfbe', 'enm', 'fretc', 'cpt2s', 'npt', 'ptp2re', 'sfm', 'svr', 'tbc', 'dsp'];
+  var BRAND_PREFIXES = ['gttxcore', 'cfbe', 'enm', 'fretc', 'cpt2s', 'npt', 'ptp2re', 'sfm', 'svr', 'tbc', 'dsp', 'oc'];
   var _brandBody = null;
   function brandFont(ff) { return '"GTTx Brand", ' + (ff || 'sans-serif'); }
   // Our own dialogs and tooltips read the page's fonts behind GTTx Brand from a variable, so one
@@ -2397,6 +2778,8 @@
   // 0), and anything else is the default; the size is 16 MB to 4 GB, clamped. `since` is
   // the last backup's time when Only since the last backup is on, else 0.
   function truthy(v) { return v === true || v === 'true'; }
+  // Text with its ends trimmed; null and undefined read as empty.
+  function trim(v) { return v == null ? '' : String(v).trim(); }
   function journalLimits() {
     var s = settings();
     var d = String(s.c1JournalKeepDays == null ? '' : s.c1JournalKeepDays).trim();
@@ -2439,7 +2822,7 @@
     var at = Math.max(Date.now(), _journalLastAt + 1);
     _journalLastAt = at;
     return { id: at.toString(36) + '-' + Math.random().toString(36).slice(2, 8), at: at, seq: ++_journalSeq,
-      source: run.source === 'hand' || run.source === 'undo' ? run.source : 'plugin',
+      source: run.source === 'hand' || run.source === 'undo' || run.source === 'replay' ? run.source : 'plugin',
       plugin: run.plugin || null, label: String(run.label || ''), note: String(run.note || ''),
       count: 0, bytes: 0, remap: run.remap || null };
   }
@@ -2455,10 +2838,12 @@
       updatedAt: x.updatedAt || null,
     };
     if (x.undoes) row.undoes = String(x.undoes);
+    if (x.replays) row.replays = String(x.replays);   // the change a replay wrote again (`journalReplayPlan`)
     if (x.folder != null) row.folder = String(x.folder);
     // A delete or a merge keeps what it takes to put the entity back (`journalSnapshot`).
     if (x.snapshot) row.snapshot = x.snapshot;
     if (x.carriers) row.carriers = x.carriers;
+    if (x.markers) row.markers = x.markers;   // a scene's markers, made again on it (`journalMarkersBack`)
     if (x.merge) row.merge = x.merge;
     if (x.lost) row.lost = String(x.lost);
     if (x.split) row.split = true;   // a merge put back, which a redo cannot merge again (`journalUndo`)
@@ -2498,8 +2883,10 @@
     head.count = rows.length;
     head.bytes = bytes;
     return journalPut(head, rows).then(function () {
-      // A settings run changed nothing another tab has listed: its Rescans stay unmarked.
-      journalChanged(rows.some(function (r) { return r.type !== 'settings'; }));
+      // A settings run changed nothing another tab has listed: its Rescans stay unmarked. Any run
+      // recorded drops the redo shelf, as typing again drops an editor's redo.
+      if (!_shelfRedoing && !run.keepsShelf) shelfWrite(null);
+      journalChanged(rows.some(function (r) { return r.type !== 'settings'; }), run.keepsShelf);
       journalProtect();
       return journalTrim();
     }).then(function () { return { recorded: rows.length, run: id, bytes: bytes }; });
@@ -2617,7 +3004,11 @@
       tx.objectStore('runs').clear();
       tx.objectStore('entries').clear();
       return idbDone(tx);
-    }).then(journalChanged);
+    }).then(function () {
+      // A redo has nothing left to go back into.
+      shelfWrite(null);
+      journalChanged();
+    });
   }
 
   // Asked once a page, on the first write, while Protect the journal's storage is on. The
@@ -2640,7 +3031,8 @@
   // messages apart: a channel hears every other one of its name, in this tab too.
   var _journalChannel = null;
   var PAGE_ID = Math.random().toString(36).slice(2);
-  function journalChanged(recorded) {
+  function journalChanged(recorded, keepsShelf) {
+    if (recorded === true && !_shelfRedoing && !keepsShelf) shelfWrite(null);
     try {
       if (!_journalChannel && typeof window.BroadcastChannel === 'function') {
         _journalChannel = new window.BroadcastChannel(JOURNAL_DB);
@@ -2722,6 +3114,13 @@
       input: 'GroupUpdateInput', name: 'name', destroy: 'groupDestroy', destroyInput: 'GroupDestroyInput' },
     tags: { label: 'Tag', labels: 'Tags', one: 'findTag', update: 'tagUpdate',
       input: 'TagUpdateInput', name: 'name', destroy: 'tagDestroy', destroyInput: 'TagDestroyInput' },
+    // A scene's marker: no `findSceneMarker(id)` - read by `findSceneMarkers(ids:)` (`many`), deleted
+    // by a bare id (`destroyBare`), and with no page of its own to link to (`noPage`).
+    markers: { label: 'Marker', labels: 'Markers', many: 'findSceneMarkers', list: 'scene_markers', update: 'sceneMarkerUpdate',
+      input: 'SceneMarkerUpdateInput', name: 'title', destroy: 'sceneMarkerDestroy', destroyBare: true, noPage: true },
+    // A file deleted in Stash's pages: recorded, never undone - it is gone from the disk. Read only to
+    // name it and to see it gone, by `findFiles(ids:)`.
+    files: { label: 'File', labels: 'Files', many: 'findFiles', list: 'files', name: 'basename', noPage: true },
     // A plugin's settings, by its id: read and written as the whole map `configurePlugin`
     // replaces (`journalRead`, `journalUndo`), each key a field `settings.<key>`.
     settings: { label: 'Plugin settings', labels: 'Plugin settings', name: 'id', settings: true },
@@ -2735,15 +3134,58 @@
     'penis_length', 'circumcised', 'career_length', 'tattoos', 'piercings', 'favorite',
     'ignore_auto_tag', 'description', 'sort_name', 'duration', 'photographer', 'urls',
     'alias_list', 'aliases', 'synopsis', 'career_start', 'career_end', 'o_counter', 'play_count',
-    'resume_time'];
+    'resume_time', 'play_duration', 'seconds', 'end_seconds'];
+
+  // The pictures an entity shows, by the update input's key: where Stash serves each, and the
+  // key per type. Its bytes are what is recorded - a data URL, which the same key takes back -
+  // and only with Record Pictures on (`c7bJournalPictures`) - from a plugin's pass too, only where it
+  // hands the data URLs it read from Stash and says so (`pass.add`'s `{ pictures: true }`).
+  var JOURNAL_PICTURES = { image: 'image_path', cover_image: 'paths { screenshot }', front_image: 'front_image_path',
+    back_image: 'back_image_path' };
+  var JOURNAL_PICTURE_OF = { scenes: ['cover_image'], tags: ['image'], studios: ['image'], performers: ['image'],
+    groups: ['front_image', 'back_image'] };
+  // Where a read put a picture's address: a scene's under `paths`, the rest by the selection's name.
+  function picturePath(k, o) { return k === 'cover_image' ? (o.paths || {}).screenshot : o[JOURNAL_PICTURES[k]]; }
+  var JOURNAL_HAND_ONLY = { stash_ids: true, containing_groups: true, sub_groups: true, cover: true };
+  // Lists undone as what they added and took away, as a relation is (`journalDelta`), but written
+  // back through mutations of their own (`journalSpecial`): a scene's O and play timestamps, and the
+  // files a scene has - one moved to another scene is assigned back.
+  var JOURNAL_DELTAS = { o_history: true, play_history: true, file_ids: true };
+  // Fields written back by `journalSpecial` though not deltas: a gallery's chapters, and a scene's resume
+  // point - `sceneUpdate` takes `resume_time` and ignores it (seen live), `sceneSaveActivity` sets it.
+  var JOURNAL_OWN_WRITE = { chapters: true, resume_time: true };
+  function ownWrite(f) { return hasOwn(JOURNAL_DELTAS, f) || hasOwn(JOURNAL_OWN_WRITE, f); }
+  function isDelta(f) { return hasOwn(JOURNAL_RELATIONS, f) || hasOwn(JOURNAL_DELTAS, f); }
 
   function sortedIds(list) {
     return (list || []).map(function (x) { return String(x.id); }).sort();
   }
+  function chapterOrder(a, b) {
+    return (a.image_index - b.image_index) || (a.title < b.title ? -1 : a.title > b.title ? 1 : 0);
+  }
 
   // `{ sel, read }` for an update input key: what to select, and the value read back in
-  // the input's own shape. Null for a key that is not recorded.
-  function journalField(key) {
+  // the input's own shape. Null for a key that is not recorded. `type` matters only to a selection
+  // that differs by type: an image's files are `visual_files`.
+  function journalField(key, type) {
+    // The primary file: the first of the entity's files, as Stash lists them.
+    if (key === 'primary_file_id') {
+      return { sel: type === 'images' ? 'pfiles: visual_files { ... on ImageFile { id } ... on VideoFile { id } }' : 'pfiles: files { id }',
+        read: function (o) { return o.pfiles && o.pfiles[0] ? String(o.pfiles[0].id) : null; } };
+    }
+    if (key === 'file_ids') {
+      return { sel: 'fids: files { id }', read: function (o) { return sortedIds(o.fids); } };
+    }
+    // A scene's O and play timestamps, sorted: one added or deleted is the change.
+    if (key === 'o_history' || key === 'play_history') {
+      return { sel: key, read: function (o) { return (o[key] || []).map(String).sort(); } };
+    }
+    // A gallery's chapters, without their ids: an undo makes a deleted one again under a new id.
+    if (key === 'chapters') {
+      return { sel: 'chapters { title image_index }', read: function (o) {
+        return (o.chapters || []).map(function (c) { return { title: c.title, image_index: c.image_index }; }).sort(chapterOrder);
+      } };
+    }
     if (hasOwn(JOURNAL_RELATIONS, key)) {
       var rel = JOURNAL_RELATIONS[key];
       return { sel: rel + ' { id }', read: function (o) { return sortedIds(o[rel]); } };
@@ -2755,12 +3197,43 @@
       return { sel: 'parent_studio { id }',
         read: function (o) { return o.parent_studio ? String(o.parent_studio.id) : null; } };
     }
+    // A gallery's cover: the image Stash shows for it, chosen or not - Stash answers the chosen one,
+    // else its fallback (cover.jpg, then the first image), and says nothing of which it is.
+    if (key === 'cover') {
+      return { sel: 'cover { id }', read: function (o) { return o.cover ? String(o.cover.id) : null; } };
+    }
+    // A marker's scene and primary tag, by id like a studio.
+    if (key === 'scene_id' || key === 'primary_tag_id') {
+      var one = key === 'scene_id' ? 'scene' : 'primary_tag';
+      return { sel: one + ' { id }', read: function (o) { return o[one] ? String(o[one].id) : null; } };
+    }
+    // Stash-box ids, a whole list; sorted, since Stash keeps no order among them. Their own
+    // `updated_at` is left to Stash, which stamps one written back.
+    if (key === 'stash_ids') {
+      return { sel: 'stash_ids { endpoint stash_id }', read: function (o) {
+        return (o.stash_ids || []).map(function (x) { return { endpoint: x.endpoint, stash_id: x.stash_id }; })
+          .sort(function (a, b) { var x = a.endpoint + ' ' + a.stash_id, y = b.endpoint + ' ' + b.stash_id; return x < y ? -1 : x > y ? 1 : 0; });
+      } };
+    }
+    // A group's containing groups and sub-groups, a whole list in Stash's order - a reorder is a
+    // change - each with its description.
+    if (key === 'containing_groups' || key === 'sub_groups') {
+      return { sel: key + ' { group { id } description }', read: function (o) {
+        return (o[key] || []).map(function (g) {
+          return { group_id: String(g.group.id), description: g.description == null ? null : g.description };
+        });
+      } };
+    }
     if (key === 'groups') {
       return { sel: 'groups { group { id } scene_index }', read: function (o) {
         return (o.groups || []).map(function (g) {
           return { group_id: String(g.group.id), scene_index: g.scene_index == null ? null : g.scene_index };
         }).sort(function (a, b) { return a.group_id < b.group_id ? -1 : a.group_id > b.group_id ? 1 : 0; });
       } };
+    }
+    // Filled in by `journalRead`, which reads the bytes once the address is known.
+    if (hasOwn(JOURNAL_PICTURES, key)) {
+      return { sel: JOURNAL_PICTURES[key], read: function (o) { return o[key] === undefined ? null : o[key]; } };
     }
     if (JOURNAL_SCALARS.indexOf(key) !== -1) {
       return { sel: key, read: function (o) {
@@ -2803,7 +3276,7 @@
         return out;
       });
     }
-    var sel = ['id', 'updated_at', t.name].concat(fields.map(function (k) { return journalField(k).sel; }));
+    var sel = ['id', 'updated_at', t.name].concat(fields.map(function (k) { return journalField(k, type).sel; }));
     if (customFields) sel.push('custom_fields');
     // A file renamed is `files.<file id>`; an image's files are read under the same name.
     if (files) {
@@ -2815,18 +3288,80 @@
     // A few chunks at once: a bulk edit of thousands waits on them, before its save and after.
     return inLanes(chunks, JOURNAL_LANES, function (chunk) {
       return Promise.resolve().then(function () {
-        var q = 'query GTTxJournalRead { ' + chunk.map(function (id, n) {
+        var q = t.many ? 'query GTTxJournalRead { r: ' + t.many + '(ids: ' + JSON.stringify(chunk.map(String)) + ') { ' +
+          t.list + ' { ' + sel.join(' ') + ' } } }' : 'query GTTxJournalRead { ' + chunk.map(function (id, n) {
           return 'e' + n + ': ' + t.one + '(id: ' + JSON.stringify(String(id)) + ') { ' + sel.join(' ') + ' }';
         }).join(' ') + ' }';
-        return send('/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: q, variables: {} }) })
-          .then(function (r) { return r.json(); })
+        var ask = function (query) {
+          return send('/graphql', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: query, variables: {} }) }).then(function (r) { return r.json(); });
+        };
+        // `findSceneMarkers(ids:)` fails whole when one id is gone (`scene marker with id N not found`),
+        // where `find<Type>(id:)` answers null - so a failed batch is asked again one id at a time, and
+        // "not found" is that id gone. Seen live: a marker's delete, re-read to confirm, was a gap.
+        var many = function () {
+          return ask(q).then(function (json) {
+            if (!json.errors || chunk.length === 0) return json;
+            return Promise.all(chunk.map(function (id) {
+              return ask(q.replace(/\(ids: \[[^\]]*\]\)/, '(ids: ' + JSON.stringify([String(id)]) + ')')).then(function (one) {
+                if (!one.errors) return ((one.data || {}).r || {})[t.list] || [];
+                // `findFiles(ids:)` says a gone file differently: "getting file by id N: sql: no rows" (seen live).
+                if (one.errors.every(function (e) { return /not found|no rows/i.test(e.message); })) return [];
+                throw new Error(one.errors.map(function (e) { return e.message; }).join('; '));
+              });
+            })).then(function (lists) { var r = {}; r[t.list] = [].concat.apply([], lists); return { data: { r: r } }; });
+          });
+        };
+        return (t.many ? many() : ask(q))
           .then(function (json) {
             if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
-            chunk.forEach(function (id, n) { out[String(id)] = (json.data || {})['e' + n] || null; });
+            var rows = t.many ? ((json.data || {}).r || {})[t.list] || [] : null;
+            chunk.forEach(function (id, n) {
+              out[String(id)] = rows ? rows.filter(function (r) { return String(r.id) === String(id); })[0] || null
+                : (json.data || {})['e' + n] || null;
+            });
           });
       });
-    }).then(function () { return out; });
+    }).then(function () {
+      var pics = fields.filter(function (k) { return hasOwn(JOURNAL_PICTURES, k); });
+      if (!pics.length) return out;
+      return inLanes(Object.keys(out), JOURNAL_LANES, function (id) {
+        var o = out[id];
+        return o && Promise.all(pics.map(function (k) {
+          return journalPicture(send, picturePath(k, o))
+            .then(function (d) { o[k] = d; });
+        }));
+      }).then(function () { return out; });
+    });
+  }
+
+  // A picture's bytes as the data URL an update input takes back, or null for none. Stash marks a
+  // tag's, studio's or performer's missing picture `default=true`, and serves a scene with no cover
+  // its default one - told apart by comparing with that, read once a page. A read that fails
+  // throws, so the save it was for is a gap, as any failed read makes one. Never from the browser's
+  // cache: the address changes only with `updated_at`, in whole seconds, and Stash marks it immutable,
+  // so two saves in one second read the first one's picture back - seen live, recording the old
+  // picture as the new one.
+  var _defaultCover = null;
+  function journalPicture(send, url) {
+    if (!url || /[?&]default=true(&|$)/.test(url)) return Promise.resolve(null);
+    var get = function (u) {
+      return send(u, { credentials: 'same-origin', cache: 'no-store' }).then(function (r) {
+        if (!r || !r.ok) throw new Error('the picture could not be read (' + (r ? r.status : 'no answer') + ')');
+        var type = ((r.headers && r.headers.get('Content-Type')) || 'image/jpeg').split(';')[0];
+        return r.arrayBuffer().then(function (buf) { return 'data:' + type + ';base64,' + bytesBase64(new Uint8Array(buf)); });
+      });
+    };
+    if (!/\/scene\/[^/?]+\/screenshot/.test(url)) return get(url);
+    _defaultCover = _defaultCover || get(url + (url.indexOf('?') === -1 ? '?' : '&') + 'default=true')
+      .then(null, function (e) { _defaultCover = null; throw e; });
+    return Promise.all([get(url), _defaultCover]).then(function (both) { return both[0] === both[1] ? null : both[0]; });
+  }
+
+  function bytesBase64(b) {
+    var s = '';
+    for (var i = 0; i < b.length; i += 0x8000) s += String.fromCharCode.apply(null, b.subarray(i, i + 0x8000));
+    return btoa(s);
   }
 
   // The changes between two reads of one entity, over the fields an input named: one
@@ -2861,7 +3396,7 @@
   // either input cannot state as a whole value (`{ ids, mode }`, an image) is left out;
   // `skipped` names them. A custom field is read off `partial` / `remove` / `full`, the
   // last being the whole map, where a key it lacks was absent.
-  function journalFromInputs(type, id, name, forward, undo, updatedAt) {
+  function journalFromInputs(type, id, name, forward, undo, updatedAt, pictures) {
     var out = { entries: [], skipped: [] };
     forward = forward || {};
     undo = undo || {};
@@ -2914,15 +3449,24 @@
           before: fk.mode === 'ADD' ? [] : ids, after: fk.mode === 'ADD' ? ids : [], updatedAt: updatedAt || null });
         return;
       }
-      var after = journalField(k) ? norm(k, forward[k]) : undefined;
-      var before = journalField(k) ? norm(k, undo[k]) : undefined;
+      // A picture in a plugin's input is an address or bytes it alone holds, not what Stash serves -
+      // unless the plugin says it read both sides from Stash (`pictures`), as data URLs or null, which
+      // is the shape a hand edit records; stash-ids and a group's sub-groups and containing groups are
+      // recorded from Stash's pages only - a plugin hands them in shapes of its own, and De-Spicer tells
+      // its users they are not kept.
+      var dataUrl = function (v) { return v === null || (typeof v === 'string' && /^data:[^,]*;base64,/.test(v)); };
+      var pic = hasOwn(JOURNAL_PICTURES, k);
+      var known = journalField(k) && !hasOwn(JOURNAL_HAND_ONLY, k) &&
+        (!pic || (pictures && dataUrl(forward[k]) && dataUrl(undo[k])));
+      var after = known ? norm(k, forward[k]) : undefined;
+      var before = known ? norm(k, undo[k]) : undefined;
       if (after === undefined || before === undefined) {
         if (out.skipped.indexOf(k) === -1) out.skipped.push(k);
         return;
       }
       if (journalSame(after, before)) return;
       out.entries.push({ type: type, id: String(id), name: name, field: k, before: before, after: after,
-        updatedAt: updatedAt || null });
+        updatedAt: updatedAt || null, picture: pic || undefined });
     });
     return out;
   }
@@ -2967,6 +3511,14 @@
         if (over || failed) return null;
         var limits = journalLimits();
         if (run.libraryWide && !limits.imageRuns) list = list.filter(function (x) { return x.type !== 'images'; });
+        // A plugin's picture, with Record Pictures off, is named in the run's note as not recorded.
+        if (!truthy(settings().c7bJournalPictures)) {
+          list = list.filter(function (x) {
+            if (!x || !x.picture) return true;
+            if (skipped.indexOf(x.field) === -1) skipped.push(x.field);
+            return false;
+          });
+        }
         list = list.filter(function (x) { return x && x.type && x.id != null; });
         if (!list.length) return null;
         written = true;
@@ -3035,12 +3587,14 @@
     var reversalsOf = {};
     return {
       id: head.id,
-      // A bulk input names its entities in `ids`; each gets the same entries.
-      add: function (type, id, name, forward, undo) {
+      // A bulk input names its entities in `ids`; each gets the same entries. `opts.pictures`: the
+      // picture keys in both inputs are data URLs read from Stash (or null), recorded as a hand edit's
+      // are, while Record Pictures is on.
+      add: function (type, id, name, forward, undo, opts) {
         var ids = forward && Object.prototype.toString.call(forward.ids) === '[object Array]'
           ? forward.ids : [id];
         for (var i = 0; i < ids.length; i++) {
-          var r = journalFromInputs(type, ids[i], name, forward, undo);
+          var r = journalFromInputs(type, ids[i], name, forward, undo, null, !!(opts && opts.pictures));
           push(r.entries);
           for (var k = 0; k < r.skipped.length; k++) {
             if (skipped.indexOf(r.skipped[k]) === -1) skipped.push(r.skipped[k]);
@@ -3110,6 +3664,59 @@
   JOURNAL_OPS.TagsMerge = { type: 'tags', mode: 'merge' };
   JOURNAL_OPS.SceneMerge = { type: 'scenes', mode: 'merge' };
   JOURNAL_OPS.PerformerMerge = { type: 'performers', mode: 'merge' };
+  // A marker's create and edit spell their input out as variables (`flat`), as its delete does.
+  JOURNAL_OPS.SceneMarkerCreate = { type: 'markers', mode: 'create', field: 'sceneMarkerCreate', flat: true };
+  JOURNAL_OPS.SceneMarkerUpdate = { type: 'markers', mode: 'one', flat: true };
+  JOURNAL_OPS.BulkSceneMarkerUpdate = { type: 'markers', mode: 'bulk' };
+  JOURNAL_OPS.SceneMarkerDestroy = { type: 'markers', mode: 'destroy' };
+  JOURNAL_OPS.SceneMarkersDestroy = { type: 'markers', mode: 'destroy' };
+  // A group's sub-groups added, removed or reordered on its page: an edit of that group's
+  // `sub_groups` (`mode: 'field'`), the group named by `idKey`.
+  JOURNAL_OPS.AddGroupSubGroups = { type: 'groups', mode: 'field', idKey: 'containing_group_id', field: 'sub_groups' };
+  JOURNAL_OPS.RemoveGroupSubGroups = { type: 'groups', mode: 'field', idKey: 'containing_group_id', field: 'sub_groups' };
+  JOURNAL_OPS.ReorderSubGroups = { type: 'groups', mode: 'field', idKey: 'group_id', field: 'sub_groups' };
+  // A gallery's cover chosen or reset on its page: an edit of its `cover`, spelt out as variables.
+  JOURNAL_OPS.SetGalleryCover = { type: 'galleries', mode: 'field', idKey: 'gallery_id', field: 'cover', flat: true };
+  JOURNAL_OPS.ResetGalleryCover = { type: 'galleries', mode: 'field', idKey: 'gallery_id', field: 'cover', flat: true };
+  // Images put in a gallery or taken out of it: an edit of each image's galleries (`idsKey`).
+  JOURNAL_OPS.AddGalleryImages = { type: 'images', mode: 'field', idsKey: 'image_ids', field: 'gallery_ids', flat: true,
+    label: 'Images added to a gallery' };
+  JOURNAL_OPS.RemoveGalleryImages = { type: 'images', mode: 'field', idsKey: 'image_ids', field: 'gallery_ids', flat: true,
+    label: 'Images removed from a gallery' };
+  // A gallery's chapters. A delete names only the chapter, so its gallery is the page's (`page`); one not
+  // on it changes nothing there, and nothing is recorded.
+  JOURNAL_OPS.GalleryChapterCreate = { type: 'galleries', mode: 'field', idKey: 'gallery_id', field: 'chapters', flat: true,
+    label: 'Gallery chapter added' };
+  JOURNAL_OPS.GalleryChapterUpdate = { type: 'galleries', mode: 'field', idKey: 'gallery_id', field: 'chapters', flat: true,
+    label: 'Gallery chapter edited' };
+  JOURNAL_OPS.GalleryChapterDestroy = { type: 'galleries', mode: 'field', page: 'galleries', field: 'chapters', flat: true,
+    label: 'Gallery chapter deleted' };
+  // A scene's O-counter and plays, by their timestamps, and its resume point and play time reset. Not
+  // `SceneSaveActivity`: the player sends it every few seconds while a scene plays.
+  ['SceneAddO', 'SceneDeleteO', 'SceneResetO'].forEach(function (op) {
+    JOURNAL_OPS[op] = { type: 'scenes', mode: 'field', idKey: 'id', field: 'o_history', flat: true, label: 'O-counter changed' };
+  });
+  ['SceneAddPlay', 'SceneDeletePlay', 'SceneResetPlayCount'].forEach(function (op) {
+    JOURNAL_OPS[op] = { type: 'scenes', mode: 'field', idKey: 'id', field: 'play_history', flat: true, label: 'Play history changed' };
+  });
+  // The player adds a play by itself once a scene has played a while: watching is no edit, so it
+  // leaves Redo... as it was (`keepsShelf`).
+  JOURNAL_OPS.SceneAddPlay.keepsShelf = true;
+  JOURNAL_OPS.SceneResetActivity = { type: 'scenes', mode: 'field', idKey: 'id', flat: true, label: 'Resume point reset',
+    field: function (v) { return [v.reset_resume && 'resume_time', v.reset_duration && 'play_duration'].filter(Boolean); } };
+  // A file moved to another scene, recorded on the scene it left - the page's, where the dialog is.
+  JOURNAL_OPS.SceneAssignFile = { type: 'scenes', mode: 'field', page: 'scenes', field: 'file_ids',
+    label: 'File moved to another scene' };
+  // A cover made from the video: a job, so the picture is read again once it ends (`job`).
+  JOURNAL_OPS.SceneGenerateScreenshot = { type: 'scenes', mode: 'field', idKey: 'id', field: 'cover_image', flat: true,
+    job: 'sceneGenerateScreenshot', label: 'Cover generated' };
+  JOURNAL_OPS.DeleteFiles = { type: 'files', mode: 'destroy' };
+
+  // The id in the page's address, for a save that names no entity of its own.
+  function pageId(type) {
+    var m = new RegExp('^/' + type + '/(\\d+)').exec((window.location && window.location.pathname) || '');
+    return m ? [m[1]] : [];
+  }
 
   // The saves in one request body, as { op, type, mode, inputs, ids, fields, customFields }.
   function journalSaves(init) {
@@ -3130,12 +3737,26 @@
         if (!gone.length) return;
         // A performer merge can also set the destination's fields (`values`): read before and after, as an edit.
         var values = v.values && typeof v.values === 'object' && Object.keys(v.values).length ? journalInputFields([v.values]) : null;
+        // A plugin's own delete names itself (`deleteRecorded`): recorded under its name, whatever Record Deletes says.
+        var by = o.extensions && o.extensions.gttxBy && typeof o.extensions.gttxBy === 'object' ? o.extensions.gttxBy : null;
         out.push({ op: o.operationName, spec: spec, type: spec.type, ids: gone.map(String), fields: [],
           skipped: [], customFields: false, into: spec.mode === 'merge' ? String(v.destination) : null,
-          filesGone: !!v.delete_file, values: values });
+          // A scene merge's own choices - the sources' play and O history moved too - kept for its replay.
+          flags: spec.mode === 'merge' && spec.type === 'scenes' ? { play_history: !!v.play_history, o_history: !!v.o_history } : null,
+          filesGone: !!v.delete_file, values: values, by: by });
         return;
       }
+      if (spec && spec.flat) input = o.variables || null;
       if (!input) return;
+      if (spec.mode === 'field') {
+        var fids = spec.idsKey ? [].concat(input[spec.idsKey] || []) : spec.page ? pageId(spec.page)
+          : input[spec.idKey] != null ? [input[spec.idKey]] : [];
+        var named = typeof spec.field === 'function' ? spec.field(input) : [spec.field];
+        if (!fids.length || !named.length) return;
+        out.push({ op: o.operationName, spec: spec, type: spec.type, ids: fids.map(String), fields: named,
+          skipped: [], customFields: false });
+        return;
+      }
       var inputs = spec.mode === 'many' ? [].concat(input) : [input];
       var ids = spec.mode === 'bulk' ? (input.ids || []).map(String)
         : spec.mode === 'create' ? [] : inputs.map(function (x) { return String(x.id); });
@@ -3160,8 +3781,24 @@
     return { fields: fields, skipped: skipped, customFields: customFields };
   }
 
+  // Record Pictures off: a picture the save sets is named in the run's note as not recorded,
+  // as any field the journal does not read; on: a delete's snapshot reads the picture too.
+  function journalPicturesOn(sv, on) {
+    sv.pictures = on;
+    if (on) return;
+    [sv, sv.values].forEach(function (f) {
+      if (!f) return;
+      f.fields = f.fields.filter(function (k) {
+        if (!hasOwn(JOURNAL_PICTURES, k)) return true;
+        if (f.skipped.indexOf(k) === -1) f.skipped.push(k);
+        return false;
+      });
+    });
+  }
+
   function journalLabel(save) {
     var t = JOURNAL_TYPES[save.type];
+    if (save.spec.label) return save.spec.label;
     if (save.spec.mode === 'create') return t.label + ' created';
     if (save.spec.mode === 'destroy') return (save.ids.length > 1 ? t.labels : t.label) + ' deleted';
     if (save.spec.mode === 'merge') return t.labels + ' merged';
@@ -3182,7 +3819,10 @@
     var v = {};
     try { v = JSON.parse(init.body).variables || {}; } catch (e) { v = {}; }
     var pid = v.plugin_id || v.id, next = v.input;
-    var record = pid && next && typeof next === 'object' && !/mutation\s+\w*(Seed|State|GTTxUndo)/.test(op);
+    // ᝯㄝₓ plugins' alone: another author's settings may hold a key or a password, and the history
+    // is kept in plain text and exported.
+    var record = pid && GTTX_IDS.indexOf(pid) !== -1 && next && typeof next === 'object' &&
+      !/mutation\s+\w*(Seed|State|GTTxUndo)/.test(op);
     // Its own query, not the shared read: the save about to go out drops that anyway.
     var prior = !record ? Promise.resolve(null) : gqlRequest('query GTTxSettingsBefore($ids: [ID!]) { configuration { plugins(include: $ids) } }', { ids: [PLUGIN_ID, pid] }).then(function (d) {
       var all = ((d || {}).configuration || {}).plugins || {}, core = all[PLUGIN_ID] || {};
@@ -3203,6 +3843,8 @@
             Object.keys(keys).sort().forEach(function (k) {
               var b = hasOwn(was, k) ? was[k] : undefined, a = hasOwn(next, k) ? next[k] : undefined;
               if (JSON.stringify(b) === JSON.stringify(a)) return;
+              // De-Spicer's secret and records stay out, as Export Settings leaves them (`TRANSFER_SECRET`).
+              if (isSecret(pid, k)) return;
               entries.push({ type: 'settings', id: pid, name: pid, field: 'settings.' + k, before: b, after: a });
             });
             return entries.length ? journalRecord({ source: 'hand', label: pid + ' settings changed' }, entries) : null;
@@ -3226,15 +3868,22 @@
     var saves = journalSaves(init);
     if (!saves.length) return send(input, init);
     var removal = saves.some(function (sv) { return sv.spec.mode === 'destroy' || sv.spec.mode === 'merge'; });
+    var pictures = false;
     return loadSettings(false).then(function (s) {
-      return truthy(removal ? s.c7JournalDeletes : s.c4JournalHandEdits);
+      pictures = truthy(s.c7bJournalPictures);
+      return removal && saves.some(function (sv) { return sv.by; }) ||
+        truthy(removal ? s.c7JournalDeletes : s.c4JournalHandEdits);
     }, function () { return true; }).then(function (on) {
       if (!on) return send(input, init);
+      saves.forEach(function (sv) { journalPicturesOn(sv, pictures); });
       if (removal) return journalCaptureRemoval(send, input, init, saves);
+      // A save left with nothing to read - a cover generated with Record Pictures off - goes unread.
+      saves = saves.filter(function (sv) { return sv.spec.mode === 'create' || sv.fields.length || sv.customFields; });
+      if (!saves.length) return send(input, init);
       // Stash's upload link aborts its request once it has read the answer, which also
-      // cuts off the copy a create's new id is read from - so a create goes without it.
+      // cuts off the copy a create's new id - or a job's - is read from, so those go without it.
       var sendInit = init;
-      if (init.signal && saves.some(function (sv) { return sv.spec.mode === 'create'; })) {
+      if (init.signal && saves.some(function (sv) { return sv.spec.mode === 'create' || sv.spec.job; })) {
         sendInit = {};
         for (var k in init) if (k !== 'signal') sendInit[k] = init[k];
       }
@@ -3252,23 +3901,63 @@
     });
   }
 
+  // Resolves once Stash's job `id` has ended - or is gone from its queue - so what it wrote can be read.
+  // One still running after two minutes is a gap. Stash 0.31 answers a cover's job as "todo", not its id
+  // (seen live; develop gives the id): then the save's fields are read until they change, for at most
+  // `JOB_PICTURE_POLLS`. Unchanged by then is a gap: the job may still be queued, and its cover would
+  // land unrecorded (a frame that makes the same picture is said so too).
+  var JOB_POLL_MS = 500, JOB_POLLS = 240, JOB_PICTURE_POLLS = 60;
+  function journalJobEnd(id, send, sv, before) {
+    if (id == null || !/^\d+$/.test(String(id))) {
+      var look = function (n) {
+        return journalRead(send, sv.type, sv.ids, sv.fields, false).then(function (now) {
+          var moved = sv.ids.some(function (x) {
+            return sv.fields.some(function (f) { return !journalSame(journalField(f).read(before[x] || {}), journalField(f).read(now[x] || {})); });
+          });
+          if (moved) return null;
+          if (n >= JOB_PICTURE_POLLS) throw new Error('the picture had not changed after 30 seconds - a job still queued would change it unrecorded');
+          return new Promise(function (res) { window.setTimeout(res, JOB_POLL_MS); }).then(function () { return look(n + 1); });
+        });
+      };
+      return look(0);
+    }
+    var poll = function (n) {
+      return gqlRequest('query GTTxJobEnd($id: ID!) { findJob(input: { id: $id }) { status } }', { id: String(id) }).then(function (d) {
+        var st = d && d.findJob && d.findJob.status;
+        if (!st || /^(FINISHED|FAILED|CANCELLED)$/.test(st)) return null;
+        if (n >= JOB_POLLS) throw new Error('the job had not ended after two minutes');
+        return new Promise(function (res) { window.setTimeout(res, JOB_POLL_MS); }).then(function () { return poll(n + 1); });
+      });
+    };
+    return poll(0);
+  }
+
   function journalAfterSave(send, saves, befores, resp) {
     if (!resp || !resp.ok) return;
     // A create names its new entity only in the answer, so that answer is read - a clone
     // of it, which leaves Stash's own read of the body untouched. The one body this
     // capture reads; every update is judged by reading the entity again instead.
-    var created = saves.some(function (sv) { return sv.spec.mode === 'create'; })
+    var created = saves.some(function (sv) { return sv.spec.mode === 'create' || sv.spec.job; })
       ? resp.clone().json().then(function (j) { return j && !j.errors ? j.data || {} : null; })
       : Promise.resolve(null);
     created.then(function (data) {
+      return Promise.all(saves.map(function (sv, i) {
+        return sv.spec.job ? journalJobEnd(data && data[sv.spec.job], send, sv, befores[i]) : null;
+      })).then(function () { return data; });
+    }).then(function (data) {
       return Promise.all(saves.map(function (sv, i) {
         if (sv.spec.mode === 'create') {
           var made = data && data[sv.spec.field];
           if (!made || made.id == null) return [];
           return journalRead(send, sv.type, [String(made.id)], [], false).then(function (m) {
             var o = m[String(made.id)] || {};
-            return [{ type: sv.type, id: String(made.id), name: o[JOURNAL_TYPES[sv.type].name] || '',
-              action: 'create', updatedAt: o.updated_at || null }];
+            var row = { type: sv.type, id: String(made.id), name: o[JOURNAL_TYPES[sv.type].name] || '',
+              action: 'create', updatedAt: o.updated_at || null };
+            if (!hasOwn(JOURNAL_CREATE, sv.type)) return [row];
+            return journalCreateSnap(sv.type, String(made.id), sv.pictures).then(function (snap) {
+              if (snap) row.snapshot = snap;
+              return [row];
+            }, function () { return [row]; });
           });
         }
         return journalRead(send, sv.type, sv.ids, sv.fields, sv.customFields).then(function (afters) {
@@ -3281,7 +3970,7 @@
       })).then(function (lists) {
         saves.forEach(function (sv, i) {
           if (!lists[i].length) return;
-          journalRecord({ source: 'hand', label: journalLabel(sv),
+          journalRecord({ source: 'hand', label: journalLabel(sv), keepsShelf: !!sv.spec.keepsShelf,
             note: sv.skipped.length ? 'not recorded: ' + sv.skipped.join(', ') : '' }, lists[i]).then(function (res) {
             if (res && res.tooLarge) journalGap([sv], JOURNAL_TOO_LARGE);
           }, function (e) { journalGap([sv], e); });
@@ -3328,6 +4017,7 @@
     studios: { type: 'Studio', input: 'StudioCreateInput', create: 'studioCreate' },
     groups: { type: 'Group', input: 'GroupCreateInput', create: 'groupCreate' },
     scenes: { type: 'Scene', input: 'SceneCreateInput', create: 'sceneCreate' },
+    markers: { type: 'SceneMarker', input: 'SceneMarkerCreateInput', create: 'sceneMarkerCreate' },
   };
   // Where a create input's relation is read from, and how it is written back.
   var SNAP_RELS = {
@@ -3337,6 +4027,7 @@
     groups: 'groups { group { id } scene_index }', stash_ids: 'stash_ids { endpoint stash_id }',
     containing_groups: 'containing_groups { group { id } description }',
     sub_groups: 'sub_groups { group { id } description }', custom_fields: 'custom_fields',
+    scene_id: 'scene { id }', primary_tag_id: 'primary_tag { id }',
   };
   var SNAP_READ = {
     tag_ids: 'tags', performer_ids: 'performers', gallery_ids: 'galleries', parent_ids: 'parents',
@@ -3348,7 +4039,10 @@
       ['galleries', 'findGalleries', 'gallery_filter', 'tags', 'tag_ids'], ['performers', 'findPerformers', 'performer_filter', 'tags', 'tag_ids'],
       ['groups', 'findGroups', 'group_filter', 'tags', 'tag_ids'], ['studios', 'findStudios', 'studio_filter', 'tags', 'tag_ids'],
       // Its children: Stash drops a deleted tag from their parents, and a merge moves them.
-      ['tags', 'findTags', 'tag_filter', 'parents', 'parent_ids']],
+      ['tags', 'findTags', 'tag_filter', 'parents', 'parent_ids'],
+      // Scene markers: a tag in a marker's tags, or its primary tag - which Stash refuses to delete,
+      // so only a merge moves that one. Split by `journalCarriersOf` into the two fields.
+      ['markers', 'findSceneMarkers', 'scene_marker_filter', 'tags', 'tag_ids']],
     performers: [['scenes', 'findScenes', 'scene_filter', 'performers', 'performer_ids'],
       ['images', 'findImages', 'image_filter', 'performers', 'performer_ids'],
       ['galleries', 'findGalleries', 'gallery_filter', 'performers', 'performer_ids']],
@@ -3400,6 +4094,8 @@
       if (hasOwn(SNAP_READ, f)) { input[f] = snapIds(o[SNAP_READ[f]]); return; }
       if (f === 'studio_id') { if (o.studio) input.studio_id = String(o.studio.id); return; }
       if (f === 'parent_id') { if (o.parent_studio) input.parent_id = String(o.parent_studio.id); return; }
+      if (f === 'scene_id') { if (o.scene) input.scene_id = String(o.scene.id); return; }
+      if (f === 'primary_tag_id') { if (o.primary_tag) input.primary_tag_id = String(o.primary_tag.id); return; }
       if (f === 'groups') {
         input.groups = (o.groups || []).map(function (g) { return { group_id: String(g.group.id), scene_index: g.scene_index }; });
         return;
@@ -3410,6 +4106,7 @@
       }
       if (o[f] !== undefined && o[f] !== null) input[f] = o[f];
     });
+    Object.keys(JOURNAL_PICTURES).forEach(function (k) { if (typeof o[k] === 'string') input[k] = o[k]; });
     return input;
   }
 
@@ -3417,13 +4114,21 @@
     var out = {};
     return (JOURNAL_CARRIERS[type] || []).reduce(function (p, c) {
       return p.then(function () {
-        var list = c[1].replace(/^find/, '').replace(/^./, function (x) { return x.toLowerCase(); });
+        var list = c[0] === 'markers' ? JOURNAL_TYPES.markers.list
+          : c[1].replace(/^find/, '').replace(/^./, function (x) { return x.toLowerCase(); });
         var crit = c[3] === 'performers' || c[3] === 'parents' ? '{ value: [' + JSON.stringify(id) + '], modifier: INCLUDES }'
           : '{ value: [' + JSON.stringify(id) + '], modifier: INCLUDES, depth: 0 }';
-        var sel = c[4] === 'groups' ? 'id groups { group { id } scene_index }' : 'id';
+        var sel = c[4] === 'groups' ? 'id groups { group { id } scene_index }' : c[0] === 'markers' ? 'id primary_tag { id } tags { id }' : 'id';
         return gqlRequest('query GTTxCarriers { r: ' + c[1] + '(' + c[2] + ': { ' + c[3] + ': ' + crit + ' }, ' +
           'filter: { per_page: -1 }) { ' + list + ' { ' + sel + ' } } }', null).then(function (d) {
           var rows = ((d.r || {})[list]) || [];
+          if (c[0] === 'markers') {
+            var tagged = rows.filter(function (r) { return (r.tags || []).some(function (x) { return String(x.id) === String(id); }); });
+            var primary = rows.filter(function (r) { return r.primary_tag && String(r.primary_tag.id) === String(id); });
+            if (tagged.length) out['markers.tag_ids'] = tagged.map(function (r) { return String(r.id); });
+            if (primary.length) out['markers.primary_tag_id'] = primary.map(function (r) { return String(r.id); });
+            return;
+          }
           if (!rows.length) return;
           out[c[0] + '.' + c[4]] = rows.map(function (r) {
             if (c[4] !== 'groups') return String(r.id);
@@ -3436,20 +4141,46 @@
   }
 
   // One entry a removed entity, with what brings it back.
+  // What a create set, read back whole as a delete's snapshot is - without the carriers, which a new
+  // entity has none of - so Replay Selected can make it again (`journalReplayPlan`).
+  function journalCreateSnap(type, id, pictures) {
+    var t = JOURNAL_TYPES[type];
+    return journalSnapFields(type).then(function (sf) {
+      var pics = pictures ? JOURNAL_PICTURE_OF[type] || [] : [];
+      var sel = sf.sel + ' ' + t.name + pics.map(function (k) { return ' ' + JOURNAL_PICTURES[k]; }).join('');
+      return gqlRequest(t.many ? 'query GTTxSnapshot { r: ' + t.many + '(ids: [' + JSON.stringify(id) + ']) { ' + t.list + ' { ' + sel + ' } } }'
+        : 'query GTTxSnapshot { o: ' + t.one + '(id: ' + JSON.stringify(id) + ') { ' + sel + ' } }', null).then(function (d) {
+        var o = t.many ? (((d || {}).r || {})[t.list] || [])[0] : (d || {}).o;
+        if (!o) return null;
+        return Promise.all(pics.map(function (k) { return journalPicture(function (i, x) { return window.fetch(i, x); }, picturePath(k, o)); }))
+          .then(function (data) {
+            delete o.paths;
+            pics.forEach(function (k, n) { delete o[JOURNAL_PICTURES[k]]; if (data[n]) o[k] = data[n]; });
+            return { fields: sf.fields, o: o };
+          });
+      });
+    });
+  }
+
   function journalSnapshot(save, id) {
     var t = JOURNAL_TYPES[save.type];
     var base = { type: save.type, id: id, action: save.spec.mode === 'merge' ? 'merge' : 'delete' };
     if (!hasOwn(JOURNAL_CREATE, save.type)) {
       return journalRead(function (i, o) { return window.fetch(i, o); }, save.type, [id], [], false).then(function (m) {
         base.name = ((m[id] || {})[t.name]) || '';
-        base.lost = save.type === 'scenes' ? 'scene' : save.filesGone ? 'files' : 'rescan';
+        base.lost = save.type === 'files' ? 'file' : save.type === 'scenes' ? 'scene' : save.filesGone ? 'files' : 'rescan';
         return base;
       });
     }
     return journalSnapFields(save.type).then(function (sf) {
-      return gqlRequest('query GTTxSnapshot { o: ' + t.one + '(id: ' + JSON.stringify(id) + ') { ' + sf.sel + ' ' + t.name + ' } }', null)
+      var pics = save.pictures ? JOURNAL_PICTURE_OF[save.type] || [] : [];
+      // A scene's markers go with it, so they are read with it and made again on the new scene.
+      var sel = sf.sel + ' ' + t.name + pics.map(function (k) { return ' ' + JOURNAL_PICTURES[k]; }).join('') +
+        (save.type === 'scenes' ? ' scene_markers { title seconds end_seconds primary_tag { id } tags { id } }' : '');
+      return gqlRequest(t.many ? 'query GTTxSnapshot { r: ' + t.many + '(ids: [' + JSON.stringify(id) + ']) { ' + t.list + ' { ' + sel + ' } } }'
+        : 'query GTTxSnapshot { o: ' + t.one + '(id: ' + JSON.stringify(id) + ') { ' + sel + ' } }', null)
         .then(function (d) {
-          var o = d.o;
+          var o = t.many ? (((d || {}).r || {})[t.list] || [])[0] : d.o;
           if (!o) return null;
           base.name = o[t.name] || '';
           base.snapshot = { fields: sf.fields, o: o };
@@ -3457,7 +4188,18 @@
             base.lost = save.spec.mode === 'merge' ? 'scene-merge' : 'files';
             return base;
           }
-          return journalCarriersOf(save.type, id).then(function (cr) { base.carriers = cr; return base; });
+          if (o.scene_markers) {
+            if (o.scene_markers.length) base.markers = o.scene_markers;
+            delete o.scene_markers;
+          }
+          // The picture is kept under its input key, which `journalSnapInput` hands the create.
+          return Promise.all(pics.map(function (k) {
+            return journalPicture(function (i, x) { return window.fetch(i, x); }, picturePath(k, o));
+          })).then(function (data) {
+            delete o.paths;
+            pics.forEach(function (k, n) { delete o[JOURNAL_PICTURES[k]]; if (data[n]) o[k] = data[n]; });
+            return journalCarriersOf(save.type, id);
+          }).then(function (cr) { base.carriers = cr; return base; });
         });
     });
   }
@@ -3476,7 +4218,8 @@
         reads.push(journalCarriersOf(sv.type, sv.into).then(function (cr) {
           return gqlRequest('query GTTxMergeInto { o: ' + JOURNAL_TYPES[sv.type].one + '(id: ' + JSON.stringify(sv.into) + ') { ' +
             (sv.type === 'tags' ? 'aliases ' : '') + JOURNAL_TYPES[sv.type].name + ' } }', null).then(function (d) {
-            return { into: sv.into, carriers: cr, aliases: d.o && d.o.aliases, name: d.o ? d.o[JOURNAL_TYPES[sv.type].name] : '' };
+            return { into: sv.into, carriers: cr, aliases: d.o && d.o.aliases, name: d.o ? d.o[JOURNAL_TYPES[sv.type].name] : '',
+              flags: sv.flags || undefined };
           });
         }));
         if (sv.values) reads.push(journalRead(send, sv.type, [sv.into], sv.values.fields, sv.values.customFields));
@@ -3485,7 +4228,7 @@
     })).then(function (all) {
       var p = send(input, init);
       p.then(function (resp) {
-        if (!resp || !resp.ok) return;
+        if (!resp || !resp.ok) { saves.forEach(function (sv) { byDone(sv, null); }); return; }
         saves.forEach(function (sv, i) {
           var list = all[i][0].filter(Boolean);
           var into = sv.into ? all[i][1] : null;
@@ -3493,7 +4236,7 @@
           var vals = sv.values, was = vals ? all[i][2] : null;
           journalRead(function (a, b) { return send(a, b); }, sv.type, sv.ids, [], false).then(function (now) {
             var gone = list.filter(function (e) { return !now[e.id]; });
-            if (!gone.length) return;
+            if (!gone.length) { byDone(sv, null); return; }
             if (into) gone.forEach(function (e) { if (e.action !== 'gap') e.merge = into; });
             if (!vals) return gone;
             // What the merge set on the destination, in the same run, so its Undo puts that back too.
@@ -3504,27 +4247,77 @@
             if (!gone) return;
             var gaps = gone.filter(function (e) { return e.action === 'gap'; }).length;
             var unread = vals && vals.skipped.length ? 'not recorded: ' + vals.skipped.join(', ') : '';
-            return journalRecord({ source: 'hand', label: journalLabel(sv), note: gaps ? 'not recorded for ' +
-              plural(gaps, 'entity', 'entities') + ': ' + errText(sv.readFailed) : unread }, gone).then(function (res) {
+            var note = gaps ? 'not recorded for ' + plural(gaps, 'entity', 'entities') + ': ' + errText(sv.readFailed) : unread;
+            return journalRecord(sv.by ? { plugin: String(sv.by.plugin || ''), label: String(sv.by.label || ''), note: note }
+              : { source: 'hand', label: journalLabel(sv), note: note }, gone).then(function (res) {
               if (res && res.tooLarge) journalGap([sv], JOURNAL_TOO_LARGE);
+              byDone(sv, res && res.run);
             });
-          }).then(null, function (e) { journalGap([sv], e); });
+          }).then(null, function (e) { journalGap([sv], e); byDone(sv, null); });
         });
-      }, function () {});
+      }, function () { saves.forEach(function (sv) { byDone(sv, null); }); });
       return p;
     }, function (e) {
       var p = send(input, init);
-      p.then(function () { journalGap(saves, e); }, function () {});
+      p.then(function () { journalGap(saves, e); }, function () {}).then(function () {
+        saves.forEach(function (sv) { byDone(sv, null); });
+      });
       return p;
+    });
+  }
+
+  // ── Undo History: a plugin's own deletes ──────────────────────────────────
+  //
+  // A plugin deleting tags, performers, studios or groups sends Stash's own bulk delete through
+  // `deleteRecorded`, which the fetch hook records exactly as a delete from Stash's page - every
+  // entity read whole first, so its Undo makes it again - but under the plugin's name, named in
+  // the request's `extensions` (`gttxBy`), which Stash ignores. Answers `{ sent, recorded }`:
+  // the delete's answer, and the run's id once it is in the history (null where nothing was
+  // recorded). `undoRun` is Undo History's Proceed for that one run, for the plugin's own Undo.
+  var DESTROY_MANY = { tags: 'Tags', performers: 'Performers', studios: 'Studios', groups: 'Groups' };
+  var _byDone = {}, _bySeq = 0;
+  function byDone(sv, run) {
+    var k = sv && sv.by && sv.by.token;
+    if (k && _byDone[k]) { _byDone[k](run || null); delete _byDone[k]; }
+  }
+  function deleteRecorded(type, ids, run) {
+    var T = DESTROY_MANY[type], op = T + 'Destroy';
+    return removeRecorded(op, 'mutation ' + op + '($ids: [ID!]!) { ' + T.charAt(0).toLowerCase() + T.slice(1) + 'Destroy(ids: $ids) }',
+      { ids: ids.map(String) }, run);
+  }
+  // Any delete or merge Stash's pages send (`JOURNAL_OPS`), sent under `run`'s name and recorded as
+  // theirs: Replay Selected's deletes and merges go this way, so each is undone as any other.
+  function removeRecorded(op, query, variables, run) {
+    var token = 'by' + (++_bySeq) + '-' + Date.now().toString(36);
+    var recorded = new Promise(function (resolve) { _byDone[token] = resolve; });
+    var sent = fetch('/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ operationName: op, query: query, variables: variables,
+        extensions: { gttxBy: { plugin: run.plugin, label: run.label, token: token } } }),
+    }).then(function (resp) { return resp.json(); }).then(function (json) {
+      if (json.errors) throw new Error(json.errors.map(function (e) { return e.message; }).join('; '));
+      return json.data;
+    });
+    // A delete that never reached the hook - no Undo History on this page - records nothing.
+    sent.then(function () { if (!window.indexedDB) byDone({ by: { token: token } }, null); },
+      function () { byDone({ by: { token: token } }, null); });
+    return { sent: sent, recorded: recorded };
+  }
+  function undoRun(runId, line) {
+    return journalEntries(runId).then(journalPlan).then(function (plan) {
+      return journalUndo(plan, line || function () {}, {});
     });
   }
 
   // Old id to new, per type, off every undo that recreated something; followed through
   // a chain, so an entity deleted, put back, deleted and put back again resolves to now.
-  function journalRemaps() {
+  // `pick(run)`: only the runs it answers true for - a replay follows its own runs' remaps alone.
+  function journalRemaps(pick) {
     return journalRuns().then(function (runs) {
       var m = {};
       runs.slice().sort(function (a, b) { return a.at - b.at; }).forEach(function (r) {
+        if (pick && !pick(r)) return;
         Object.keys(r.remap || {}).forEach(function (t) {
           m[t] = m[t] || {};
           Object.keys(r.remap[t]).forEach(function (old) { m[t][old] = String(r.remap[t][old]); });
@@ -3543,13 +4336,14 @@
     files: 'its files were deleted with it',
     scene: 'this Stash cannot create a scene from here',
     'scene-merge': 'a scene merge moved its files, and is not undone here',
+    file: 'a deleted file is gone from the disk',
   };
 
   // Puts a removed entity back: create, reattach, and for a merge take the destination
   // off what only a source carried. Resolves to the new id.
   function journalRecreate(w) {
     var e = w.entries[0], c = JOURNAL_CREATE[e.type], snap = e.snapshot;
-    var into = e.merge, t = JOURNAL_TYPES[e.type];
+    var into = e.merge;
     // The destination gives back only the names the merge gave it - the source's name and
     // aliases - and keeps any alias added to it since. Stash compares names without case.
     var lc = function (x) { return String(x).toLowerCase(); };
@@ -3570,12 +4364,113 @@
         if (k === 'tag_ids' || k === 'parent_ids' || k === 'child_ids') input[k] = input[k].map(function (x) { return w.remap('tags', x); });
         if (k === 'performer_ids') input[k] = input[k].map(function (x) { return w.remap('performers', x); });
         if (k === 'studio_id' || k === 'parent_id') input[k] = w.remap('studios', input[k]);
+        if (k === 'primary_tag_id') input[k] = w.remap('tags', input[k]);
+        if (k === 'scene_id') input[k] = w.remap('scenes', input[k]);
       });
       return gqlRequest('mutation GTTxUndoCreate($input: ' + c.input + '!) { ' + c.create + '(input: $input) { id } }', { input: input });
     }).then(function (d) {
       var made = String(((d || {})[c.create] || {}).id);
-      return journalCarry(w, made).then(function () { return made; });
+      return journalMarkersBack(w, made).then(function () { return journalCarry(w, made); }).then(function () { return made; });
     });
+  }
+
+  // A gallery's cover put back to `want` (an image id, or null for none chosen). Stash does not say
+  // whether a cover was chosen or is its fallback, so the cover is reset first: if the fallback is
+  // the one wanted - or none was - that is the gallery as it was, nothing chosen; otherwise the image
+  // is chosen. What the gallery shows is always what it showed.
+  function journalCover(gallery, want) {
+    var gid = JSON.stringify(String(gallery));
+    return gqlRequest('mutation GTTxUndoCoverReset { resetGalleryCover(input: { gallery_id: ' + gid + ' }) }', null).then(function () {
+      if (want == null) return null;
+      return gqlRequest('query GTTxUndoCoverRead { o: findGallery(id: ' + gid + ') { cover { id } } }', null).then(function (d) {
+        var now = d && d.o && d.o.cover ? String(d.o.cover.id) : null;
+        if (now === String(want)) return null;
+        return gqlRequest('mutation GTTxUndoCoverSet { setGalleryCover(input: { gallery_id: ' + gid + ', cover_image_id: ' +
+          JSON.stringify(String(want)) + ' }) }', null);
+      });
+    });
+  }
+
+  // `a` less `b`, each item taken once per match: a timestamp or chapter may appear twice.
+  function multisetLess(a, b) {
+    var left = b.map(function (x) { return JSON.stringify(x); });
+    return a.filter(function (x) {
+      var i = left.indexOf(JSON.stringify(x));
+      if (i === -1) return true;
+      left.splice(i, 1);
+      return false;
+    });
+  }
+
+  // A field with no update input of its own, put back to `w.want` from what it holds now: a scene's O
+  // or play timestamps added or deleted - an empty list is never sent, which Stash reads as "the
+  // latest" - its files assigned back, or a gallery's chapters made and deleted to match.
+  var JOURNAL_HISTORY_OPS = { o_history: ['sceneAddO', 'sceneDeleteO'], play_history: ['sceneAddPlay', 'sceneDeletePlay'] };
+  function journalSpecial(w) {
+    var id = JSON.stringify(String(w.id)), f = w.special;
+    if (f === 'resume_time') {
+      return gqlRequest('mutation GTTxUndoResume($id: ID!, $t: Float) { sceneSaveActivity(id: $id, resume_time: $t) }',
+        { id: String(w.id), t: w.want == null ? 0 : w.want });
+    }
+    if (f === 'chapters') {
+      return gqlRequest('query GTTxUndoChapters { o: findGallery(id: ' + id + ') { chapters { id title image_index } } }', null).then(function (d) {
+        var now = ((d && d.o) || {}).chapters || [];
+        var bare = function (c) { return { title: c.title, image_index: c.image_index }; };
+        var extra = multisetLess(now.map(bare), w.want), missing = multisetLess(w.want, now.map(bare));
+        // Each extra one its own chapter: two alike take two ids, never the first one twice.
+        var taken = {};
+        var gone = extra.map(function (c) {
+          var hit = now.filter(function (x) { return x.title === c.title && x.image_index === c.image_index && !taken[x.id]; })[0];
+          taken[hit.id] = true;
+          return hit.id;
+        });
+        return gone.reduce(function (p, cid) {
+          return p.then(function () { return gqlRequest('mutation GTTxUndoChapterDelete($id: ID!) { galleryChapterDestroy(id: $id) }', { id: cid }); });
+        }, Promise.resolve()).then(function () {
+          return missing.reduce(function (p, c) {
+            return p.then(function () {
+              return gqlRequest('mutation GTTxUndoChapterCreate($input: GalleryChapterCreateInput!) { galleryChapterCreate(input: $input) { id } }',
+                { input: { gallery_id: String(w.id), title: c.title, image_index: c.image_index } });
+            });
+          }, Promise.resolve());
+        });
+      });
+    }
+    return journalRead(function (i, o) { return window.fetch(i, o); }, w.type, [w.id], [f], false).then(function (m) {
+      if (!m[w.id]) throw new Error('it no longer exists');
+      var now = journalField(f).read(m[w.id]);
+      var add = multisetLess(w.want, now), del = multisetLess(now, w.want);
+      if (f === 'file_ids') {
+        // Never counted as written when it could not be (the plan refuses it first).
+        if (del.length) throw new Error('a file comes off a scene only by moving it to another, in Stash');
+        return add.reduce(function (p, fid) {
+          return p.then(function () {
+            return gqlRequest('mutation GTTxUndoAssign($input: AssignSceneFileInput!) { sceneAssignFile(input: $input) }',
+              { input: { scene_id: String(w.id), file_id: fid } });
+          });
+        }, Promise.resolve());
+      }
+      var ops = JOURNAL_HISTORY_OPS[f];
+      var q = function (op, times) {
+        return gqlRequest('mutation GTTxUndoHistory($id: ID!, $times: [Timestamp!]) { ' + op + '(id: $id, times: $times) { count } }',
+          { id: String(w.id), times: times });
+      };
+      return (del.length ? q(ops[1], del) : Promise.resolve()).then(function () { return add.length ? q(ops[0], add) : null; });
+    });
+  }
+
+  // A deleted scene's markers made again on the scene put back, one at a time, their tags through
+  // the remap; one Stash refuses - its primary tag deleted since - is counted, not a failure.
+  function journalMarkersBack(w, scene) {
+    var tag = function (x) { return w.remap ? w.remap('tags', String(x)) : String(x); };
+    return (w.entries[0].markers || []).reduce(function (p, m) {
+      return p.then(function () {
+        return gqlRequest('mutation GTTxUndoMarker($input: SceneMarkerCreateInput!) { sceneMarkerCreate(input: $input) { id } }',
+          { input: { title: m.title, seconds: m.seconds, end_seconds: m.end_seconds, scene_id: scene,
+            primary_tag_id: tag(m.primary_tag.id), tag_ids: (m.tags || []).map(function (x) { return tag(x.id); }) } })
+          .then(null, function () { if (w.miss) w.miss('sceneMarkers'); });
+      });
+    }, Promise.resolve());
   }
 
   // The recreated entity put back on what carried it, and for a merge the destination taken
@@ -3601,7 +4496,8 @@
 
   var BULK = { scenes: ['bulkSceneUpdate', 'BulkSceneUpdateInput'], images: ['bulkImageUpdate', 'BulkImageUpdateInput'],
     galleries: ['bulkGalleryUpdate', 'BulkGalleryUpdateInput'], performers: ['bulkPerformerUpdate', 'BulkPerformerUpdateInput'],
-    groups: ['bulkGroupUpdate', 'BulkGroupUpdateInput'], tags: ['bulkTagUpdate', 'BulkTagUpdateInput'] };
+    groups: ['bulkGroupUpdate', 'BulkGroupUpdateInput'], tags: ['bulkTagUpdate', 'BulkTagUpdateInput'],
+    markers: ['bulkSceneMarkerUpdate', 'BulkSceneMarkerUpdateInput'] };
 
   // `renew` is the undo's lease, renewed before each chunk.
   function journalChunks(ids, fn, renew) {
@@ -3678,11 +4574,12 @@
         });
       }, Promise.resolve());
     }
-    return journalBulk(ct, field, field === 'studio_id' ? made : { ids: [made], mode: 'ADD' }, ids, renew, miss);
+    return journalBulk(ct, field, field === 'studio_id' || field === 'primary_tag_id' ? made : { ids: [made], mode: 'ADD' }, ids, renew, miss);
   }
 
   function journalDetach(ct, field, ids, dest, renew, miss) {
-    if (!ids.length || !dest || field === 'studio_id') return Promise.resolve();
+    // A single id - a studio, a marker's primary tag - is replaced by the re-attach, not detached.
+    if (!ids.length || !dest || field === 'studio_id' || field === 'primary_tag_id') return Promise.resolve();
     // Studios have no bulk update: each is read and written without the tag, as `journalReattach` adds it.
     if (ct === 'studios' && field === 'tag_ids') {
       return ids.reduce(function (p, id) {
@@ -3770,7 +4667,8 @@
   // An entry as it reads now: an entity put back since under a new id, and the related
   // ids in a relation, followed to that id. A copy, so the stored entry is left as it was.
   var REMAP_REL = { tag_ids: 'tags', parent_ids: 'tags', child_ids: 'tags', performer_ids: 'performers',
-    gallery_ids: 'galleries', scene_ids: 'scenes', studio_id: 'studios', parent_id: 'studios' };
+    gallery_ids: 'galleries', scene_ids: 'scenes', studio_id: 'studios', parent_id: 'studios',
+    primary_tag_id: 'tags', scene_id: 'scenes' };
   function journalRemapped(e, remap) {
     var r = {}, k;
     for (k in e) if (hasOwn(e, k)) r[k] = e[k];
@@ -3817,6 +4715,174 @@
     });
   }
 
+  // ── Replay: changes written again, oldest first ────────────────────────────
+  //
+  // For a database put back from a backup, the history imported: the good changes made after it,
+  // written again. A replay is an undo run the other way - each change mirrored, before and after
+  // swapped and the order reversed - planned and written by the undo's own code, so it checks,
+  // threads and refuses exactly as an undo does; what it adds is "already applied", where the
+  // library holds the change already. No remap: a database put back has the old ids.
+  function journalMirror(e) {
+    var m = {}, k;
+    for (k in e) if (hasOwn(e, k)) m[k] = e[k];
+    m.before = e.after; m.after = e.before;
+    m.beforeAbsent = e.afterAbsent; m.afterAbsent = e.beforeAbsent;
+    // Made again is the undo of a delete; deleted again the undo of a create; a merge reads as one.
+    if (e.action === 'create') m.action = 'delete';
+    else if (e.action === 'delete') m.action = 'create';
+    else if (e.action === 'merge') m.action = 'split';
+    delete m.undone; delete m.undoes; delete m.replayed;
+    // Oldest first, as `entryNewestFirst` puts an undo's newest first.
+    m.at = -e.at;
+    m.id = e.run + ':' + -(Number(String(e.id).split(':')[1] || 0) + 1);   // never the original's own, -0 included
+    m.replays = e.id;
+    m._replayOf = e;
+    return m;
+  }
+  // A merge made again: `{ op, field, input }` of Stash's own merge mutation, per type.
+  var MERGE_OPS = { tags: { op: 'TagsMerge', field: 'tagsMerge', input: 'TagsMergeInput' },
+    performers: { op: 'PerformerMerge', field: 'performerMerge', input: 'PerformerMergeInput' },
+    scenes: { op: 'SceneMerge', field: 'sceneMerge', input: 'SceneMergeInput' } };
+  // Carriers as one comparable string: which entities hold it, in which field.
+  function carrierKey(cr) {
+    return Object.keys(cr || {}).filter(function (k) { return (cr[k] || []).length; }).sort().map(function (k) {
+      return k + '=' + cr[k].map(function (x) { return JSON.stringify(x); }).sort().join(',');
+    }).join(';');
+  }
+  // What carries an entity once `earlier` - changes this same replay writes before it - are written: a
+  // delete replayed after the edits that put the tag on is compared with what will carry it then.
+  // ponytail: edits where the edited entity is the carrier, and deletes; a child_ids edit or a merge
+  // before it still reads as changed.
+  function carriersAfter(cr, type, id, earlier) {
+    var out = {};
+    Object.keys(cr || {}).forEach(function (k) { out[k] = cr[k].slice(); });
+    earlier.forEach(function (e) {
+      // A delete replayed before it (its mirror a create): what it deletes carries nothing after.
+      if (e.action === 'create') {
+        Object.keys(out).forEach(function (k) { if (k.split('.')[0] === e.type) out[k] = out[k].filter(function (x) { return x !== String(e.eid); }); });
+        return;
+      }
+      if (!e.field || REMAP_REL[e.field] !== type || e.field === 'child_ids' || e.eid == null) return;
+      var k = e.type + '.' + e.field, eid = String(e.eid), list = out[k] || [];
+      // A mirror is planned as an undo, so what it writes is its `before`.
+      var d = isDelta(e.field) ? journalDelta({ before: e.after, after: e.before })
+        : { added: e.before != null ? [String(e.before)] : [], removed: e.after != null ? [String(e.after)] : [] };
+      if (d.removed.indexOf(String(id)) !== -1) list = list.filter(function (x) { return x !== eid; });
+      if (d.added.indexOf(String(id)) !== -1 && list.indexOf(eid) === -1) list.push(eid);
+      out[k] = list;
+    });
+    return out;
+  }
+  // The entity under an id is the one recorded only where its name is the recorded name: a database put
+  // back from a backup hands out again the ids used after it (Stash's ids are `autoincrement`), to
+  // whatever is made next - so a matching id alone could be another entity entirely.
+  function sameEntity(type, o, name) {
+    return !o || name == null || name === '' || String(o[JOURNAL_TYPES[type].name] || '') === String(name);
+  }
+  var ID_REUSED = 'its id is another entity\'s now - given out again after the backup';
+  function journalReplayPlan(entries) {
+    // Earlier replays' remaps only: an undo's point away from the ids a database put back has.
+    return journalRemaps(function (r) { return r.source === 'replay'; }).then(function (remap) {
+      return journalReplayPlanNow(entries, remap);
+    });
+  }
+  function journalReplayPlanNow(entries, remap) {
+    var picked = {}, pair = {}, cancelled = [], items = [], mirrors = [], unmade = {}, merges = {}, order = [], madeHere = {};
+    entries.forEach(function (e) { picked[e.id] = e; });
+    entries.forEach(function (e) {
+      var o = e.undoes && picked[e.undoes];
+      if (o && o.undone === e.run) pair[e.id] = pair[o.id] = true;
+    });
+    // A create that cannot be made again: nothing was kept of what it set.
+    entries.forEach(function (e) {
+      if (!pair[e.id] && e.action === 'create' && !(e.snapshot && hasOwn(JOURNAL_CREATE, e.type))) unmade[e.type + ':' + e.eid] = true;
+    });
+    var refuse = function (e, status, reason) { items.push({ entry: journalMirror(e), status: status, reason: reason }); };
+    var send = function (i, o) { return window.fetch(i, o); };
+    // A create whose id another entity holds now (`sameEntity`) is not made again, so neither is what
+    // a replayed change would put on under that id - it would put on the other entity.
+    var made = {}, reused = {};
+    entries.forEach(function (e) {
+      if (!pair[e.id] && e.action === 'create' && !e.replayed && !e.undone && hasOwn(JOURNAL_TYPES, e.type)) (made[e.type] = made[e.type] || []).push(e);
+    });
+    return Promise.all(Object.keys(made).map(function (t) {
+      return journalRead(send, t, made[t].map(function (e) { return remap(t, e.eid); }), [], false).then(function (now) {
+        made[t].forEach(function (e) {
+          var o = now[remap(t, e.eid)], named = e.snapshot && e.snapshot.o ? e.snapshot.o[JOURNAL_TYPES[t].name] : e.name;
+          if (o && !sameEntity(t, o, named)) reused[t + ':' + e.eid] = true;
+        });
+      });
+    })).then(function () {
+      entries.forEach(function (e) {
+        if (pair[e.id]) { cancelled.push(e); return; }
+        if (e.undone) return refuse(e, 'unrecorded', 'undone later - tick the undo too to leave it undone, or undo the undo');
+        if (e.replayed) return refuse(e, 'applied', 'replayed already - undo that replay to replay it again');
+        if (e.type === 'files') return refuse(e, 'unrecorded', 'a file is deleted again in Stash');
+        if (e.action === 'merge') {
+          if (!hasOwn(MERGE_OPS, e.type) || !e.merge || !e.merge.into) return refuse(e, 'unrecorded', 'this merge is made again in Stash');
+          var k = e.run + '|' + e.type + '|' + e.merge.into;
+          if (!hasOwn(merges, k)) { merges[k] = { type: e.type, into: String(e.merge.into), name: e.merge.name || '', list: [] }; order.push(k); }
+          merges[k].list.push(e);
+          return;
+        }
+        // Something a replayed change would put on, made by a create not replayed, is not there to put.
+        var rt = hasOwn(REMAP_REL, e.field) ? REMAP_REL[e.field] : null;
+        if (rt && isDelta(e.field) && journalDelta(e).added.some(function (x) { return unmade[rt + ':' + x]; })) {
+          return refuse(e, 'gone', 'its create is not replayed');
+        }
+        if (rt && !isDelta(e.field) && e.after != null && unmade[rt + ':' + String(e.after)]) return refuse(e, 'gone', 'its create is not replayed');
+        var puts = rt ? (isDelta(e.field) ? journalDelta(e).added : e.after != null ? [String(e.after)] : []) : [];
+        if (puts.some(function (x) { return reused[rt + ':' + x]; })) return refuse(e, 'changed', 'what it puts on was made after the backup, and ' + ID_REUSED);
+        if (e.action === 'create' && !reused[e.type + ':' + e.eid]) madeHere[e.type + ':' + remap(e.type, e.eid)] = true;
+        mirrors.push(journalMirror(e));
+      });
+      // A merge is made again where its destination and a source still exist; a source gone is merged already.
+      var mergeChecks = Promise.all(order.map(function (k) {
+        var m = merges[k], ids = [remap(m.type, m.into)].concat(m.list.map(function (e) { return remap(m.type, e.eid); }));
+        return journalRead(send, m.type, ids, [], false).then(function (now) { m.now = now; });
+      }));
+      return Promise.all([journalPlanNow(mirrors.map(function (m) { return journalRemapped(m, remap); }), remap), mergeChecks]).then(function (both) {
+        var plan = both[0];
+        // As a replay reads them: one there already is applied, a delete's entity gone is deleted already -
+        // unless this replay makes it first, when the delete goes once it is made.
+        plan.items.forEach(function (i) {
+          if (!i.entry.replays) return;
+          if (i.status === 'undone') { i.status = 'applied'; i.reason = 'it exists already'; }
+          else if (i.status === 'gone' && i.entry.action === 'create') {
+            if (madeHere[i.entry.type + ':' + i.entry.eid]) { i.status = 'ok'; i.reason = 'deleted again, once this replay has made it'; }
+            else { i.status = 'applied'; i.reason = 'deleted already'; }
+          }
+        });
+        order.forEach(function (k) {
+          var m = merges[k], live = [], into = remap(m.type, m.into);
+          m.list.forEach(function (e) {
+            var mm = journalMirror(e), src = remap(m.type, e.eid), there = m.now[src];
+            // A destination this replay makes first is merged into once it is made (`live` at the write).
+            if (!m.now[into] && !madeHere[m.type + ':' + into]) return items.push({ entry: mm, status: 'gone', reason: 'what it was merged into no longer exists' });
+            if ((m.now[into] && !sameEntity(m.type, m.now[into], m.name)) || (there && !sameEntity(m.type, there, e.name))) {
+              return items.push({ entry: mm, status: 'changed', reason: ID_REUSED });
+            }
+            if (!there && !madeHere[m.type + ':' + src]) return items.push({ entry: mm, status: 'applied', reason: 'merged already' });
+            items.push({ entry: mm, status: 'ok', reason: there ? 'merged again' : 'merged again, once this replay has made it' });
+            live.push(mm);
+          });
+          if (live.length) {
+            plan.writes.push({ type: m.type, id: m.into, name: m.name, entries: live,
+              mergeAgain: { source: live.map(function (e) { return String(e.eid); }), destination: m.into } });
+          }
+        });
+        plan.items = cancelled.map(function (e) {
+          return { entry: journalMirror(e), status: 'cancelled', reason: 'undone in what is ticked too, so nothing changes' };
+        }).concat(items, plan.items);
+        plan.cancelled = cancelled;
+        plan.entries = mirrors;
+        plan.remap = remap;
+        plan.replay = true;
+        return plan;
+      });
+    });
+  }
+
   function journalPlanNow(entries, remap) {
     var items = [], groups = {}, order = [], removals = [];
     entries.forEach(function (e) {
@@ -3828,7 +4894,8 @@
       }
       if (e.action === 'delete' || e.action === 'merge') {
         if (e.lost || !e.snapshot) {
-          items.push({ entry: e, status: 'unrecorded', reason: LOST_REASON[e.lost] || 'nothing was kept to put it back' });
+          items.push({ entry: e, status: 'unrecorded', reason: e.replays ? 'kept without what it set (a plugin\'s or an undo\'s create, or one from before the history kept it) - make it again in Stash'
+            : LOST_REASON[e.lost] || 'nothing was kept to put it back' });
         } else {
           removals.push(e);
         }
@@ -3842,6 +4909,12 @@
       // is said for itself, rather than throwing and taking every other selected change with it.
       if (e.action === 'update' && e.field && !/^(files|custom_fields|settings)\./.test(e.field) && !journalField(e.field)) {
         items.push({ entry: e, status: 'unrecorded', reason: 'this field cannot be undone here' });
+        return;
+      }
+      // A file goes back by being assigned to a scene, and the entry keeps the scene it left, not
+      // the one it went to: one an undo would take off is not to be undone here.
+      if (e.action === 'update' && e.field === 'file_ids' && multisetLess(e.after || [], e.before || []).length) {
+        items.push({ entry: e, status: 'unrecorded', reason: 'a file comes off a scene only by moving it to another, in Stash' });
         return;
       }
       if (!hasOwn(groups, e.entity)) { groups[e.entity] = []; order.push(e.entity); }
@@ -3887,7 +4960,13 @@
       // Put back first, so whatever follows in the same undo finds them there - and what
       // follows is checked again then (`journalUndo`), against the new ids.
       removals.forEach(function (e) {
-        if (exists[e.type][e.eid]) { items.push({ entry: e, status: 'undone', reason: 'it exists again' }); return; }
+        if (exists[e.type][e.eid]) {
+          // A replayed create: the entity under its id is it only by its name (`sameEntity`).
+          var named = e.snapshot && e.snapshot.o ? e.snapshot.o[JOURNAL_TYPES[e.type].name] : e.name;
+          items.push(e.replays && !sameEntity(e.type, exists[e.type][e.eid], named)
+            ? { entry: e, status: 'changed', reason: ID_REUSED } : { entry: e, status: 'undone', reason: 'it exists again' });
+          return;
+        }
         items.push({ entry: e, status: 'ok', reason: e.action === 'merge' ? 'put back, and split off the tag it was merged into'
           : 'created again under a new id, and put back on what still carries it' });
         writes.push({ type: e.type, id: e.eid, name: e.name || '', recreate: true, entries: [e], remap: remap,
@@ -3914,15 +4993,25 @@
           return;
         }
         var state = {}, touched = [], done = [];
+        // A replay: what the newest change of each field in it left there. An older one is already
+        // applied where the field holds that - a later change in the same replay is in, so it was.
+        var last = {};
+        g.forEach(function (e) { if (e.replays && !isDelta(e.field)) last[e.field] = entryBefore(e); });
         g.forEach(function (e) {
           if (!hasOwn(state, e.field)) state[e.field] = journalCurrent(cur, e.field);
           // A relation - tags, performers, galleries - is undone as the ids it added and
           // took away: still there and still gone is enough, whatever else joined since.
-          if (hasOwn(JOURNAL_RELATIONS, e.field)) {
+          if (isDelta(e.field)) {
             var d = journalDelta(e), now = state[e.field] || [];
             var intact = d.added.every(function (x) { return now.indexOf(x) !== -1; }) &&
               d.removed.every(function (x) { return now.indexOf(x) === -1; });
-            if (!intact) { items.push({ entry: e, status: 'changed', reason: since }); return; }
+            if (!intact) {
+              // A replay (`journalMirror`) whose change the library already holds: nothing to write.
+              var held = e.replays && d.added.every(function (x) { return now.indexOf(x) === -1; }) &&
+                d.removed.every(function (x) { return now.indexOf(x) !== -1; });
+              items.push(held ? { entry: e, status: 'applied', reason: 'already applied' } : { entry: e, status: 'changed', reason: since });
+              return;
+            }
             state[e.field] = now.filter(function (x) { return d.added.indexOf(x) === -1; })
               .concat(d.removed).sort();
             if (touched.indexOf(e.field) === -1) touched.push(e.field);
@@ -3931,7 +5020,8 @@
             return;
           }
           if (!journalSame(state[e.field], entryAfter(e))) {
-            items.push({ entry: e, status: 'changed', reason: since });
+            items.push(e.replays && (journalSame(state[e.field], entryBefore(e)) || journalSame(state[e.field], last[e.field]))
+              ? { entry: e, status: 'applied', reason: 'already applied' } : { entry: e, status: 'changed', reason: since });
             return;
           }
           if (e.field.indexOf('custom_fields.') === 0) {
@@ -3965,6 +5055,21 @@
         });
         done = done.filter(function (e) { return e.field.indexOf('files.') !== 0; });
         touched = touched.filter(function (f) { return f.indexOf('files.') !== 0; });
+        // A gallery's cover has no update field: it goes back through its own mutations (`journalCover`).
+        if (touched.indexOf('cover') !== -1) {
+          writes.push({ type: t, id: id, name: cur[JOURNAL_TYPES[t].name] || '', cover: state.cover,
+            entries: done.filter(function (e) { return e.field === 'cover'; }) });
+          done = done.filter(function (e) { return e.field !== 'cover'; });
+          touched = touched.filter(function (f) { return f !== 'cover'; });
+        }
+        // Timestamps, a scene's files and resume point, and a gallery's chapters go back through their
+        // own mutations too.
+        touched.filter(ownWrite).forEach(function (f) {
+          writes.push({ type: t, id: id, name: cur[JOURNAL_TYPES[t].name] || '', special: f, want: state[f],
+            entries: done.filter(function (e) { return e.field === f; }) });
+        });
+        done = done.filter(function (e) { return !ownWrite(e.field); });
+        touched = touched.filter(function (f) { return !ownWrite(f); });
         if (!touched.length) return;
         touched.forEach(function (f) {
           if (f.indexOf('custom_fields.') === 0) {
@@ -4018,6 +5123,25 @@
         });
       }
       creates.forEach(function (c) {
+        // A delete replayed: what carries the entity now must be what carried it when it was deleted,
+        // or the delete would take it off something the original never touched.
+        var del = c.g.filter(function (e) { return e.replays && e.action === 'create'; })[0];
+        if (del && !sameEntity(c.t, now[c.t][c.id], del.name)) {
+          c.g.forEach(function (e) { items.push({ entry: e, status: 'changed', reason: ID_REUSED }); });
+          return;
+        }
+        if (del) {
+          if (del.carriers && carrierKey(carriersAfter(carried[c.key], c.t, c.id, entries.filter(function (e) { return e.replays && e.at > del.at; })))
+            !== carrierKey(del.carriers)) {
+            c.g.forEach(function (e) {
+              items.push({ entry: e, status: 'changed', reason: 'what carries it is not what carried it when it was deleted' });
+            });
+            return;
+          }
+          c.g.forEach(function (e) { items.push({ entry: e, status: 'ok', reason: e === del ? 'deleted again' : 'goes with the delete' }); });
+          writes.push({ type: c.t, id: c.id, name: c.name, destroy: true, entries: c.g });
+          return;
+        }
         if (c.used) {
           c.g.forEach(function (e) {
             items.push({ entry: e, status: 'changed', reason: 'it is used by ' + plural(c.used, 'entity', 'entities') +
@@ -4039,6 +5163,8 @@
   // redo - and the entries it undid are marked. Resolves to { written, failed, run }.
   function journalUndo(plan, line, opts) {
     line = line || function () {};
+    // A replay (`journalReplayPlan`) is written by the same code; only its words and record differ.
+    var replay = !!(opts && opts.replay), back = replay ? 'written again' : 'put back';
     var c = coop();
     var lease = { owner: PLUGIN_ID, label: 'Undo History', until: 0 };
     // Renewed per write and per re-attach chunk, and put back when a respecter has
@@ -4060,10 +5186,47 @@
       var r = plan.remap ? plan.remap(type, id) : String(id);
       return made[type] && hasOwn(made[type], r) ? made[type][r] : r;
     };
+    // A replayed delete or merge, sent as Stash's page sends it and recorded by the capture as its own run.
+    var captured = function (w, op, q, vars, did) {
+      var r = removeRecorded(op, q, vars, { plugin: PLUGIN_SHORT_NAME + ' Undo History', label: 'Replay - ' + did });
+      return r.sent.then(function () { return r.recorded; }).then(function (run) {
+        w.capturedRun = run || null;
+        written.push(w);
+        line('UNDO', did, w);
+      }, function (e) {
+        failed++;
+        line('ERROR', 'the replay failed: ' + (e && e.message ? e.message : e), w);
+      });
+    };
     var write = function (p, w) {
       return p.then(function () {
         renew();
         var t = JOURNAL_TYPES[w.type], q, vars;
+        if (w.mergeAgain) {
+          var mo = MERGE_OPS[w.type], min = { source: w.mergeAgain.source.map(function (x) { return live(w.type, x); }),
+            destination: live(w.type, w.mergeAgain.destination) };
+          // A scene merge as it was made: the sources' play and O history moved too where they were.
+          var flags = (w.entries[0].merge || {}).flags || {};
+          Object.keys(flags).forEach(function (k) { if (flags[k]) min[k] = true; });
+          w.replaysOf = {};
+          w.entries.forEach(function (e) { w.replaysOf[live(w.type, e.eid)] = e.replays; });
+          return captured(w, mo.op, 'mutation ' + mo.op + '($input: ' + mo.input + '!) { ' + mo.field + '(input: $input) { id } }',
+            { input: min }, 'merged again into ' + t.label.toLowerCase() + ' ' + min.destination);
+        }
+        if (replay && w.destroy) {
+          var dop = t.destroy.charAt(0).toUpperCase() + t.destroy.slice(1), dvars;
+          w.replaysOf = {};
+          w.replaysOf[String(w.id)] = (w.entries.filter(function (e) { return e.action === 'create'; })[0] || w.entries[0]).replays;
+          if (t.destroyBare) { q = 'mutation ' + dop + '($id: ID!) { ' + t.destroy + '(id: $id) }'; dvars = { id: w.id }; }
+          else {
+            var din = {};
+            if (t.destroyIds) din.ids = [w.id]; else din.id = w.id;
+            Object.keys(t.destroyArgs || {}).forEach(function (k) { din[k] = t.destroyArgs[k]; });
+            q = 'mutation ' + dop + '($input: ' + t.destroyInput + '!) { ' + t.destroy + '(input: $input) }';
+            dvars = { input: din };
+          }
+          return captured(w, dop, q, dvars, 'deleted again');
+        }
         if (w.recreate) {
           w.renew = renew;
           w.remap = live;
@@ -4077,7 +5240,8 @@
             (made[w.type] = made[w.type] || {})[w.id] = id;
             written.push(w);
             line('UNDO', 'put back as ' + t.label.toLowerCase() + ' ' + id, w);
-            var where = Object.keys(missed).map(function (ct) {
+            if (missed.sceneMarkers) line('WARN', plural(missed.sceneMarkers, 'marker') + ' of the scene not made again: Stash refused the write', w);
+            var where = Object.keys(missed).filter(function (ct) { return ct !== 'sceneMarkers'; }).map(function (ct) {
               return ct === 'aliases' ? 'the aliases of the tag it was merged into, left as the merge made them'
                 : plural(missed[ct], JOURNAL_TYPES[ct].label.toLowerCase(), ct) + (missed[ct] === 1 ? ' that still exists' : ' that still exist');
             });
@@ -4085,6 +5249,24 @@
           }, function (e) {
             failed++;
             line('ERROR', 'it could not be put back: ' + (e && e.message ? e.message : e), w);
+          });
+        }
+        if (w.special) {
+          return journalSpecial(w).then(function () {
+            written.push(w);
+            line('UNDO', plural(w.entries.length, 'change') + ' ' + back, w);
+          }, function (e) {
+            failed++;
+            line('ERROR', 'the undo failed: ' + (e && e.message ? e.message : e), w);
+          });
+        }
+        if (hasOwn(w, 'cover')) {
+          return journalCover(w.id, w.cover).then(function () {
+            written.push(w);
+            line('UNDO', 'cover ' + back, w);
+          }, function (e) {
+            failed++;
+            line('ERROR', 'the undo failed: ' + (e && e.message ? e.message : e), w);
           });
         }
         if (w.settings) {
@@ -4100,7 +5282,7 @@
               'configurePlugin(plugin_id: $plugin_id, input: $input) }', { plugin_id: w.id, input: map });
           }).then(function () {
             written.push(w);
-            line('UNDO', plural(w.entries.length, 'setting') + ' put back', w);
+            line('UNDO', plural(w.entries.length, 'setting') + ' ' + back, w);
           }, function (e) {
             failed++;
             line('ERROR', 'the undo failed: ' + (e && e.message ? e.message : e), w);
@@ -4109,6 +5291,9 @@
         if (w.move) {
           q = 'mutation GTTxUndoMove($input: MoveFilesInput!) { moveFiles(input: $input) }';
           vars = { input: w.move };
+        } else if (w.destroy && t.destroyBare) {
+          q = 'mutation GTTxUndoDelete($id: ID!) { ' + t.destroy + '(id: $id) }';
+          vars = { id: w.id };
         } else if (w.destroy) {
           var input = {};
           if (t.destroyIds) input.ids = [w.id]; else input.id = w.id;
@@ -4122,16 +5307,17 @@
         return gqlRequest(q, vars).then(function (data) {
           w.updatedAt = w.destroy || w.move ? null : ((data || {})[t.update] || {}).updated_at || null;
           written.push(w);
-          line('UNDO', w.destroy ? 'deleted again' : w.move ? 'renamed back to "' + w.move.destination_basename + '"'
-            : plural(w.entries.length, 'change') + ' put back', w);
+          line('UNDO', w.destroy ? 'deleted again' : w.move ? (replay ? 'renamed to "' : 'renamed back to "') + w.move.destination_basename + '"'
+            : plural(w.entries.length, 'change') + ' ' + back, w);
         }, function (e) {
           failed++;
           line('ERROR', 'the undo failed: ' + (e && e.message ? e.message : e), w);
         });
       });
     };
-    var puts = plan.writes.filter(function (w) { return w.recreate; });
-    var rest = plan.writes.filter(function (w) { return !w.recreate; });
+    // A merge made again goes in its place in time, as a put-back does.
+    var puts = plan.writes.filter(function (w) { return w.recreate || w.mergeAgain; });
+    var rest = plan.writes.filter(function (w) { return !w.recreate && !w.mergeAgain; });
     // In the order the history happened, newest first: each delete or merge put back only
     // once every edit newer than it is undone, and each run of edits checked against the
     // library as it is then, with the ids recreated so far followed. A relation is undone as
@@ -4173,8 +5359,10 @@
       }).then(function () { return write(Promise.resolve(), w); });
     }, Promise.resolve()).then(function () { return edited(left); });
     return steps.then(release, function (e) { release(); throw e; }).then(function () {
-      var entries = [], undid = [], remap = null;
+      var entries = [], undid = [], remap = null, elsewhere = [];
       written.forEach(function (w) {
+        // Recorded by the capture as a run of its own: marked replayed by that run, not this one.
+        if (hasOwn(w, 'capturedRun')) { if (w.capturedRun) elsewhere.push(w); return; }
         if (w.recreate) {
           var e = w.entries[0];
           undid.push(e);
@@ -4182,7 +5370,8 @@
           (remap[w.type] = remap[w.type] || {})[e.eid] = w.made;
           // `split`: a merge put back. Deleting it again would not put the surviving tag back on what
           // only the merged one carried, so a redo of it is refused, to be merged again in Stash.
-          entries.push({ type: w.type, id: w.made, name: w.name, action: 'create', undoes: e.id, split: e.action === 'merge' || undefined });
+          entries.push({ type: w.type, id: w.made, name: w.name, action: 'create', undoes: replay ? undefined : e.id, replays: replay ? e.replays : undefined,
+            split: e.action === 'merge' || undefined, snapshot: replay ? e.snapshot : undefined });
           return;
         }
         w.entries.forEach(function (e) {
@@ -4190,17 +5379,57 @@
           entries.push({ type: e.type, id: e.eid, name: w.name || e.name, field: e.field,
             action: e.action === 'create' ? 'delete' : 'update',
             before: e.afterAbsent ? undefined : e.after, after: e.beforeAbsent ? undefined : e.before,
-            updatedAt: w.updatedAt, undoes: e.id, folder: e.folder });
+            updatedAt: w.updatedAt, undoes: replay ? undefined : e.id, replays: replay ? e.replays : undefined, folder: e.folder });
         });
       });
       if (opts && opts.pop) {
         var out = undid.concat(plan.cancelled || []);
         if (!out.length) return { written: 0, failed: failed, run: null, popped: 0 };
-        return journalPop(out, remap).then(function () {
-          return { written: written.length, failed: failed, run: null, popped: out.length };
+        // A redo: the shelf's undo was written; what it had taken out comes back, and the shelf goes.
+        if (opts.redo) {
+          var ids = undid.map(function (e) { return (e._orig || e).undoes; });
+          _shelfRedoing = true;
+          return journalPop(out, remap).then(function () { return journalRestore(opts.redo, ids); })
+            .then(function (n) {
+              _shelfRedoing = false;
+              shelfWrite(null);
+              return { written: written.length, failed: failed, run: null, popped: 0, redone: n };
+            }, function (e) { _shelfRedoing = false; throw e; });
+        }
+        var originals = undid.map(function (e) { return e._orig || e; });
+        var runIds = originals.map(function (e) { return e.run; }).filter(function (r, i, a) { return a.indexOf(r) === i; });
+        return journalRunHeads(runIds).then(function (heads) {
+          var kept = entries.length ? shelfWrite({ at: Date.now(), entries: entries, originals: originals, heads: heads }) : shelfWrite(null);
+          return journalPop(out, remap).then(function () {
+            return { written: written.length, failed: failed, run: null, popped: out.length, shelved: entries.length ? kept : null };
+          });
         });
       }
+      // Each captured run's rows name the change they replayed too, so undoing that run clears the mark.
+      var marksElsewhere = function () {
+        return elsewhere.reduce(function (p, w) {
+          return p.then(function () { return journalMarkReplayed(w.entries, w.capturedRun); }).then(function () {
+            return journalEntries(w.capturedRun);
+          }).then(function (rows) {
+            return journalDb().then(function (db) {
+              var tx = db.transaction('entries', 'readwrite'), store = tx.objectStore('entries');
+              rows.forEach(function (x) { if (w.replaysOf && w.replaysOf[x.eid]) { x.replays = w.replaysOf[x.eid]; store.put(x); } });
+              return idbDone(tx);
+            });
+          });
+        }, Promise.resolve());
+      };
+      if (replay && !entries.length) {
+        return marksElsewhere().then(function () { return { written: written.length, failed: failed, run: null, elsewhere: elsewhere.length }; });
+      }
       if (!entries.length) return { written: 0, failed: failed, run: null };
+      if (replay) {
+        return journalRecord({ source: 'replay', label: 'Replay of ' + plural(undid.length, 'change'), remap: remap }, entries).then(function (res) {
+          if (!res.run) return marksElsewhere().then(function () { return { written: written.length, failed: failed, run: null, tooLarge: !!res.tooLarge }; });
+          return journalMarkReplayed(undid, res.run).then(marksElsewhere)
+            .then(function () { return { written: written.length, failed: failed, run: res.run, elsewhere: elsewhere.length }; });
+        });
+      }
       return journalRecord({ source: 'undo', label: 'Undo of ' + plural(undid.length, 'change'), remap: remap }, entries)
         .then(function (res) {
           // An undo record too large to keep is not kept, and then nothing is marked undone by it:
@@ -4211,6 +5440,76 @@
           });
         });
     });
+  }
+
+  // ── The redo shelf ───────────────────────────────────────────────────────
+  //
+  // A pop records no undo, so nothing in the history redoes it. What it would have recorded is kept
+  // here instead - the undo's entries, and the changes it took out with their runs' heads - and
+  // **Redo** undoes that undo, as any redo is the undo of an undo, then puts those changes back in the
+  // history. One shelf, in this browser's localStorage, emptied by the next change recorded here, as
+  // an editor drops its redo once you type again; one past `SHELF_MAX` (pictures, a large run) is not
+  // kept, and the pop says so.
+  var JOURNAL_SHELF_KEY = 'gttx-journal-shelf';
+  // A quarter of the 5 MB most browsers give an origin, which Stash and every plugin share.
+  var SHELF_MAX = 1048576;
+  var _shelfRedoing = false;
+  function shelfRead() {
+    try { var t = window.localStorage.getItem(JOURNAL_SHELF_KEY); return t ? JSON.parse(t) : null; } catch (e) { return null; }
+  }
+  function shelfWrite(sh) {
+    try {
+      if (!sh) { window.localStorage.removeItem(JOURNAL_SHELF_KEY); return true; }
+      var t = JSON.stringify(sh);
+      if (t.length > SHELF_MAX) { window.localStorage.removeItem(JOURNAL_SHELF_KEY); return false; }
+      window.localStorage.setItem(JOURNAL_SHELF_KEY, t);
+      return true;
+    } catch (e) {
+      try { window.localStorage.removeItem(JOURNAL_SHELF_KEY); } catch (x) { /* storage refused */ }
+      return false;
+    }
+  }
+  function journalRunHeads(ids) {
+    return journalDb().then(function (db) {
+      return Promise.all(ids.map(function (id) { return idbRequest(db.transaction('runs').objectStore('runs').get(id)); }));
+    }).then(function (heads) { return heads.filter(Boolean); });
+  }
+  // The shelf's undo, as rows a plan reads, under a run of its own that is never stored.
+  function journalRedoPlan() {
+    var sh = shelfRead();
+    if (!sh) return Promise.resolve(null);
+    return journalPlan(sh.entries.map(function (x, i) { return journalRow('shelf', sh.at, i, x); }))
+      .then(function (plan) { return { plan: plan, shelf: sh }; });
+  }
+  // The changes a redo wrote back return to the history as they were, their runs remade where the pop
+  // emptied them, each run's count and size counted again.
+  function journalRestore(sh, ids) {
+    var back = sh.originals.filter(function (e) { return ids.indexOf(e.id) !== -1; });
+    if (!back.length) return Promise.resolve(0);
+    return journalDb().then(function (db) {
+      var tx = db.transaction(['runs', 'entries'], 'readwrite');
+      var runs = tx.objectStore('runs'), store = tx.objectStore('entries'), touched = {};
+      back.forEach(function (e) {
+        delete e.undone;
+        store.put(e);
+        touched[e.run] = true;
+        // An undo put back undoes again what it had undone: its pop cleared that mark (`journalPop`).
+        if (!e.undoes) return;
+        var g = store.get(e.undoes);
+        g.onsuccess = function () { if (g.result && !g.result.undone) { g.result.undone = e.run; store.put(g.result); } };
+      });
+      Object.keys(touched).forEach(function (rid) {
+        var g = runs.get(rid), all = store.index('run').getAll(rid);
+        all.onsuccess = function () {
+          var head = g.result || sh.heads.filter(function (h) { return h.id === rid; })[0];
+          if (!head) return;
+          head.count = all.result.length;
+          head.bytes = all.result.reduce(function (n, x) { return n + (x.bytes || 0); }, 0);
+          runs.put(head);
+        };
+      });
+      return idbDone(tx);
+    }).then(function () { journalChanged(); return back.length; });
   }
 
   // A pop: what was undone leaves the history instead of an undo joining it. An undo
@@ -4263,6 +5562,18 @@
     }).then(journalChanged);
   }
 
+  // The originals a replay wrote again, marked with its run: "(replayed)" in the list.
+  function journalMarkReplayed(list, runId) {
+    return journalDb().then(function (db) {
+      var tx = db.transaction('entries', 'readwrite'), store = tx.objectStore('entries');
+      list.forEach(function (e) {
+        var g = store.get(e.replays);
+        g.onsuccess = function () { if (g.result) { g.result.replayed = runId; store.put(g.result); } };
+      });
+      return idbDone(tx);
+    }).then(journalChanged);
+  }
+
   // Resolves to the marks a redo cleared, `{ id, undone }` each.
   function journalMark(undid, runId) {
     var cleared = [];
@@ -4272,6 +5583,11 @@
         e = e._orig || e;
         e.undone = runId || true;
         store.put(e);
+        // A replay undone: what it wrote again is no longer replayed.
+        if (e.replays) {
+          var r = store.get(e.replays);
+          r.onsuccess = function () { if (r.result && r.result.replayed) { delete r.result.replayed; store.put(r.result); } };
+        }
         if (e.undoes) {
           var g = store.get(e.undoes);
           g.onsuccess = function () {
@@ -4332,6 +5648,7 @@
     c5JournalImageRuns: false,
     c6JournalProtect: true,
     c7JournalDeletes: true,
+    c7bJournalPictures: false,
     c9JournalSettings: true,
     // What the review's "Take it out of the history" box starts as; the box still decides.
     c8JournalUndoTakesOut: false,
@@ -4395,7 +5712,7 @@
     var named = {};
     OWNED_SETTINGS.forEach(function (p) {
       var v = ((plugins || {})[p[0]] || {})[p[1]];
-      v = v == null ? '' : String(v).replace(/^\s+|\s+$/g, '');
+      v = v == null ? '' : String(v).trim();
       if (v) named[v] = p[0];
     });
     return function (key) { return String(key).indexOf(OWNED_PREFIX) === 0 || hasOwn(named, String(key)); };
@@ -4414,12 +5731,12 @@
     ['NormalizeParentTags', 'b1ExcludeEntityWithTagName'], ['PropagateTagsAndPerformers', 'f1ExcludeTargetWithTagName'],
     ['PropagateTagsAndPerformers', 'f8ExcludeTagSubtreeName'], ['SceneVariants', 'a1FullLengthTag'],
     ['SceneVariants', 'a2PartialLengthTag'], ['SceneVariants', 'a4VariantFlagTag'], ['SceneVariants', 'e5NoRenameTag'],
-    ['CustomFieldsBulkEditor', 'b1DescriptionTagName']];
+    ['CustomFieldsBulkEditor', 'b1DescriptionTagName'], ['OrphanCleanup', 'a3ExcludeWithTagName']];
   function ownedTags(plugins) {
     var named = {};
     OWNED_TAG_SETTINGS.forEach(function (p) {
       var v = ((plugins || {})[p[0]] || {})[p[1]];
-      v = v == null ? '' : String(v).replace(/^\s+|\s+$/g, '').toLowerCase();
+      v = v == null ? '' : String(v).trim().toLowerCase();
       if (v && !hasOwn(named, v)) named[v] = p[0];
     });
     return function (tag) {
@@ -4450,7 +5767,7 @@
   // no save here dropped. A write's read of the map it is about to send back stays a query of
   // its own, never this: a value another tab changed is one it would otherwise write back over.
   var GTTX_IDS = ['GTTxCore', 'CustomFieldsBulkEditor', 'DeSpicer', 'EntityNameMaintainer',
-    'FindEntitiesByTextContent', 'MergePerformerTagsToScenes', 'NormalizeParentTags',
+    'FindEntitiesByTextContent', 'MergePerformerTagsToScenes', 'NormalizeParentTags', 'OrphanCleanup',
     'PropagateTagsAndPerformers', 'SceneFilenameManager', 'SceneVariants', 'TagBundleClipboard'];
   var READ_APART = ['DeSpicer'];
   var SHARED_IDS = GTTX_IDS.filter(function (id) { return READ_APART.indexOf(id) === -1; });
@@ -4656,7 +5973,7 @@
 
   // ── The Undo History settings, in a dialog of their own ───────────────────
   //
-  // Nine settings about one thing made the group read as a wall, so they are one row of it -
+  // Nine settings (ten since Record Pictures) about one thing made the group read as a wall, so they are one row of it -
   // what they say now, and a button opening them - the way Scene Variants keeps its title
   // rules. Nothing in the `.yml` names them any more (`.tests/version.test.js` lists them as
   // dialog-only); they are stored under their keys as before, the seed still writes their
@@ -4695,12 +6012,22 @@
         'again - under a new id, since Stash never reuses one - and puts it back on what still ' +
         'exists of those. A tag merge is undone the same way, and the tag it was merged into is ' +
         'taken off what only the merged tag carried. Not brought back: a scene\'s play history ' +
-        'and O-count, markers, pictures, and images, galleries and scenes whose files were ' +
-        'deleted with them - those are recorded and the review says so. A delete of something ' +
-        'large reads a lot first, and waits for it.' },
+        'and O-count, markers, pictures unless Record Pictures is on, and images, galleries and ' +
+        'scenes whose files were deleted with them - those are recorded and the review says so. A ' +
+        'delete of something large reads a lot first, and waits for it.' },
+    { key: 'c7bJournalPictures', label: 'Record Pictures',
+      tip: 'Keep the picture itself - a scene\'s cover, a tag\'s, studio\'s or performer\'s image, a group\'s ' +
+        'front and back images - ' +
+        'when you change one in Stash\'s pages or delete what shows it, so the undo puts it back. ' +
+        'Off by default.\n\nEach picture is kept whole, before and after: usually 20 KB to 1 MB ' +
+        'each, counted against the Size Limit, and a save that changes one waits while it is read. ' +
+        'Off: a picture change is named in its run as not recorded, and a delete puts the entity ' +
+        'back without its picture. Of the pictures a ᝯㄝₓ plugin writes, only the covers Scene Variants ' +
+        'pushes are recorded, and only with this on.' },
     { key: 'c9JournalSettings', label: 'Record Settings Changes',
-      tip: 'Record the plugin settings you save in this browser - on Stash\'s settings page or in a ' +
-        'ᝯㄝₓ plugin\'s own dialog - so a change can be undone later. On by default.\n\nEach ' +
+      tip: 'Record the ᝯㄝₓ plugins\' settings you save in this browser - on Stash\'s settings page or in a ' +
+        'ᝯㄝₓ plugin\'s own dialog - so a change can be undone later. Another plugin\'s settings are never ' +
+        'recorded: they may hold a key or a password. On by default.\n\nEach ' +
         'setting that changed is a change of its own, the value before and after; undoing it ' +
         'puts that value back, the plugin\'s other settings left as they are then. The defaults ' +
         'a plugin writes in when it first loads are not recorded.' },
@@ -4710,7 +6037,7 @@
         'a million images is up to a million changes and could push everything else out of the size ' +
         'limit. Off: those changes are left out of the history - the dialog\'s own Undo still covers ' +
         'them while it is open - and images you edit yourself are always recorded.\n\nThe pictures ' +
-        'entities show - a scene\'s cover, a performer\'s image - are not recorded whatever this says.' },
+        'entities show - a scene\'s cover, a performer\'s image - are Record Pictures\' to keep, not this.' },
     { key: 'c6JournalProtect', label: 'Protect Its Storage',
       tip: 'Ask the browser not to clear Undo History when the disk is nearly full. On by ' +
         'default.\n\nChrome and Edge grant it quietly to a site you use often, Firefox asks you ' +
@@ -4719,9 +6046,9 @@
     { key: 'c8JournalUndoTakesOut', label: 'Undo Takes It Out of the History', warn: true,
       tip: 'Start the undo review with "Take it out of the history" ticked. Off by default.\n\nRISK ' +
         'OF HISTORY LOSS: ticked, what an undo puts back leaves Undo History instead of an undo ' +
-        'being recorded beside it. Nothing is kept of it: that undo cannot itself be undone, and ' +
-        'the changes it took out cannot be redone, found or exported again. Leave it off unless ' +
-        'you mean the history to work as a stack.\n\nUnticked, the undo is recorded and can ' +
+        'being recorded beside it. Only Redo... can bring the changes back, and only until the next ' +
+        'change is recorded in this browser; after that they cannot be redone, found or exported ' +
+        'again. Leave it off unless you mean the history to work as a stack.\n\nUnticked, the undo is recorded and can ' +
         'itself be undone. This only sets where the box starts: the review screen still shows it ' +
         'beside Proceed, and changing it there decides for that undo alone.' },
   ];
@@ -4729,8 +6056,8 @@
     var days = String(s.c1JournalKeepDays == null || s.c1JournalKeepDays === '' ? JOURNAL_KEEP_DAYS : s.c1JournalKeepDays);
     var mb = String(s.c2JournalSizeMB == null || s.c2JournalSizeMB === '' ? JOURNAL_SIZE_MB : s.c2JournalSizeMB);
     var on = function (k) { return truthy(s[k]); };
-    var records = ['edits made in Stash\'s pages', 'deletes and merges', 'settings changes', 'library-wide image writes']
-      .filter(function (x, i) { return on(['c4JournalHandEdits', 'c7JournalDeletes', 'c9JournalSettings', 'c5JournalImageRuns'][i]); });
+    var records = ['edits made in Stash\'s pages', 'deletes and merges', 'pictures', 'settings changes', 'library-wide image writes']
+      .filter(function (x, i) { return on(['c4JournalHandEdits', 'c7JournalDeletes', 'c7bJournalPictures', 'c9JournalSettings', 'c5JournalImageRuns'][i]); });
     var text = 'Kept ' + (/^forever$/i.test(days) ? 'forever' : days + ' days') + ', up to ' + mb + ' MB' +
       (on('c3JournalSinceBackup') ? ', only since the last backup' : '') + '. Records ' +
       (records.length ? records.join(', ') : 'nothing from Stash\'s pages') + '.';
@@ -4919,6 +6246,8 @@
       box.disabled = true;
       box.addEventListener(box.type === 'checkbox' || f.choices ? 'change' : 'input', function () { refreshSave(); });
       boxes[f.key] = box;
+      // A box naming a tag or a custom field lists what the library has as you type (`suggestBox`).
+      if (f.tag && box.type === 'text') tagSuggest(box); else if (f.cf && box.type === 'text') fieldSuggest(box);
       if (section && box.type === 'checkbox') section.ticks.push(f.key);
       var name = markGlyphs(el('span', 'gttxcore-devname'), f.label, spec.plainNames);
       if (box.type === 'checkbox') { label.appendChild(box); label.appendChild(name); }
@@ -4966,7 +6295,7 @@
         var asked = 0, wait = null;
         box._mark = function () {
           var ask = ++asked;
-          Promise.resolve(f.mark(String(box.value).replace(/^\s+|\s+$/g, ''))).then(function (node) {
+          Promise.resolve(f.mark(String(box.value).trim())).then(function (node) {
             if (ask !== asked) return;                            // typed on while it was asked
             while (slot.firstChild) slot.removeChild(slot.firstChild);
             if (node) slot.appendChild(node);
@@ -5149,7 +6478,7 @@
   function markLevel(node, w) {
     if (!node) return node;
     var lv = levelOf(w), had = String(node.className || '');
-    var cls = had.replace(/(^|\s)gttx-lv-\w+/g, '').replace(/^\s+|\s+$/g, '');
+    var cls = had.replace(/(^|\s)gttx-lv-\w+/g, '').trim();
     if (lv) cls = (cls ? cls + ' ' : '') + 'gttx-lv-' + lv;
     if (cls !== had) node.className = cls;
     return node;
@@ -5399,7 +6728,7 @@
   var JOURNAL_ROW = { key: 'journal', heading: 'Undo History', summary: journalSummary,
     level: parentLevel(JOURNAL_FIELDS.map(function (f) { return f.warn; })),
     line: 'How long Undo History keeps what was changed and what it records: edits in Stash\'s pages, ' +
-      'deletes and merges, settings changes, library-wide image writes. Nine settings, in a dialog.',
+      'deletes and merges, pictures, settings changes, library-wide image writes. Ten settings, in a dialog.',
     button: 'Undo History Settings...', open: openJournalSettings,
     title: 'Open the Undo History settings. Nothing is written until you press Save there.' };
   function journalRowTick(group) { dialogRowTick(group, JOURNAL_ROW); }
@@ -5592,6 +6921,7 @@
   }
   // What a file would change: `{ changes: [{ id, key, from, to }], skipped: [ids] }`, or throws why
   // it is no export of these settings.
+  var SETTING_KEY = /^[a-z]\d+[a-z]?[A-Z][A-Za-z0-9]*$/;
   function transferPlan(text, plugins) {
     var f;
     try { f = JSON.parse(text); } catch (e) { throw new Error('the file is not JSON'); }
@@ -5604,6 +6934,8 @@
       if (GTTX_IDS.indexOf(id) === -1 || !map || typeof map !== 'object') { skipped.push(id); return; }
       var now = plugins[id] || {};
       Object.keys(map).sort().forEach(function (k) {
+        // Every ᝯㄝₓ setting is named so (a1Name, c7bName): another key was never one of ours.
+        if (!SETTING_KEY.test(k)) { skipped.push(id + '.' + k); return; }
         if (JSON.stringify(now[k]) !== JSON.stringify(map[k])) changes.push({ id: id, key: k, from: now[k], to: map[k] });
       });
     });
@@ -5697,7 +7029,7 @@
           note.textContent = (plan.changes.length ? file.name + ' changes ' + plural(plan.changes.length, 'setting') + ' in ' +
             plural(Object.keys(plugins).length, 'plugin') + '; Proceed writes them.' : file.name + ' changes nothing: every setting it names is stored already.') +
             (plan.changes.some(function (c) { return c.key === 'z1Salt'; }) ? ' It replaces De-Spicer\'s secret: names de-spiced before get other pseudonyms on the next run.' : '') +
-            (plan.skipped.length ? ' Not ᝯㄝₓ plugins, skipped: ' + plan.skipped.join(', ') + '.' : '');
+            (plan.skipped.length ? ' Not ᝯㄝₓ plugins or settings, skipped: ' + plan.skipped.join(', ') + '.' : '');
         }).then(null, function (e) { run.plan = null; list.textContent = ''; fail('The import failed')(e); })
           .then(function () { busy(false); });
       });
@@ -5802,6 +7134,16 @@
     return true;
   }
 
+  // A dialog's log as a text file named by the plugin and the time - Save log, beside Copy log
+  // in every dialog, for a log too long to paste or one to keep with a backup. Answers the name.
+  function saveLogFile(slug, text) {
+    var d = new Date(), two = function (n) { return (n < 10 ? '0' : '') + n; };
+    var name = slug + '-log-' + d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + '-' +
+      two(d.getHours()) + two(d.getMinutes()) + two(d.getSeconds()) + '.txt';
+    download(name, [text], 'text/plain');
+    return name;
+  }
+
   // ── Undo History: export and import ───────────────────────────────────────
   //
   // One file, a line of JSON each: a header, then every run, then every entry. Lines
@@ -5820,8 +7162,10 @@
       return Promise.all([idbRequest(tx.objectStore('runs').getAll()),
         idbRequest(tx.objectStore('entries').getAll())]);
     }).then(function (both) {
+      // The last backup's time goes with it: Tick Since the Last Backup in another browser, or after
+      // this one's data is cleared, still knows it.
       var parts = [JSON.stringify({ kind: 'gttx-undo-history', version: 1, exported: Date.now(),
-        runs: both[0].length, entries: both[1].length }) + '\n'];
+        backupAt: stampAt(JOURNAL_BACKUP_KEY) || undefined, runs: both[0].length, entries: both[1].length }) + '\n'];
       both[0].sort(journalOrder).forEach(function (r) { parts.push(JSON.stringify({ kind: 'run', run: r }) + '\n'); });
       both[1].forEach(function (e) { parts.push(JSON.stringify({ kind: 'entry', entry: e }) + '\n'); });
       var name = 'gttx-undo-history-' + historyWhen(Date.now()).replace(' ', '-').replace(':', '') + '.ndjson';
@@ -5842,7 +7186,8 @@
         try { o = JSON.parse(line); } catch (e) { skipped++; return; }
         if (o && o.kind === 'run' && o.run && o.run.id) { o.run.imported = true; runs.push(o.run); }
         else if (o && o.kind === 'entry' && o.entry && o.entry.id && o.entry.run) entries.push(o.entry);
-        else if (!(o && o.kind === 'gttx-undo-history')) skipped++;
+        else if (o && o.kind === 'gttx-undo-history') { if (o.backupAt > stampAt(JOURNAL_BACKUP_KEY)) stampSaw(JOURNAL_BACKUP_KEY, o.backupAt); }
+        else skipped++;
       });
     });
     if (!runs.length && !entries.length) return Promise.resolve({ runs: 0, entries: 0, skipped: skipped });
@@ -5906,7 +7251,7 @@
   var _history = null;
 
   function historyWho(r) {
-    return r.source === 'hand' ? 'Your edit' : r.source === 'undo' ? 'Undo' : (r.plugin || 'A plugin');
+    return r.source === 'hand' ? 'Your edit' : r.source === 'undo' ? 'Undo' : r.source === 'replay' ? 'Replay' : (r.plugin || 'A plugin');
   }
 
   function historyWhen(at) {
@@ -5921,15 +7266,37 @@
     if (Object.prototype.toString.call(v) === '[object Array]') {
       return v.length ? v.map(function (x) { return typeof x === 'object' ? JSON.stringify(x) : String(x); }).join(', ') : '(none)';
     }
+    if (typeof v === 'string' && /^data:image\//.test(v)) return 'a picture (' + historyKB(v) + ')';
     var t = typeof v === 'object' ? JSON.stringify(v) : typeof v === 'string' ? '"' + v + '"' : String(v);
     return t.length > 80 ? t.slice(0, 79) + '…' : t;
+  }
+
+  // What a run or a change keeps in this browser: its size, and its share of the Size Limit once
+  // that is 0.01% or more - 27 KB of the default 256 MB, so a picture or a large run shows one and
+  // an ordinary edit, a few hundred bytes, does not.
+  function historySize(bytes, limit) {
+    var n = bytes || 0;
+    var text = n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(n < 10240 ? 1 : 0) + ' KB'
+      : (n / 1048576).toFixed(n < 10485760 ? 1 : 0) + ' MB';
+    var pct = limit ? n / limit * 100 : 0;
+    if (pct >= 0.01) text += ' (' + (pct < 1 ? pct.toFixed(2) : pct < 10 ? pct.toFixed(1) : Math.round(pct)) + '%)';
+    var span = el('span', 'gttxcore-hsize', text);
+    span.title = 'What this keeps in this browser: ' + n + ' bytes' + (limit ? ', ' + (Math.round(pct * 1000) / 1000) +
+      '% of the Size Limit (' + Math.round(limit / 1048576) + ' MB). The share is shown from 0.01%.' : '.');
+    return span;
+  }
+
+  // A picture's size from its data URL: three bytes for every four base64 characters.
+  function historyKB(v) {
+    var b64 = v.slice(v.indexOf(',') + 1);
+    return Math.max(1, Math.round(b64.length * 3 / 4 / 1024)) + ' KB';
   }
 
   function historyChange(e) {
     if (e.action === 'create') return 'created';
     if (e.action === 'delete') return 'deleted' + (e.lost ? ' (' + LOST_REASON[e.lost] + ')' : '');
     if (e.action === 'gap') return 'not recorded';
-    if (hasOwn(JOURNAL_RELATIONS, e.field)) {
+    if (isDelta(e.field)) {
       var d = journalDelta(e);
       return e.field + ': ' + [].concat(d.added.map(function (x) { return '+' + x; }),
         d.removed.map(function (x) { return '\u2212' + x; })).join(', ');
@@ -5949,7 +7316,7 @@
       return set;
     }
     var a = el('a', 'gttxcore-elink', t.label + ' "' + (e.name || 'untitled') + '" [' + e.eid + ']');
-    if (e.eid !== '?') {
+    if (e.eid !== '?' && !t.noPage) {
       a.href = '/' + e.type + '/' + e.eid;
       a.target = linkTarget();
       a.rel = 'noopener noreferrer';
@@ -5965,7 +7332,7 @@
   // at once with its id and named when the answer lands. Each is a link with the hover
   // card every listing here draws.
   // The relations a merge remaps, and a scene's groups.
-  var HISTORY_REL_TYPES = { groups: 'groups' };
+  var HISTORY_REL_TYPES = { groups: 'groups', cover: 'images' };
   (function () { for (var k in REMAP_REL) if (hasOwn(REMAP_REL, k)) HISTORY_REL_TYPES[k] = REMAP_REL[k]; }());
   var _histNames = {};
 
@@ -6043,6 +7410,7 @@
     if (e.action === 'create') r.action = 'delete';
     else if (e.action === 'delete') r.action = 'create';
     else if (e.action === 'merge') r.action = 'split';
+    else if (e.action === 'split') r.action = 'merge';
     return r;
   }
 
@@ -6136,18 +7504,66 @@
     });
   }
 
+  // Narrowed to one entity (`H.scope`, the page the ↶ button was pressed on) and not widened: its own
+  // changes, under any id it had before an undo made it again - and, with `H.related`, the changes
+  // that put it on something or took it off, or merged into it.
+  function historyNarrow(H) { return !!(H.find || H.type || (H.scope && !H.wide)); }
+  function historyInScope(H, e) {
+    var sc = H.scope;
+    if (e.type === sc.type && hasOwn(sc.ids, String(e.eid))) return true;
+    if (!H.related) return false;
+    if (e.merge && e.type === sc.type && hasOwn(sc.ids, String(e.merge.into))) return true;
+    // Only a change that put it on or took it off: a scene edit that left it in place is not about it.
+    if (historyRelType(e) !== sc.type) return false;
+    var b = historyRelIds(e.before), a = historyRelIds(e.after);
+    return Object.keys(sc.ids).some(function (x) { return (a.indexOf(x) === -1) !== (b.indexOf(x) === -1); });
+  }
   function historyMatches(H, e) {
+    if (H.scope && !H.wide && !historyInScope(H, e)) return false;
     if (H.type && e.type !== H.type) return false;
     if (!H.find) return true;
-    return [e.name, e.field, JSON.stringify(e.before), JSON.stringify(e.after)].join('\n')
+    // A picture is matched as the line draws it, never on its bytes.
+    return [e.name, e.field, historyFindText(e.before), historyFindText(e.after)].join('\n')
       .toLowerCase().indexOf(H.find) !== -1;
   }
+  function historyFindText(v) {
+    return typeof v === 'string' && /^data:image\//.test(v) ? historyValue(v) : JSON.stringify(v);
+  }
 
-  function openHistory() {
+  // The ids an entity had before undos made it again, each followed through the remaps to `id`.
+  function journalOldIds(type, id) {
+    return journalRuns().then(function (runs) {
+      var m = {}, olds = [];
+      // In time order, as `journalRemaps` reads them: a later remap of the same id wins.
+      runs.slice().sort(journalOrder).forEach(function (r) {
+        var t = (r.remap || {})[type] || {};
+        Object.keys(t).forEach(function (o) { m[o] = String(t[o]); });
+      });
+      Object.keys(m).forEach(function (o) {
+        var cur = o, n = 0;
+        while (hasOwn(m, cur) && n++ < 50) cur = m[cur];
+        if (cur === String(id)) olds.push(o);
+      });
+      return olds;
+    }, function () { return []; });
+  }
+
+  // The entity page the ↶ button is pressed on, which Undo History opens narrowed to.
+  var SCOPE_ROUTE = /^\/(scenes|images|galleries|performers|studios|groups|tags)\/(\d+)(?:[/?#]|$)/;
+  function historyScopeHere() {
+    var m = SCOPE_ROUTE.exec(String((window.location || {}).pathname || ''));
+    return m ? { type: m[1], id: m[2] } : null;
+  }
+
+  // `scope` - { type, id } - opens it narrowed to that entity, with Show Everything to widen it.
+  function openHistory(scope) {
     if (_history) { if (_history.modal.scrollIntoView) _history.modal.scrollIntoView(); return; }
     injectStyle();
     var H = { selRuns: {}, selEntries: {}, shownRuns: [], open: {}, entries: {}, byId: {}, shown: HISTORY_PAGE,
-      mode: 'list', plan: null, find: '', type: '', source: '', from: 0, to: 0, drawing: 0 };
+      mode: 'list', plan: null, find: '', type: '', source: '', from: 0, to: 0, drawing: 0,
+      scope: scope && hasOwn(JOURNAL_TYPES, scope.type) ? { type: scope.type, id: String(scope.id), ids: {} } : null,
+      wide: false, related: false };
+    if (H.scope) H.scope.ids[H.scope.id] = true;
     var backdrop = el('div', 'gttxcore-backdrop');
     var modal = el('div', 'gttxcore-modal gttxcore-history');
     backdrop.appendChild(modal);
@@ -6156,10 +7572,19 @@
 
     var head = el('div', 'gttxcore-head');
     head.appendChild(el('div', 'gttxcore-title', PLUGIN_SHORT_NAME + ' - Undo History'));
-    head.appendChild(el('div', 'gttxcore-warn',
+    var warn = el('div', 'gttxcore-warn',
       'Backing up your database before proceeding is strongly recommended. An undo writes to your ' +
       'library like any other edit, and is recorded here so it can be undone in turn - all but the undo of a ' +
-      'create, which deletes what was made and keeps nothing to bring it back.'));
+      'create, which deletes what was made and keeps nothing to bring it back. Not everything can be undone: ');
+    var cannot = el('a', 'gttxcore-elink', 'what Undo History cannot undo');
+    cannot.href = README_URL + '#what-undo-history-cannot-undo';
+    cannot.target = linkTarget();
+    cannot.rel = 'noopener noreferrer';
+    cannot.title = 'Open the ᝯㄝₓ Core README at its list: what is never recorded, what is recorded but not undone, ' +
+      'and what an undo puts back only in part.';
+    warn.appendChild(cannot);
+    warn.appendChild(el('span', null, '.'));
+    head.appendChild(warn);
     H.noteEl = el('div', 'gttxcore-note', 'Reading the history…');
     head.appendChild(H.noteEl);
     H.alertEl = el('div', 'gttxcore-warn gttxcore-hidden', '');
@@ -6191,8 +7616,8 @@
     });
     typeSel.title = 'Show only the runs that changed this kind of entity.';
     var sourceSel = dropdown('gttxcore-hselect');
-    sourceSel.title = 'Show only your own edits in Stash’s pages, only what the plugins wrote, or only undos.';
-    [['', 'Everything'], ['hand', 'Your edits'], ['plugin', 'Plugin writes'], ['undo', 'Undos']].forEach(function (o) {
+    sourceSel.title = 'Show only your own edits in Stash’s pages, only what the plugins wrote, only undos, or only replays.';
+    [['', 'Everything'], ['hand', 'Your edits'], ['plugin', 'Plugin writes'], ['undo', 'Undos'], ['replay', 'Replays']].forEach(function (o) {
       var opt = el('option', null, o[1]);
       opt.value = o[0];
       sourceSel.appendChild(opt);
@@ -6205,6 +7630,43 @@
     to.title = 'Show only the runs up to and including this day.';
     [find, typeSel, sourceSel, from, to].forEach(function (n) { bar.appendChild(n); });
     modal.appendChild(bar);
+    if (H.scope) {
+      // What it is narrowed to, a link with its hover card; Show Everything widens it, off to begin with.
+      var sc = H.scope, scopeBar = modal.appendChild(el('div', 'gttxcore-hfilter gttxcore-hscope'));
+      var only = scopeBar.appendChild(el('span', 'gttxcore-hscopename', 'Only '));
+      var who = only.appendChild(el('span'));
+      who.appendChild(historyEntity({ type: sc.type, eid: sc.id, name: '' }));
+      Promise.resolve(historyNames(sc.type, [sc.id])[sc.id]).then(function (n) {
+        if (n == null) return;
+        while (who.firstChild) who.removeChild(who.firstChild);
+        who.appendChild(historyEntity({ type: sc.type, eid: sc.id, name: n }));
+      }, function () {});
+      var related = null;
+      if (/^(tags|performers|studios|groups)$/.test(sc.type)) {
+        related = scopeBar.appendChild(el('label', 'gttxcore-hrelated'));
+        var rbox = related.appendChild(el('input', 'gttxcore-hbox'));
+        rbox.type = 'checkbox';
+        related.appendChild(el('span', null, ' Where it was added or removed'));
+        related.title = 'Also list the changes that put this ' + JOURNAL_TYPES[sc.type].label.toLowerCase() +
+          ' on something or took it off - a scene it was tagged on, say - and what was merged into it.';
+        rbox.addEventListener('change', function () { H.related = !!rbox.checked; H.shown = HISTORY_PAGE; if (H.mode === 'list') historyDraw(H); });
+      }
+      var wideBtn = scopeBar.appendChild(button('Show Everything', 'gttxcore-hwide'));
+      var paintWide = function () {
+        wideBtn.textContent = H.wide ? 'Show Only This ' + JOURNAL_TYPES[sc.type].label : 'Show Everything';
+        wideBtn.title = H.wide ? 'Narrow the history back to the changes of the ' + JOURNAL_TYPES[sc.type].label.toLowerCase() + ' this page shows.'
+          : 'Widen the history to every change recorded, not only this ' + JOURNAL_TYPES[sc.type].label.toLowerCase() + '\'s.';
+        toggleClass(only, 'gttxcore-hscopeoff', H.wide);
+        if (related) related.style.display = H.wide ? 'none' : '';
+      };
+      wideBtn.addEventListener('click', function () { H.wide = !H.wide; paintWide(); H.shown = HISTORY_PAGE; if (H.mode === 'list') historyDraw(H); });
+      paintWide();
+      journalOldIds(sc.type, sc.id).then(function (olds) {
+        if (!olds.length) return;
+        olds.forEach(function (o) { sc.ids[o] = true; });
+        if (H.mode === 'list') historyDraw(H);
+      });
+    }
     function refilter() {
       H.find = String(find.value || '').toLowerCase();
       H.type = typeSel.value || '';
@@ -6225,7 +7687,16 @@
     var foot = el('div', 'gttxcore-foot');
     var orange = function (b) { b.className = b.className.replace('btn-secondary', 'btn-warning'); return b; };
     H.undoBtn = orange(button('Undo Selected...', 'gttxcore-hundo'));
+    H.replayBtn = orange(button('Replay Selected...', 'gttxcore-hreplay'));
+    H.replayBtn.title = 'Write the ticked changes again, oldest first, where the library still holds what it held before ' +
+      'each - for a database put back from a backup, with this history imported: the good changes made after the backup, ' +
+      'replayed. Lists what it would write first; nothing is written until Proceed. Recorded, so Undo Selected... takes it back.';
+    H.sinceBackupBtn = button('Tick Since the Last Backup', 'gttxcore-hsincebackup');
     H.deleteBtn = button('Delete Selected...', 'gttxcore-hdelete');
+    H.redoBtn = orange(button('Redo...', 'gttxcore-hredo'));
+    H.redoBtn.title = 'Redo the last undo that took its changes out of the history: they are written again ' +
+      'where the library still holds what that undo put back, and return to the history. Kept until the next ' +
+      'change is recorded in this browser. Lists what it would write first; nothing is written until Proceed.';
     H.unselAllBtn = button('Unselect All', 'gttxcore-hunselall');
     H.selAllBtn = button('Select All', 'gttxcore-hselall');
     H.popLabel = el('label', 'gttxcore-hpop gttxcore-hidden');
@@ -6234,13 +7705,15 @@
     H.popLabel.appendChild(H.popBox);
     H.popLabel.appendChild(el('span', null, ' Take it out of the history'));
     H.popLabel.title = 'Ticked, what is undone leaves the history instead of an undo joining it - the ' +
-      'history goes back to where it was, as a stack does. It cannot then be redone from here. ' +
+      'history goes back to where it was, as a stack does. Redo... puts it back until the next change is ' +
+      'recorded in this browser. ' +
       'Unticked, the undo is recorded and can be undone in turn. It starts as the Undo Takes It ' +
       'Out of the History setting says, and this box decides for this undo.';
     H.popBox.addEventListener('change', function () { historyFoot(H); });
     H.proceedBtn = orange(button('Proceed', 'gttxcore-hproceed gttxcore-hidden'));
     H.backBtn = button('Back', 'gttxcore-hback gttxcore-hidden');
     H.copyBtn = button('Copy log', 'gttxcore-hcopy gttxcore-hidden');
+    H.saveLogBtn = button('Save log', 'gttxcore-hsavelog gttxcore-hidden');
     H.exportBtn = button('Export', 'gttxcore-hexport');
     H.importBtn = button('Import...', 'gttxcore-himport');
     H.backupBtn = button('Back Up and Export', 'gttxcore-hbackup');
@@ -6269,17 +7742,30 @@
       'all but a create deleted again, which nothing brings back.';
     H.backBtn.title = 'Back to the history, with nothing written.';
     H.copyBtn.title = 'Copy what the review or the undo lists, line by line, as plain text.';
+    H.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     H.closeBtn.title = 'Close Undo History.';
     // The selection pair at the right end, where every sibling's dialog has it.
-    [H.undoBtn, H.deleteBtn, H.popLabel, H.proceedBtn, H.backBtn, H.copyBtn, H.exportBtn, H.importBtn, H.backupBtn, H.dropBtn,
+    [H.undoBtn, H.replayBtn, H.sinceBackupBtn, H.redoBtn, H.deleteBtn, H.popLabel, H.proceedBtn, H.backBtn, H.copyBtn, H.saveLogBtn, H.exportBtn, H.importBtn, H.backupBtn, H.dropBtn,
       H.clearBtn, H.closeBtn, H.unselAllBtn, H.selAllBtn].forEach(function (b) { foot.appendChild(b); });
     modal.appendChild(foot);
 
     H.undoBtn.addEventListener('click', function () { historyReview(H); });
+    H.replayBtn.addEventListener('click', function () { historyReview(H, true); });
+    // Step 5 of a replay's usual use: every run since the backup the database was put back from.
+    H.sinceBackupBtn.addEventListener('click', function () {
+      var at = stampAt(JOURNAL_BACKUP_KEY);
+      if (H.busy || !at) return;
+      journalRuns().then(function (runs) {
+        runs.filter(function (r) { return r.at > at; }).forEach(function (r) { H.selRuns[r.id] = true; });
+        return historyDraw(H, true);
+      }).then(function () { historyFoot(H); });
+    });
     H.proceedBtn.addEventListener('click', function () { historyProceed(H); });
     H.backBtn.addEventListener('click', function () {
-      H.mode = 'list'; H.plan = null; H.done = false; historyDraw(H); historyFoot(H);
+      H.mode = 'list'; H.plan = null; H.redoShelf = null; H.replay = false; H.done = false; historyDraw(H); historyFoot(H);
     });
+    H.redoBtn.addEventListener('click', function () { historyRedoReview(H); });
     H.exportBtn.addEventListener('click', function () {
       historyBusy(H, true);
       historyWorking(H, 'Saving the history…');
@@ -6350,10 +7836,14 @@
       return journalClear().then(function () { H.progressEl.textContent = 'The history is cleared.'; });
     }, H, historyClearGate(H));
     H.closeBtn.addEventListener('click', function () { historyClose(H); });
-    H.copyBtn.addEventListener('click', function () {
+    function historyLogText() {
       var lines = [H.progressEl.textContent];
       for (var i = 0; i < H.listEl.childNodes.length; i++) lines.push(H.listEl.childNodes[i].textContent);
-      copyToClipboard(lines.join('\n'), function (ok) {
+      return lines.join('\n');
+    }
+    H.saveLogBtn.addEventListener('click', function () { saveLogFile('undo-history', historyLogText()); });
+    H.copyBtn.addEventListener('click', function () {
+      copyToClipboard(historyLogText(), function (ok) {
         holdWidth(H.copyBtn);
         H.copyBtn.textContent = ok ? 'Copied' : 'Failed';
         setTimeout(function () { H.copyBtn.textContent = 'Copy log'; }, 2000);
@@ -6523,12 +8013,22 @@
   function historyFoot(H) {
     var list = H.mode === 'list', review = H.mode === 'review', done = H.mode === 'done';
     historyShow(H.undoBtn, list);
+    historyShow(H.replayBtn, list);
+    historyShow(H.sinceBackupBtn, list);
     historyShow(H.deleteBtn, list);
-    historyShow(H.popLabel, review);
+    historyShow(H.redoBtn, list);
+    H.redoBtn.disabled = !!H.busy || !shelfRead();
+    historyShow(H.popLabel, review && !H.redoShelf && !H.replay);
     historyShow(H.proceedBtn, review);
     historyShow(H.backBtn, !list);
     historyShow(H.copyBtn, !list);
-    H.undoBtn.disabled = H.deleteBtn.disabled = !!H.busy || !historySelected(H);
+    historyShow(H.saveLogBtn, !list);
+    H.undoBtn.disabled = H.replayBtn.disabled = H.deleteBtn.disabled = !!H.busy || !historySelected(H);
+    var backupAt = stampAt(JOURNAL_BACKUP_KEY);
+    H.sinceBackupBtn.disabled = !!H.busy || !backupAt;
+    H.sinceBackupBtn.title = backupAt ? 'Tick every run recorded after the last backup, taken ' + historyWhen(backupAt) +
+      ' - whatever the filter shows: what Replay Selected... writes again on a database put back from it.'
+      : 'No backup is known here: Back Up and Export takes one, and an imported history brings the time of its own.';
     historyShow(H.unselAllBtn, list);
     historyShow(H.selAllBtn, list);
     H.unselAllBtn.disabled = !!H.busy || !historySelected(H);
@@ -6602,13 +8102,13 @@
       var cheap = runs.filter(function (r) {
         return (!H.source || r.source === H.source) && (!H.from || r.at >= H.from) && (!H.to || r.at < H.to);
       });
-      var deep = !!(H.find || H.type), kept = [], i = 0;
+      var deep = historyNarrow(H), kept = [], i = 0;
       function more() {
         if (token !== H.drawing) return null;
         while (i < cheap.length && kept.length <= H.shown) {
           var r = cheap[i++];
           if (!deep) { kept.push(r); continue; }
-          if (H.find && !H.type && (String(r.label).toLowerCase().indexOf(H.find) !== -1 ||
+          if (H.find && !H.type && !(H.scope && !H.wide) && (String(r.label).toLowerCase().indexOf(H.find) !== -1 ||
               String(r.plugin || '').toLowerCase().indexOf(H.find) !== -1)) { kept.push(r); continue; }
           return historyEntriesOf(H, r.id).then(function (es) { return historyFilter(H, es); }).then(function (run) {
             return function (es) {
@@ -6694,13 +8194,14 @@
       });
       row.appendChild(box);
       row.appendChild(toggle);
+      row.appendChild(historySize(r.bytes, journalLimits().bytes));
       row.appendChild(back);
       block.appendChild(row);
       if (H.open[r.id]) {
         var inner = el('div', 'gttxcore-hentries', 'Reading…');
         block.appendChild(inner);
         historyEntriesOf(H, r.id).then(function (es) {
-          return H.find || H.type ? historyFilter(H, es) : es;
+          return historyNarrow(H) ? historyFilter(H, es) : es;
         }).then(function (es) {
           inner.textContent = '';
           es.forEach(function (e) {
@@ -6727,6 +8228,8 @@
             line.appendChild(el('span', null, ' – '));
             line.appendChild(historyChangeNode(e));
             if (e.undone) line.appendChild(el('span', null, ' (undone)'));
+            else if (e.replayed) line.appendChild(el('span', null, ' (replayed)'));
+            line.appendChild(historySize(e.bytes, journalLimits().bytes));
             inner.appendChild(line);
           });
         });
@@ -6756,10 +8259,12 @@
   }
 
   // Everything ticked, read and checked against what the library holds now.
-  function historyReview(H) {
+  // `replay`: the ticked changes planned to be written again (`journalReplayPlan`), not undone.
+  function historyReview(H, replay) {
     if (H.busy || !historySelected(H)) return;
     historyBusy(H, true);
-    H.progressEl.textContent = 'Checking what can still be undone…';
+    H.replay = !!replay;
+    H.progressEl.textContent = replay ? 'Checking what can be replayed…' : 'Checking what can still be undone…';
     Promise.all(Object.keys(H.selRuns).map(function (id) { return historyEntriesOf(H, id); })).then(function (lists) {
       var seen = {}, entries = [];
       lists.forEach(function (es) { es.forEach(function (e) { if (!seen[e.id]) { seen[e.id] = 1; entries.push(e); } }); });
@@ -6769,12 +8274,12 @@
       // The setting read fresh, not from the copy this page loaded with: it is changed on
       // Stash's settings page, which nothing here hears, often just before an undo.
       var fresh = loadSettings(true).then(null, function () { return settings(); });
-      return Promise.all([journalPlan(entries), fresh]);
+      return Promise.all([replay ? journalReplayPlan(entries) : journalPlan(entries), fresh]);
     }).then(function (both) {
       var plan = both[0];
       H.plan = plan;
       H.mode = 'review';
-      H.popBox.checked = truthy((both[1] || settings()).c8JournalUndoTakesOut);
+      H.popBox.checked = !replay && truthy((both[1] || settings()).c8JournalUndoTakesOut);
       var list = H.listEl;
       while (list.firstChild) list.removeChild(list.firstChild);
       var ok = 0;
@@ -6783,9 +8288,35 @@
         historyLine(H, i.status === 'ok' ? 'PLAN' : 'SKIP', i.entry, i.reason);
       });
       var gone = (plan.cancelled || []).length;
-      H.progressEl.textContent = plural(ok, 'change') + ' can be undone' +
-        (plan.items.length - gone > ok ? ', and ' + plural(plan.items.length - gone - ok, 'change') + ' will be skipped' : '') +
-        (gone ? '; ' + plural(gone, 'change') + ' cancel out, undone and undone again in what is ticked' : '') +
+      var held = plan.items.filter(function (i) { return i.status === 'applied'; }).length;
+      H.progressEl.textContent = plural(ok, 'change') + (replay ? ' can be replayed' : ' can be undone') +
+        (held ? ', ' + plural(held, 'change') + ' already applied' : '') +
+        (plan.items.length - gone - held > ok ? ', and ' + plural(plan.items.length - gone - held - ok, 'change') + ' will be skipped' : '') +
+        (gone ? '; ' + plural(gone, 'change') + ' cancel out, ' + (replay ? 'made and undone' : 'undone and undone again') + ' in what is ticked' : '') +
+        '. Nothing has been written.';
+    }, function (e) {
+      H.progressEl.textContent = 'The check failed: ' + (e && e.message ? e.message : e);
+    }).then(function () { historyBusy(H, false); });
+  }
+
+  // Redo's review: the shelf's undo planned like any other, every line checked against the library now.
+  function historyRedoReview(H) {
+    if (H.busy) return;
+    historyBusy(H, true);
+    H.progressEl.textContent = 'Checking what can still be redone…';
+    journalRedoPlan().then(function (r) {
+      if (!r) { H.progressEl.textContent = 'Nothing to redo: a change was recorded since the last undo that took its changes out.'; return; }
+      H.plan = r.plan;
+      H.redoShelf = r.shelf;
+      H.mode = 'review';
+      var list = H.listEl, ok = 0;
+      while (list.firstChild) list.removeChild(list.firstChild);
+      r.plan.items.forEach(function (i) {
+        if (i.status === 'ok') ok++;
+        historyLine(H, i.status === 'ok' ? 'PLAN' : 'SKIP', i.entry, i.reason);
+      });
+      H.progressEl.textContent = plural(ok, 'change') + ' can be redone' +
+        (r.plan.items.length > ok ? ', and ' + plural(r.plan.items.length - ok, 'change') + ' will be skipped' : '') +
         '. Nothing has been written.';
     }, function (e) {
       H.progressEl.textContent = 'The check failed: ' + (e && e.message ? e.message : e);
@@ -6796,36 +8327,42 @@
     if (H.busy || !H.plan || H.proceedBtn.disabled) return;
     H.mode = 'writing';
     historyBusy(H, true);
-    var list = H.listEl, pop = !!H.popBox.checked;
+    var redo = H.redoShelf || null, list = H.listEl, replay = !!H.replay, pop = redo ? true : !replay && !!H.popBox.checked;
     while (list.firstChild) list.removeChild(list.firstChild);
     journalUndo(H.plan, function (kind, text, w) {
+      if (replay && kind === 'UNDO') kind = 'REPLAY';
       var line = el('div', 'gttxcore-line gttxcore-h' + kind);
       line.appendChild(el('span', null, '[' + kind + '] '));
       line.appendChild(historyEntity({ type: w.type, eid: w.id, name: w.name }));
       line.appendChild(el('span', null, ' – ' + text));
       // What was put back, field by field, the way the review said it would be.
-      if (kind === 'UNDO' && !w.destroy && !w.move) {
+      if ((kind === 'UNDO' || kind === 'REPLAY') && !w.destroy && !w.move) {
         (w.entries || []).forEach(function (e) {
           line.appendChild(el('span', null, '; '));
           line.appendChild(historyChangeNode(historyInverse(e)));
         });
       }
       list.appendChild(line);
-    }, { pop: pop }).then(function (res) {
+    }, { pop: pop, redo: redo, replay: replay }).then(function (res) {
       H.failed = res.failed;
       if (res.written) H.wrote = true;
-      H.progressEl.textContent = 'Undone: ' + plural(res.written, 'entity', 'entities') + ' written' +
-        (res.failed ? ', ' + plural(res.failed, 'failure') : '') + '. ' + (pop
-        ? plural(res.popped, 'change') + ' taken out of the history; what was skipped or failed is still there.'
-        : res.run ? 'The undo is in the history, where it can be undone in turn.'
-          : res.tooLarge ? 'The undo itself is not in the history: it is more than half its size limit, so it cannot be undone in turn.'
+      H.progressEl.textContent = (redo ? 'Redone: ' : replay ? 'Replayed: ' : 'Undone: ') + plural(res.written, 'entity', 'entities') + ' written' +
+        (res.failed ? ', ' + plural(res.failed, 'failure') : '') + '. ' + (redo
+        ? plural(res.redone || 0, 'change') + ' back in the history.'
+        : pop ? plural(res.popped, 'change') + ' taken out of the history; what was skipped or failed is still there. ' +
+          (res.shelved ? 'Redo... puts it back until the next change is recorded.'
+            : res.shelved === false ? 'It is too large to keep for Redo, past ' + Math.round(SHELF_MAX / 1048576) + ' MB.' : '')
+        : res.run ? (replay ? 'The replay is in the history, where Undo Selected... takes it back.' : 'The undo is in the history, where it can be undone in turn.')
+          : res.tooLarge ? 'The ' + (replay ? 'replay' : 'undo') + ' itself is not in the history: it is more than half its size limit, so it cannot be undone in turn.'
             : '');
     }, function (e) {
       H.failed = 1;
       H.wrote = true;   // it may have written before it failed
-      H.progressEl.textContent = 'The undo failed: ' + (e && e.message ? e.message : e);
+      H.progressEl.textContent = 'The ' + (replay ? 'replay' : 'undo') + ' failed: ' + (e && e.message ? e.message : e);
     }).then(function () {
       H.plan = null;
+      H.redoShelf = null;
+      H.replay = false;
       H.selRuns = {};
       H.selEntries = {};
       H.entries = {};
@@ -6899,9 +8436,12 @@
       btn = el('button', 'btn btn-primary minimal nav-utility gttxcore-navbtn', '↶');
       btn.id = HISTORY_NAV_ID;
       btn.type = 'button';
-      btn.title = 'Undo History';
+      btn.title = 'Undo History: what the ᝯㄝₓ plugins wrote and what you saved in Stash\'s pages in this ' +
+        'browser, to undo any of it - on a scene\'s, tag\'s or other entity\'s page, narrowed to it, Show Everything ' +
+        'a click away. Not everything can be undone - the dialog links to what it cannot undo.';
       btn.setAttribute('aria-label', 'Undo History');
-      btn.addEventListener('click', function () { openHistory(); });
+      // On an entity's page, narrowed to that entity; anywhere else, the whole history.
+      btn.addEventListener('click', function () { openHistory(historyScopeHere()); });
     }
     // Before Stash's Settings link, else before the menu toggle, else at the end. The link
     // is found by reading each anchor's `href`, an exact value rather than a selector.
@@ -7134,6 +8674,14 @@
     '@font-face{font-family:"GTTx Brand";font-display:block;unicode-range:U+2093;' +
     'src:url(data:font/woff2;base64,' + BRAND_FONT.x + ') format("woff2");}' +
     SYMBOL_FACES +
+    '.gttx-suggest{position:fixed;z-index:1800;max-height:16rem;overflow-y:auto;max-width:min(36rem,90vw);' +
+    'background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);border:1px solid var(--gttx-border-strong,#425a6b);' +
+    'border-radius:3px;box-shadow:0 2px 10px rgba(0,0,0,.55);font-size:.85rem;text-align:left;}' +
+    '.gttx-suggest-row{display:flex;gap:.6rem;justify-content:space-between;padding:.2rem .5rem;cursor:pointer;white-space:nowrap;}' +
+    '.gttx-suggest-row:hover,.gttx-suggest-on{background:var(--gttx-border-strong,#425a6b);}' +
+    '.gttx-suggest-note{color:var(--gttx-muted,#a7b6c2);}' +
+    '.gttx-suggest-val .gttx-tagglyph,.gttx-suggest-val .gttx-cftip{margin:0 .35em 0 0;}' +
+    '.gttx-nativemark{display:inline-flex;align-items:center;gap:.3rem;width:3.5rem;margin-left:.5rem;vertical-align:middle;}' +
     '.gttx-tipbox{display:none;position:fixed;left:0;top:0;z-index:1700;' +
     'width:20rem;max-width:90vw;padding:.5rem .65rem;background:var(--gttx-bg,#202b33);color:var(--gttx-fg2,#d6dee4);' +
     'border:1px solid var(--gttx-border-strong,#425a6b);border-radius:3px;font-size:.8rem;line-height:1.45;' +
@@ -7400,6 +8948,7 @@
     '.gttxcore-modal.gttxcore-history{width:min(100rem,94vw);}' +
     '.gttxcore-hfilter{padding:.35rem 1rem;border-bottom:1px solid var(--gttx-border,#394b59);display:flex;gap:.5rem;' +
     'flex-wrap:wrap;align-items:center;font-size:.8rem;}' +
+    '.gttxcore-hscopename{flex:1 1 auto;} .gttxcore-hscopeoff{opacity:.5;text-decoration:line-through;}' +
     '.gttxcore-hfind{flex:1 1 14rem;min-width:8rem;background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);' +
     'border:1px solid var(--gttx-border,#394b59);border-radius:3px;padding:.15rem .4rem;}' +
     '.gttxcore-hselect,.gttxcore-hdate{background:var(--gttx-bg,#1f2b33);color:var(--gttx-fg,#f5f8fa);border:1px solid var(--gttx-border,#394b59);' +
@@ -7419,6 +8968,7 @@
     '.gttxcore-hplus{color:var(--gttx-good,#84d68a);font-weight:600;}.gttxcore-hminus{color:#ff7b72;font-weight:600;}' +
     '.gttxcore-hcfname{color:#48aff0;cursor:help;}' +
     '.gttxcore-hbackto{margin-left:.75rem;font-size:.8rem;color:var(--gttx-muted,#a7b6c2);white-space:nowrap;}' +
+    '.gttxcore-hsize{margin-left:.5rem;font-size:.8rem;color:var(--gttx-muted,#a7b6c2);white-space:nowrap;}' +
     '.gttxcore-hpop{margin:0 .5rem;align-self:center;cursor:pointer;}' +
     '.gttxcore-htoggle{cursor:pointer;white-space:pre-wrap;word-break:break-word;}' +
     '.gttxcore-hentries{padding:2px 0 4px 26px;color:var(--gttx-muted,#a7b6c2);}' +
@@ -7428,7 +8978,7 @@
     '.gttxcore-hundone>:not(.gttxcore-hbox){opacity:.55;}' +
     '.gttxcore-elink{text-decoration:none;}' +
     '.gttxcore-elink:hover{text-decoration:underline;}' +
-    '.gttxcore-hSKIP,.gttxcore-hWARN{color:var(--gttx-highlight,#ffc107);} .gttxcore-hERROR{color:#ff7373;} .gttxcore-hUNDO{color:#84d68a;}' +
+    '.gttxcore-hSKIP,.gttxcore-hWARN{color:var(--gttx-highlight,#ffc107);} .gttxcore-hERROR{color:#ff7373;} .gttxcore-hUNDO,.gttxcore-hREPLAY{color:#84d68a;}' +
     '.gttxcore-hmore{margin-top:.5rem;}' +
     '.gttxcore-navbtn{font-size:1.15rem;line-height:1;}' +
     // In the Highlighted Text Color, as a mark of something that writes: an Undo does. By id, because Stash's
@@ -8112,11 +9662,7 @@
   // instance's `logEl`, `lines`, `pending`, `undoBtn` and `modal`, and `flush` ends in the
   // instance's own `renderProgress`. `prefix` names the classes each line carries, so the
   // plugin's own CSS styles them; `own` lists the methods a plugin keeps a copy of its own.
-  // `linesDrawn` is exported beside it, for the progress line that says how much is shown, and
-  // the spinner's frames and period, for a dialog that keeps a log of its own.
-  // COMPAT: plugins before their busyCursor release draw their own cursor from these (since Core 5.1.0); remove when every plugin's floor is busyCursor.
-  var RUN_SPIN_FRAMES = ['▙', '▛', '▜', '▟'];
-  var RUN_SPIN_MS = 125;          // one four-frame cycle at 2Hz
+  // `linesDrawn` is exported beside it, for the progress line that says how much is shown.
   // **The busy cursor**: a `tag` with `cls` and `gttxcore-busy`, in the Busy Cursor style (or
   // `style`, a `BUSY_CURSORS` value) and the Highlighted Text Color, turning until it leaves the
   // page - so whoever drew it only has to take it out. `back` runs it the other way. Put it on
@@ -8704,7 +10250,7 @@
     pickControl: pickControl,
     byClass: byClass, gqlRequest: gqlRequest, pluginConfig: pluginConfig, settingElement: settingElement,
     markStale: markStale, clearStale: clearStale, ownedFields: ownedFields, ownedTags: ownedTags,
-    settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, settleWho: true, waitingOn: waitingOn,
+    settingRow: settingRow, coopObject: coopObject, coop: coop, settle: settle, settled: settled, waitingOn: waitingOn,
     domBus: domBus, plural: plural, copyToClipboard: copyToClipboard,
     keepLog: keepLog, droppedLine: droppedLine, logKeep: logKeep,
     splitTerms: splitTerms, nameMatchesAny: nameMatchesAny,
@@ -8719,19 +10265,19 @@
     cfTipLoad: cfTipLoad, cfTipPlace: cfTipPlace, cfTipOpen: cfTipOpen,
     cfTipArm: cfTipArm, cfTipTick: cfTipTick, cfTipMark: cfTipMark, anyStale: anyStale,
     reloadUiAnchor: reloadUiAnchor, ensureReloadUiButton: ensureReloadUiButton, staleReloadButton: staleReloadButton,
-    computedStyleOf: computedStyleOf, findActionByLabel: findActionByLabel, borderingAction: borderingAction,
-    pxOf: pxOf, sideMargin: sideMargin, neighbourGap: neighbourGap,
-    nonZeroLength: nonZeroLength, stashButtonMargins: stashButtonMargins, fillNeighbourGaps: fillNeighbourGaps,
+    findActionByLabel: findActionByLabel, detailButtonContainer: detailButtonContainer,
     ensureRowSpacing: ensureRowSpacing, applyButtonSpacing: applyButtonSpacing, insertOrdered: insertOrdered,
     insertBeforeImportantAction: insertBeforeImportantAction, findEditContainer: findEditContainer,
     showDefaults: showDefaults,
-    settingsPage: settingsPage, settingsDialog: settingsDialog, fieldHeading: fieldHeading, tagMark: tagMark, tagGlyph: tagGlyph, valueProse: valueProse, drawSummary: drawSummary, settingButton: settingButton, levelOf: levelOf, parentLevel: parentLevel, atLevel: atLevel, markLevel: markLevel, levelRow: levelRow, LEVEL_COLOR: LEVEL_COLOR, afterDescription: afterDescription, logsToConsole: logsToConsole, lease: lease, foreignLease: foreignLease, installedVersion: installedVersion,
+    settingsPage: settingsPage, settingsDialog: settingsDialog, fieldHeading: fieldHeading, tagMark: tagMark, tagNamed: tagNamed, tagSuggest: tagSuggest, fieldSuggest: fieldSuggest, suggestSetting: suggestSetting, tagGlyph: tagGlyph, valueProse: valueProse, drawSummary: drawSummary, settingButton: settingButton, parentLevel: parentLevel, atLevel: atLevel, markLevel: markLevel, levelRow: levelRow, afterDescription: afterDescription, logsToConsole: logsToConsole, lease: lease, foreignLease: foreignLease, installedVersion: installedVersion,
     gate: gate, ownTaskName: ownTaskName, paintButton: paintButton, paintTaskButtons: paintTaskButtons,
-    wireEscape: wireEscape, unwireEscape: unwireEscape, firstBasename: firstBasename, displayName: displayName,
+    wireEscape: wireEscape, unwireEscape: unwireEscape, displayName: displayName,
     fakeOk: fakeOk, mutationSucceeded: mutationSucceeded, writePluginSettings: writePluginSettings, button: button, dropdown: dropdown,
-    runLog: runLog, linesDrawn: function () { return linesDrawn(); }, runSpinFrames: RUN_SPIN_FRAMES, runSpinMs: RUN_SPIN_MS,
+    styleOnce: styleOnce, sharedRead: sharedRead, hide: hide, truthy: truthy, trim: trim, escapeRe: escapeRe, nptApi: nptApi, jobWrite: jobWrite,
+    pickTagByNameOrAlias: pickTagByNameOrAlias,
+    runLog: runLog, linesDrawn: function () { return linesDrawn(); },
     busyCursor: busyCursor, selectionMenuItem: selectionMenuItem,
-    entityTypes: entityTypes, occurrences: occurrences, matchContext: matchContext, download: download, wordChars: WORD_CHARS,
+    entityTypes: entityTypes, occurrences: occurrences, matchContext: matchContext, download: download, saveLogFile: saveLogFile, deleteRecorded: deleteRecorded, undoRun: undoRun, wordChars: WORD_CHARS,
   };
   ns.core = api;
   // The surface this plugin's own suite drives, beside the one its callers bind. Separate
@@ -8767,7 +10313,8 @@
     record: journalRecord, runs: journalRuns, entries: journalEntries,
     stats: journalStats, clear: journalClear,
     plan: journalPlan, undo: journalUndo, remove: journalRemove, open: openHistory, fromInputs: journalFromInputs,
-    pass: journalPass, reversesFields: true, limits: journalLimits,
+    redoPlan: journalRedoPlan, replayPlan: journalReplayPlan,
+    pass: journalPass, limits: journalLimits,
     exportAll: journalExport, importTexts: journalImport,
   };
   installJournalCapture();

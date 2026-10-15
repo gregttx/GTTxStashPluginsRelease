@@ -32,10 +32,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.7.0 or newer, told by one of its exports (`download`).
+  // The Core floor, ᝯㄝₓ Core 5.26.0 or newer, told by the newest export it binds (`styleOnce`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.download !== 'function') {
-    var NAME = 'ᝯㄝₓ Find & Replace Entities by Text Content', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.7.0 or newer, installed and '
+  if (!C || typeof C.styleOnce !== 'function') {
+    var NAME = 'ᝯㄝₓ Find & Replace Entities by Text Content', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.26.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[fretc] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -43,6 +43,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -58,8 +60,10 @@
     mark();
     return;
   }
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var button = C.button;
   var caseSensitive = C.caseSensitive, fold = C.fold, coop = C.coop, fieldLocks = C.fieldLocks, plural = C.plural,
-    linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, keepLog = C.keepLog, droppedLine = C.droppedLine,
     holdWidth = C.holdWidth, entityTip = C.entityTip, staleReloadButton = C.staleReloadButton, hasOwn = C.hasOwn, hasClass = C.hasClass,
     gqlRequest = C.gqlRequest, el = C.el, paintButton = C.paintButton, displayName = C.displayName,
     matchesIn = C.occurrences, context = C.matchContext, download = C.download;
@@ -83,7 +87,7 @@
   // The one version that proves anything. The settings page reads the manifest over
   // GraphQL and goes current the moment plugins are reloaded, while the browser can
   // still be running a script it cached before the edit.
-  var PLUGIN_VERSION = '4.11.5';
+  var PLUGIN_VERSION = '5.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -386,13 +390,7 @@
     // not lost - it is on the task button, which Core's `paintTaskButtons` sets.
     'text-decoration:underline;}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // A `<datalist>` renders nothing of its own, so there is no empty state to draw and
   // nothing to hide when the history is switched off - an empty list is simply a box that
@@ -406,12 +404,6 @@
       o.value = t;
       list.appendChild(o);
     });
-  }
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
   }
 
   // ── What the running Stash actually stores ────────────────────────────────
@@ -863,6 +855,8 @@
     // all, and a control like that starting in the on position because of something the
     // user did last week is the one default worth being conservative about.
     this.replacing = false;
+    this.tagging = false;
+    this.tagFound = null;     // { text, tag: { id, name } or null, failed } for the Tag box, once asked
     // **As ᝯㄝₓ Core's Case-Sensitive Matching setting says**, off unless it is on:
     // somebody who wants case-sensitive matching usually wants it every time, and one
     // setting says so once, for every plugin with this box. The box then decides for
@@ -1059,6 +1053,21 @@
     // beside everything else that answers for this control.
     this.replaceLabel = repl;
     opts.appendChild(repl);
+    // The other write: a tag on every entity the search found. Off every time, as Replace is.
+    var tg = el('label', 'fretc-check');
+    this.tagBox = el('input');
+    this.tagBox.type = 'checkbox';
+    this.tagBox.checked = false;
+    this.tagBox.addEventListener('change', function () {
+      self.tagging = !!self.tagBox.checked;
+      self.syncFooter();
+    });
+    tg.appendChild(this.tagBox);
+    tg.appendChild(el('span', null, 'Tag'));
+    tg.title = 'Offer to put a tag on every entity this search found - a tag kept for a temporary collection, ' +
+      'say. Off: this dialog writes no tag.';
+    this.tagLabel = tg;
+    opts.appendChild(tg);
 
     // Beside Replace rather than beside the box, because it belongs with the other two
     // things that decide how a run behaves rather than with the text itself.
@@ -1143,6 +1152,30 @@
       'search did; the replacement goes in exactly as typed.'));
     this.modal.appendChild(rbar);
 
+    // The Tag line, revealed by its checkbox: the tag by its name or an alias, its mark beside
+    // the box (Core's `tagMark`), asked once typing pauses.
+    var tbar = el('div', 'fretc-search fretc-search-wrap fretc-hidden');
+    this.tagBar = tbar;
+    tbar.appendChild(el('span', 'fretc-label', 'Tag with:'));
+    this.tagInput = el('input', 'fretc-textbox fretc-searchbox');
+    this.tagInput.type = 'text';
+    // The library's tags by name or alias, listed under the box as you type (Core's `tagSuggest`).
+    C.tagSuggest(this.tagInput);
+    this.tagInput.value = '';
+    this.tagInput.title = 'The tag to add, by its name or an alias. Only a tag that exists is added; none is made.';
+    var tagTimer = null;
+    this.tagInput.addEventListener('input', function () {
+      clearTimeout(tagTimer);
+      self.syncFooter();
+      tagTimer = setTimeout(function () { self.findTag(); }, TAG_LOOKUP_MS);
+    });
+    tbar.appendChild(this.tagInput);
+    this.tagMarkEl = tbar.appendChild(el('span', 'fretc-tagmark'));
+    tbar.appendChild(el('span', 'fretc-hint',
+      'Added to every entity on this list, in the types switched on and the attributes shown, that does not carry it yet. ' +
+      'A tag found is left out: a tag cannot carry a tag.'));
+    this.modal.appendChild(tbar);
+
     this.filtersEl = el('div', 'fretc-filters');
     var filterRows = this.filtersEl.appendChild(el('div', 'fretc-filterrows'));
     this.typeRow = el('div', 'fretc-filterrow');
@@ -1180,9 +1213,11 @@
     this.replaceBtn = button('Replace', 'fretc-replace fretc-hidden');
     this.replaceBtn.className =
       this.replaceBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
+    this.tagBtn = button('Add Tag', 'fretc-tagbtn fretc-hidden');
+    this.tagBtn.className = this.tagBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.undoBtn = button('Undo', 'fretc-undo fretc-hidden');
     this.undoBtn.className = this.undoBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
-    this.undoBtn.title = 'Put back what every Replace since the last Undo changed, newest first, field by ' +
+    this.undoBtn.title = 'Put back what every Replace and Add Tag since the last Undo changed, newest first, field by ' +
       'field, as the entities carried it a moment before. Only what this dialog wrote, and only while ' +
       'it stays open.';
     this.cancelBtn = button('Cancel', 'fretc-cancel');
@@ -1194,6 +1229,9 @@
     this.copyBtn = button('Copy log', 'fretc-copy');
     this.copyBtn.title = 'Copy the counters, the messages and every result as plain text - ' +
       'including the ones the on-screen list no longer shows.';
+    this.saveLogBtn = button('Save log', 'fretc-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     // Export, its format, and - for Term counts alone - how often a phrase must occur to be listed.
     this.exportBtn = button('Export', 'fretc-export');
     this.formatSel = C.dropdown('fretc-num fretc-format');
@@ -1240,6 +1278,7 @@
 
     this.goBtn.addEventListener('click', function () { self.go(); });
     this.replaceBtn.addEventListener('click', function () { self.replaceAll(); });
+    this.tagBtn.addEventListener('click', function () { self.tagAll(); });
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.refreshBtn.addEventListener('click', function () { self.refresh(); });
     this.cancelBtn.addEventListener('click', function () { self.close(); });
@@ -1251,6 +1290,7 @@
         'so far stays written, and Undo still reaches it.');
     });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.saveLogBtn.addEventListener('click', function () { saveLogFile('find-and-replace', self.logLines()); });
     this.exportBtn.addEventListener('click', function () { self.exportAll(); });
     // De-Spicer's types and the attributes its goals and rules would change, for this dialog only.
     this.dspBtn = button('De-Spicer changes', 'fretc-dspscope');
@@ -1263,8 +1303,8 @@
     // The write leads, as in all five dialogs; Undo sits with it, and the read controls
     // follow. Export and its options stand alone in the middle, between two spacers, well
     // apart from Copy log. The filters' own buttons are beside the filters, not here.
-    [this.replaceBtn, this.goBtn, this.refreshBtn, this.cancelBtn, this.stopBtn,
-      this.copyBtn, this.undoBtn].forEach(function (b) { foot.appendChild(b); });
+    [this.replaceBtn, this.tagBtn, this.goBtn, this.refreshBtn, this.cancelBtn, this.stopBtn,
+      this.copyBtn, this.saveLogBtn, this.undoBtn].forEach(function (b) { foot.appendChild(b); });
     foot.appendChild(el('div', 'fretc-spacer'));
     [this.exportBtn, this.formatSel, this.minLabel].forEach(function (b) { foot.appendChild(b); });
     foot.appendChild(el('div', 'fretc-spacer'));
@@ -1504,7 +1544,6 @@
 
   Run.prototype.save = function () {
     var types = {};
-    var self = this;
     // While De-Spicer's view is borrowed, what is stored is still the user's own choice.
     var typeOn = this.mine ? this.mine.types : this.typeOn, attrOn = this.mine ? this.mine.attrs : this.attrOn;
     TYPE_ORDER.forEach(function (k) { if (typeOn[k]) types[k] = true; });
@@ -1579,7 +1618,7 @@
     // so disabling it is what makes the key inert too.
     this.cancelBtn.disabled = writing;
     this.cancelBtn.title = writing
-      ? 'Not while a replacement is running - press Stop, and this comes back.' : '';
+      ? 'Not while a write is running - press Stop, and this comes back.' : '';
     this.show(this.stopBtn, writing);
     this.stopBtn.disabled = !writing || !!this.stopping;
     this.stopBtn.title = this.stopping
@@ -1587,7 +1626,7 @@
       : 'Stop after the batch already in flight. What has been written stays written.';
     if (writing) {
       this.goBtn.disabled = true;
-      this.goBtn.title = 'Not while a replacement is running - it rewrites the very ' +
+      this.goBtn.title = 'Not while a write is running - it changes the very ' +
         'entities on this list. Let it finish, or stop it.';
     }
     this.show(this.clearBtn, !!text && this.state !== 'running');
@@ -1655,7 +1694,7 @@
     var fmt = formatOf(this.exportFormat);
     this.exportBtn.textContent = exporting ? 'Stop export' : 'Export';
     var why = exporting ? ''
-      : this.writing ? 'Not while a replacement is running.'
+      : this.writing ? 'Not while a write is running.'
         : this.state === 'running' ? 'Not while a search is running - pause it, or let it finish.'
           : !types ? 'Turn on at least one entity-type.'
             : this.noAttrs() ? 'Turn on at least one attribute.' : '';
@@ -1675,7 +1714,6 @@
   // button says why it is: a write that is quietly unavailable is a user re-reading the
   // dialog looking for what they have missed.
   Run.prototype.syncReplace = function (busy) {
-    var self = this;
     var writing = !!this.writing;
     var text = this.textInput.value.trim();
     // **Nothing to replace until there is something to replace.** The button already said
@@ -1685,20 +1723,22 @@
     // disabled-with-a-reason - and the tick is kept, so typing the search back brings the
     // row straight back with it.
     var on = !!this.replacing && !!text;
+    var tagOn = this.syncTag(busy);
     this.show(this.replaceBar, on);
     // **Highlighted in the one state that earns it.** The backup sentence is the first line of
     // every head in this repo that can write, and it is highlighted in all of them; the other
     // wording is a fact about a dialog that writes nothing, which is the gray note slot.
     // One element with the class swapped rather than two, so the sentence stays in the
     // place the siblings put it whichever of the two it is showing.
-    this.noteFixedEl.className = on ? 'fretc-warn' : 'fretc-note';
-    this.noteFixedEl.textContent = on
-      ? 'Backing up your database before proceeding is strongly recommended. Replace rewrites the ' +
-        'text in your library; Undo only reverses what this dialog wrote, while it stays ' +
+    this.noteFixedEl.className = on || tagOn ? 'fretc-warn' : 'fretc-note';
+    this.noteFixedEl.textContent = on || tagOn
+      ? 'Backing up your database before proceeding is strongly recommended. ' +
+        (on ? 'Replace rewrites the text in your library' : 'Add Tag puts a tag on what this search found') +
+        '; Undo only reverses what this dialog wrote, while it stays ' +
         'open, and cannot account for changes made elsewhere in the meantime.'
       : 'Nothing here is written to your library: this is a read and a list of links.';
     this.show(this.replaceBtn, on);
-    this.show(this.undoBtn, on && this.changes.length > 0);
+    this.show(this.undoBtn, (on || tagOn) && this.changes.length > 0);
     // Locked while the run it steers is running, and while a replacement is writing -
     // the search captured it at `start` and a replacement reads that capture, so a
     // control left live there would look like it steers something it cannot reach.
@@ -1719,7 +1759,7 @@
     this.replaceBox.disabled = busy || writing || !text;
     this.replaceLabel.title = text
       ? 'Offer to replace the text you searched for, everywhere this search found it. ' +
-        'Off: this dialog reads and writes nothing at all.'
+        'Off: this dialog replaces nothing.'
       : 'Nothing to replace yet: a replacement replaces what a search found, so the box ' +
         'above has to say what to look for first.';
     this.undoBtn.disabled = writing;
@@ -1746,6 +1786,67 @@
     this.replaceBtn.title = why || ('Replace "' + text + '" with ' +
       (to ? '"' + to + '"' : 'nothing') + ' in ' + plural(scope.length, 'entity', 'entities') +
       ' on this list, in the attributes still shown. Nothing else is touched.');
+  };
+
+  // The Tag line and Add Tag, synced with the rest of the footer; answers whether the line is on.
+  Run.prototype.syncTag = function (busy) {
+    var writing = !!this.writing;
+    var on = !!this.tagging;
+    this.show(this.tagBar, on);
+    this.show(this.tagBtn, on);
+    this.tagBox.disabled = this.tagInput.disabled = busy || writing;
+    if (!on) return false;
+    var text = this.tagInput.value.trim();
+    var found = this.tagFound && this.tagFound.text === text ? this.tagFound : null;
+    var scope = this.tagScope();
+    var left = this.results.filter(function (hit) { return hit.typeKey === 'tags'; }).length;
+    var why = writing ? 'A write is running.'
+      : this.state === 'running' ? 'Not while the search is running - pause it, or let it finish.'
+        : this.exporting ? 'Not while an export is running - stop it, or let it finish.'
+        : this.stale ? 'This page is running an older script than Stash has installed. Reload first.'
+          : !text ? 'Type the tag to add, by its name or an alias.'
+            : !found ? 'Looking for the tag "' + text + '"...'
+              : found.failed ? 'The tag "' + text + '" could not be looked up - edit the box to try again.'
+              : !found.tag ? 'No tag is named "' + text + '", by its name or an alias. None is made here.'
+                : !scope.length ? 'Nothing on this list to tag: search first, or turn a type or an attribute back on' +
+                  (left ? ' - a tag cannot carry a tag.' : '.')
+                  : '';
+    this.tagBtn.disabled = !!why;
+    this.tagBtn.title = why || ('Add the tag "' + found.tag.name + '" to every one of ' +
+      plural(scope.length, 'entity', 'entities') + ' on this list that does not carry it yet' +
+      (left ? ', leaving out ' + plural(left, 'tag') + ': a tag cannot carry a tag' : '') +
+      '. Recorded in Undo History; Undo here takes it off again.');
+    return true;
+  };
+
+  // What Add Tag covers: the results of the types switched on that the attribute filters leave,
+  // file names included, but never a tag - a tag carries parents, not tags.
+  Run.prototype.tagScope = function () {
+    var self = this;
+    return this.results.filter(function (hit) {
+      return hit.typeKey !== 'tags' && self.typeOn[hit.typeKey] && self.shownAttrs(hit).length > 0;
+    });
+  };
+
+  // The tag the box names, by its name or an alias, any case, as Stash's EQUALS reads it -
+  // and its mark beside the box. A newer answer replaces an older one; one for text the box
+  // no longer holds is dropped.
+  Run.prototype.findTag = function () {
+    var self = this, text = this.tagInput.value.trim();
+    this.tagMarkEl.textContent = '';
+    if (!text) { this.tagFound = null; this.syncFooter(); return Promise.resolve(); }
+    // One read: the mark beside the box shares the lookup (`tagNamed`).
+    return Promise.all([C.tagNamed(text), C.tagMark(text, true)]).then(function (both) {
+      if (self.tagInput.value.trim() !== text) return;
+      self.tagFound = { text: text, tag: both[0] };
+      if (both[1]) self.tagMarkEl.appendChild(both[1]);
+      self.syncFooter();
+    }, function (e) {
+      if (self.tagInput.value.trim() !== text) return;
+      self.tagFound = { text: text, tag: null, failed: true };
+      self.msg('ERROR', 'The tag "' + text + '" could not be looked up: ' + (e && e.message ? e.message : String(e)));
+      self.syncFooter();
+    });
   };
 
   // What a press would cover: the results the attribute filters leave, each carrying only
@@ -2238,6 +2339,7 @@
   //   - **It keeps the previous values**, which is what makes Undo an exact per-field
   //     inverse rather than a restore of a whole record.
   var WRITE_CHUNK = 50;   // entities re-read per query before their mutations go out
+  var TAG_LOOKUP_MS = 400;   // the Tag box asks for its tag once typing pauses this long, as Core's marks do
 
   Run.prototype.replaceAll = function () {
     if (this.replaceBtn.disabled) return;
@@ -2287,6 +2389,82 @@
     });
   };
 
+  // Add Tag: each batch re-read for the tags it carries now, then one bulk ADD per type for the
+  // entities still without it - an entity that has it already is left alone, so Undo, here and
+  // in Undo History, takes the tag only off entities this press put it on.
+  Run.prototype.tagAll = function () {
+    if (this.tagBtn.disabled || !this.tagFound || !this.tagFound.tag) return;
+    var self = this, tag = this.tagFound.tag;
+    var scope = this.tagScope();
+    var left = this.results.filter(function (hit) { return hit.typeKey === 'tags'; }).length;
+    this.msg('INFO', 'Adding the tag "' + tag.name + '" to ' + plural(scope.length, 'entity', 'entities') +
+      ' on this list.' + (left ? ' Left out: ' + plural(left, 'tag') + ' - a tag cannot carry a tag.' : ''));
+    this.searchedKey = null;
+    this.writing = true;
+    this.syncFooter();
+    var lease = C.lease(PLUGIN_ID, 'Find & Replace (tag)', LEASE_TTL_MS);
+    var pass = journalPass('Add Tag "' + tag.name + '"');
+    var at = 0, added = 0, had = 0, gone = 0, failed = 0;
+    function chunk() {
+      var stopped = self.stopping && at < scope.length;
+      if (at >= scope.length || self.stopping) {
+        lease.release();
+        self.writing = false;
+        self.stopping = false;
+        self.syncFooter();
+        pass.finish().then(function (line) { if (line) self.msg('INFO', line); });
+        self.msg('INFO', 'Add Tag ' + (stopped ? 'stopped: ' : 'finished: ') + plural(added, 'entity', 'entities') +
+          ' tagged' + (had ? ', ' + had + ' carrying it already' : '') + (gone ? ', ' + gone + ' no longer there' : '') +
+          (stopped ? ', ' + (scope.length - at) + ' not reached' : '') + (failed ? ', ' + plural(failed, 'failure') : '') + '.');
+        return;
+      }
+      lease.renew();
+      var part = scope.slice(at, at + WRITE_CHUNK);
+      at += part.length;
+      gqlRequest('query FRETC_TagsNow { ' + part.map(function (hit, i) {
+        return 'r' + i + ': ' + ENTITIES[hit.typeKey].one + '(id: ' + JSON.stringify(String(hit.id)) + ') { id tags { id } }';
+      }).join(' ') + ' }', null).then(function (d) {
+        var byType = {};
+        part.forEach(function (hit, i) {
+          var ent = (d || {})['r' + i];
+          if (!ent) { gone++; return; }
+          if ((ent.tags || []).some(function (t) { return String(t.id) === tag.id; })) { had++; return; }
+          (byType[hit.typeKey] = byType[hit.typeKey] || []).push(hit);
+        });
+        return TYPE_ORDER.filter(function (k) { return byType[k]; }).reduce(function (p, k) {
+          return p.then(function () {
+            var hits = byType[k];
+            lease.renew();
+            return self.sendBulk(k, { ids: hits.map(function (hit) { return String(hit.id); }),
+              tag_ids: { ids: [tag.id], mode: 'ADD' } }).then(function () {
+              hits.forEach(function (hit) {
+                added++;
+                var one = function (mode) { return { ids: [String(hit.id)], tag_ids: { ids: [tag.id], mode: mode } }; };
+                self.changes.push({ typeKey: k, id: hit.id, input: one('REMOVE'), bulk: true, run: pass.id });
+                pass.add(k, hit.id, hit.name, one('ADD'), one('REMOVE'));
+                self.msg('EDIT', ENTITIES[k].label + ' "' + (hit.name || '(untitled)') + '" (' + hit.id + '): tagged "' +
+                  tag.name + '"');
+              });
+            }, function (e) {
+              failed += hits.length;
+              self.msg('ERROR', plural(hits.length, ENTITIES[k].label.toLowerCase(), ENTITIES[k].plural.toLowerCase()) +
+                ' could not be tagged: ' + (e && e.message ? e.message : String(e)));
+            });
+          });
+        }, Promise.resolve());
+      }, function (e) {
+        failed += part.length;
+        self.msg('ERROR', 'Reading a batch\u2019s tags failed, so none of it was tagged: ' +
+          (e && e.message ? e.message : String(e)));
+      // A slip in the handlers above is said and the loop goes on, so Cancel never stays shut.
+      }).then(chunk, function (e) {
+        self.msg('ERROR', 'A batch went wrong after its write: ' + (e && e.message ? e.message : String(e)));
+        chunk();
+      });
+    }
+    chunk();
+  };
+
   Run.prototype.undo = function () {
     if (this.undoBtn.disabled || !this.changes.length) return;
     var self = this;
@@ -2326,7 +2504,7 @@
       }
       lease.renew();
       var c = back[i++];
-      self.sendUpdate(c.typeKey, c.id, c.input).then(function () {
+      (c.bulk ? self.sendBulk(c.typeKey, c.input) : self.sendUpdate(c.typeKey, c.id, c.input)).then(function () {
         ok++;
         // Recorded from the Replace's own run in the history, reversed - nothing is kept here.
         pass.reverse(c.run, c.typeKey, c.id);
@@ -2355,6 +2533,13 @@
     vars.input.id = String(id);
     return gqlRequest('mutation FRETC_Update($input: ' + spec.input + '!) { ' +
       spec.mutation + '(input: $input) { id } }', vars);
+  };
+
+  // A bulk update of one type - Add Tag's, and its Undo's - named from the type's GraphQL name.
+  Run.prototype.sendBulk = function (typeKey, input) {
+    var t = ENTITIES[typeKey].gqlType;
+    return gqlRequest('mutation FRETC_Bulk($input: Bulk' + t + 'UpdateInput!) { bulk' + t + 'Update(input: $input) { id } }',
+      { input: input });
   };
 
   // The chunked read-then-write loop both Replace and a future second operation would
@@ -2758,7 +2943,7 @@
       (shown.length ? ': ' + shown[0].ctx.pre + shown[0].ctx.hit + shown[0].ctx.post : '');
   };
 
-  Run.prototype.copyLog = function () {
+  Run.prototype.logLines = function () {
     var self = this;
     var lines = [this.progressEl.textContent, ''];
     // Every result the attribute filters leave, not only the ones the window is currently
@@ -2771,8 +2956,11 @@
     lines.push('');
     if (this.logDropped) lines.push(droppedLine(this.logDropped));
     this.logText.forEach(function (l) { lines.push(l); });
-    var was = this.copyBtn.textContent;
-    copyToClipboard(lines.join('\n'), function (ok) {
+    return lines.join('\n');
+  };
+  Run.prototype.copyLog = function () {
+    var self = this, was = this.copyBtn.textContent;
+    copyToClipboard(this.logLines(), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = was; }, 2000);

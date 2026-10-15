@@ -19,6 +19,7 @@ Settings → Tasks and in the browser console. Tag custom fields (two of the exc
 > while it stays open. It is a way out of a run you regret in the moment, not a safety net — the
 > backup is the safety net. ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history) keeps every pass for later,
 > automatic ones included, but it lives in this browser and is no backup either.
+> Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo).
 
 A front-end-only Stash plugin that adds three tasks to **Settings → Tasks → Plugin Tasks**:
 
@@ -41,7 +42,7 @@ page, in the **Auto-mode per entity-type** row, with every type that is not Off 
 Either direction can also be kept up **automatically**, per entity-type, applying as Stash saves
 each entity rather than to the whole library at once — see [Auto-mode](#auto-mode). That
 path has no dialog — only ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history) can take
-its writes back — and every type is off by default.
+its writes back — and every type is off by default ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)).
 
 
 ## Prune and Roll-Up on a single entity
@@ -207,7 +208,7 @@ question a pass that spends several seconds on one page of a large library leave
 **The log stays until you close the dialog.** A **Rescan** writes a `--- Rescan ---` line and
 carries on below it, so a run you applied, rescanned and applied again reads top to bottom on
 screen and not only through **Copy log**. Once changes have been written, ᝯㄝₓ Core's Undo History keeps
-what was written; the log is the only record of why each line was listed, so copy it before you close.
+what was written; the log is the only record of why each line was listed, so copy it before you close ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)).
 
 ## Undo
 
@@ -222,7 +223,7 @@ seconds carries it out. Clicking anything else, or waiting, disarms it.
 them worth knowing before you rely on it:
 
 - **It only lives as long as the dialog.** Close it, navigate away, or reload the page and the
-  record is gone. From a later session a run is undone through ᝯㄝₓ Core's Undo History instead.
+  record is gone. From a later session a run is undone through ᝯㄝₓ Core's Undo History instead. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo).
 - **It only knows about its own writes.** It puts back exactly the tag assignments this dialog
   changed and touches nothing else. That is deliberate — it is written as an add/remove delta
   rather than by restoring an old tag list, so it cannot wipe out an unrelated edit you made in
@@ -370,7 +371,7 @@ Whatever it understood is written back in the canonical form above.
 > moment you press Save. **A type set to PRUNE has tag assignments deleted**, silently, one save at
 > a time. Every save's writes are recorded in ᝯㄝₓ Core's
 > [Undo History](../GTTx-Core/README.md#undo-history), which is the only way to take them back, and
-> it lives in this browser. If it is misconfigured you will find out from your library, not from a
+> it lives in this browser ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). If it is misconfigured you will find out from your library, not from a
 > plan you read first.
 >
 > Run the task manually at least once, with that type set to Prune, and read what it plans, before
@@ -558,7 +559,7 @@ here are set to. It needs 3.2.0 or newer; without it that plugin says so instead
 [Auto-mode](#auto-mode) stands down while any plugin holds the
 [bulk-edit lease](../GTTx-Core/README.md#the-bulk-edit-lease) — a task, a dialog's Proceed or Undo,
 an undo in ᝯㄝₓ Core's Undo History — not only the Merge Performer Tags To Scenes task above, so a
-bulk write is never re-normalized entity by entity as it lands.
+bulk write is never re-normalized entity by entity as it lands ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)).
 
 ### Plugins outside this repo
 
@@ -600,13 +601,13 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Normalize Parent Tags | 728 MB | 1109 MB | 1006 MB |
+| Normalize Parent Tags | 733 MB | 1112 MB | 1006 MB |
 | Auto-Mode Settings | 1 MB | — | — |
 | Show Tag Hierarchy | 15 MB | — | — |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** and **Save log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.

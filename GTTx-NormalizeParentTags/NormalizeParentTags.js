@@ -21,10 +21,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.4.0 or newer, told by the newest export it binds (`dropdown`).
+  // The Core floor, ᝯㄝₓ Core 5.26.0 or newer, told by the newest export it binds (`styleOnce`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.dropdown !== 'function') {
-    var NAME = 'ᝯㄝₓ Normalize Parent Tags', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.4.0 or newer, installed and '
+  if (!C || typeof C.styleOnce !== 'function') {
+    var NAME = 'ᝯㄝₓ Normalize Parent Tags', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.26.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[npt] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -32,6 +32,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -47,6 +49,8 @@
     mark();
     return;
   }
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var button = C.button, hide = C.hide;
   var hasOwn = C.hasOwn, el = C.el, byClass = C.byClass, gqlRequest = C.gqlRequest, pluginConfig = C.pluginConfig,
     settingRow = C.settingRow, displayName = C.displayName, mutationSucceeded = C.mutationSucceeded, fakeOk = C.fakeOk,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, ownTaskName = C.ownTaskName, paintButton = C.paintButton,
@@ -54,18 +58,17 @@
   var stripEllipsis = C.stripEllipsis, pickControl = C.pickControl, insertBeforeImportantAction = C.insertBeforeImportantAction,
     findEditContainer = C.findEditContainer,
     applyButtonSpacing = C.applyButtonSpacing, domBus = C.domBus,
-    coopObject = C.coopObject, coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tagTipImage = C.tagTipImage, tipBox = C.tipBox,
-    tipPlace = C.tipPlace, tipOpen = C.tipOpen, tipClose = C.tipClose, tagTip = C.tagTip,
-    tipText = C.tipText, tagTipNames = C.tagTipNames, tagLinkTitle = C.tagLinkTitle,
-    entityTipStars = C.entityTipStars, entityTipCountry = C.entityTipCountry,
-    entityTipGender = C.entityTipGender, entityTipLines = C.entityTipLines,
-    entityTipDetail = C.entityTipDetail, entityTip = C.entityTip,
-    cfTipCarriers = C.cfTipCarriers, cfTipTitle = C.cfTipTitle, cfTipLoad = C.cfTipLoad,
-    cfTipPlace = C.cfTipPlace, cfTipOpen = C.cfTipOpen, cfTipArm = C.cfTipArm,
-    cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, anyStale = C.anyStale, reloadUiAnchor = C.reloadUiAnchor,
-    ensureReloadUiButton = C.ensureReloadUiButton, staleReloadButton = C.staleReloadButton,
-    entityTipName = C.entityTipName, splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny;
+    coop = C.coop, plural = C.plural, linkTarget = C.linkTarget,
+    copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, droppedLine = C.droppedLine, holdWidth = C.holdWidth,
+    tagTip = C.tagTip,
+
+
+
+
+
+    cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog,
+    staleReloadButton = C.staleReloadButton,
+    splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny;
   var writePluginSettings = C.writePluginSettings, settle = C.settle, settled = C.settled;
   var tagHasDetail = C.tagHasDetail, tagTooltip = C.tagTooltip, lowerId = C.lowerId, partsText = C.partsText;
   var runLog = C.runLog, linesDrawn = C.linesDrawn;   // log lines kept in the DOM; all stay in `lines`
@@ -88,7 +91,7 @@
   // stale script, not a contradiction. This constant travels inside the file, so the
   // line below says which script is actually running. Bump it with the manifest and
   // the yml; the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.3.6';
+  var PLUGIN_VERSION = '7.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -600,7 +603,7 @@
     }
     // COMPAT: the old booleans, read where a1AutoModes is empty
     // (since NormalizeParentTags 4.0.0); remove when LEGACY_ENABLE goes.
-    if (!String(s.a1AutoModes).replace(/^\s+|\s+$/g, '') && hasLegacySettings(raw)) {
+    if (!String(s.a1AutoModes).trim() && hasLegacySettings(raw)) {
       s.a1AutoModes = formatAutoModes(legacyModes(raw));
       migrateLegacy(s.a1AutoModes);
     }
@@ -1526,13 +1529,7 @@
     // its row, so it takes that row's spacing rather than the dialog's.
     '#npt-modes-line{margin:.1rem 0 .25rem;}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // ── The per-type mode selectors ───────────────────────────────────────────
   //
@@ -1627,12 +1624,6 @@
         allBtns.forEach(function (b) { b.disabled = !on; });
       },
     };
-  }
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
   }
 
   // ── Is this script the one Stash has installed? ───────────────────────────
@@ -1787,7 +1778,7 @@
   // Newest first, no duplicates, capped. Returns the list so a caller can render it
   // without reading the store back.
   function rememberFilter(text) {
-    var t = String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
+    var t = String(text == null ? '' : text).trim();
     if (!t) return null;
     var list = storedFilterHistory().filter(function (x) { return x !== t; });
     list.unshift(t);
@@ -1932,6 +1923,9 @@
     this.cancelBtn  = button('Cancel', 'npt-cancel');
     this.stopBtn    = button('Stop', 'npt-stop npt-hidden');
     this.copyBtn    = button('Copy log', 'npt-copy');
+    this.saveLogBtn = button('Save log', 'npt-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.undoBtn    = button('Undo', 'npt-undo npt-hidden');
     [this.proceedBtn, this.undoBtn].forEach(function (b) {
       b.className = b.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
@@ -1948,11 +1942,12 @@
     this.cancelBtn.addEventListener('click', function () { self.cancel(); });
     this.stopBtn.addEventListener('click', function () { self.stop(); });
     this.copyBtn.addEventListener('click', function () { self.copy(); });
+    this.saveLogBtn.addEventListener('click', function () { self.saveLog(); });
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
 
-    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.undoBtn,
+    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.saveLogBtn, this.undoBtn,
       this.rescanBtn, this.closeBtn].forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -2481,12 +2476,19 @@
     this.begin();
   };
 
+  Run.prototype.logLines = function () {
+    return [droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n');
+  };
+  Run.prototype.saveLog = function () {
+    this.disarmUndo();
+    saveLogFile('normalize-parent-tags', this.logLines());
+  };
   Run.prototype.copy = function () {
     this.disarmUndo();
     // The caption flash is the caller's, like every sibling's: the shared helper answers
     // whether the copy landed and says nothing about buttons.
     var self = this;
-    copyToClipboard([droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n'), function (ok) {
+    copyToClipboard(this.logLines(), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
@@ -2563,7 +2565,7 @@
     head.appendChild(el('div', 'npt-warn',
       'A type set to Prune or Roll-Up here is rewritten whenever Stash saves one - ' +
       'immediately, with no dialog and no review; only ᝯㄝₓ Core\'s Undo History can ' +
-      'take it back. Off is what a type does ' +
+      'take it back, and not everything. Off is what a type does ' +
       'until you say otherwise; the tasks are unaffected either way, since the run ' +
       'dialog asks again every time.'));
     head.appendChild(el('div', 'npt-legend',
@@ -2800,6 +2802,9 @@
       'tag list, so it is asked for rather than loaded with the tree; counts are for the ' +
       'tag itself, not for it plus everything under it. Click again to re-fetch.';
     this.closeBtn = button('Close', 'npt-close');
+    this.expandBtn.title = 'Open every branch of the tree, so each tag shows its children.';
+    this.collapseBtn.title = 'Fold every branch of the tree back to its top-level tags.';
+    this.closeBtn.title = 'Close the hierarchy. It only reads, so there is nothing to save.';
 
     this.expandBtn.addEventListener('click', function () { self.expandAll(true); });
     this.collapseBtn.addEventListener('click', function () { self.expandAll(false); });
@@ -3614,9 +3619,6 @@
   // for, the prune reads the tags as they end up and prunes what the merge brought in too.
   function autoReact(type, ids, leased) {
     if (!ids || !ids.length) return Promise.resolve();
-    // COMPAT: a Core without `settleWho` cannot tell this plugin's registration from the others' and
-    // would have it wait on itself (since NormalizeParentTags 6.1.17); remove when the floor is Core 4.20.3.
-    if (!C.settleWho) return autoNormalize(type, ids, leased);
     return settled(settleKey(type), ids.map(String), 30000, PLUGIN_SHORT_NAME).then(function () {
       return autoNormalize(type, ids, leased);
     });
@@ -3704,10 +3706,6 @@
   var FIELD_BTN_ID  = 'npt-modes-button';
   var _normalizedFrom = null;
 
-  function hide(node) {
-    if (node && node.style) node.style.display = 'none';
-  }
-
   function modeFieldTick() {
     var row = settingRow(PLUGIN_ID, 'a1AutoModes');
     if (!row) return;
@@ -3761,7 +3759,7 @@
       renderModeString(line, modes);
     }
     var raw = String(_autoSettings.a1AutoModes || '');
-    if (_savingModes || !raw.replace(/^\s+|\s+$/g, '')) return;
+    if (_savingModes || !raw.trim()) return;
     if (raw === canon || raw === _normalizedFrom || hasUnknownPair(raw)) return;
     _normalizedFrom = raw;
     saveAutoModes(canon).then(null, function () {});
@@ -3820,13 +3818,13 @@
         'is how a substring can then contain a space. It is matched literally, so punctuation needs no ' +
         'escaping, and surrounding whitespace is trimmed from each substring.' },
     { key: 'c5ExcludeAddTagWithCustomFieldName', label: 'Never Add Tags Marked via This Custom Field', warn: 'semi',
-      text: true, wide: true, mark: function (v) { return v ? cfTipMark(v) : null; },
+      text: true, wide: true, cf: true, mark: function (v) { return v ? cfTipMark(v) : null; },
       tip: 'Enter a custom field name. Roll-Up will not add a tag that has this custom field.\n\nOnly the ' +
         'presence of the field matters - its value is ignored, so any value at all excludes the tag. ' +
         'Remove the field from a tag to have it added again. Skipping a tag does not stop its own ' +
         'parents from being added.' },
     { key: 'c6ExcludeRemoveTagWithCustomFieldName', label: 'Never Remove Tags Marked via This Custom Field', warn: 'semi',
-      text: true, wide: true, mark: function (v) { return v ? cfTipMark(v) : null; },
+      text: true, wide: true, cf: true, mark: function (v) { return v ? cfTipMark(v) : null; },
       tip: 'Enter a custom field name. Prune will not remove a tag that has this custom field, even when a ' +
         'descendant tag makes it redundant.\n\nOnly the presence of the field matters - its value is ' +
         'ignored, so any value at all protects the tag.' },
@@ -3834,7 +3832,7 @@
 
   // What the filters say now, in one line: each one that does something, or that none does.
   function exclusionSummary(s) {
-    var q = function (k) { return String(s[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var q = function (k) { return String(s[k] || '').trim(); };
     var words = function (k) {
       return splitTerms(q(k), q('c4TagNameSeparator')).map(function (t) { return '"' + t + '"'; }).join(' or ');
     };

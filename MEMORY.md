@@ -8,23 +8,24 @@ MB of JavaScript heap above what the page held before the task opened, read afte
 
 | Plugin | Task | scan | plan | write | undo | closed | scan time | write time |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| SceneFilenameManager 2.4.14 | Archive Original Filenames | 116.2 | 116.2 | 162.1 | 161.3 | 0.6 | 2.8 s | 3.5 s |
-| SceneFilenameManager 2.4.14 | Restore Original Filenames | 56.3 | 56.3 | 82.4 | 82.4 | 1.1 | 1.8 s | 1.7 s |
-| SceneFilenameManager 2.4.14 | Rename Files From Metadata | 198.6 | 198.6 | 257.6 | 257.6 | 1.3 | 13.9 s | 5.6 s |
-| SceneVariants 3.3.8 | Migrate Variant Stash-IDs | 58.5 | 58.5 | 93.3 | 92.3 | 1.4 | 3.0 s | 7.8 s |
-| SceneVariants 3.3.8 | Flag Variants | 46.1 | 46.1 | 86.0 | 84.1 | 1.3 | 4.1 s | 9.2 s |
-| SceneVariants 3.3.8 | Review Variant Sets | 309.5 | 302.5 | - | - | 1.4 | 51.8 s | - |
-| SceneVariants 3.3.8 | Rename Variants | 637.0 | 630.0 | 670.5 | 666.9 | 1.7 | 51.3 s | 4.9 s |
-| CustomFieldsBulkEditor 4.1.21 | Edit Custom Fields Across the Whole Library | 551.8 | 551.7 | 1150.2 | 1150.2 | 1.2 | 29.2 s | 63.1 s |
-| CustomFieldsBulkEditor 4.1.21 | Manage Custom Field Descriptions and Locks | 284.2 | 213.8 | 318.4 | 318.2 | 0.8 | 5.8 s | 15.0 s |
-| FindEntitiesByTextContent 4.11.5 | Find & Replace Entities by Text Content | 829.5 | 829.5 | 1820.4 | 1628.4 | 1.1 | 21.2 s | 347.2 s |
-| FindEntitiesByTextContent 4.11.5 | Find & Replace: Export, Term counts | 147.4 | -0.5 | - | - | -0.4 | 79.6 s | - |
-| DeSpicer 1.0.4 | De-Spice Library | 438.2 | 438.2 | 1098.6 | 440.3 | 0.7 | 163.9 s | 344.2 s |
-| NormalizeParentTags 6.3.6 | Normalize Parent Tags | 728.1 | 728.1 | 1109.0 | 1006.3 | 1.0 | 371.0 s | 520.0 s |
-| NormalizeParentTags 6.3.6 | Auto-Mode Settings | 0.8 | 0.7 | - | - | 0.7 | 0.2 s | - |
-| NormalizeParentTags 6.3.6 | Show Tag Hierarchy | 15.2 | 15.2 | - | - | 0.6 | 0.5 s | - |
-| MergePerformerTagsToScenes 5.3.8 | Merge Performer Tags into All Their Scenes | 271.0 | 268.6 | 293.6 | 282.7 | 0.9 | 23.7 s | 24.0 s |
-| PropagateTagsAndPerformers 6.8.10 | Propagate All | 1162.5 | 999.0 | 1050.4 | 1033.5 | 1.0 | 205.7 s | 162.5 s |
+| SceneFilenameManager 3.0.0 | Archive Original Filenames | 116.3 | 116.3 | 154.0 | 151.5 | 0.7 | 2.8 s | 3.4 s |
+| SceneFilenameManager 3.0.0 | Restore Original Filenames | 56.1 | 56.1 | 77.3 | 77.3 | 1.0 | 1.7 s | 1.5 s |
+| SceneFilenameManager 3.0.0 | Rename Files From Metadata | 198.8 | 198.8 | 251.7 | 247.8 | 1.3 | 13.6 s | 4.9 s |
+| SceneVariants 4.0.0 | Migrate Variant Stash-IDs | 58.6 | 58.5 | 93.6 | 93.3 | 1.5 | 3.0 s | 7.5 s |
+| SceneVariants 4.0.0 | Flag Variants | 46.2 | 46.1 | 86.9 | 84.1 | 1.4 | 3.9 s | 9.3 s |
+| SceneVariants 4.0.0 | Review Variant Sets | 309.5 | 302.5 | - | - | 1.3 | 51.4 s | - |
+| SceneVariants 4.0.0 | Rename Variants | 637.0 | 630.0 | 670.9 | 667.7 | 1.7 | 50.5 s | 5.0 s |
+| CustomFieldsBulkEditor 5.0.0 | Edit Custom Fields Across the Whole Library | 551.8 | 551.8 | 1150.2 | 1150.2 | 1.2 | 31.8 s | 67.8 s |
+| CustomFieldsBulkEditor 5.0.0 | Manage Custom Field Descriptions and Locks | 276.5 | 213.8 | 318.4 | 317.3 | 0.8 | 5.8 s | 14.1 s |
+| FindEntitiesByTextContent 5.0.0 | Find & Replace Entities by Text Content | 829.5 | 829.5 | 1817.5 | 1629.3 | 1.1 | 20.9 s | 336.7 s |
+| OrphanCleanup 1.0.0 | Orphan Cleanup | 3.4 | 3.4 | 4.2 | 4.1 | 0.8 | 0.3 s | 3.6 s |
+| FindEntitiesByTextContent 5.0.0 | Find & Replace: Export, Term counts | 143.8 | 0.6 | - | - | 0.6 | 82.5 s | - |
+| DeSpicer 2.0.0 | De-Spice Library | 438.2 | 438.2 | 1104.1 | 440.3 | 0.8 | 192.1 s | 397.6 s |
+| NormalizeParentTags 7.0.0 | Normalize Parent Tags | 732.8 | 728.8 | 1111.8 | 1005.9 | -0.1 | 372.5 s | 481.6 s |
+| NormalizeParentTags 7.0.0 | Auto-Mode Settings | 0.8 | 0.8 | - | - | 0.7 | 0.2 s | - |
+| NormalizeParentTags 7.0.0 | Show Tag Hierarchy | 15.2 | 15.2 | - | - | 0.6 | 0.5 s | - |
+| MergePerformerTagsToScenes 6.0.0 | Merge Performer Tags into All Their Scenes | 270.0 | 268.6 | 294.9 | 282.9 | 0.9 | 23.6 s | 23.4 s |
+| PropagateTagsAndPerformers 7.0.0 | Propagate All | 1162.6 | 999.1 | 1050.5 | 1033.5 | 1.0 | 212.4 s | 156.5 s |
 
 ## Against the baseline
 
@@ -42,8 +43,9 @@ No marker moved by more than 15% or 8 MB, and `closed` by no more than 1 MB, or 
 - **CustomFieldsBulkEditor / Edit Custom Fields Across the Whole Library** - Overwrite one field with a new value on every entity of all seven types. 1128300 entities read, 205000 with custom fields, 275000 fields in total, 1198300 lines listed. Apply covers 1128300 entities. Then: Applied. 1128300 entity changes written (13799 requests)
 - **CustomFieldsBulkEditor / Manage Custom Field Descriptions and Locks** - One field, held by every scene and performer and one image in ten, renamed. 4 custom fields, 1 described, 1 unsaved change Then: 4 custom fields, 1 described, no unsaved changes - last Apply written (14439 requests)
 - **FindEntitiesByTextContent / Find & Replace Entities by Text Content** - All seven types, searching "e" - in nearly every text - and replacing every match. Scanned 1128300 of 1128300 entities · 6053287 matches in 881274 entities · 1000 on screen · finished Scenes 100000/100000 (2918028 matches) · Images 1000000/100 (901169 requests)
-- **FindEntitiesByTextContent / Find & Replace: Export, Term counts** - All seven types exported as Term counts, Min count 5; nothing written. Exported 1128300 entities read: saved to your browser's downloads as fretc-export-2026-10-13-0022.csv. (2266 requests)
-- **DeSpicer / De-Spice Library** - Anonymize and Vanillify over every entity-type, every rule as the goals say, images kept; every change written. Scanned 1148300 entities · 2945080 changes found · 2945080 to write Performers 5000/5000 · Studios 300/300 · Groups 1000/1000 · Tags 2000/2000 · Scenes 100000/1 Then: Done in 4 min 38 s · 2,945,080 written to 1,148,300 entities · nothing left · 26 WARN Scanned 1148300 entities · 2945080 changes found · 0 to write · written 29 (2301223 requests)
+- **OrphanCleanup / Orphan Cleanup** - Every orphan of the four types listed, ticked and deleted. 800 orphans found. Tick what to delete. Then: 800 orphans deleted. (1653 requests)
+- **FindEntitiesByTextContent / Find & Replace: Export, Term counts** - All seven types exported as Term counts, Min count 5; nothing written. Exported 1128300 entities read: saved to your browser's downloads as fretc-export-2026-10-14-2347.csv. (2266 requests)
+- **DeSpicer / De-Spice Library** - Anonymize and Vanillify over every entity-type, every rule as the goals say, images kept; every change written. Scanned 1148300 entities · 2945080 changes found · 2945080 to write Performers 5000/5000 · Studios 300/300 · Groups 1000/1000 · Tags 2000/2000 · Scenes 100000/1 Then: Done in 5 min 15 s · 2,945,080 written to 1,148,300 entities · nothing left · 26 WARN Scanned 1148300 entities · 2945080 changes found · 0 to write · written 29 (2301223 requests)
 - **NormalizeParentTags / Normalize Parent Tags** - Roll-Up on all seven types, over a tag tree five levels deep. Review complete. 1146296 entity changes planned, 9847213 log lines - showing the last 1000 of 9847213 lines Performers 5000 / 5000 Studios 300 / 300 Groups 1000 Then: Finished. 1146296 entity changes applied - showing the last 1000 of 19694426 lines Performers 5000 / 5000 Studios 300 / 300 Groups 1000 / 1000 Galleries 20000 / (1017643 requests)
 - **NormalizeParentTags / Auto-Mode Settings** - The dialog opened; it reads nothing. no counters (2 requests)
 - **NormalizeParentTags / Show Tag Hierarchy** - Every tag expanded, with its counts loaded. 2000 tags, 20 roots. 2000 rows shown - click a tag for what Prune and Roll-Up would do with it. (4 requests)
@@ -52,6 +54,6 @@ No marker moved by more than 15% or 8 MB, and `closed` by no more than 1 MB, or 
 
 ## What the synthetic server could not answer
 
-Answered with null, or matching everything; where a task depends on one, its numbers understate what a real Stash would cost: `query findSavedFilters`, `field studio.organized`.
+Answered with null, or matching everything; where a task depends on one, its numbers understate what a real Stash would cost: `query findSavedFilters`, `field group.sub_group_count`, `field group.updated_at`, `field studio.organized`.
 
-<sub>Fingerprint 34b8973f92a1a7db (the plugins, the harness and this tool). Generated by `node .tools/memory-watermark.js`.</sub>
+<sub>Fingerprint f7c6e7759ea2f83d (the plugins, the harness and this tool). Generated by `node .tools/memory-watermark.js`.</sub>

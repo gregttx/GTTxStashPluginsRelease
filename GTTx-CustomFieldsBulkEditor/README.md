@@ -15,7 +15,7 @@ Settings → Tasks and in the browser console. `custom_fields` on the [<abbr tit
 >
 > Two limits are worth knowing before you rely on it: Undo only reaches **this dialog's own writes**,
 > and only **while the dialog stays open**. After that, what is left is ᝯㄝₓ Core's
-> [Undo History](../GTTx-Core/README.md#undo-history), which keeps every Apply in this browser within its limits. Read the list before pressing Apply — that is what it is for — and for a first run over a
+> [Undo History](../GTTx-Core/README.md#undo-history), which keeps every Apply in this browser within its limits. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo). Read the list before pressing Apply — that is what it is for — and for a first run over a
 > large selection, stop Stash and copy `stash-go.sqlite` (next to your `config.yml`) somewhere safe.
 
 Stash stores custom fields on seven kinds of entity and lets you edit them **one record at a time**.
@@ -128,7 +128,8 @@ with no colors to paste into anything.
   clicked**, like the names in the listing. Messages sit in the same box as the listing,
   in the order they happened, and nothing is cleared until you close the dialog.
 - **Copy log** copies the counters and then the whole log in that same order — every message
-  and every listing, including the lines that cap leaves off the screen.
+  and every listing, including the lines that cap leaves off the screen. **Save log** downloads
+  the same text as a file.
 - Entities carrying **no** custom fields get **one line each**, marked `␀`, so the filters reach
   them and so does **Apply**. Setting a field on exactly those is **Fields → Without fields**
   followed by an **Add**.
@@ -223,7 +224,7 @@ It asks first: the first click arms the button and shows the count (*Undo 37 cha
 performs it. The arming lapses after a few seconds.
 
 It only reaches **this dialog's own writes**, and only **while the dialog stays open**. Closing the
-dialog ends it. Nothing else does: Undo stays in the footer after you have used it (pressing it
+dialog ends it — after that, ᝯㄝₓ Core's Undo History takes an Apply back. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo). Nothing else ends it: Undo stays in the footer after you have used it (pressing it
 again just re-asserts the same values), and it survives a **Rescan**. Only a fresh **Apply**
 replaces what it will put back.
 
@@ -358,6 +359,9 @@ the defaults above. Whatever you have put there is never written over — includ
 Add Lists** means no filtering at all, and an empty **Description Store Tag Name** goes back to the
 default name.
 
+Editing either name in Stash's own dialog, a list under the box offers your library's tags, or the
+custom field names its entities hold ([ᝯㄝₓ Core](../GTTx-Core/README.md#links-cards-and-tooltips)).
+
 ## Locked custom fields
 
 A locked field's **name**, **description** and **values** cannot change, and it cannot be
@@ -406,7 +410,7 @@ Several of them work with custom fields, and this plugin is where they look:
 - **Locked Custom Fields** is asked through ᝯㄝₓ Core before any of them writes a custom field.
   `ᝯㄝₓ Scene Filename Manager`, `ᝯㄝₓ Scene Variants`, `ᝯㄝₓ Entity Name Maintainer`,
   `ᝯㄝₓ Find & Replace Entities by Text Content` and Core's own Undo History never change or remove
-  a locked field.
+  a locked field ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)).
 - **Descriptions**: `ᝯㄝₓ Scene Filename Manager`, `ᝯㄝₓ Scene Variants` and
   `ᝯㄝₓ Propagate Tags and Performers to Related Entities` file a description for the fields they use in this plugin's
   store, never over one you wrote. The ⓕ Core puts beside a setting, in the Highlighted Text Color, naming a custom field reads
@@ -423,7 +427,7 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
 | Edit Custom Fields Across the Whole Library | 552 MB | 1150 MB | 1150 MB |
-| Manage Custom Field Descriptions and Locks | 284 MB | 318 MB | 318 MB |
+| Manage Custom Field Descriptions and Locks | 277 MB | 318 MB | 317 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 

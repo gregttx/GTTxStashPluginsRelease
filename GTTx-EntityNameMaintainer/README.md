@@ -149,7 +149,7 @@ page already carries its type's count.
   plugin absent or disabled it says the descriptions are searchable when it is enabled.
 - **Undo only reverses what this dialog wrote**, while it stays open, and cannot account for
   changes made elsewhere in the meantime. Every replacement, its Undo and a canceled rename are
-  also kept in ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history), where they can be undone later. Backing up your database before proceeding is
+  also kept in ᝯㄝₓ Core's [Undo History](../GTTx-Core/README.md#undo-history), where they can be undone later. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo). Backing up your database before proceeding is
   strongly recommended.
 
 ## Matching
@@ -227,11 +227,11 @@ field's new name stays under it; **Prune orphans** in Custom Fields Bulk Editor'
 clears it. **Rescan** reads the renamed entity as it is now, not as it was when the dialog opened -
 and what your save changed on it is still left alone while it holds what you saved; a field you
 edited by hand since is listed.
-Image replacements reach Undo History only with ᝯㄝₓ Core's **Record Library-Wide Image Writes** on.
+Image replacements reach Undo History only with ᝯㄝₓ Core's **Record Library-Wide Image Writes** on ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)).
 
 ## What a run costs in memory
 
-The dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
+The dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** and **Save log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes.
 

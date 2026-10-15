@@ -36,10 +36,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.1.6 or newer, told by one of its exports (`ownedFields`).
+  // The Core floor, ᝯㄝₓ Core 5.26.0 or newer, told by the newest export it binds (`styleOnce`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.ownedFields !== 'function') {
-    var NAME = 'ᝯㄝₓ Entity Name Maintainer', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.1.6 or newer, installed and '
+  if (!C || typeof C.styleOnce !== 'function') {
+    var NAME = 'ᝯㄝₓ Entity Name Maintainer', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.26.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[enm] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -47,6 +47,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -63,10 +65,12 @@
     return;
   }
   // Every plugin's settings through Core's one shared read.
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var trim = C.trim, button = C.button;
   var pluginConfig = C.pluginConfig, logsToConsole = C.logsToConsole, linesDrawn = C.linesDrawn;
   var showDefaults = C.showDefaults, caseSensitive = C.caseSensitive, fold = C.fold, coop = C.coop,
     fieldLocks = C.fieldLocks, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, keepLog = C.keepLog, droppedLine = C.droppedLine,
     holdWidth = C.holdWidth, entityTip = C.entityTip, staleReloadButton = C.staleReloadButton,
     hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, paintButton = C.paintButton,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, foreignLease = C.foreignLease,
@@ -87,7 +91,7 @@
   // still be running a script it cached before the edit - so a heading reading one
   // version over the previous one's behaviour is the normal look of a stale script,
   // not a contradiction.
-  var PLUGIN_VERSION = '3.4.6';
+  var PLUGIN_VERSION = '4.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers rather
@@ -118,10 +122,6 @@
   // question and to reach the button, short enough that a user who has looked away does
   // not come back to one still waiting to close.
   var CLOSE_CONFIRM_SECONDS = 5;
-
-  function trim(text) {
-    return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
-  }
 
   // ── The seven entity-types ────────────────────────────────────────────────
   //
@@ -296,6 +296,13 @@
   // writes must not be things it reacts to. Capturing it also means a *later* plugin
   // wrapping fetch does not get to see these, which is the same trade.
   var ORIG_FETCH = window.fetch && window.fetch.bind(window);
+
+  // Through this plugin's own `gqlRequest`, which marks the write as its own - not Core's `jobWrite`.
+  function sendJob(job, input, op) {
+    if (job.write) return job.write(input);
+    return gqlRequest('mutation ' + op + '($input: ' + job.spec.input + '!) { ' +
+      job.spec.mutation + '(input: $input) { id } }', { input: input });
+  }
 
   function gqlRequest(query, variables) {
     return ORIG_FETCH('/graphql', {
@@ -527,20 +534,7 @@
     'box-shadow:0 2px 10px rgba(0,0,0,.55);}' +
     '.enm-tipped.enm-tip-open .enm-tipbox{display:block;}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-  // Local: Core has a `button` of its own but does not export it.
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // ── Finding the old name in a string ──────────────────────────────────────
   //
@@ -865,6 +859,9 @@
     this.copyBtn = button('Copy log', 'enm-copy');
     this.copyBtn.title = 'Copy the counters, the messages and every line of the listing as ' +
       'plain text.';
+    this.saveLogBtn = button('Save log', 'enm-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.rescanBtn = button('Rescan', 'enm-rescan');
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.allOnBtn = button('All On', 'enm-allon enm-filterbtn');
@@ -887,10 +884,11 @@
     this.cancelBtn.addEventListener('click', function () { self.cancelRename(); });
     this.closeBtn.addEventListener('click', function () { self.requestClose(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.saveLogBtn.addEventListener('click', function () { saveLogFile('entity-name-maintainer', self.logLines()); });
     this.allOnBtn.addEventListener('click', function () { self.setAllFilters(true); });
     this.allOffBtn.addEventListener('click', function () { self.setAllFilters(false); });
 
-    [this.goBtn, this.cancelBtn, this.closeBtn, this.copyBtn, this.rescanBtn]
+    [this.goBtn, this.cancelBtn, this.closeBtn, this.copyBtn, this.saveLogBtn, this.rescanBtn]
       .forEach(function (b) { foot.appendChild(b); });
     foot.appendChild(el('div', 'enm-spacer'));
     // All On / All Off beside the filters they act on; the selection pair last, at the right end, where every sibling's dialog has it.
@@ -941,7 +939,7 @@
     this.cancelBtn.disabled = busy;
     // A scan can always be left: closing ends it (`closed`). A write cannot be walked away from halfway.
     this.closeBtn.disabled = busy && state !== 'scanning';
-    this.copyBtn.disabled = false;
+    this.copyBtn.disabled = this.saveLogBtn.disabled = false;
     this.newInput.disabled = state !== 'listing';
     this.syncFilterButtons();
     this.syncFooter();
@@ -1616,7 +1614,7 @@
     return row;
   };
 
-  Run.prototype.copyLog = function () {
+  Run.prototype.logLines = function () {
     var self = this;
     var lines = [this.progressText(), ''];
     this.hits.forEach(function (h) {
@@ -1631,8 +1629,11 @@
     lines.push('');
     if (this.logDropped) lines.push(droppedLine(this.logDropped));
     this.logText.forEach(function (l) { lines.push(l); });
-    var was = this.copyBtn.textContent;
-    copyToClipboard(lines.join('\n'), function (ok) {
+    return lines.join('\n');
+  };
+  Run.prototype.copyLog = function () {
+    var self = this, was = this.copyBtn.textContent;
+    copyToClipboard(this.logLines(), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = was; }, 2000);
@@ -1961,12 +1962,6 @@
   function journalJob(pass, job, name, forward, back) {
     if (!pass || job.write || !job.spec || !forward) return;
     pass.add(job.spec.key, forward.id, name || '', forward, back || {});
-  }
-
-  function sendJob(job, input, op) {
-    if (job.write) return job.write(input);
-    return gqlRequest('mutation ' + op + '($input: ' + job.spec.input + '!) { ' +
-      job.spec.mutation + '(input: $input) { id } }', { input: input });
   }
 
   // Batched so the log and the counters stay live on a long run, and so a failure is one

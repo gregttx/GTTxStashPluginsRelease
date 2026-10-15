@@ -35,7 +35,7 @@ A plan of more than 20,000 changes keeps no copy of the values it changes, so a 
 the browser: each page reads its own values when it is shown, and each field is read again, checked
 and worked out afresh as it is written - a field changed since the scan is still left alone and said.
 A run of more than 5,000 entities keeps no copy for the dialog's own Undo either: Undo History records
-it, and is where it is undone. The dialog says both before Proceed, and Copy log gives the values of
+it, and is where it is undone. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo). The dialog says both before Proceed, and Copy log gives the values of
 the page shown. Where Undo History will not keep such a run either - one over half its Size Limit,
 which it records whole or not at all, or Image entities while ᝯㄝₓ Core's Record Library-Wide Image
 Writes is off, or any of it while **Record in Undo History** is off - Proceed asks for a second press,
@@ -101,7 +101,7 @@ tag's - takes a placeholder where blank was asked for. A custom field holding a 
 no empty form, so blank removes it, and Undo puts it back; random values keep a true/false, and a
 pseudonym or a placeholder keeps the number or true/false as it is. A blanked O-counter, play count
 or resume time is reset by Stash's own mutation for it, which deletes its history of times; the dialog's Undo adds it back,
-times and all (an image's O-counter, which has no history, counted back up), but Undo History cannot. **Custom field
+times and all (an image's O-counter, which has no history, counted back up), but Undo History cannot ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). **Custom field
 names** kept have their explicit terms rewritten while Vanillify is on, as kept text does everywhere: on every
 entity holding the field and in every saved filter naming it, one name for the field everywhere, a name
 already in the library numbered ("Warm rating 2"); **Never rename** leaves every name as it is. Fields other
@@ -180,7 +180,7 @@ alike on the page. A see-through image fades to nothing toward its edges rather 
 line, and an opaque one shows no dark frame. The listing names the strength each blur is drawn at. An entity with no image of its own (Stash's stand-in) is
 left alone, and one that cannot be drawn is left as it is and said, the entity's other changes
 written. An image is not recorded in Undo History and Undo here does not put it back - holding
-every original image for that would hold your library's - so the backup is the way back for it.
+every original image for that would hold your library's - so the backup is the way back for it ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)).
 
 What the original is decides how it is drawn, and the entity's line in the log says so:
 
@@ -209,7 +209,7 @@ old to be asked - no file is renamed. The new name is a pseudonym of the archive
 run - with the extension kept; Vanillify's words are rewritten in file names too. Two files in one folder
 whose originals draw the same pseudonym, or a pseudonym another file there already has, are told apart by a
 number, as names are (`Silver Beacon 115 2.mp4`), the first in scan order keeping it plain. A file is moved in
-its own folder, recorded in Undo History as Scene Filename Manager records its own renames. A file
+its own folder, recorded in Undo History as Scene Filename Manager records its own renames ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). A file
 moved or deleted outside Stash since its last scan cannot be renamed: the log says so, and a Scan of
 its folder, then Clean, brings the library up to date - but Clean removes every entry whose file is
 not on the disk or is outside Stash's library folders: in a copy whose folders point elsewhere, every entry.
@@ -289,7 +289,7 @@ again just before the delete and left alone. **Removal Deletes** says how much g
 library entries only, their generated files too (the default), or the media files as well. The
 dialog can name another tag, or choose another level, for one run.
 
-**A removal is not undone, here or in Undo History.** Deleted media files are gone from the disk:
+**A removal is not undone, here or in Undo History.** Deleted media files are gone from the disk ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)):
 not even the backup brings them back. The dialog warns before Proceed.
 
 ## After the run
@@ -389,12 +389,12 @@ Each is named in the dialog's log.
 
 A run is recorded in Undo History, so it can be undone after the dialog closes - except stash-ids,
 scene marker titles and saved filters, which Undo History has no place for; the dialog says so
-before Proceed, and its own Undo puts them back while it stays open. Entity images are neither
+before Proceed, and its own Undo puts them back while it stays open ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). Entity images are neither
 recorded nor undone (see [Images](#images)).
 
 **Real Library or Copy**, in **Removal and Safety**, holds three switches - **Record in Undo History**, **Offer Stash's Backup
 First** and **Keep Scene Filename Manager's Archive** - all on for your real library, all off for a
-copy: a second Stash serving a backup of your library, where nothing needs undoing and the archive
+copy ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)): a second Stash serving a backup of your library, where nothing needs undoing and the archive
 of original filenames only names your real files. All three start on. **All On** and **All Off** set either answer in
 one press, and say in their tooltips what each means. To set up a copy, restore a backup into a
 second Stash configuration folder, start that Stash on another port and install this plugin there.

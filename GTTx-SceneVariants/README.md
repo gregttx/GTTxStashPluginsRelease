@@ -24,7 +24,14 @@ told apart by two tags you name in the settings.
 
 Open a scene that has other [<abbr title="Scene Variants: scenes that are the same content - a full version and its trailers or cuts.">variants</abbr>](../GLOSSARY.md#variant). Beside **Details**, **File Info** and **Edit** there is a
 **Variants** tab, captioned with how many there are - **2 Variants**, **1 Variant**. Where finding
-them takes longer than a moment, the tab shows as **? Variants** until the count is in:
+them takes longer than a moment, the tab shows as **? Variants** until the count is in.
+
+A number in a small badge after the caption, in the Highlighted Text Color, counts the
+partial-duration variants whose title is not the one the naming rule expects - the titles
+**Rename Variants...** would change. Hover it for each title and the one it would get. A partial
+the rule leaves alone (the no-rename field or tag) never counts, and a set with no [<abbr title="The title a variant set's partials are named after.">base-title</abbr>](../GLOSSARY.md#base-title)
+shows no badge.
+
 
 <img src="screenshots/variants-tab.png" alt="A scene page with the Variants tab open, listing the scene's two promos">
 
@@ -90,6 +97,8 @@ Scene Cards** turns it off. Hover it for the other variants' titles; the Variant
 lists them in full. The count is matched the way the tab matches, on a shared stash-id or a shared
 line of the **Variant Stash-ID Custom Field**, and every card on the page is counted in one go.
 
+<img src="screenshots/card-count.png" alt="A scene card in the Scenes list: under it, among the tag and performer counters, ⸎ 2 - its two other variants">
+
 ### Opening the full-duration variant
 
 On a partial-duration scene whose set has a full-duration member, a blue **▶ Open Full-Duration**
@@ -97,7 +106,7 @@ button sits at the end of the tab strip, after Edit. It opens that variant, in a
 ᝯㄝₓ Core's Open Links in the Same Tab is on. Its tooltip names the scene it opens. Where the set has
 several full-duration variants, the button picks one, and the tooltip says how:
 
-1. The title closest to the set's [<abbr title="The title a variant set's partials are named after.">base-title</abbr>](../GLOSSARY.md#base-title), the value of the **Variant Base-Title Custom Field**
+1. The title closest to the set's base-title, the value of the **Variant Base-Title Custom Field**
    (`ᱜ╦╦🞮_Variant_Base_Name`). The field is read off this scene first, then off the full-duration
    variants, then off any other variant. Case and runs of spaces are ignored.
 2. Then the shortest title.
@@ -177,7 +186,7 @@ not say which scene it is. **Undo** puts every one of them back — the field to
 or removed where the scene had none, and the stash-ids back on — for as long as the dialog stays
 open. Every write here but a stash-id removal is also kept in ᝯㄝₓ Core's
 [Undo History](../GTTx-Core/README.md#undo-history), where it can be undone after the dialog has closed; a
-stash-id taken off is put back only by this dialog's Undo.
+stash-id taken off is put back only by this dialog's Undo. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo).
 
 **Copy log** hands over the counters and every line as plain text, including the ones a long list
 no longer shows: the dialog keeps the last thousand lines on screen so a library-sized migration
@@ -478,7 +487,9 @@ The rules, each visible in the plan:
   that was rescanned and lost the cover that came from a stash-box gets the source's back. It is
   compared by the image bytes rather than by the URL — every scene has a URL of its own whatever
   the pictures are — so a set already sharing a cover lists nothing, and a variant whose own cover
-  cannot be read is not offered one, since Undo would then have nothing to put back. The setting
+  cannot be read is not offered one, since Undo would then have nothing to put back. A cover
+  replaced is kept in ᝯㄝₓ Core's Undo History too, with its **Record Pictures** setting on, so it can
+  be put back after the dialog has closed. The setting
   is **off by default** because it is the one comparison that costs a picture downloaded per scene
   rather than a field already read; with it off, nothing is fetched at all. Hovering a **Cover**
   line shows the two pictures side by side — the variant's own bordered red and the one it would
@@ -552,7 +563,7 @@ wrongly is a lost mark.
 
 **OK** folds the first two into the save itself — the form posts the whole tag list and the whole
 custom-field map, so a tag or line taken off separately would have been put straight back — and
-removes the survivor's tag right after the save lands, recorded in Undo History. **Cancel** lets the save through with the
+removes the survivor's tag right after the save lands, recorded in Undo History ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)). **Cancel** lets the save through with the
 stash-id put back into it, so every other edit you made still lands and the id stays; Escape is
 Cancel. A deletion with nothing to tidy — no field line, no flag on the scene, no lone survivor —
 is not asked about at all, and neither is a save that keeps its ids. The question does not depend
@@ -580,7 +591,8 @@ All under **Settings → Plugins → ᝯㄝₓ Scene Variants**, all optional, i
 be read, a task plans nothing and says so, and a save goes through without this plugin's part in it. Each row says
 what its settings are set to and opens a dialog holding them, where every line explains itself on
 hover and nothing is written until you press **Save**. Each setting is stored under its own key, so
-`config.yml` still edits them.
+`config.yml` still edits them. A box naming a tag or a custom field offers what your library has in a
+list under it ([ᝯㄝₓ Core](../GTTx-Core/README.md#links-cards-and-tooltips)).
 
 **Tags and Fields...** - the names the tab and the tasks run on. A **🔗** beside a tag's box links
 the tag it resolves to once you pause typing, and a **ⓕ** beside the field's box carries its tooltip
@@ -721,14 +733,14 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Migrate Variant Stash-IDs | 59 MB | 93 MB | 92 MB |
-| Flag Variants | 46 MB | 86 MB | 84 MB |
+| Migrate Variant Stash-IDs | 59 MB | 94 MB | 93 MB |
+| Flag Variants | 46 MB | 87 MB | 84 MB |
 | Review Variant Sets | 310 MB | — | — |
-| Rename Variants | 637 MB | 671 MB | 667 MB |
+| Rename Variants | 637 MB | 671 MB | 668 MB |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** and **Save log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole. A line no longer drawn is still in the plan: **Select All** ticks it

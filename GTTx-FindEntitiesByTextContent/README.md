@@ -173,6 +173,8 @@ replaces what a search found, so there is nothing for it to offer before that. T
 looking at is the plan**, every page of it, not only the one on screen. There is no second review dialog: the list already names every
 entity, which attributes matched and how many times each.
 
+<img src="screenshots/replace.png" alt="Find & Replace with Replace ticked: “beach” to be replaced by “seaside” in every entity listed, the Replace button waiting">
+
 Three things follow from that, and all three are worth knowing before the first press:
 
 Every entity it rewrites gets its own **`[EDIT]`** line in the log, naming the entity and which
@@ -223,7 +225,22 @@ in between is not reverted. The list on screen still describes what was found *b
 write — press **Refresh** to search again. **Replace** is off while the box says something other
 than what was searched: the list, and so the write, is what the search found. If another tab changes your library meanwhile, ᝯㄝₓ Core
 marks **Search** (or **Refresh**, while it is showing) to say the list may be out of date. Every Replace, and every Undo, is also kept in ᝯㄝₓ Core's
-[Undo History](../GTTx-Core/README.md#undo-history), where it can be undone after this dialog has closed.
+[Undo History](../GTTx-Core/README.md#undo-history), where it can be undone after this dialog has closed. Not everything can be undone there: see [what Undo History cannot undo](../GTTx-Core/README.md#what-undo-history-cannot-undo).
+
+## Tagging the results
+
+Tick **Tag** and a line appears for a tag, typed by its name or an alias - a list under the box
+offers the tags whose name or an alias holds what you type; the mark beside the box
+links the tag it found, or shows a red ? where no tag has that name - none is made here. **Add Tag**
+then puts that tag on every entity on the list, in the entity-types switched on and the attributes
+shown, that does not carry it yet - switch a type off after the search to leave it out: a way to gather what a search found into a tag kept for a temporary collection.
+A tag the search found is left out, since a tag carries [<abbr title="Tags nest: a tag's parents and sub-tags, and everything above (ancestors) or below (descendants) it.">parent</abbr>](../GLOSSARY.md#parent) tags, not tags.
+
+Each batch is read again for the tags it carries now, and one bulk write per entity-type adds the
+tag where it is missing; an entity that carries it already is counted and left alone. **Undo**
+takes the tag off only the entities this press put it on, and the press is kept in
+[Undo History](../GTTx-Core/README.md#undo-history) as one run, like a Replace. **Stop** halts it
+after the batch in flight. Tag is off every time the dialog opens, as Replace is.
 
 ## Exporting
 
@@ -277,9 +294,9 @@ export reads, the entity-types, the format and Search wait for it.
 
 ## Nothing is written until you ask
 
-With **Replace** off this is a read of your library and a list of links: there is no undo
+With **Replace** and **Tag** off this is a read of your library and a list of links: there is no undo
 because there is nothing to undo, and the head says so where a writing dialog would tell you
-to back up first. Ticking Replace swaps that sentence for the backup one, which is the only
+to back up first. Ticking either swaps that sentence for the backup one, which is the only
 honest thing either of them can say in the other's state.
 
 Either way it does note in its head when another ᝯㄝₓ plugin holds a bulk-edit [<abbr title="The flag a plugin holds while it writes, so the others do not react to its writes.">lease</abbr>](../GLOSSARY.md#lease) while you
@@ -366,7 +383,7 @@ start off.
 
 **Image Replaces and Undo History.** A Replace on images is recorded in ᝯㄝₓ Core's Undo History only
 with Core's **Record Library-Wide Image Writes** on, which is off by default; the dialog's own Undo
-covers it either way while the dialog stays open.
+covers it either way while the dialog stays open ([not everything can be undone](../GTTx-Core/README.md#what-undo-history-cannot-undo)).
 
 ## What a run costs in memory
 
@@ -374,12 +391,12 @@ Against a library of 100,000 scenes and 1,000,000 images, with each task set to 
 
 | Task | While it reads and plans | While it writes | Held for Undo |
 |---|--:|--:|--:|
-| Find & Replace Entities by Text Content | 830 MB | 1820 MB | 1628 MB |
-| Find & Replace: Export, Term counts | 147 MB | — | — |
+| Find & Replace Entities by Text Content | 830 MB | 1818 MB | 1629 MB |
+| Find & Replace: Export, Term counts | 144 MB | — | — |
 
 All of it is given back when the dialog is closed. The figures come from [MEMORY.md](../MEMORY.md), measured again for every release.
 
-A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** can hand over the
+A dialog shows the last lines of its log - as many as ᝯㄝₓ Core's **Lines Drawn at Once** says, 1,000 by default - and keeps the rest so **Copy log** and **Save log** can hand over the
 whole run. Past ᝯㄝₓ Core's **Maximum Log Lines Kept** (200,000 by default) the oldest lines are dropped
 and the copy says how many went; nothing else changes — the plan, the counters, what is written
 and what Undo takes back are all whole.

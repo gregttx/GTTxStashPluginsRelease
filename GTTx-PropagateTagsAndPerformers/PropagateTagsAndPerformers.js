@@ -24,10 +24,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.11.0 or newer, told by one of its exports (`selectionMenuItem`).
+  // The Core floor, ᝯㄝₓ Core 5.26.0 or newer, told by the newest export it binds (`styleOnce`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.selectionMenuItem !== 'function') {
-    var NAME = 'ᝯㄝₓ Propagate Tags and Performers to Related Entities', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
+  if (!C || typeof C.styleOnce !== 'function') {
+    var NAME = 'ᝯㄝₓ Propagate Tags and Performers to Related Entities', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.26.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[ptp2re] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -35,6 +35,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -51,11 +53,13 @@
     return;
   }
   // Every plugin's settings through Core's one shared read.
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var button = C.button, pickTagByNameOrAlias = C.pickTagByNameOrAlias, nptApi = C.nptApi, hide = C.hide;
   var pluginConfig = C.pluginConfig;
   var showDefaults = C.showDefaults, stripEllipsis = C.stripEllipsis, pickControl = C.pickControl,
     coopObject = C.coopObject, coop = C.coop, settle = C.settle, waitingOn = C.waitingOn,
     domBus = C.domBus, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine,
+    copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, droppedLine = C.droppedLine,
     holdWidth = C.holdWidth, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
     splitTerms = C.splitTerms, nameMatchesAny = C.nameMatchesAny, cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
     staleReloadButton = C.staleReloadButton, ensureRowSpacing = C.ensureRowSpacing,
@@ -97,7 +101,7 @@
   // not a contradiction.
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
-  var PLUGIN_VERSION = '6.8.10';
+  var PLUGIN_VERSION = '7.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is
   // told apart from one that never loaded at all: banner plus error means the new
@@ -1044,7 +1048,7 @@
   // on Stash's settings page; the pair is edited in the Auto-Propagation and Depropagate Assist
   // dialog now, and the old keys are read by the migration in `settingsFrom` only.
   var AUTO_MODES = ['target', 'source', 'silent', 'depropagate'];
-  // Each row: its mode, label, help, and Core's level (`levelOf`) - the two reactions write on
+  // Each row: its mode, label, help, and Core's level - the two reactions write on
   // their own, Silent writes with no dialog at all, Depropagate assist decides what a save
   // offers to take back.
   var AUTO_ROWS = [
@@ -1102,7 +1106,7 @@
   // Elements rather than `textContent`, so the list can be a list.
   function renderPathString(box, modes, raw) {
     while (box.firstChild) box.removeChild(box.firstChild);
-    var text = String(raw == null ? '' : raw).replace(/^\s+|\s+$/g, '');
+    var text = String(raw == null ? '' : raw).trim();
     var on = displayPaths().filter(function (p) { return modes && modes[p.id] !== PATH_OFF; });
     // The three columns live on a list inside the row rather than on the row itself,
     // so the warning below can sit beside them rather than in a cell of the grid.
@@ -1556,7 +1560,7 @@
     // COMPAT: the per-path booleans before `b1Paths` (since PropagateTagsAndPerformers 3.0.0);
     // remove when `LEGACY_PATH` goes. Written back after the initial write is sent.
     var migrate = false;
-    if (!String(s.b1Paths).replace(/^\s+|\s+$/g, '') && hasLegacyPaths(raw)) {
+    if (!String(s.b1Paths).trim() && hasLegacyPaths(raw)) {
       s.b1Paths = formatPaths(legacyPaths(raw));
       migrate = true;
     }
@@ -1565,7 +1569,7 @@
     // (since PropagateTagsAndPerformers 5.0.0); remove when never on its own: an install may
     // skip releases. On, every button starts on. Read-side only - the dialog's first Save writes the old key false in the same
     // write, which is what stops a saved "none" coming back as "all".
-    if (!String(s.a1ManualButtons).replace(/^\s+|\s+$/g, '') && raw.a1ShowManualButtons) {
+    if (!String(s.a1ManualButtons).trim() && raw.a1ShowManualButtons) {
       var every = {};
       manualButtons().forEach(function (b) { every[b.key] = true; });
       s.a1ManualButtons = formatButtons(every);
@@ -1575,7 +1579,7 @@
     // `a3AutoPropagation` (since PropagateTagsAndPerformers 5.0.1); remove when never on its
     // own: an install may skip releases. On, that mode starts on. Read-side only, and
     // retired by the auto dialog's first Save, for the reason above.
-    if (!String(s.a3AutoPropagation).replace(/^\s+|\s+$/g, '')) {
+    if (!String(s.a3AutoPropagation).trim()) {
       var was = {};
       if (raw.a3AutoOnTargetUpdate) was.target = true;
       if (raw.a4AutoOnSourceUpdate) was.source = true;
@@ -1931,19 +1935,7 @@
     '.ptp2re-tagicon:hover{text-decoration:underline;}' +
     '.ptp2re-choices{display:flex;flex-direction:column;align-items:flex-start;gap:.45rem;padding:.75rem 1rem;}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // ── The dialog shell ──────────────────────────────────────────────────────
   //
@@ -2342,32 +2334,9 @@
   // scan and an auto-mode reaction - let it stop them. Running unfiltered would copy
   // onto the very entities the user asked to protect, and nothing here ever removes
   // anything, so refusing is the safe direction. The sibling does the same.
-  // **The one rule two callers resolve by**, written once: the run resolves against the
-  // tag list it already has in hand, and the settings row against a query - two sources
-  // of tags, and the same question asked of both. A second copy of the rule is exactly
-  // the drift that would let a link promise a tag the run then refuses.
-  //
-  // Exact and case-sensitive, with none of the SQL LIKE wildcard trouble a name query
-  // brings (Stash compiles EQUALS to LIKE, where _ and % are wildcards). **Every name
-  // is tried before any alias**: a tag called X and a different tag carrying X as an
-  // alias is a library the user can build, and the one they named is the one they
-  // meant. Two passes rather than one loop with a remembered fallback, because the
-  // loop's answer would depend on the order the list happens to arrive in.
-  //
-  // Aliases are matched on the same terms as the name because Stash shows them beside
-  // it and refuses to let two tags share one, so a box holding an alias names exactly
-  // one tag - and refusing it would send the user to look up a spelling nothing else in
-  // Stash made them use. The raw `aliases`, not `aliasList`: that one collapses
-  // whitespace for display, and a match here has to be the comparison the name gets.
-  function pickTagByNameOrAlias(tags, wanted) {
-    var i;
-    for (i = 0; i < tags.length; i++) if (tags[i] && tags[i].name === wanted) return tags[i];
-    for (i = 0; i < tags.length; i++) {
-      if (tags[i] && ((tags[i].aliases || []).indexOf(wanted) !== -1)) return tags[i];
-    }
-    return null;
-  }
-
+  // The tag is found by Core's `pickTagByNameOrAlias`, the one rule both callers resolve by: the run
+  // against the tag list it has in hand, the settings row against a query. A second copy of the rule
+  // is exactly the drift that would let a link promise a tag the run then refuses.
   function resolveExclusionTagId(settings, tagMap) {
     var wanted = (settings.f1ExcludeTargetWithTagName || '').trim();
     if (!wanted) return null;
@@ -2820,6 +2789,9 @@
     this.cancelBtn  = button('Cancel', 'ptp2re-cancel');
     this.stopBtn    = button('Stop', 'ptp2re-stop ptp2re-hidden');
     this.copyBtn    = button('Copy log', 'ptp2re-copy');
+    this.saveLogBtn = button('Save log', 'ptp2re-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.undoBtn    = button('Undo', 'ptp2re-undo ptp2re-hidden');
     [this.proceedBtn, this.undoBtn].forEach(function (b) {
       b.className = b.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
@@ -2843,12 +2815,13 @@
     this.cancelBtn.addEventListener('click', function () { self.cancel(); });
     this.stopBtn.addEventListener('click', function () { self.stop(); });
     this.copyBtn.addEventListener('click', function () { self.copy(); });
+    this.saveLogBtn.addEventListener('click', function () { self.saveLog(); });
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
     this.pathsBtn.addEventListener('click', function () { startRun(TASK_PATHS); });
 
-    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.undoBtn,
+    [this.proceedBtn, this.cancelBtn, this.stopBtn, this.copyBtn, this.saveLogBtn, this.undoBtn,
       this.rescanBtn, this.closeBtn, this.pathsBtn].forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
     dialogOpen(this);
@@ -4178,9 +4151,16 @@
     };
   }
 
+  Run.prototype.logLines = function () {
+    return [droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n');
+  };
+  Run.prototype.saveLog = function () {
+    this.disarmUndo();
+    saveLogFile('propagate-tags-and-performers', this.logLines());
+  };
   Run.prototype.copy = function () {
     this.disarmUndo();
-    copyToClipboard([droppedLine(this.logDropped)].filter(Boolean).concat(this.lines).join('\n'),
+    copyToClipboard(this.logLines(),
       copyFeedback(this.copyBtn, 'Copy log'));
   };
 
@@ -5009,7 +4989,7 @@
       // is a fair thing to do on a press, and not one to do without saying so - and it
       // is the one press this dialog offers with nothing changed, so it is read before
       // the toggles are set, which is what arms Save.
-      var raw = String(loaded.settings.b1Paths || '').replace(/^\s+|\s+$/g, '');
+      var raw = String(loaded.settings.b1Paths || '').trim();
       self.unread = !!raw && unrecognisedPairs(raw) > 0;
       self.stored = formatPaths(loaded.settings.paths);
       // Shown as stored even where the sibling is not answering: the box is disabled
@@ -5402,8 +5382,8 @@
       'Both modes react to Stash\'s own saves. Unless Silent Auto-propagation is on, a ' +
       'reaction lists what it would add and writes only what you leave ticked; with Silent ' +
       'on it writes the moment Stash saves, with no dialog. The Depropagate assist removes ' +
-      'only what you tick. Every write is recorded in ᝯㄝₓ Core\'s Undo History - but try ' +
-      'the task first.',
+      'only what you tick. Every write is recorded in ᝯㄝₓ Core\'s Undo History, though not everything can ' +
+      'be undone - try the task first.',
       'Every enabled path is written along, and every exclusion filter applies. An ' +
       'entity this plugin has just written to is left alone for a few seconds, which is ' +
       'what stops a reversible pair of paths bouncing.');
@@ -5952,7 +5932,7 @@
   // the plugin - a gallery holding twenty thousand images is exactly the case
   // `per_page: -1` would break on.
   AutoRun.prototype.reverseSources = function (path, id) {
-    var self = this, out = [], t = TARGETS[path.sourceType];
+    var out = [], t = TARGETS[path.sourceType];
     function page(n) {
       return gqlRequest(reverseQuery(path), { id: String(id), page: n, per_page: t.pageSize })
         .then(function (data) {
@@ -6696,14 +6676,6 @@
   //     changes what a run writes.
   var NPT_API_MIN = '3.2.0';   // the release that publishes `prepare`, for the log line
 
-  function nptApi() {
-    var api = coop().api && coop().api[NPT_ID];
-    // COMPAT: a NormalizeParentTags with no `prepare`, before its 3.2.0 (since
-    // PropagateTagsAndPerformers 3.17.0); remove when never on its own: the sibling is
-    // optional, and an install may keep an old one.
-    return api && typeof api.prepare === 'function' ? api : null;
-  }
-
   // A bound pruner per target type, `{}` where the filter is off or nothing is
   // pruning. Resolved once per run and read synchronously from `planTarget`, which is
   // the whole reason the sibling's `plan` is not a promise.
@@ -6804,10 +6776,6 @@
     return null;
   }
 
-  function hide(node) {
-    if (node && node.style) node.style.display = 'none';
-  }
-
   // The takeover itself, shared by the two string settings a dialog edits: the
   // line that replaces Stash's value, and the button that replaces its Edit.
   // Returns the line, or null where the row is not on the page.
@@ -6861,7 +6829,7 @@
       line._ptp2reText = canon + '\u0000' + raw;
       renderPathString(line, modes, raw);
     }
-    if (_savingPaths || !raw.replace(/^\s+|\s+$/g, '')) return;
+    if (_savingPaths || !raw.trim()) return;
     if (raw === canon || raw === _normalizedFrom) return;
     // **Never write nothing over something, and never write away a pair this script
     // could not read.** The rewrite is a convenience for a hand-typed value; a value
@@ -7074,7 +7042,7 @@
         'time this plugin loads, and saved here as yours. It is asked once: change it here from then on, ' +
         'and a value you set - including switching a toggle back off - is never replaced.' },
     { key: 'f4ExcludeTagWithCustomFieldName', label: 'Never Copy Tags Marked via This Custom Field', warn: 'semi', text: true, wide: true,
-      mark: function (v) { return v ? cfTipMark(v) : null; },
+      cf: true, mark: function (v) { return v ? cfTipMark(v) : null; },
       tip: 'Enter a custom field name. A tag carrying this custom field is never copied onto ' +
         'anything.\n\nOnly the presence of the field matters - its value is ignored, so any value at all ' +
         'excludes the tag. Remove the field from a tag to have it copied again.\n\nThis one has a ' +
@@ -7113,7 +7081,7 @@
   // Each tag with its 🔗 and the field with its ⓕ after them, as the dialog draws them: a
   // summary's own link ids, beside the dialog's, and the same lookup cache.
   function exclusionSummary(s) {
-    var q = function (k) { return String(s[k] || '').replace(/^\s+|\s+$/g, ''); };
+    var q = function (k) { return String(s[k] || '').trim(); };
     var link = function (n, name) {
       var row = { key: TAG_ROWS[n].key, linkId: TAG_ROWS[n].linkId + '-sum' };
       return { text: '"' + name + '"', tag: true, mark: function () { return exclusionMark(row, name); } };
@@ -7795,65 +7763,7 @@
     return template.replace('{mode}', pathCommon(s, path) ? 'common' : 'all');
   }
 
-  // The other half of the swap `findEditContainer` already reads: the
-  // detail-view navbar carrying a Delete button, rather than the edit form a target
-  // button wants. This is where a source button belongs, on the page *about* the
-  // source entity rather than inside its edit form.
-  // MergePerformerTagsToScenes' own performer button already depends on exactly this
-  // container. Confirmed live only for Group (via the edit-container fallback's own
-  // rejected half) and, through that plugin's precedent, for Performer; Studio,
-  // Scene, Gallery and Image are the same guess, unverified - see AGENTS.md.
-  function findDetailContainer() {
-    var candidates = document.querySelectorAll('.details-edit');
-    for (var i = 0; i < candidates.length; i++) {
-      if (candidates[i].querySelector('button.delete')) return candidates[i];
-    }
-    return null;
-  }
-
-  // ── The tab strip: where a source button goes on a page with no navbar ──────
-  //
-  // `findDetailContainer` wants a `.details-edit` carrying a Delete button, and live
-  // use confirmed that **only Performer and Group render one**. Scene and Gallery show
-  // a tab strip instead - Details / File Info / Chapters / Edit - and no action row at
-  // all, so five of the eleven source buttons had nowhere to go and had never once
-  // appeared. Image is untested and handled by the same rule either way.
-  //
-  // Read off a live Stash rather than guessed, which is §6's rule and the one four
-  // releases of placement churn were spent learning:
-  //
-  //   <div class="scene-tabs order-xl-first order-last">      <- grandparent, flex
-  //     <div>                                                  <- parent, block, 1 child
-  //       <div class="mr-auto nav nav-tabs" role="tablist">    <- the strip, flex
-  //         <div class="nav-item"><a data-rb-event-key="scene-details-panel" …>
-  //         … <a data-rb-event-key="scene-edit-panel">Edit</a>
-  //
-  // **The strip is found by its Edit tab's key, not by its class.** Gallery renders
-  // *two* `.nav-tabs` strips - its own panels, and an Images/Add strip for the image
-  // list - and only the entity's own carries a `*-edit-panel` key. A class match alone
-  // picks the wrong one on that page. Scene also renders a second element whose text is
-  // exactly "Edit" (a `button.btn-link` in the details panel), so matching on the label
-  // the way `findActionByLabel` does would be ambiguous too. The key is the one signal
-  // that is unambiguous on both pages, and it names what it is.
-  //
-  // The walk is hand-rolled rather than `querySelectorAll('[data-rb-event-key$=…]')`
-  // for the reason `findActionByLabel` is: the shared test harness's fake DOM answers
-  // class selectors and nothing more.
-  function hasEditPanelTab(node) {
-    if (!node) return false;
-    var key = node.getAttribute && node.getAttribute('data-rb-event-key');
-    if (typeof key === 'string' && key.length > 11 && key.slice(-11) === '-edit-panel') return true;
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) if (hasEditPanelTab(kids[i])) return true;
-    return false;
-  }
-
-  function findTabStrip() {
-    var lists = document.querySelectorAll('.nav-tabs') || [];
-    for (var i = 0; i < lists.length; i++) if (hasEditPanelTab(lists[i])) return lists[i];
-    return null;
-  }
-
+  // A source button's place on the detail view: Core's `detailButtonContainer`, its reasoning beside it.
   // Which entity-type a tab shows, from its `data-rb-event-key`. The keys are
   // `<page>-<what>-panel` (`scene-details-panel`, `scene-edit-panel`), so the middle
   // segment is the answer. Gallery's image-list strip uses bare keys (`images`, `add`)
@@ -7918,30 +7828,13 @@
 
   var SRC_ROW_CLASS = 'ptp2re-src-row';
 
-  // A row of our own, immediately after the strip inside the strip's own block-level
-  // parent. This is the one container in the plugin that Stash puts nothing into, so
-  // it is also the one with no anchor to find and nothing to order against - a button
-  // here appends, which is what `insertBeforeImportantAction` already does when it
-  // recognises no action, so that call needs no branch for this case.
-  //
-  // Not *inside* the strip: it is `role="tablist"`, whose children are meant to be
-  // tabs, and it is the flex row the tabs are laid out in. A button in there would be
-  // wrong to a screen reader and would sit on the tab line rather than under it.
-  function ensureTabStripRow() {
-    var strip = findTabStrip();
-    if (!strip || !strip.parentNode) return null;
-    var existing = byClass(strip.parentNode, SRC_ROW_CLASS);
-    if (existing) return existing;
-    var row = el('div', SRC_ROW_CLASS);
-    strip.parentNode.insertBefore(row, strip.nextSibling);
-    return row;
-  }
-
+  // Our own row under the tab strip is the one container Stash puts nothing into, so a button there
+  // appends - which `insertBeforeImportantAction` already does when it recognizes no action.
   // The navbar where there is one, our own row under the tab strip where there is not.
   // Order matters: Performer and Group render a navbar *and* no tab strip, so the first
   // branch is the only one they ever reach, and their placement is unchanged.
   function findSourceButtonContainer() {
-    return findDetailContainer() || ensureTabStripRow();
+    return C.detailButtonContainer(SRC_ROW_CLASS);
   }
 
   var MANUAL_SRC_BTN_CLASS = 'ptp2re-manual-src-btn';

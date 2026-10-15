@@ -35,10 +35,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.1.0 or newer, told by one of its exports (`busyCursor`).
+  // The Core floor, ᝯㄝₓ Core 5.26.0 or newer, told by the newest export it binds (`styleOnce`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.busyCursor !== 'function') {
-    var NAME = 'ᝯㄝₓ Scene Variants', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.1.0 or newer, installed and '
+  if (!C || typeof C.styleOnce !== 'function') {
+    var NAME = 'ᝯㄝₓ Scene Variants', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.26.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[svr] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -46,6 +46,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -62,14 +64,16 @@
     return;
   }
   // Every plugin's settings through Core's one shared read.
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var trim = C.trim, nptApi = C.nptApi, escapeRe = C.escapeRe;
   var pluginConfig = C.pluginConfig;
   var showDefaults = C.showDefaults, coop = C.coop, fieldLocks = C.fieldLocks, settled = C.settled, plural = C.plural, linkTarget = C.linkTarget,
-    copyToClipboard = C.copyToClipboard, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
+    copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, keepLog = C.keepLog, droppedLine = C.droppedLine, holdWidth = C.holdWidth, tipRatingBadge = C.tipRatingBadge,
     tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, mutationSucceeded = C.mutationSucceeded,
     entityTip = C.entityTip, entityTipName = C.entityTipName, cfTipMark = C.cfTipMark, settingsDialog = C.settingsDialog, logsToConsole = C.logsToConsole,
     staleReloadButton = C.staleReloadButton, splitTerms = C.splitTerms, tipText = C.tipText,
-    hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass, byClass = C.byClass,
-    coreSettingRow = C.settingRow, foreignLease = C.foreignLease, paintButton = C.paintButton,
+    hasOwn = C.hasOwn, el = C.el, hasClass = C.hasClass,
+    foreignLease = C.foreignLease, paintButton = C.paintButton,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, writePluginSettings = C.writePluginSettings;
 
   // How many lines a dialog draws at once: Core's Lines Drawn at Once, read where it is used.
@@ -90,7 +94,7 @@
   //
   // The number the .yml and the manifest carry; a dialog compares it with what Stash
   // reports installed and refuses to write from a script that is not the one installed.
-  var PLUGIN_VERSION = '3.3.8';
+  var PLUGIN_VERSION = '4.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all.
@@ -124,10 +128,6 @@
   // Stash's own button variant for a control that writes, and the one every plugin here
   // paints its task button with.
   var PLUGIN_BTN_VARIANT = 'btn-warning';
-
-  function trim(text) {
-    return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
-  }
 
   // What a listing calls a scene: its title, else its file's name the way Stash's own
   // lists do - a long one cut to the start of its stem and its extension - else its
@@ -1458,6 +1458,9 @@
       'is left to do. The log starts afresh; what Undo can still reverse is kept.';
     this.copyBtn.title = 'Copy the counters, the messages and every line of the listing as ' +
       'plain text.';
+    this.saveLogBtn = button('Save log', 'svr-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.goBtn.addEventListener('click', function () { self.go(); });
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.stopBtn.addEventListener('click', function () { self.stop(); });
@@ -1467,6 +1470,7 @@
     this.nextSetBtn.addEventListener('click', function () { self.nextSet(); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.saveLogBtn.addEventListener('click', function () { saveLogFile('scene-variants', self.logLines()); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     // A task may caption Proceed with what it writes; the candidate pair is captioned
     // as what it acts on and walled off from the rest of the row, both shown with it.
@@ -1483,7 +1487,7 @@
     this.selAllBtn.addEventListener('click', function () { self.tickCandidates(true); });
     this.unselAllBtn.addEventListener('click', function () { self.tickCandidates(false); });
     [this.syncSetBtn, this.goBtn, this.stopBtn, this.nextSetBtn, this.candLabel, this.groupBtn, this.untagBtn,
-      this.candSep, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn,
+      this.candSep, this.copyBtn, this.saveLogBtn, this.undoBtn, this.rescanBtn, this.closeBtn,
       this.unselAllBtn, this.selAllBtn]
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
@@ -2115,7 +2119,7 @@
   // a control steering a run is locked while the run is running, with a scan counting.
   Run.prototype.syncSets = function () {
     if (!this.sets.length) return;
-    var busy = this.state !== 'listing', self = this;
+    var busy = this.state !== 'listing';
     this.srcRadios.forEach(function (r) { r.disabled = busy; });
     var k;
     for (k in this.weightInputs) {
@@ -2513,12 +2517,13 @@
     this.spinEl = this.logEl.appendChild(C.busyCursor('div', 'svr-spin'));
   };
 
-  Run.prototype.copyLog = function () {
-    var self = this;
-    var text = [this.progressEl.textContent, droppedLine(this.logDropped)].filter(Boolean)
+  Run.prototype.logLines = function () {
+    return [this.progressEl.textContent, droppedLine(this.logDropped)].filter(Boolean)
       .concat(this.logText).join('\n');
-    var was = this.copyBtn.textContent;
-    copyToClipboard(text, function (ok) {
+  };
+  Run.prototype.copyLog = function () {
+    var self = this, was = this.copyBtn.textContent;
+    copyToClipboard(this.logLines(), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = was; }, 2000);
@@ -2871,7 +2876,9 @@
             } else {
               back = last.journalSent || null;
             }
-            self.journalRun.add('scenes', job.id, job.title || '', sent, back || {});
+            // A cover goes both ways as the bytes read from Stash (`readCover`), which Core records
+            // while Record Pictures is on.
+            self.journalRun.add('scenes', job.id, job.title || '', sent, back || {}, { pictures: job.kind === 'cover_image' });
           }
           if (forward) self.changes.push(job);
           else {
@@ -4621,17 +4628,12 @@
   // is a type where adding it is harmless. This plugin's question is "is this tag
   // redundant *as data* before I copy it to three more scenes", and the answer does
   // not depend on whether anyone tidies up afterwards. `plan` answers without the
-  // mode, so nothing is being worked around: the two callers ask what each needs.
-  var NPT_ID = 'NormalizeParentTags';
+  // mode, so nothing is being worked around: the two callers ask what each needs. It is found by
+  // Core's `nptApi`.
   // Named as the user will see it: the whole point of the line is to send them to that
   // plugin's own settings group, which they then have to find.
   var NPT_NAME = 'ᝯㄝₓ Normalize Parent Tags';
   var NPT_API_MIN = '3.2.0';   // the release that publishes `prepare`, for the log line
-
-  function nptApi() {
-    var api = coop().api && coop().api[NPT_ID];
-    return api && typeof api.prepare === 'function' ? api : null;
-  }
 
   // ── Handing a renamed title to Entity Name Maintainer ─────────────────────
   //
@@ -4819,7 +4821,6 @@
     return alpha.kind === 'digits' ? '[0-9]+' : alpha.kind === 'upper' ? '[A-Z]+' : '[a-z]+';
   }
 
-  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
   // The same, with every run of spaces matching any run of whitespace: a title typed with
   // two spaces, or a non-breaking one, before its index is still in the expected shape,
   // so it keeps its index and is only respaced rather than renumbered.
@@ -5104,6 +5105,9 @@
       // The switch sits before its caption, as Stash's own do; a text box sits under it.
       if (f.bool) { row.appendChild(box); row.appendChild(cap); }
       else { row.appendChild(cap); row.appendChild(box); }
+      // The library's tags, or the custom field names it uses, listed under the box as you type.
+      if (!f.bool && f.tag) C.tagSuggest(box);
+      else if (!f.bool && f.cfDefault) C.fieldSuggest(box);
       if (f.cfDefault) {
         // The field in force - the box, else the default - marked after the caption.
         var remark = function () {
@@ -6135,6 +6139,7 @@
     // focus and the active tab are named because Bootstrap sets each of them separately.
     '.nav-tabs .svr-tab-link,.nav-tabs .svr-tab-link:hover,' +
     '.nav-tabs .svr-tab-link:focus,.nav-tabs .svr-tab-link.active{color:var(--gttx-highlight,#ffc107);}' +
+    '.svr-tab-off{margin-left:.4em;background:var(--gttx-highlight,#ffc107);color:#000;vertical-align:text-top;}' +
     // The full-duration button: centred in the tab row, and bold so it reads as the way out.
     '.svr-full-item{display:flex;align-items:center;margin-left:.5rem;}' +
     '.svr-full-btn{font-weight:600;white-space:nowrap;}' +
@@ -6309,13 +6314,7 @@
     '.svr-tagicon{margin-left:.9rem;text-decoration:none;}' +
     '.svr-tagicon:hover{text-decoration:underline;}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // Gray unless `variant` names another of Bootstrap's: orange for one that writes.
   function button(label, className, variant) {
@@ -6474,15 +6473,19 @@
       var scene = (props && props.scene) || {};
       var st = React.useState(null);
       var caption = st[0], setCaption = st[1];
+      var ot = React.useState(null);
+      var off = ot[0], setOff = ot[1];
       React.useEffect(function () {
         var live = true;
         setCaption(null);
+        setOff(null);
         var slow = setTimeout(function () { setCaption('? ' + TAB_LABEL); }, SLOW_CAPTION_MS);
         variantsOnce(scene, 0).then(function (found) {
           clearTimeout(slow);
           if (!live) return;
           if (!found) return setCaption(null);
           var n = found.rows.length;
+          setOff(found.failed ? null : titlesOff(found));
           setCaption(found.failed ? TAB_LABEL
             : n ? n + ' ' + (n === 1 ? 'Variant' : 'Variants')
             : (scene.performers || []).length ? TAB_LABEL : null);
@@ -6491,8 +6494,27 @@
       }, [scene.id, lookupKey(scene, true), scene.title]);
       if (!caption) return null;
       return React.createElement(Nav.Item, null,
-        React.createElement(Nav.Link, { eventKey: TAB_KEY, className: 'svr-tab-link' }, caption));
+        React.createElement(Nav.Link, { eventKey: TAB_KEY, className: 'svr-tab-link' }, caption,
+          off && off.length ? React.createElement('span', { key: 'off', className: 'badge svr-tab-off',
+            title: plural(off.length, 'partial-duration title is', 'partial-duration titles are') +
+              ' not the one the naming rule expects - Rename Variants would give ' +
+              (off.length === 1 ? 'it' : 'them') + ':\n' + off.map(function (o) {
+                return '"' + (o.title || '(untitled)') + '" [' + o.id + '] \u2192 "' + o.expected + '"';
+              }).join('\n') }, String(off.length)) : null));
     };
+  }
+
+  // The set's partials whose title the naming rule would change, as Rename Variants plans it
+  // for the set the tab lists: [{ id, title, expected }], empty where none is off or the set has
+  // no base. A partial the rule leaves alone is never off, and a set matched loosely - by title or by
+  // shared performers - is none Rename Variants acts on, so nothing in it is.
+  function titlesOff(found) {
+    if (!found || !found.self || !found.matchers || !found.naming || !found.rows.length) return [];
+    if (found.byTitle || found.byPerformers) return [];
+    var scenes = [found.self].concat(found.rows.map(function (r) { return r.scene; }));
+    var exp = expectedMap(scenes, found.matchers, found.naming) || {};
+    return scenes.filter(function (sc) { return hasOwn(exp, String(sc.id)) && exp[String(sc.id)] !== (sc.title || ''); })
+      .map(function (sc) { return { id: String(sc.id), title: sc.title || '', expected: exp[String(sc.id)] }; });
   }
 
   // One row. `row.cls.label` is empty for an unclassified scene and the span is then not
@@ -7285,8 +7307,6 @@
     readmeUrl: README_URL, readmeLabel: 'GTTx-SceneVariants/README.md', injectStyle: injectStyle,
   });
 
-  function settingRow(key) { return coreSettingRow(PLUGIN_ID, key); }
-
   var TAG_LINK_MARK = '🔗';      // link symbol
   function tagLinkId(key) { return 'svr-taglink-' + key; }
 
@@ -7384,7 +7404,7 @@
         'as a contradiction of its own.' },
     { key: 'a3VariantStashIdField', label: 'Variant Stash-ID Custom Field',
       text: true, wide: true, dflt: FIELD_DEFAULT,
-      mark: function (v) { return cfTipMark(v || FIELD_DEFAULT); },
+      cf: true, mark: function (v) { return cfTipMark(v || FIELD_DEFAULT); },
       tip: 'The custom field the migration task writes a variant\'s stash-id into.\n\nThe default, ' +
         'ᱜ╦╦🞮_Variant_Stash_ID, is written into this box the first time the plugin loads, so what you ' +
         'see here is the name it is actually using - Stash has no default for a plugin setting, and an ' +

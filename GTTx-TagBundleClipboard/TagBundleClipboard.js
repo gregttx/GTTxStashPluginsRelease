@@ -26,10 +26,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.4.0 or newer, told by the newest export it binds (`dropdown`).
+  // The Core floor, ᝯㄝₓ Core 5.27.0 or newer, told by the newest export it binds (`sharedRead`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.dropdown !== 'function') {
-    var NAME = 'ᝯㄝₓ Tag Bundle Clipboard', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.4.0 or newer, installed and '
+  if (!C || typeof C.sharedRead !== 'function') {
+    var NAME = 'ᝯㄝₓ Tag Bundle Clipboard', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.27.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[tbc] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -37,6 +37,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -52,10 +54,12 @@
     mark();
     return;
   }
-  var hasOwn = C.hasOwn, el = C.el, byClass = C.byClass, gqlRequest = C.gqlRequest,
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var nptApi = C.nptApi, button = C.button;
+  var hasOwn = C.hasOwn, el = C.el, gqlRequest = C.gqlRequest,
     tipText = C.tipText, tagTipNames = C.tagTipNames, displayName = C.displayName, pickControl = C.pickControl,
     findEditContainer = C.findEditContainer, coop = C.coop, domBus = C.domBus, plural = C.plural,
-    copyToClipboard = C.copyToClipboard, holdWidth = C.holdWidth, tagTip = C.tagTip,
+    copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, holdWidth = C.holdWidth, tagTip = C.tagTip,
     staleReloadButton = C.staleReloadButton, ensureRowSpacing = C.ensureRowSpacing,
     insertBeforeImportantAction = C.insertBeforeImportantAction,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, showDefaults = C.showDefaults;
@@ -81,7 +85,7 @@
   // This constant travels inside the file. Bump it with the manifest and the yml;
   // the `version` suite fails if the three disagree.
   //
-  var PLUGIN_VERSION = '3.2.14';
+  var PLUGIN_VERSION = '4.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all: banner plus error means the new code is
@@ -196,6 +200,10 @@
   // strands the old value in the config.
   var DEFAULTS = {
     a1MaxBundles: String(DEFAULT_BUNDLES),
+    // The two shortcuts, in the Keyboard Shortcuts dialog alone: one or two keys, a space between,
+    // as Stash writes its own. Never set means these; set empty turns the shortcut off.
+    b1CopyKeys: 't c',
+    b2PasteKeys: 't v',
   };
   // Shown in its box on Stash's settings page from its first paint (Core's `showDefaults`),
   // so the box says the 5 in force rather than standing empty.
@@ -261,7 +269,8 @@
       var s = {};
       for (var k in DEFAULTS) {
         if (!hasOwn(DEFAULTS, k)) continue;
-        s[k] = typeof DEFAULTS[k] === 'boolean' ? !!raw[k] : (raw[k] == null ? '' : String(raw[k]));
+        s[k] = typeof DEFAULTS[k] === 'boolean' ? !!raw[k]
+          : raw[k] == null ? (hasOwn(KEY_SETTINGS, k) ? DEFAULTS[k] : '') : String(raw[k]);
       }
       return s;
     });
@@ -270,24 +279,21 @@
   // Read synchronously by the click handlers and refreshed on a timer, the shape
   // MergePerformerTagsToScenes uses. Awaiting a settings query inside a click would put
   // a round trip between the press and the dialog for a value that changes once a year.
-  var _settings = null, _settingsAt = 0, _settingsWait = null;
+  var _defaults = null;
+  // A failed read answers the last known settings rather than the defaults, and is kept for the window
+  // like any answer: the clipboard limit going back to 5 because one query failed would discard bundles
+  // the user asked to keep.
+  var settingsRead = C.sharedRead(function () {
+    return loadSettings().then(null, function () { return settingsRead.last(); });
+  }, SETTINGS_TTL_MS);
 
   function settings() {
-    if (!_settings) {
-      _settings = {};
-      for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) _settings[k] = DEFAULTS[k];
+    if (!_defaults) {
+      _defaults = {};
+      for (var k in DEFAULTS) if (hasOwn(DEFAULTS, k)) _defaults[k] = DEFAULTS[k];
     }
-    if (!_settingsWait && Date.now() - _settingsAt > SETTINGS_TTL_MS) {
-      _settingsWait = loadSettings().then(function (s) {
-        _settings = s; _settingsAt = Date.now(); _settingsWait = null;
-      }, function () {
-        // A failed read keeps the last known settings rather than reverting to the
-        // defaults: the clipboard limit going back to 5 because one query failed would
-        // discard bundles the user asked to keep.
-        _settingsAt = Date.now(); _settingsWait = null;
-      });
-    }
-    return _settings;
+    settingsRead();
+    return settingsRead.last() || _defaults;
   }
 
   function logToConsole(msg) {
@@ -533,11 +539,6 @@
 
   function nptPresent() { return !!coop().respecters[NPT_ID]; }
 
-  function nptApi() {
-    var a = coop().api && coop().api[NPT_ID];
-    return (a && typeof a.prepare === 'function') ? a : null;
-  }
-
   // The prepared planner for the dialog that is open, or null. Module-level beside
   // `_graph` rather than on the run, because only one dialog is ever open and both are
   // read by the same render path.
@@ -753,19 +754,7 @@
     '.tbc-src-row{display:flex;flex-wrap:wrap;column-gap:.5rem;row-gap:.25rem;' +
     'margin:.5rem 0;}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // ── Putting tags into the edit form ───────────────────────────────────────
   //
@@ -1147,7 +1136,12 @@
       self.render();
     });
     this.copyBtn = button('Copy log');
+    this.copyBtn.title = 'Copy every line of the log as plain text.';
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.saveLogBtn = button('Save log');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
+    this.saveLogBtn.addEventListener('click', function () { saveLogFile('tag-bundle-clipboard', self.lines.join('\n')); });
     this.undoBtn = button('Undo');
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.closeBtn = button('Close');
@@ -1158,6 +1152,7 @@
     foot.appendChild(this.addBtn);
     foot.appendChild(this.modeSel);
     foot.appendChild(this.copyBtn);
+    foot.appendChild(this.saveLogBtn);
     foot.appendChild(this.undoBtn);
     foot.appendChild(this.closeBtn);
     // At the row's right end, as in the siblings' pick lists. Gray: they only move the
@@ -1695,90 +1690,58 @@
   // because this plugin declares none, so no Settings - Tasks group shares our heading.
   var page = C.settingsPage({
     id: PLUGIN_ID, name: PLUGIN_NAME, shortName: PLUGIN_SHORT_NAME, version: PLUGIN_VERSION,
-    prefix: 'tbc', keys: Object.keys(DEFAULTS), tasks: [],
+    prefix: 'tbc', keys: ['a1MaxBundles'], tasks: [],
     readmeUrl: README_URL, readmeLabel: 'GTTx-TagBundleClipboard/README.md', injectStyle: injectStyle,
+  });
+
+  // Keyboard Shortcuts: the two key sequences, in a dialog of Core's, each box saying what clashes.
+  var SHORTCUT_FIELDS = [
+    { key: 'b1CopyKeys', label: 'Copy Tags Keys', text: true,
+      tip: 'The keys that press ⮺ Tags: one or two single keys, a space between, as Stash writes its own - "t c" ' +
+        'is T, then C within a second. Empty turns the shortcut off. Nothing fires while you type in a box, or with ' +
+        'Ctrl, Alt or Meta held. Change it where it clashes with another plugin\'s keys.',
+      aside: function (v, boxes) { return keysProblem(v, boxes.b2PasteKeys && boxes.b2PasteKeys.value); } },
+    { key: 'b2PasteKeys', label: 'Paste Tags Keys', text: true,
+      tip: 'The keys that press 📋Tags... on an Edit tab: one or two single keys, a space between - "t v" is T, then ' +
+        'V within a second. Empty turns the shortcut off. In the dialog it opens, Enter presses Add.',
+      aside: function (v, boxes) { return keysProblem(v, boxes.b1CopyKeys && boxes.b1CopyKeys.value); } },
+  ];
+  function shortcutSummary(s) {
+    var said = function (k) { var ks = keysOf(s[k]); ks = ks === null ? keysOf(DEFAULTS[k]) : ks; return ks.length ? '"' + ks.join(' ') + '"' : 'off'; };
+    return 'Copy ' + said('b1CopyKeys') + ', paste ' + said('b2PasteKeys') + '.';
+  }
+  var SHORTCUTS = C.settingsDialog({
+    id: PLUGIN_ID, shortName: PLUGIN_SHORT_NAME, prefix: 'tbc', key: 'shortcuts', title: 'Keyboard Shortcuts',
+    line: 'The keys that press ⮺ Tags and 📋Tags..., or none. Two settings, in a dialog.',
+    fields: SHORTCUT_FIELDS, summary: shortcutSummary, settings: settings,
+    load: function () { return loadSettings(); },
+    saved: function (patch) { var c = settings(); for (var k in patch) if (hasOwn(patch, k)) c[k] = patch[k]; },
   });
 
   // No MutationObserver here, unlike the button injection: this is decoration in a
   // settings panel, not something that has to land before the user can click it, and a
   // second of delay after a re-render costs nothing.
   function settingsTick() {
-    page.decorate(page.group());
+    var group = page.group();
+    page.decorate(group);
+    if (group) SHORTCUTS.tick(group);
   }
 
   // ── Where a button goes ───────────────────────────────────────────────────
   //
-  // All of this is ported from PropagateTagsAndPerformers, which spent six releases
-  // getting it right against a live Stash. The reasoning is in the repo-root AGENTS.md
-  // under "Placing a manual button near Stash's own actions" and "deterministic button
-  // ordering"; what follows is a copy, not a redesign, and the comments kept here are
-  // the ones that would otherwise invite one.
+  // Core's: the placement PropagateTagsAndPerformers spent six releases getting right against a live
+  // Stash (`detailButtonContainer`, `insertBeforeImportantAction`); the reasoning is beside it there and in
+  // the repo-root AGENTS.md under "Placing a manual button near Stash's own actions".
 
-  // The edit form is ᝯㄝₓ Core's `findEditContainer`: `.edit-buttons` on a Scene, else
-  // the `.details-edit` that carries no Delete. This is the other half of that swap: the
-  // detail-view navbar, carrying Delete. Confirmed
-  // live for Performer and Group; Studio, Scene, Gallery and Image are the same guess.
-  function findDetailContainer() {
-    var candidates = document.querySelectorAll('.details-edit');
-    for (var i = 0; i < candidates.length; i++) {
-      if (candidates[i].querySelector('button.delete')) return candidates[i];
-    }
-    return null;
-  }
-
-  // ── The tab strip: where a detail button goes on a page with no navbar ─────
-  //
-  // Only Performer and Group render a navbar. Scene and Gallery show a tab strip
-  // instead - Details / File Info / Chapters / Edit - and no action row at all. Read off
-  // a live Stash rather than guessed:
-  //
-  //   <div class="scene-tabs order-xl-first order-last">      <- grandparent, flex
-  //     <div>                                                  <- parent, block, 1 child
-  //       <div class="mr-auto nav nav-tabs" role="tablist">    <- the strip, flex
-  //         <div class="nav-item"><a data-rb-event-key="scene-details-panel" ...>
-  //         ... <a data-rb-event-key="scene-edit-panel">Edit</a>
-  //
-  // **The strip is found by its Edit tab's key, not by its class.** Gallery renders
-  // *two* `.nav-tabs` strips - its own panels, and an Images/Add strip for the image
-  // list - and only the entity's own carries a `*-edit-panel` key. Scene also renders a
-  // second element whose text is exactly "Edit", so matching on the label would be
-  // ambiguous there too. The key is the one unambiguous signal on both pages.
-  function hasEditPanelTab(node) {
-    if (!node) return false;
-    var key = node.getAttribute && node.getAttribute('data-rb-event-key');
-    if (typeof key === 'string' && key.length > 11 && key.slice(-11) === '-edit-panel') return true;
-    var kids = node.childNodes || [];
-    for (var i = 0; i < kids.length; i++) if (hasEditPanelTab(kids[i])) return true;
-    return false;
-  }
-
-  function findTabStrip() {
-    var lists = document.querySelectorAll('.nav-tabs') || [];
-    for (var i = 0; i < lists.length; i++) if (hasEditPanelTab(lists[i])) return lists[i];
-    return null;
-  }
-
+  // The detail view's button: Core's `detailButtonContainer` - the navbar where there is one, else
+  // this plugin's own row under the tab strip - its reasoning beside it.
   var SRC_ROW_CLASS = 'tbc-src-row';
-
-  // A row of our own, immediately after the strip inside the strip's own block-level
-  // parent. Not *inside* the strip: it is `role="tablist"`, whose children are meant to
-  // be tabs, and it is the flex row the tabs are laid out in. A button in there would be
-  // wrong to a screen reader and would sit on the tab line rather than under it.
-  function ensureTabStripRow() {
-    var strip = findTabStrip();
-    if (!strip || !strip.parentNode) return null;
-    var existing = byClass(strip.parentNode, SRC_ROW_CLASS);
-    if (existing) return existing;
-    var row = el('div', SRC_ROW_CLASS);
-    strip.parentNode.insertBefore(row, strip.nextSibling);
-    return row;
-  }
 
   // The navbar where there is one, our own row under the tab strip where there is not.
   // Order matters: Performer and Group render a navbar *and* no tab strip, so the first
   // branch is the only one they ever reach.
   function findCopyContainer() {
-    return findDetailContainer() || ensureTabStripRow();
+    return C.detailButtonContainer(SRC_ROW_CLASS);
   }
 
   // ── The two buttons ───────────────────────────────────────────────────────
@@ -1871,7 +1834,7 @@
   function copyTitle() {
     return 'Copy Tags\n\nPut every tag on this entity onto the clipboard as one ' +
       'bundle, ready to paste onto another entity. Nothing is written and nothing ' +
-      'is removed.';
+      'is removed.\n\n' + keysLine('copy', '');
   }
 
   // ── Is there anything to copy? ────────────────────────────────────────────
@@ -1917,7 +1880,8 @@
   function pasteTitle() {
     return 'Paste Tags\n\nPick a bundle from the clipboard and choose which of its ' +
       'tags to add to the tag box on this form. Tags already here cannot be picked, ' +
-      'and Stash’s own Save is what commits what you add.';
+      'and Stash’s own Save is what commits what you add.\n\n' +
+      keysLine('paste', ' It opens with the newest bundle picked, and Enter adds.');
   }
 
   // Reconciliation, not tracking: React can tear down and rebuild these rows on a
@@ -1955,6 +1919,7 @@
         copy.parentNode.removeChild(copy);
         copy = null;
       }
+      if (copy && copy.title !== copyTitle()) copy.title = copyTitle();   // the keys may have changed
       if (!copy) {
         copy = buildButton(COPY_BTN_ID, COPY_LABEL, COPY_BTN_VARIANT, copyTitle(), onCopy);
         copy._tbcEntity = rt.type + ':' + rt.id;
@@ -1986,6 +1951,7 @@
       paste.parentNode.removeChild(paste);
       paste = null;
     }
+    if (paste && paste.title !== pasteTitle()) paste.title = pasteTitle();
     if (!paste) {
       paste = buildButton(PASTE_BTN_ID, PASTE_LABEL, PASTE_BTN_VARIANT, pasteTitle(), onPaste);
       paste._tbcEntity = rt.type + ':' + rt.id;
@@ -2049,14 +2015,107 @@
     } catch (e) { /* a body that is not JSON is not a save */ }
   }
 
-  // The shared bus rather than an observer of our own - see `domBus`. This is called at
-  // script bottom *and* from the `load` handler, so that a script evaluated after `load`
-  // has already fired is still observed; `subscribe` is idempotent, which is what stops
-  // the ordinary case registering twice for the life of the page.
-  function startObserver() {
-    domBus().subscribe(scheduleTick);
+  // Keyboard shortcuts, in Stash's own two-key style: the Keyboard Shortcuts settings' keys - `t c` for
+  // ⮺ Tags and `t v` for 📋Tags... unless set otherwise - and Enter for Add in the open dialog. Stash binds
+  // nothing that starts with `t`; its `c c` (a cover from the player) and `v g` (grid view) start with the
+  // defaults' second keys, so a key that completes ours, or an Enter Add takes, stops here and never
+  // reaches Stash's handler (Mousetrap, on the document) - its keypress too; keys set otherwise are
+  // checked against Stash's own in the dialog (`keysProblem`). Nothing fires while a box takes typing or
+  // with Ctrl, Alt or Meta held. One listener for the life of the page, as `watchSaves`.
+  var KEY_SEQUENCE_MS = 1000;   // Mousetrap's own wait for a sequence's next key
+  var _keyT = 0, _keyPrev = '';
+  var KEY_SETTINGS = { b1CopyKeys: 'copy', b2PasteKeys: 'paste' };
+  // Stash's own shortcuts (its Mousetrap bindings, 0.31): a sequence that is one of them, or starts
+  // with a single key of them, is said in the dialog - the first would take Stash's, the second fire it.
+  var STASH_KEYS = ['a', 'c', 'e', 'f', 'g', 'h', 'i', 'k', 'm', 'n', 'o', 'q', 'r', 'u', '?', '/', '.', '+', '-', '`',
+    'c c', 'c d', 'd d', 'g z', 'p n', 'p p', 'p r', 's a', 's i', 's n', 's s', 'v g', 'v l', 'v t', 'v w'];
+  // A setting as keys: [] for off, null for something that is not one or two single keys.
+  function keysOf(v) {
+    var t = String(v == null ? '' : v).trim().toLowerCase();
+    if (!t) return [];
+    var ks = t.split(/\s+/);
+    return ks.length <= 2 && ks.every(function (k) { return k.length === 1; }) ? ks : null;
+  }
+  // The keys in force for `which` ('copy' or 'paste'): the setting, or its default where it is not keys.
+  function shortcut(which) {
+    var k = which === 'copy' ? 'b1CopyKeys' : 'b2PasteKeys';
+    var ks = keysOf(settings()[k]);
+    return ks === null ? keysOf(DEFAULTS[k]) : ks;
+  }
+  function keysLine(which, more) {
+    var ks = shortcut(which);
+    if (!ks.length) return 'No keyboard shortcut: set one in Keyboard Shortcuts on this plugin\'s settings.';
+    return 'Keys: ' + ks.join(' ').toUpperCase() + ' - press ' + ks.map(function (k) { return k.toUpperCase(); }).join(', then ') +
+      ', outside a text box.' + more;
+  }
+  // What is wrong with a value, against Stash's own and the other shortcut; '' where nothing is.
+  function keysProblem(v, other) {
+    var ks = keysOf(v), os = keysOf(other);
+    if (ks === null) return 'Not a shortcut: one or two single keys, a space between - "t c". The default is used.';
+    if (!ks.length) return 'Off.';
+    var seq = ks.join(' ');
+    if (STASH_KEYS.indexOf(seq) !== -1) return 'Stash itself uses "' + seq + '" - this would take it from Stash.';
+    if (ks.length === 2 && STASH_KEYS.indexOf(ks[0]) !== -1) return 'Its first key is Stash\'s own "' + ks[0] + '", which fires as you press it.';
+    var starting = STASH_KEYS.filter(function (k) { return ks.length === 1 && k.length === 3 && k.charAt(0) === seq; });
+    if (starting.length) return 'Stash\'s own "' + starting.join('", "') + '" start with it, and could no longer be pressed.';
+    if (os && os.length && (os.join(' ') === seq || os[0] === seq || ks[0] === os.join(' '))) return 'The other shortcut starts the same way - one of them never fires.';
+    return '';
+  }
+  function watchKeys() {
+    var ns = window.__GTTx__ || (window.__GTTx__ = {});
+    ns.tbcKeySeen = onKey;
+    if (ns.tbcKeyWrap || !window.addEventListener) return;
+    ns.tbcKeyWrap = true;
+    var swallow = false;
+    window.addEventListener('keydown', function (ev) {
+      swallow = typeof ns.tbcKeySeen === 'function' && ns.tbcKeySeen(ev) === true;
+      if (swallow) { ev.preventDefault(); ev.stopImmediatePropagation(); }
+    }, true);
+    window.addEventListener('keypress', function (ev) {
+      if (swallow) { swallow = false; ev.preventDefault(); ev.stopImmediatePropagation(); }
+    }, true);
+  }
+  function typing(t) {
+    var tag = t && t.tagName ? t.tagName.toLowerCase() : '';
+    return tag === 'textarea' || tag === 'select' || !!(t && t.isContentEditable) ||
+      (tag === 'input' && !/^(checkbox|radio|button|submit|reset)$/i.test(t.type || ''));
+  }
+  // True where the key was ours and must go no further.
+  function onKey(ev) {
+    if (ev.ctrlKey || ev.altKey || ev.metaKey || typing(ev.target)) { _keyT = 0; return false; }
+    var key = String(ev.key || '').toLowerCase();
+    // A modifier's own keydown - Shift before "?", say - is no key of a sequence and leaves it as it is.
+    if (/^(shift|capslock|control|alt|meta|os|altgraph)$/.test(key)) return false;
+    if (_active) {
+      var tag = ev.target && ev.target.tagName ? ev.target.tagName.toLowerCase() : '';
+      if (key !== 'enter' || tag === 'button' || tag === 'a' || _active.addBtn.disabled) return false;
+      _active.addBtn.click();
+      return true;
+    }
+    var armed = _keyT && Date.now() - _keyT <= KEY_SEQUENCE_MS ? _keyPrev : '';
+    var hit = null, starts = false, both = [['copy', shortcut('copy')], ['paste', shortcut('paste')]];
+    // A two-key sequence completed wins over a one-key shortcut that is its second key ("y x" over "x").
+    both.forEach(function (sc) { if (!hit && sc[1].length === 2 && armed === sc[1][0] && key === sc[1][1]) hit = sc[0]; });
+    both.forEach(function (sc) {
+      if (hit || !sc[1].length) return;
+      if (sc[1].length === 1 && key === sc[1][0]) hit = sc[0];
+      else if (sc[1].length === 2 && key === sc[1][0]) starts = true;
+    });
+    // A first key arms afresh, whatever was armed before it.
+    _keyT = !hit && starts ? Date.now() : 0;
+    _keyPrev = key;
+    if (!hit) return false;
+    var btn = document.getElementById(hit === 'copy' ? COPY_BTN_ID : PASTE_BTN_ID);
+    // Not one on a tab out of view: Stash keeps the Edit pane mounted after you leave it.
+    if (!btn || btn.disabled || btn.offsetParent === null) return false;
+    btn.click();
+    return true;
   }
 
+  // The DOM is watched through the shared bus rather than an observer of our own (`domBus`), subscribed
+  // at script bottom *and* from the `load` handler, so that a script evaluated after `load` has already
+  // fired is still observed; `subscribe` is idempotent, which is what stops the ordinary case
+  // registering twice for the life of the page.
   // Patches have to be registered before the components they target first render, so
   // this runs at script load. The load-event retry only covers Stash setting
   // window.PluginApi later than usual.
@@ -2065,7 +2124,7 @@
   if (window.addEventListener) {
     window.addEventListener('load', function () {
       if (!_patchInstalled) installTagSelectPatch();
-      startObserver();
+      domBus().subscribe(scheduleTick);
       tick();
     });
     window.addEventListener('popstate', function () { setTimeout(function () { tick(); }, 300); });
@@ -2077,6 +2136,7 @@
   setInterval(function () { tick(); }, 1000);
   settings();   // warm the settings cache so the first copy knows the bundle limit
   watchSaves();
-  startObserver();
+  watchKeys();
+  domBus().subscribe(scheduleTick);
   tick();
 }());

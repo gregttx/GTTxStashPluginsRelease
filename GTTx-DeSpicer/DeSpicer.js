@@ -24,10 +24,10 @@
   // Bound at load: `ui: requires:` in the .yml is topologically sorted by Stash and
   // `useScript` sets `async = false`, so Core has finished running before this line.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.9.0 or newer, told by one of its exports (`ownedTags`).
+  // The Core floor, ᝯㄝₓ Core 5.26.0 or newer, told by the newest export it binds (`styleOnce`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.ownedTags !== 'function') {
-    var NAME = 'ᝯㄝₓ De-Spicer', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.9.0 or newer, installed and '
+  if (!C || typeof C.styleOnce !== 'function') {
+    var NAME = 'ᝯㄝₓ De-Spicer', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.26.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[dsp] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -35,6 +35,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -50,8 +52,10 @@
     mark();
     return;
   }
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var trim = C.trim, truthy = C.truthy, escapeRe = C.escapeRe, button = C.button, sendJob = C.jobWrite;
   var pluginConfig = C.pluginConfig, logsToConsole = C.logsToConsole, showDefaults = C.showDefaults,
-    coop = C.coop, plural = C.plural, copyToClipboard = C.copyToClipboard, keepLog = C.keepLog,
+    coop = C.coop, plural = C.plural, copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile, keepLog = C.keepLog,
     droppedLine = C.droppedLine, holdWidth = C.holdWidth, staleReloadButton = C.staleReloadButton,
     hasOwn = C.hasOwn, el = C.el, fieldHeading = C.fieldHeading, hasClass = C.hasClass, paintButton = C.paintButton,
     wireEscape = C.wireEscape, unwireEscape = C.unwireEscape, gqlRequest = C.gqlRequest,
@@ -66,7 +70,7 @@
 
   // The one version that proves which script is running: the settings page reads the
   // manifest, which goes current the moment plugins are reloaded, cached script or not.
-  var PLUGIN_VERSION = '1.0.4';
+  var PLUGIN_VERSION = '2.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all.
@@ -100,10 +104,6 @@
   var REVIEW_MAX = 30;
   // The changes that keep their values in any plan: few, and the write needs what they hold.
   var KEEP_VALUES = { file: true, archive: true, remove: true, image: true, rename: true };
-
-  function trim(text) {
-    return String(text == null ? '' : text).replace(/^\s+|\s+$/g, '');
-  }
 
   // ── Settings ──────────────────────────────────────────────────────────────
   //
@@ -186,8 +186,6 @@
       return s;
     });
   }
-  function truthy(v) { return v === true || v === 'true'; }
-
   // Shown on Stash's settings page from its first paint (Core's `showDefaults`); stored by
   // the first Save in a dialog, never by opening a page.
   showDefaults(PLUGIN_ID, function () {
@@ -517,8 +515,6 @@
   // replaced inside it. A word character is a letter or digit of any script: `\b` knows
   // only ASCII, and a name like "Zoë" would otherwise end at the ë: Core's `wordChars`.
   var WORD_CHARS = C.wordChars;
-  function escapeRe(s) { return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
-
   // The names a run renames, found in free text by looking each run of words up in a table:
   // linear in the text's length however many names there are, where one pattern of every name
   // took longer with each and froze the tab on a large library. A name is found where its words
@@ -610,15 +606,6 @@
       var out = '', last = 0, i = 0;
       while (i < toks.length) {
         var found = at(i), hit = null, lower = !isCap(text.charAt(toks[i][0]));
-        // Every entry found here is counted, before one is chosen: a word naming a tag and a
-        // performer counts for both, or the one tried second is never asked about.
-        if (sink) {
-          for (var y = found.length - 1; y >= 0; y--) {
-            var f = found[y][1];
-            if (f.single && f.cap && lower) sink('lower', f, text, toks[i][0], toks[i][1]);
-            else if (f.single && !f.free) sink(related(f, rel) ? 'related' : 'unrelated', f, text, toks[i][0], toks[i][1]);
-          }
-        }
         for (var x = found.length - 1; x >= 0 && !hit; x--) {
           var e = found[x][1], n = found[x][0];
           if (e.single && e.cap && lower) continue;
@@ -626,6 +613,16 @@
           if (asNames && e.named === null) continue;
           if (n > 1 && rel && !e.free && !related(e, rel) && crossed(i, i + n - 1)) break;
           hit = found[x];
+        }
+        // Every one-word entry found here is counted, whichever is chosen: a word naming a tag and a
+        // performer counts for both, or the one tried second is never asked about. Not one inside a
+        // longer name that is replaced here ("Jane" in "Jane Doe"): no answer about it changes this.
+        if (sink && !(hit && hit[0] > 1)) {
+          for (var y = found.length - 1; y >= 0; y--) {
+            var f = found[y][1];
+            if (f.single && f.cap && lower) sink('lower', f, text, toks[i][0], toks[i][1]);
+            else if (f.single && !f.free) sink(related(f, rel) ? 'related' : 'unrelated', f, text, toks[i][0], toks[i][1]);
+          }
         }
         if (!hit) { i++; continue; }
         out += text.slice(last, toks[i][0]) + (asNames && hit[1].named !== undefined ? hit[1].named : hit[1].to);
@@ -1687,25 +1684,12 @@
     '.gttx-tipbox img{display:block;width:100%;max-height:14rem;object-fit:contain;' +
     'margin-bottom:.4rem;border-radius:3px;background:var(--gttx-sunken,#111a20);}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // ── What a rule does to a value ───────────────────────────────────────────
   //
   // `ctx`: the run's namer, its words and name rewriters, the entity's label and id. Returns
   // the new value; the same value back means nothing changes.
-  var EMPTY_OF = { string: '', list: [], ids: [], scalar: null };
 
   // Random words in place of a text: each run of letters becomes as many letters of one script -
   // Latin most often, accented Latin, Cyrillic, Greek, Hebrew, Arabic, Devanagari, kana or Han -
@@ -2561,7 +2545,7 @@
       .map(function (t) { return ENTITIES[t[1]].plural; });
     if (off.length) this.msg('INFO', 'Not read at all, as Entity-Types says: ' + off.join(', ') + '.');
     this.msg('INFO', this.recordUndo
-      ? 'What is written is recorded in Undo History, so it can be undone after this dialog closes.'
+      ? 'What is written is recorded in Undo History, so it can be undone after this dialog closes. Not everything can be undone - the Undo History dialog links to what it cannot undo.'
       : 'What is written is not recorded in Undo History: Record in Undo History is off (Removal and Safety, Real Library or Copy).');
     this.isOwned = C.ownedFields(this.settings.others);   // what other ᝯㄝₓ plugins keep, left alone
     linesDrawn();   // asked now, so Core's settings are read by the time the listing is drawn
@@ -2742,7 +2726,7 @@
         // under Placeholder or Blank the entity's placeholder - its aliases go, so a mention of one
         // names the entity - or, kept, null. A name two entities share takes the first one's placeholder.
         // ponytail: matched by the words, as free text is; a criterion's {id, label} item could be
-        // relabelled by its id instead, if two entities sharing a name under Placeholder matters.
+        // relabeled by its id instead, if two entities sharing a name under Placeholder matters.
         var nway = wayOf(self.rules, 'names');
         var asNamed = function (k, ent, to) {
           return nway === 'pseudonym' || nway === 'random' ? to : nway === 'placeholder' || nway === 'blank'
@@ -2909,7 +2893,6 @@
     var self = this, api = sfmApi();
     var names = api ? api.archivedNames(ent, this.sfmField) : null;
     var way = wayOf(this.rules, 'files');
-    var renamed = false;
     (ent.files || []).forEach(function (file) {
       var folder = file.parent_folder ? String(file.parent_folder.id) : '';
       (self.inFolder[folder] || (self.inFolder[folder] = {}))[String(file.basename).toLowerCase()] = String(file.id);
@@ -2919,7 +2902,6 @@
       if (ctx.words) stem = ctx.words(stem);
       var next = safeName(stem) + parts[1];
       if (!stem || next === file.basename) return;
-      renamed = true;
       self.hits.push({ typeKey: 'scenes', entId: String(ent.id), entName: name, field: 'files', cat: 'files',
         shape: 'file', label: 'File', slot: String(file.id), folder: folder || null,
         before: file.basename, after: next, checked: true });
@@ -3425,7 +3407,7 @@
     if (planned > UNDO_KEEP) {
       this.msg('INFO', 'This plan changes ' + plural(planned, 'entity', 'entities') + ', more than the ' + UNDO_KEEP +
         ' the dialog keeps a copy of for its own Undo: ' + (this.recordUndo ? 'Undo History records it, and is ' +
-        'where it is undone.' : 'nothing records it, since Record in Undo History is off.'));
+        'where it is undone - though not everything can be undone there.' : 'nothing records it, since Record in Undo History is off.'));
     }
     if (this.lean) {
       this.msg('INFO', 'A plan this large keeps no copy of the values it changes: a page of the listing reads its ' +
@@ -3789,11 +3771,8 @@
     });
   };
   Run.prototype.saveLog = function () {
-    var d = new Date(), two = function (n) { return (n < 10 ? '0' : '') + n; };
-    var name = 'de-spicer-log-' + d.getFullYear() + '-' + two(d.getMonth() + 1) + '-' + two(d.getDate()) + '-' +
-      two(d.getHours()) + two(d.getMinutes()) + two(d.getSeconds()) + '.txt';
-    this.savedLog = { name: name, text: this.logLines() };
-    saveText(this.savedLog.text, name, 'text/plain');
+    var text = this.logLines();
+    this.savedLog = { name: saveLogFile('de-spicer', text), text: text };
   };
 
   // ── Writing ───────────────────────────────────────────────────────────────
@@ -4301,12 +4280,6 @@
     return out;
   }
 
-  function sendJob(job, input, op) {
-    if (job.write) return job.write(input);
-    return gqlRequest('mutation ' + op + '($input: ' + job.spec.input + '!) { ' + job.spec.mutation +
-      '(input: $input) { id } }', { input: input });
-  }
-
   // What one write did, counted for the closing summary: changes by kind of data, entities, images by what they were.
   Run.prototype.tallied = function (job) {
     var self = this, d = this.drawnStats;
@@ -4447,7 +4420,7 @@
     'in a copy whose folders point elsewhere, every entry';
   var MISSING_FILE = /cannot find the (?:file|path) specified|no such file or directory/i;
   Run.prototype.moveFiles = function (job, pass, back, landed) {
-    var self = this, moves = job.moves || [];
+    var moves = job.moves || [];
     return moves.reduce(function (p, mv) {
       return p.then(function () {
         var to = back ? mv.from : mv.to, from = back ? mv.to : mv.from;
@@ -4967,14 +4940,14 @@
         'stay as they are, it is not removed, and its name is not replaced where other entities mention it.' +
         EXCLUSION_TAG_TIP },
     { key: 'h2ExcludeEntityWithCustomFieldName', warn: 'semi', label: 'Leave Alone Entities Marked via This Custom Field', text: true,
-      wide: true, mark: function (v) { return v ? C.cfTipMark(v) : null; },
+      wide: true, cf: true, mark: function (v) { return v ? C.cfTipMark(v) : null; },
       tip: 'An entity holding this custom field is left out of every run, as with the tag above.' + EXCLUSION_FIELD_TIP },
     { key: 'h3ExcludeImageWithTagName', warn: 'semi', label: 'Keep the Image of Entities Carrying This Tag', text: true, wide: true,
       tag: true, mark: function (v) { return C.tagMark(v); },
       tip: 'An entity carrying this tag keeps its image - neither blurred nor replaced by a card - and the rest of it ' +
         'is rewritten as usual - a studio\'s logo, say.' + EXCLUSION_TAG_TIP },
     { key: 'h4ExcludeImageWithCustomFieldName', warn: 'semi', label: 'Keep the Image of Entities Marked via This Custom Field',
-      text: true, wide: true, mark: function (v) { return v ? C.cfTipMark(v) : null; },
+      text: true, wide: true, cf: true, mark: function (v) { return v ? C.cfTipMark(v) : null; },
       tip: 'An entity holding this custom field keeps its image, as with the tag above.' + EXCLUSION_FIELD_TIP },
   ];
   function exclusionSummary(st) {
@@ -4999,7 +4972,7 @@
   // Three settings for the one question of what this library is, so either answer is one press:
   // the dialog's All On and All Off say in their tooltips what each end means.
   var REAL_TIP = 'This library is your real one: a run is recorded in Undo History so it can be undone after the ' +
-    'dialog closes, Stash\'s backup is offered before it, and Scene Filename Manager\'s archive of original ' +
+    'dialog closes, all but what Record in Undo History names, Stash\'s backup is offered before it, and Scene Filename Manager\'s archive of original ' +
     'filenames is kept, so its Restore Original Filenames still works.';
   var COPY_TIP = 'This library is a copy - a second Stash opened on a backup of your library: a run is not ' +
     'recorded in Undo History, no backup is offered, and Scene Filename Manager\'s archive of original ' +

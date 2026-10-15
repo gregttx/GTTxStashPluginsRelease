@@ -27,10 +27,10 @@
   // Binding rather than looking up per call is what keeps every call site below
   // reading exactly as it did when the block was local.
   var C = (window.__GTTx__ || {}).core;
-  // The Core floor, ᝯㄝₓ Core 5.11.0 or newer, told by one of its exports (`selectionMenuItem`).
+  // The Core floor, ᝯㄝₓ Core 5.27.0 or newer, told by the newest export it binds (`sharedRead`).
   // Below it nothing else in this file can run, and no shared code is left to say so.
-  if (!C || typeof C.selectionMenuItem !== 'function') {
-    var NAME = 'ᝯㄝₓ Custom Fields Bulk Editor', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.11.0 or newer, installed and '
+  if (!C || typeof C.sharedRead !== 'function') {
+    var NAME = 'ᝯㄝₓ Custom Fields Bulk Editor', NO_CORE = NAME + ' cannot start: it needs ᝯㄝₓ Core 5.27.0 or newer, installed and '
       + 'enabled. Install or update it from the same source and reload the page.';
     if (window.console && console.error) console.error('[cfbe] ' + NO_CORE);
     // Said where it shows, too. Stash still draws this plugin's settings and task buttons from
@@ -38,6 +38,8 @@
     // goes under each of its headings, on Settings → Plugins and Settings → Tasks, and back
     // whenever Stash redraws them. Plain DOM: no shared code is here to draw it with.
     var mark = function () {
+      // Only Settings draws these headings: on any other page a redraw costs no search here.
+      if (!/^\/settings/.test(window.location.pathname)) return;
       var hs = document.querySelectorAll('.setting-group h3');
       for (var i = 0; i < hs.length; i++) {
         var h = hs[i], t = h.textContent;
@@ -53,12 +55,14 @@
     mark();
     return;
   }
+  // Shared with every ᝯㄝₓ plugin, from Core.
+  var button = C.button;
   var hasOwn = C.hasOwn, hasClass = C.hasClass, el = C.el, byClass = C.byClass, gqlRequest = C.gqlRequest,
     settingRow = C.settingRow, showDefaults = C.showDefaults, coopObject = C.coopObject, coop = C.coop,
-    plural = C.plural, linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard,
+    plural = C.plural, linkTarget = C.linkTarget, copyToClipboard = C.copyToClipboard, saveLogFile = C.saveLogFile,
     holdWidth = C.holdWidth, tagTip = C.tagTip, tagLinkTitle = C.tagLinkTitle, entityTip = C.entityTip,
     cfTipTick = C.cfTipTick, staleReloadButton = C.staleReloadButton,
-    installedVersion = C.installedVersion, gate = C.gate('cfbe'), ownTaskName = C.ownTaskName,
+    installedVersion = C.installedVersion, ownTaskName = C.ownTaskName,
     paintButton = C.paintButton, paintTaskButtons = C.paintTaskButtons, wireEscape = C.wireEscape,
     unwireEscape = C.unwireEscape, displayName = C.displayName, fakeOk = C.fakeOk;
   // Every plugin's settings through Core's one shared read.
@@ -79,7 +83,7 @@
   // still be running a script it cached before the edit. This constant travels
   // inside the file; bump it with the manifest and the yml, or the `version` suite
   // fails.
-  var PLUGIN_VERSION = '4.1.21';
+  var PLUGIN_VERSION = '5.0.0';
 
   // Printed before anything else runs, so a script that loads and then throws is told
   // apart from one that never loaded at all. Through whatever the console offers
@@ -900,19 +904,7 @@
     // own `div.dropdown-menu .dropdown-item` white, which outranked a bare class (seen live).
     'div.dropdown-menu .dropdown-item.cfbe-menu-item{cursor:pointer;color:var(--gttx-highlight,#ffc107);}';
 
-  function injectStyle() {
-    if (document.getElementById(STYLE_ID)) return;
-    var style = document.createElement('style');
-    style.id = STYLE_ID;
-    style.textContent = CSS;
-    (document.head || document.body || document.documentElement).appendChild(style);
-  }
-
-  function button(label, className) {
-    var b = el('button', 'btn btn-secondary btn-sm' + (className ? ' ' + className : ''), label);
-    b.type = 'button';
-    return b;
-  }
+  function injectStyle() { C.styleOnce(STYLE_ID, CSS); }
 
   // A drag handle that pins the height of the element above it, so the flex column
   // below takes whatever is left. The listeners go on `document` rather than on the
@@ -1404,6 +1396,9 @@
     this.undoBtn.className = this.undoBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.rescanBtn = button('Rescan', 'cfbe-rescan cfbe-hidden');
     this.copyBtn = button('Copy log', 'cfbe-copy');
+    this.saveLogBtn = button('Save log', 'cfbe-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.closeBtn = button('Close', 'cfbe-close cfbe-hidden');
     this.applyBtn.disabled = true;
     this.undoBtn.title = 'Put back the value each entity carried before Apply, field by field. ' +
@@ -1418,13 +1413,14 @@
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.saveLogBtn.addEventListener('click', function () { saveLogFile('custom-fields-bulk-editor', self.logLines()); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
 
     // The siblings' footer order, which three of the four plugins already had:
     // <write> Cancel [Stop] Copy log Undo Rescan Close. There is no Stop here - a
     // write is one bulk mutation per batch and the dialog disables its own footer for
     // the duration - so Apply takes Proceed's leading position and the rest follow.
-    [this.applyBtn, this.cancelBtn, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
+    [this.applyBtn, this.cancelBtn, this.copyBtn, this.saveLogBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -3131,15 +3127,18 @@
   // The counters, then the log in the order it happened: every message as itself, and
   // every listing from the text built beside its nodes rather than from the DOM, so
   // what is copied includes the lines the render cap left off the screen.
-  Run.prototype.copyLog = function () {
-    var self = this;
+  Run.prototype.logLines = function () {
     var parts = [this.progressEl.textContent || ''];
     var kids = this.listEl.childNodes || [];
     for (var i = 0; i < kids.length; i++) {
       parts = kids[i]._cfbeText
         ? parts.concat(kids[i]._cfbeText) : parts.concat([kids[i].textContent || '']);
     }
-    copyToClipboard(parts.join('\n'), function (ok) {
+    return parts.join('\n');
+  };
+  Run.prototype.copyLog = function () {
+    var self = this;
+    copyToClipboard(this.logLines(), function (ok) {
       holdWidth(self.copyBtn);
       self.copyBtn.textContent = ok ? 'Copied' : 'Failed';
       setTimeout(function () { self.copyBtn.textContent = 'Copy log'; }, 2000);
@@ -3325,6 +3324,9 @@
     this.undoBtn.className = this.undoBtn.className.replace('btn-secondary', PLUGIN_BTN_VARIANT);
     this.rescanBtn = button('Rescan', 'cfbe-rescan cfbe-hidden');
     this.copyBtn = button('Copy log', 'cfbe-copy');
+    this.saveLogBtn = button('Save log', 'cfbe-savelog');
+    this.saveLogBtn.title = 'Download what Copy log copies as a text file named by the date and time: a long log ' +
+      'may be too large to paste, and a file can be kept with the backup.';
     this.closeBtn = button('Close', 'cfbe-close cfbe-hidden');
     this.applyBtn.disabled = true;
     this.undoBtn.title = 'Put the store tag back the way it was before Apply. ' +
@@ -3338,8 +3340,9 @@
     this.undoBtn.addEventListener('click', function () { self.undo(); });
     this.rescanBtn.addEventListener('click', function () { self.rescan(); });
     this.copyBtn.addEventListener('click', function () { self.copyLog(); });
+    this.saveLogBtn.addEventListener('click', function () { saveLogFile('custom-fields-bulk-editor', self.logLines()); });
     this.closeBtn.addEventListener('click', function () { self.close(); });
-    [this.applyBtn, this.cancelBtn, this.copyBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
+    [this.applyBtn, this.cancelBtn, this.copyBtn, this.saveLogBtn, this.undoBtn, this.rescanBtn, this.closeBtn]
       .forEach(function (b) { foot.appendChild(b); });
     this.modal.appendChild(foot);
 
@@ -3362,6 +3365,7 @@
   DescRun.prototype.runWrites = Run.prototype.runWrites;
   DescRun.prototype.writeChunk = Run.prototype.writeChunk;
   DescRun.prototype.copyLog = Run.prototype.copyLog;
+  DescRun.prototype.logLines = Run.prototype.logLines;
   DescRun.prototype.close = Run.prototype.close;
   DescRun.prototype.focus = Run.prototype.focus;
   DescRun.prototype.show = Run.prototype.show;
@@ -4155,7 +4159,6 @@
   // dozens of these at most, and each one is a sentence the user typed.
   DescRun.prototype.reportChanges = function (changes, reversed) {
     if (!changes.length) return;
-    var self = this;
     this.blockEl = null;
     this.fillList(changes, function (c) {
       var before = reversed ? c.after : c.before;
@@ -4376,12 +4379,8 @@
   var STORE_LINK_ID = 'cfbe-store-tag';
   var STORE_LINK_MARK = '🔗';      // link symbol
   var STORE_LINK_TTL_MS = 15000;             // so a store made just now is found without a reload
-  var _storeLinkAt = 0, _storeLinkWait = null;
-
-  function lookupStoreTag() {
-    if (_storeLinkWait && Date.now() - _storeLinkAt < STORE_LINK_TTL_MS) return _storeLinkWait;
-    _storeLinkAt = Date.now();
-    _storeLinkWait = markedTags(STORE_FIELD).then(function (tags) {
+  var lookupStoreTag = C.sharedRead(function () {
+    return markedTags(STORE_FIELD).then(function (tags) {
       // COMPAT: a store still marked `cfbe_desc_store` (since CustomFieldsBulkEditor 2.0.1);
       // remove when `LEGACY_STORE_FIELD` goes.
       return tags.length ? tags : markedTags(LEGACY_STORE_FIELD);
@@ -4390,8 +4389,7 @@
         return pickStoreTag(tags, s.b1DescriptionTagName);
       });
     }).then(null, function () { return null; });   // a link is not worth an error
-    return _storeLinkWait;
-  }
+  }, STORE_LINK_TTL_MS);
 
   function storeTagLinkTick() {
     var key = 'b1DescriptionTagName';
@@ -4442,23 +4440,22 @@
   // of its own, and only once the row is actually on the page. A settings page showing our
   // group but none of our rows still costs nothing, which is what its own suite pins.
   var CF_TICK_TTL_MS = 10000;
-  var _cfTickAt = 0, _cfTickWait = null, _cfTickSettings = null;
+  // A failed read answers the last settings, kept for the window, so a failing server is not asked every tick.
+  var cfTickRead = C.sharedRead(function () { return loadSettings().then(null, function () { return cfTickRead.last(); }); }, CF_TICK_TTL_MS);
 
   function cfFieldTick() {
     var key = 'c1ExcludeFromAddListField', locks = 'd1LockedFields';
     if (!settingRow(PLUGIN_ID, key) && !settingRow(PLUGIN_ID, locks)) return;
-    if (!_cfTickWait || Date.now() - _cfTickAt > CF_TICK_TTL_MS) {
-      _cfTickAt = Date.now();
-      _cfTickWait = loadSettings().then(function (s) { _cfTickSettings = s; }, function () {});
-    }
+    cfTickRead();
+    var cfs = cfTickRead.last();
     // Trimmed and nothing else: this is a map key, so a name holding a double space is a
     // different key from one holding a single.
-    cfTipTick(PLUGIN_ID, key, _cfTickSettings
-      ? String(_cfTickSettings[key] || '').trim() : '');
+    cfTipTick(PLUGIN_ID, key, cfs
+      ? String(cfs[key] || '').trim() : '');
     // The locked list: one mark per name, drawn after the name it describes. Shown, not
     // edited here: Stash's Edit box holds its own copy of the value and does not see a
     // write from the lock switch until a reload, so the switch is the one way to change it.
-    cfTipTick(PLUGIN_ID, locks, _cfTickSettings ? lockedFields(_cfTickSettings) : []);
+    cfTipTick(PLUGIN_ID, locks, cfs ? lockedFields(cfs) : []);
     var lockRow = settingRow(PLUGIN_ID, locks);
     if (lockRow && !hasClass(lockRow, 'cfbe-readonly-row')) {
       lockRow.className = ((lockRow.className || '') + ' cfbe-readonly-row').replace(/^\s+/, '');
@@ -5001,6 +4998,11 @@
       };
     });
   }
+
+  // Its two names edited in Stash's own setting dialog get the library's tags and field names
+  // listed under the box as you type.
+  C.suggestSetting('Description Store Tag Name', 'tag');
+  C.suggestSetting('Hide from Add Lists - Custom Field Name', 'field');
 
   coop().api[PLUGIN_ID] = {
     version: API_VERSION,
