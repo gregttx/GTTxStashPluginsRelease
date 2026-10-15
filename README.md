@@ -159,10 +159,10 @@ A task gives all of it back when its dialog is closed.
 
 | | |
 |---|---|
-| `GTTx-<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `AGENTS.md` (the rules), `NOTES.md` (the reasoning), `RELEASES.md` |
+| `GTTx-<PluginName>/` | one folder per plugin: `.yml` manifest, `.js`, `manifest`, `README.md`, `RELEASES.md`, and in the maintainer package `AGENTS.md` (the rules) and `NOTES.md` (the reasoning) |
 | `GTTx-Core/` | the shared half every other plugin binds at load, and requires |
-| `.tests/` | `node .tests/run.js` (or `npm test --prefix .tests`). See .tests/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.14.1)) |
-| `.tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See .tools/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.14.1)) |
+| `.tests/` | `node .tests/run.js` (or `npm test --prefix .tests`). See .tests/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.15.1)) |
+| `.tools/` | repo tooling — release-row generation, the release drop, the memory watermark and the live-Stash probes. See .tools/README.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.15.1)) |
 | `RELEASES.md` | every release of every plugin, one row per commit. **Generated** |
 | `MEMORY.md` | what every task holds in memory against 100,000 scenes and 1,000,000 images. **Generated** by `node .tools/memory-watermark.js`; a release waits for it |
 | `AGENTS.md` | the rules, one table per kind — the onboarding document |
@@ -183,15 +183,15 @@ A task gives all of it back when its dialog is closed.
   cannot name the commit that adds it.
 - **READMEs and source describe the plugin, not its history.** No "since 1.2.0" in either; that
   argument belongs in the plugin's own `NOTES.md`, which does not ship.
-- **Read AGENTS.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.14.1)) before adding a button, a dialog or a shared block.** Nearly every
+- **Read AGENTS.md (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.15.1)) before adding a button, a dialog or a shared block.** Nearly every
   rule in it exists because something here guessed about Stash's markup and was wrong.
 - **Releasing to the public mirror goes through `node .tools/release-drop.js`**, which
   copies an allowlist - never a denylist - and scans every staged file before it writes
-  anything. See `.tools/README.md` (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.14.1)).
-- **The source repo enforces some of this after every turn**, through Claude Code Stop hooks that
-  are not part of a release: a plugin's docs left behind by a change to its source, a script
-  changed without its version moving, a release missing from `RELEASES.md`, a new plugin starting
-  above `0.0.1`. A git pre-commit hook in `.githooks/` refuses a commit
+  anything. See `.tools/README.md` (in the [maintainer package](https://github.com/gregttx/GTTxStashPluginsRelease/releases/tag/v2026.10.15.1)).
+- **Claude Code hooks enforce some of this after every turn**, in `.githooks/claude/` (in the
+  maintainer package, with a README saying how to register them): a plugin's docs left behind by a
+  change to its source, a script changed without its version moving, a release missing from
+  `RELEASES.md`, a new plugin starting above `0.0.1`, a hand edit to a generated file. A git pre-commit hook in `.githooks/` (in the maintainer package) refuses a commit
   that stages a plugin's script without moving its version, before the commit exists, and warns
   when a change to a setting leaves the settings inventory out, and a pre-push hook refuses a
   push carrying a file over GitHub's 100 MB limit; wire both with
